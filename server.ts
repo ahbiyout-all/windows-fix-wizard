@@ -2511,7 +2511,7 @@ async function startServer() {
         return res.json(cachedReleaseData.response);
       }
 
-      let currentVersion = "3.11.0";
+      let currentVersion = "3.12.0";
       try {
         const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
         if (pkg.version) currentVersion = pkg.version;

@@ -1,13 +1,23 @@
-# Dependencies
+# =========================================================================
+# Windows Fix Wizard - Selective GitOps & Build Artifact .gitignore
+# Only core source code, official documentation, build configs, and public assets
+# are committed to GitHub. All secrets, local test scripts, runtime logs,
+# and deployment helper scripts are strictly excluded.
+# =========================================================================
+
+# --- 1. Dependencies ---
 node_modules/
 .pnp
 .pnp.js
+bun.lock
+bun.lockb
 
-# Production and Build Artifacts
+# --- 2. Build & Packaging Artifacts ---
 dist/
 build/
 Output/
 out/
+release_assets/
 *.exe
 *.msi
 *.zip
@@ -17,16 +27,10 @@ out/
 *.7z
 *.apk
 *.ipa
+*.iss.bak
 
-# Logs and Run-time data
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Environment and Secrets (CRITICAL: Do NOT leak keys or credentials)
+# --- 3. Secrets & Sensitive Environment Variables ---
+# (CRITICAL: Never leak private API keys, service accounts, or tokens)
 .env
 .env.*
 !.env.example
@@ -36,34 +40,73 @@ lerna-debug.log*
 serviceAccountKey*.json
 firebase-adminsdk*.json
 
-# Inno Setup temporaries
-*.iss.bak
-Output/
+# --- 4. Push & Local Deployment Automation Scripts ---
+# (Excludes local automated push scripts from GitHub repository)
+scripts/github_push.bat
+scripts/github_push.sh
+scripts/github_push.*
+*github_push*
+scripts/push*.bat
+scripts/push*.sh
 
-# Test & Local experiment files (prevent unnecessary debug files)
+# --- 5. Temporary Scratch & Unit Test Scripts ---
 test-*.ts
 test-*.js
+test-*.mjs
 check-*.ts
-replace_date.mjs
+check-*.js
+check_*.ts
+check_*.js
+update-*.ts
+replace_*.mjs
+generate-*.cjs
+*.test.ts
+*.spec.ts
+*.test.js
+*.spec.js
 
-# Operating System files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-desktop.ini
+# --- 6. Runtime Server Logs & Volatile Storage (data/) ---
+# Exclude server-generated runtime logs and local instance config files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+data/logs_*.json
+data/*_logs.json
+data/*_config.json
+data/*.bak
+data/*.tmp
+data/*.cache
 
-# IDE & Editor files
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-*.swp
-*.swo
+# Whitelist essential GitOps and seed datasets:
+!data/issues.json
+!data/github-feed.json
 
-# Coverage and cache
+# --- 7. Cache & Compilers ---
 coverage/
 .nyc_output/
 .cache/
 .vite/
 .parcel-cache/
 tsconfig.tsbuildinfo
+
+# --- 8. AI Studio Platform Files ---
+.aistudio/
+
+# --- 9. Operating System Files ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# --- 10. IDE & Editor Files ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*.suo
+*.user

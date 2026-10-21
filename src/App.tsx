@@ -242,7 +242,7 @@ const AdSense = ({ slot }: { slot: string }) => {
   );
 };
 
-const APP_VERSION = "3.11.0";
+const APP_VERSION = "3.12.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -12927,7 +12927,7 @@ start /min msedge "${appUrl}"
                           : 'GitHub Actions & GitOps 자율 데이터 수집 시스템 구축 가이드'}
                       </h3>
                       <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        v3.11.0 Master
+                        v3.12.0 Master
                       </span>
                     </div>
                     <p className="text-xs text-indigo-200/80 mt-0.5">

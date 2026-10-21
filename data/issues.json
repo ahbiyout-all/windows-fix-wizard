@@ -846,5 +846,104 @@
     ],
     "isLatest": false,
     "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "gh-0x00000124--whea-uncorrectable-error--mvhwcok6",
+    "category": "시스템/블루스크린",
+    "code": "0x00000124 (WHEA_UNCORRECTABLE_ERROR)",
+    "title": "WHEA_UNCORRECTABLE_ERROR 블루스크린 오류 (0x00000124) 발생 및 해결 방법",
+    "title_en": "WHEA_UNCORRECTABLE_ERROR Blue Screen Error (0x00000124) and Troubleshooting",
+    "symptoms": "Windows 10 또는 11 시스템에서 예기치 않게 시스템이 재부팅되거나 블루스크린이 나타나며 'WHEA_UNCORRECTABLE_ERROR' 메시지와 함께 중지 코드 0x00000124가 표시됩니다. 이 오류는 주로 CPU, RAM, 저장 장치, 그래픽 카드 등 하드웨어 구성 요소의 심각한 오류나 불안정성으로 인해 발생합니다. 오버클러킹 설정, 과열, 손상된 하드웨어, 오래되거나 손상된 드라이버, 또는 최근 Windows 업데이트로 인한 드라이버 비호환성이 원인일 수 있습니다.",
+    "symptoms_en": "Your Windows 10 or 11 system unexpectedly reboots or displays a blue screen with the 'WHEA_UNCORRECTABLE_ERROR' message and stop code 0x00000124. This error is primarily caused by severe faults or instability in hardware components such as the CPU, RAM, storage devices, or graphics card. Possible causes include overclocking settings, overheating, faulty hardware, outdated or corrupted drivers, or driver incompatibilities introduced by recent Windows updates.",
+    "script": "",
+    "manualSteps": [
+      "1. 오버클러킹 설정 해제: BIOS/UEFI 설정으로 들어가 CPU, GPU, RAM에 적용된 모든 오버클러킹 설정을 기본값으로 되돌리고 XMP/EXPO 프로필을 비활성화합니다.",
+      "2. 드라이버 업데이트 및 Windows 업데이트 확인: 장치 관리자에서 모든 하드웨어 드라이버(특히 칩셋, 그래픽, 저장 장치 드라이버)를 최신 버전으로 업데이트하고, Windows Update를 통해 최신 보안 및 기능 업데이트를 설치합니다.",
+      "3. 시스템 파일 검사 및 디스크 오류 확인: 관리자 권한으로 PowerShell 또는 명령 프롬프트를 열고 `sfc /scannow`를 실행하여 시스템 파일을 검사하고, `Dism /Online /Cleanup-Image /RestoreHealth`를 실행하여 Windows 이미지를 복구합니다. 또한, `chkdsk C: /f` 명령어를 사용하여 디스크 오류를 확인하고 수정합니다.",
+      "4. 하드웨어 진단 실행: Windows 메모리 진단 도구를 사용하여 RAM에 문제가 없는지 확인하고, CPU 및 기타 하드웨어 제조업체에서 제공하는 진단 도구를 사용하여 하드웨어 오류를 검사합니다.",
+      "5. BIOS/UEFI 펌웨어 업데이트: 마더보드 제조사 웹사이트에서 최신 BIOS/UEFI 펌웨어를 다운로드하여 업데이트합니다. 이는 하드웨어 호환성 및 안정성을 개선할 수 있습니다."
+    ],
+    "manualSteps_en": [
+      "1. Disable Overclocking Settings: Enter BIOS/UEFI settings and revert all overclocking configurations applied to the CPU, GPU, and RAM to their default values, and disable XMP/EXPO profiles.",
+      "2. Update Drivers and Check Windows Updates: Update all hardware drivers (especially chipset, graphics, and storage drivers) to the latest versions via Device Manager, and install the latest security and feature updates through Windows Update.",
+      "3. Run System File Checker and Check Disk for Errors: Open PowerShell or Command Prompt as an administrator and execute `sfc /scannow` to scan system files, then run `Dism /Online /Cleanup-Image /RestoreHealth` to repair the Windows image. Additionally, use `chkdsk C: /f` to check and fix disk errors.",
+      "4. Perform Hardware Diagnostics: Use the Windows Memory Diagnostic tool to check for RAM issues, and use diagnostic tools provided by your CPU and other hardware manufacturers to check for hardware failures.",
+      "5. Update BIOS/UEFI Firmware: Download and install the latest BIOS/UEFI firmware from your motherboard manufacturer's website. This can improve hardware compatibility and stability."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/ko-kr/windows-hardware/drivers/debugger/bug-check-0x124--whea-uncorrectable-error",
+      "https://www.easeus.com/data-recovery/fix-blue-screen-code-124.html"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "블루스크린",
+      "하드웨어 오류",
+      "Windows 10/11 시스템 문제",
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "Blue Screen",
+      "Hardware Error",
+      "Windows 10/11 System Issue"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-21T09:15:26.934Z",
+    "updatedAt": "2026-10-21T09:15:26.934Z",
+    "verifiedAt": "2026-10-21T09:15:26.934Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mvhwdyid",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 누적 업데이트 설치 실패 오류 (0x800f0922)",
+    "title_en": "Windows Cumulative Update Installation Failure (0x800f0922)",
+    "symptoms": "최신 Windows 10/11 누적 업데이트 진행 중 96%~99% 지점에서 '업데이트를 완료할 수 없습니다. 변경 사항 취소 중' 메시지가 표시되며 설치가 실패하고 0x800f0922 오류 코드가 발생합니다. 주로 시스템 예약 파티션(EFI 파티션)의 공간 부족, .NET Framework 기능 손상, 또는 Edge 브라우저 구성 요소 간섭으로 인해 발생합니다.",
+    "symptoms_en": "During recent Windows 10/11 cumulative update installation, progress stops near 96%-99% displaying the message 'Undoing changes made to your computer' and error code 0x800f0922. This issue is primarily triggered by insufficient space on the System Reserved/EFI partition, corrupted .NET Framework settings, or leftover flags from uninstalled system components.",
+    "script": "Get-Service -Name wuauserv, bits, cryptsvc | Select-Object Name, Status, StartType\nWrite-Host 'Restarting Windows Update services...' -ForegroundColor Green\nStop-Service -Name wuauserv, bits, cryptsvc -Force -ErrorAction SilentlyContinue\nStart-Sleep -Seconds 2\nStart-Service -Name cryptsvc, bits, wuauserv -ErrorAction SilentlyContinue\nWrite-Host 'Analyzing Component Store status...' -ForegroundColor Green\nDism.exe /Online /Cleanup-Image /AnalyzeComponentStore",
+    "manualSteps": [
+      "Windows Update 서비스 중지 및 캐시 삭제: 명령 프롬프트를 관리자 권한으로 실행하고 net stop wuauserv, net stop bits, net stop cryptsvc를 실행한 후 C:\\Windows\\SoftwareDistribution 및 C:\\Windows\\System32\\catroot2 폴더 내 파일들을 정리하고 서비스를 다시 시작합니다.",
+      "EFI / 시스템 예약 파티션 공간 확보: 파티션 관리 도구를 사용하여 EFI 시스템 파티션 용량이 최소 100MB 이상 여유 공간을 가지고 있는지 확인하고 비어있지 않은 임시 로그 파일 등을 정리합니다.",
+      ".NET Framework 3.5 기능 재설정: [제어판] - [프로그램 및 기능] - [Windows 기능 켜기/끄기]에서 '.NET Framework 3.5' 항목을 체크 해제하고 재부팅한 후, 다시 체크하여 활성화합니다.",
+      "DISM 및 SFC 무결성 검사 실행: 관리자 권한 PowerShell에서 DISM /Online /Cleanup-Image /RestoreHealth 및 sfc /scannow 명령을 순차적으로 실행하여 손상된 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Stop Windows Update services and clear cache: Run Command Prompt as administrator, execute 'net stop wuauserv', 'net stop bits', and 'net stop cryptsvc', clear contents in C:\\Windows\\SoftwareDistribution and C:\\Windows\\System32\\catroot2, then restart the services.",
+      "Free up space on EFI / System Reserved Partition: Check the EFI System Partition to ensure at least 100MB of free space is available, removing unnecessary font or log files if space is tight.",
+      "Reset .NET Framework 3.5 Features: Navigate to Control Panel > Programs and Features > Turn Windows features on or off, uncheck '.NET Framework 3.5', restart your PC, and then re-enable it.",
+      "Run DISM and SFC Integrity Checks: Open PowerShell as administrator and run 'DISM /Online /Cleanup-Image /RestoreHealth' followed by 'sfc /scannow' to repair component store corruption."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-10-and-windows-11-update-error-0x800f0922-troubleshooting-4b62d2e1-4c63-47a3-8be2-32b50937a44f",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-windows-update-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0922",
+      "Windows update 0x800f0922",
+      "Windows 업데이트 0x800f0922",
+      "누적 업데이트 실패 0x800f0922",
+      "EFI 파티션 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-21T09:16:26.485Z",
+    "updatedAt": "2026-10-21T18:16:26.641+09:00",
+    "verifiedAt": "2026-10-21T09:16:26.485Z",
+    "verificationStatus": "verified"
   }
 ]

@@ -7,7 +7,7 @@
 ; =========================================================================
 
 #ifndef MyAppVersion
-  #define MyAppVersion "3.11.0"
+  #define MyAppVersion "3.12.0"
 #endif
 
 #define MyAppName "Windows Fix Wizard"

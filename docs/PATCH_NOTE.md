@@ -1,6 +1,33 @@
-# Patch Note - System Update (v3.11.0)
+# Patch Note - System Update (v3.12.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.12.0] - 2026-10-21
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Selective GitOps Repository Management & Strict .gitignore Architecture
+- **Complete .gitignore Re-architecture**: Replaced permissive default rules with a hardened, 10-tier exclusion matrix designed to guarantee that ONLY essential build source code, official documentation, public assets, and official automation workflows are pushed to GitHub.
+- **Strict Exclusion of Deployment Push Scripts**: Explicitly excluded local deployment and push automation scripts (`scripts/github_push.bat`, `scripts/github_push.sh`, `*github_push*`) from repository tracking, ensuring private deployment workflows and tokens remain strictly local.
+- **Runtime Log & Volatile Storage Isolation**: Strictly excluded server runtime logs (`data/logs_backend.json`, `data/logs_visitor.json`), local instance configs (`data/maintenance_config.json`, `data/system_config.json`, `data/github_config.json`), and temporary files, while preserving essential GitOps data feeds (`data/issues.json`, `data/github-feed.json`).
+
+#### 2. Local Repository Commit & Push Pipeline Modernization (`scripts/github_push.bat` & `scripts/github_push.sh`)
+- **Automated Pre-Flight Security Verifier**: Integrated automated scanning that audits staged and untracked changes for sensitive credentials (`.env`, `serviceAccountKey*.json`, `firebase-adminsdk*.json`) or runtime log leaks before allowing a commit.
+- **Fail-Safe Push Script Unstaging**: Both Windows batch and Linux/macOS bash push utilities automatically unstage `scripts/github_push.*` and runtime JSON files before staging, preventing accidental tracking even if `git add .` was executed manually.
+- **Cross-Platform Parity**: Provided fully mirrored Bash script (`scripts/github_push.sh`) alongside Windows Batch (`scripts/github_push.bat`) with identical validation, dynamic version discovery, release tagging, and push capabilities.
+
+### 🛡️ Security Hardening & Authentication
+- **Zero-Credential Exposure Guarantee**: Eliminated scratch debugging scripts (`test-*.ts`, `check-*.ts`, `replace_date.mjs`) from the workspace and added wildcard exclusion patterns preventing temporary test files from ever being committed to GitHub.
+- **Secret Isolation Enforcement**: Ensured `.env` and private service keys remain uncommitted, preserving `.env.example` as the canonical template.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Workspace Cleanup**: Purged deprecated one-off testing scripts from root (`test-api-key*.ts`, `test-client-fs.ts`, `test-env*.ts`, `check_logs.ts`, `update-upvotes.ts`, `replace_date.mjs`, `generate-icons.cjs`).
+- **Clean Git Tracking Alignment**: Re-initialized local repository tracking (`main` branch) and verified that only production-required files are detected by `git status`.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, `server.ts`, `scripts/installer.iss`, `scripts/github_push.bat`, `scripts/github_push.sh`, and `docs/PATCH_NOTE.md` to `v3.12.0`.
 
 ---
 

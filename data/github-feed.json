@@ -1,0 +1,15 @@
+{
+  "lastCollectedAt": "2026-10-21T09:16:26.485Z",
+  "modelUsed": "gemini-3.5-flash",
+  "targetCategory": "업데이트",
+  "newlyAddedCount": 1,
+  "totalIssuesCount": 24,
+  "newIssues": [
+    {
+      "id": "gh-0x800f0922-mvhwdyid",
+      "code": "0x800f0922",
+      "title": "Windows 누적 업데이트 설치 실패 오류 (0x800f0922)",
+      "category": "업데이트"
+    }
+  ]
+}
