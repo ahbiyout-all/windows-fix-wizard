@@ -1,0 +1,852 @@
+import { KnownIssue } from "../types";
+
+export const KNOWN_ISSUES: KnownIssue[] = [
+  {
+    "id": "seed-update-0x80070002",
+    "category": "업데이트",
+    "code": "0x80070002",
+    "title": "Windows 업데이트 실패 (0x80070002)",
+    "title_en": "Windows Update Failed (0x80070002)",
+    "symptoms": "업데이트 파일이 손상되었거나 누락되어 누적 업데이트 설치가 0% 또는 특정 비율에서 더 이상 진행되지 않고 중단됩니다.",
+    "symptoms_en": "Update files are corrupted or missing, causing cumulative updates to freeze or fail during installation.",
+    "manualSteps": [
+      "Windows 설정 > 업데이트 및 보안 > 문제 해결사에서 'Windows 업데이트' 도구를 가동합니다.",
+      "관리자 권한으로 명령 프롬프트(CMD)를 열고 'net stop wuauserv', 'net stop cryptSvc', 'net stop bits', 'net stop msiserver'를 차례로 입력해 정지합니다.",
+      "C:\\Windows\\SoftwareDistribution 및 C:\\Windows\\System32\\catroot2 폴더 내의 모든 파일을 영구 삭제하여 캐시를 포맷합니다.",
+      "명령 프롬프트에서 'net start wuauserv', 'net start cryptSvc', 'net start bits', 'net start msiserver'를 입력해 서비스를 재기동하고 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Windows Settings > Update & Security > Troubleshoot and run the 'Windows Update' troubleshooter.",
+      "Open Command Prompt (CMD) as administrator and stop update services: 'net stop wuauserv', 'net stop cryptSvc', 'net stop bits', 'net stop msiserver'.",
+      "Delete all files inside C:\\Windows\\SoftwareDistribution and C:\\Windows\\System32\\catroot2 to purge cache.",
+      "Restart the services: 'net start wuauserv', 'net start cryptSvc', 'net start bits', 'net start msiserver', then retry the update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/windows-%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0-19bc41ca-ad72-ae67-af3c-89ce169755dd"
+    ],
+    "windowsVersions": [
+      "Windows 10",
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "업데이트",
+      "update",
+      "0x80070002",
+      "SoftwareDistribution",
+      "오류코드"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-network-dns",
+    "category": "네트워크",
+    "code": "DNS_PROBE_FINISHED_NO_INTERNET",
+    "title": "웹 브라우저 접속 장애 및 DNS 조회 실패",
+    "title_en": "DNS Probe Finished No Internet Access",
+    "symptoms": "인터넷 선이나 공유기는 물리적으로 연결되어 있으나, 웹 브라우저에서 '사이트에 연결할 수 없음' 에러와 함께 페이지가 열리지 않습니다.",
+    "symptoms_en": "Physical connection is active, but web pages show 'Site cannot be reached' or DNS resolution failures.",
+    "manualSteps": [
+      "관리자 권한으로 CMD를 열어 'ipconfig /flushdns'를 입력하여 DNS 캐시를 즉시 포맷합니다.",
+      "계속해서 'netsh winsock reset' 및 'netsh int ip reset'을 실행하여 네트워크 소켓 및 TCP/IP 아키텍처를 강제 초기화합니다.",
+      "제어판 > 네트워크 및 공유 센터 > 어댑터 설정 변경에서 사용 중인 어댑터 속성을 선택합니다.",
+      "Internet Protocol Version 4 (TCP/IPv4) 속성에서 DNS 서버 주소를 구글 공용 DNS인 '8.8.8.8' 및 '8.8.4.4'로 변경합니다."
+    ],
+    "manualSteps_en": [
+      "Open CMD as Administrator and type 'ipconfig /flushdns' to purge DNS resolver cache.",
+      "Run 'netsh winsock reset' and 'netsh int ip reset' to restore network socket and TCP/IP stack configuration.",
+      "Go to Control Panel > Network and Sharing Center > Change Adapter Settings and right-click your adapter properties.",
+      "Select Internet Protocol Version 4 (TCP/IPv4) Properties and specify DNS addresses manually to '8.8.8.8' and '8.8.4.4' (Google DNS)."
+    ],
+    "sourceUrls": [
+      "https://developers.google.com/speed/public-dns/docs/using"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "DNS",
+      "internet",
+      "인터넷",
+      "연결끊김",
+      "ipconfig",
+      "구글dns"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-system-bsod",
+    "category": "시스템/블루스크린",
+    "code": "CRITICAL_PROCESS_DIED",
+    "title": "Critical Process Died 블루스크린 (0x000000EF)",
+    "title_en": "Critical Process Died BSOD (0x000000EF)",
+    "symptoms": "작업 도중 PC가 갑자기 크래시되면서 블루스크린(BSOD)이 발생하고 'CRITICAL_PROCESS_DIED' 중지 코드가 출력됩니다.",
+    "symptoms_en": "The system suddenly crashes displaying BSOD with stop code 'CRITICAL_PROCESS_DIED'.",
+    "manualSteps": [
+      "PC 부팅 시 F8 혹은 안전 모드로 진입하기 위해 자동 복구 상태로 3회 강제 리부팅하여 블루스크린 루프를 정지시킵니다.",
+      "관리자 권한 명령 프롬프트에서 'sfc /scannow'를 실행하여 커널 등 하드디스크 시스템 파일 무결성을 자동 검증하고 복구합니다.",
+      "복구가 더 진행되지 않는다면 'DISM /Online /Cleanup-Image /RestoreHealth' 명령어를 가동해 Windows 업데이트 서버로부터 깨끗한 시스템 이미지를 다운로드 받아 치환합니다.",
+      "최근 추가된 드라이버나 그래픽 카드의 장치 관리자 제어판에서 롤백을 수행하고, 메인보드 칩셋 호환 드라이버 다운로드를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode by interrupting the boot process 3 times to trigger Automated Troubleshooting Recovery.",
+      "Run 'sfc /scannow' in Admin CMD to analyze and repair systemic system file corruptions.",
+      "Execute 'DISM /Online /Cleanup-Image /RestoreHealth' to replace corrupt files from official Windows Component Store.",
+      "Roll back recently installed graphics or system drivers inside Device Manager and inspect memory using 'mdsched.exe'."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/%EB%B8%94%EB%A3%A8%EC%8A%A4%ED%81%AC%EB%A6%B0-%EC%98%A4%EB%A5%98-%ED%95%B4%EA%B2%B0-31ce781f-3590-2c3b-556b-6269afd28742"
+    ],
+    "windowsVersions": [
+      "Windows 10",
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "블루스크린",
+      "BSOD",
+      "critical",
+      "sfc",
+      "dism",
+      "scannow",
+      "크래시"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-activation-error",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 정품 인증 실패 (0xC004C003)",
+    "title_en": "Windows Activation Error (0xC004C003)",
+    "symptoms": "하드웨어를 변경(메인보드 교체 등)한 뒤 화면 우측 하단에 'Windows 정품 인증' 메시지가 표시되고 오류 코드 0xC004C003이 표시됩니다.",
+    "symptoms_en": "After motherboard replacement or major hardware upgrades, Windows shows 'Activate Windows' watermarks and error 0xC004C003.",
+    "manualSteps": [
+      "Windows 설정 > 업데이트 및 보안 > 정품 인증 탭으로 이동하여 하단의 '문제 해결' 링크를 클릭합니다.",
+      "'최근에 이 기기의 하드웨어를 변경했습니다'를 선택하고 마이크로소프트 계정(MSA)에 기 바인딩된 원격 디지털 서명 라이선스를 체크하여 이전 선택 복구를 진행합니다.",
+      "만약 OEM 라이선스 재주입이 필요한 경우 CMD를 관리자 권한으로 가동해 'slmgr.vbs /ipk <보유 정품 시리얼 키>'를 입력해 라이선스를 재장착합니다.",
+      "서버 강제 동기화 명령어인 'slmgr.vbs /ato'를 가동해 온라인 상에서 원격 마이크로소프트 검증 서버로부터 디지털 활성 완료 통보를 즉시 유도합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows Settings > Update & Security > Activation and select 'Troubleshoot' at the bottom of the registry panel.",
+      "Select 'I recently changed hardware on this device' and sign into your Microsoft Account to migrate digital licenses.",
+      "To re-inject your product key, open Admin CMD and write 'slmgr.vbs /ipk YOUR-PRODUCT-KEY'.",
+      "Force online activation registry synchronization immediately by running 'slmgr.vbs /ato'."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/windows-%EC%A0%95%ED%92%88-%EC%9D%B8%EC%A6%9D-%EC%98%A4%EB%A5%98%EC%97%90-%EB%8C%80%ED%95%9C-%EB%8F%84%EC%9B%80%EB%A7%90-090ec25c-a1cf-4077-b4b3-ea68ee5694d7"
+    ],
+    "windowsVersions": [
+      "Windows 10",
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "정품인증",
+      "activation",
+      "0xC004C003",
+      "slmgr",
+      "라이선스",
+      "메인보드"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-store-failed",
+    "category": "스토어/앱",
+    "code": "0x80073CF9",
+    "title": "Windows Microsoft Store 앱 다운로드 에러",
+    "title_en": "Microsoft Store App Install Fail (0x80073CF9)",
+    "symptoms": "마이크로소프트 스토어에서 카카오톡, 게임, 넷플릭스 등 앱 다운로드 클릭 시 즉각 다운로드가 끊기며 '다운로드 대기 중' 혹은 '0x80073CF9' 에러가 팝업됩니다.",
+    "symptoms_en": "Downloading games or applications inside Microsoft Store instantly crashes with code 0x80073CF9.",
+    "manualSteps": [
+      "Windows 실행창(Win + R)을 활성화한 후 'wsreset.exe'를 입력한 후 검은색 명령창이 종료되고 Store가 자동 재진입되는 구조를 마칠 때까지 약 10초 대기합니다.",
+      "Windows 앱 설정 > 설치된 앱 제어판으로 진입해 'Microsoft Store'를 클릭한 뒤 고급 옵션에서 '초기화(Reset)' 버튼을 클릭합니다.",
+      "시스템 탐색기에서 C:\\Windows 폴더 아래에 'AUInstallAgent' 폴더가 강제 손상 유무를 확인하고 폴더가 보이지 않을 시 'AUInstallAgent' 및 'AppReadiness' 폴더를 수동으로 새로 만들기(N) 생성합니다.",
+      "관리자 권한의 PowerShell에서 'Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}'을 전면 가동하여 Windows 구조 앱들을 전체 재등록시킵니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Keys + R, type 'wsreset.exe' into the run utility and let the black empty console clear and auto-refresh the Store.",
+      "Navigate to Windows Apps > Installed Apps, search Microsoft Store, open advanced settings and click 'Reset'.",
+      "Verify if C:\\Windows\\AUInstallAgent exists inside system root. If missing, manually create folders named 'AUInstallAgent' and 'AppReadiness'.",
+      "Launch Admin PowerShell and deploy UWP registration: 'Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}'."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/account-billing/microsoft-store-%EC%97%90%EC%84%9C-%EC%95%B1%EC%9D%84-%EC%B0%BE%EA%B1%B0%EB%82%98-%EC%84%A4%EC%B9%90%ED%95%A0-%EC%88%98-%EC%97%86%EB%8A%94-%EA%B2%BD%EC%9A%B0-ca530de4-cd19-f728-dae7-7368fb8b17b8"
+    ],
+    "windowsVersions": [
+      "Windows 10",
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "스토어",
+      "store",
+      "wsreset",
+      "0x80073CF9",
+      "앱다운로드",
+      "초기화"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-defender-failed",
+    "category": "보안/백신",
+    "code": "0x80073AFC",
+    "title": "Microsoft Defender 백신 강제 비활성화 해결법",
+    "title_en": "Microsoft Defender Startup Error (0x80073AFC)",
+    "symptoms": "Windows 보안 센터를 동작하면 먹통이 되거나 백신 실시간 보호가 켜지지 않으며, 위협 요소 확인 도중 보호 서비스가 중지되는 에러 코드가 호출됩니다.",
+    "symptoms_en": "Windows Security client crashes, and real-time Protection service refuse to start showing error 0x80073AFC.",
+    "manualSteps": [
+      "보안 위협 로그 조작을 위해 타사 외장형 애드웨어 백신(V3, 알약 등)이 다중 탑재되어 Defender 드라이버 필터가 충돌하는지 수동 검토 후 타사 백신 정리를 진행합니다.",
+      "Windows 검색에서 '서비스(services.msc)' 제어 패널을 열고 'Microsoft Defender 백신 서비스(WinDefend)' 서비스 항목을 찾아 시작 상태가 자동 기동으로 유지되고 있는지 체크합니다.",
+      "명령 프롬프트를 관리자 권한으로 가고하여 'DISM /Online /Cleanup-Image /ScanHealth' 및 복구 명령어를 가동해 손상된 엔진 모듈을 전면 정비합니다.",
+      "Windows 보안 설정 내 클라우드 전송 보호를 포함한 Defender 플랫폼 캐시를 수동 갱신하기 위해 최신 엔진 오프라인 팩다운로드를 Microsoft 공식 센터에서 진행해 교체합니다."
+    ],
+    "manualSteps_en": [
+      "Uninstall conflicting third-party antivirus utilities (Avast, McAfee, Al-yak, V3) completely to stop active filter drivers conflicts.",
+      "Open 'services.msc' and locate 'Microsoft Defender Antivirus Service (WinDefend)' ensuring startup state parameter is set to Automatic.",
+      "Run 'DISM /Online /Cleanup-Image /ScanHealth' into administrative cmd to analyze registry engine corruption.",
+      "Force update the base protection engine directly by visiting Microsoft center or running command line update configurations."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/microsoft-defender-%EB%B0%B1%EC%8B%A0%EC%9D%98-%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0-9e6db3f2-d8ce-b24d-bfcd-ca8ed14995f9"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "보안",
+      "백신",
+      "디펜더",
+      "defender",
+      "WinDefend",
+      "실시간보호"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-hardware-flicker",
+    "category": "하드웨어/드라이버",
+    "code": "GRAPHICS_DRIVER_RESET",
+    "title": "그래픽 드라이버 중단으로 인한 화면 블랙아웃 현상",
+    "title_en": "Graphics Driver Timeout / Sleep Blackouts",
+    "symptoms": "모니터 화면이 수초간 까맣게 꺼진 후 돌아오거나, 게임 가동 도중 그래픽 카드가 튕기고 드라이버 타임아웃 오류 메시지가 송출됩니다.",
+    "symptoms_en": "Display panel goes completely black for a few seconds or device freezes with Graphic Driver Timeout alerts during gaming.",
+    "manualSteps": [
+      "화면 즉시 재기동 특수 단축키인 [Ctrl + Shift + Win + B] 키를 동시 입력하여 그래픽 드라이버 장치 레지스트리 세션을 고속 리부팅합니다 (경고 비프 발생).",
+      "호환성이 안 좋은 기존 버전을 안전하게 소각하기 위해 'DDU (Display Driver Uninstaller)' 소프트웨어를 다운받아 드라이버를 영구 소거한 뒤, 제조업체 공식 드라이버(NVIDIA, AMD 등)를 신규 클린 설치합니다.",
+      "Windows 레지스트리 편집기(regedit)를 활성화해 'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 경로로 제어 탐색 이동합니다.",
+      "레지스트리 우클릭하여 'TdrDelay' 이름의 DWORD(32비트) 값을 추가 정의하고 값을 10진수 '8'(초 단위 장치 응답 지연 허용 시간)로 확장 상향해 타임아웃 충돌 루프를 임시 방어 조치합니다."
+    ],
+    "manualSteps_en": [
+      "Press the keyboard shortcut shortcut [Ctrl + Shift + Win + B] to force-reload and reset display driver sessions immediately.",
+      "Use DDU (Display Driver Uninstaller) tool inside Safe Mode to completely wipe legacy display driver files, then install standard driver suite.",
+      "Open registry editor (regedit) and drill down to: 'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers'.",
+      "Create a new DWORD (32-bit) with name 'TdrDelay' and configure decimal limit value to '8' to tolerate display response lag windows."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/display/timeout-detection-and-recovery"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "그래픽",
+      "드라이버",
+      "NVIDIA",
+      "Intel",
+      "단축키",
+      "블랙아웃",
+      "레지스트리"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-performance-leak",
+    "category": "성능/프리징",
+    "code": "SYSTEM_RESOURCES_MAX",
+    "title": "DWM.exe 프로세스 메모리 누수 및 마우스 급버벅임 현상",
+    "title_en": "Desktop Window Manager (dwm.exe) Memory Leak",
+    "symptoms": "장시간 PC 가동 후 화면 주사율이 급정지하고 렉이 심각해지며, 작업관리자를 체크하면 '데스크톱 창 관리자(dwm.exe)' 메모리 점유가 기가바이트 단결까지 점진적으로 솟구칩니다.",
+    "symptoms_en": "Desktop frame rate decreases with significant mouse lag. Task Manager shows Desktop Window Manager memory climbing into gigabytes.",
+    "manualSteps": [
+      "설치된 그래픽 어댑터 인텔 내장 그래픽 드라이버의 특정 호환 누수를 점검하기 위해 최신 혹은 구형 LTS 인증 그래픽 설치로 이중 교환합니다.",
+      "제어판 > 시스템 성능 정보로 진입해 컴퓨터 시각 효과 옵션 중 세부 '창 아래에 그림자 표시', '투명한 유리 효과' 옵션을 일괄 해제하여 dwm의 자원 렌더 버퍼 생성을 급정지합니다.",
+      "Windows 설정 > 개인 설정 > 색상으로 진입해 '투명 효과' 제어 토글 스위치를 완전히 비활성화(Off) 처리합니다.",
+      "작업 스케줄러를 수행하여 불필요한 제조사 Bloatware 유틸리티의 GPU 후킹 자원들을 관리자 권한으로 찾아 강제 정지 명령을 설정합니다."
+    ],
+    "manualSteps_en": [
+      "Install older or OEM dedicated stable Intel Integrated Graphics display driver package to tackle active buffer leaks within dwm modules.",
+      "Open Windows Performance Options panel, and opt to disable 'Enable transparent glass' or transparency visuals.",
+      "Navigate to Personalization Settings > Colors and turn off transparency effects to avoid massive canvas overlays initialization.",
+      "Inspect background services and disable custom third-party active wallpaper customization tools (e.g. Wallpaper Engine, customization docks)."
+    ],
+    "sourceUrls": [
+      "https://answers.microsoft.com/ko-kr/windows/forum/all/dwmexe-%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%84%84%EC%88%98/f591cd64-bf6e-4ccb-b9fb-1c4b92b60bfe"
+    ],
+    "windowsVersions": [
+      "Windows 10",
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "메모리누수",
+      "dwm",
+      "버벅임",
+      "프리징",
+      "작업관리자",
+      "시각효과"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "seed-fs-system",
+    "category": "파일 시스템/저장소",
+    "code": "0x80070057",
+    "title": "NTFS 디스크 포맷 실패 및 파일 복사 손상 오류 (0x80070057)",
+    "title_en": "Format Drive Failed / File Write Error (0x80070057)",
+    "symptoms": "대용량 파일을 외장 드라이브로 복사하거나 디스크 검사를 구동 시 데이터 구조 파라미터 유효성 한계를 초과하는 경고 단선이 뜨며 복사가 강제 튕김 됩니다.",
+    "symptoms_en": "Copying huge datasets on external formatted drives failed with parameter corruptions or drive I/O failures (0x80070057).",
+    "manualSteps": [
+      "어플리케이션 시스템이 데이터를 안전하게 읽도록 CMD 창에서 'chkdsk /f /r <대상디바이스문자:>'를 수동 파티셔닝에 탑재 가동해 물리 배드 섹터를 자동 진압 시도합니다.",
+      "포맷하려는 파일 시스템의 주 유형이 4GB 넘는 파일 연동을 위해 FAT32 구조가 아닌 'NTFS' 또는 외장형 규격인 'exFAT' 형식으로 정상 지향 포맷 구조 체크 유도합니다.",
+      "시스템 레지스트리 편집기로 진입하여 'HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\SystemCertificates'로 전입합니다.",
+      "'CopyFileBufferedThreshold' DWORD 매개변수를 새로 삽입해 포맷 가치를 조율 검토 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Launch command shell and perform drive sectors validation checks using: 'chkdsk /f /r E:' replacing drive letter properly.",
+      "Ensure targeted partition file formatting relies on NTFS or exFAT rather than standard legacy FAT32.",
+      "Check disk health state manually using official smart utility diagnostics to check if drive shows hardware decay warnings.",
+      "Optimize disk sectors alignment layout inside Windows Disk Management dashboard directly."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/topic/-0x80070057-%EC%98%A4%EB%A5%98%EB%8A%94-windows-7%EC%97%90%EC%84%9C-%EB%B0%B1%EC%97%85-%ED%8C%8C%EC%9D%BC%EC%9D%84-%EB%B0%B1%EC%97%85%ED%95%98%EB%A0%A4%EA%B3%A0-%ED%95%A0-%EB%95%8C-%EB%B0%9C%EC%83%9D%ED%95%A9%EB%8B%88%EB%8B%A4-b816cd9c-851f-50ab-d72b-8b5eaccc2073"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "디스크",
+      "포맷",
+      "ntfs",
+      "0x80070057",
+      "복사오류",
+      "chkdsk"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T16:35:51.830+09:00",
+    "source": "System Grounding (Initial Setup)"
+  },
+  {
+    "id": "kb-update-0x80070003",
+    "category": "업데이트",
+    "code": "0x80070003",
+    "title": "Windows 업데이트 경로를 찾을 수 없음 (0x80070003)",
+    "title_en": "Windows Update The system cannot find the path specified (0x80070003)",
+    "symptoms": "업데이트 다운로드 폴더의 디렉터리 구조가 손상되었거나 지정된 파일 경로를 찾을 수 없어 설치 프로세스가 중단됩니다.",
+    "symptoms_en": "Windows Update installation fails because the system cannot find the specified download path or directory structure is corrupted.",
+    "manualSteps": [
+      "관리자 권한 명령 프롬프트(CMD)를 엽니다.",
+      "net stop wuauserv 및 net stop bits 명령으로 업데이트 서비스를 중지합니다.",
+      "ren C:\\Windows\\SoftwareDistribution SoftwareDistribution.old 명령으로 캐시 디렉터리를 백업 및 재설정합니다.",
+      "net start wuauserv 및 net start bits를 실행하여 서비스를 재기동하고 업데이트를 다시 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Stop update services: 'net stop wuauserv' and 'net stop bits'.",
+      "Rename cache folder: 'ren C:\\Windows\\SoftwareDistribution SoftwareDistribution.old'.",
+      "Restart services: 'net start wuauserv' and 'net start bits', then retry updating."
+    ],
+    "script": "Stop-Service -Name wuauserv -Force; Stop-Service -Name bits -Force; Rename-Item -Path \"C:\\Windows\\SoftwareDistribution\" -NewName \"SoftwareDistribution.bak\" -ErrorAction SilentlyContinue; Start-Service -Name wuauserv; Start-Service -Name bits",
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/windows-update-troubleshooter"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070003",
+      "업데이트",
+      "update",
+      "SoftwareDistribution",
+      "경로오류"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-update-0x80070422",
+    "category": "업데이트",
+    "code": "0x80070422",
+    "title": "Windows Update 서비스 비활성화 오류 (0x80070422)",
+    "title_en": "Windows Update Service Disabled Error (0x80070422)",
+    "symptoms": "Windows Update 또는 관련 종속 서비스가 비활성화되어 업데이트를 설치하거나 확인할 수 없습니다.",
+    "symptoms_en": "Windows Update or dependent services are disabled, preventing any downloads or installations.",
+    "manualSteps": [
+      "Win + R을 누르고 services.msc를 입력하여 서비스 관리자를 엽니다.",
+      "'Windows Update' 서비스를 찾아 마우스 우클릭 후 '속성'을 클릭합니다.",
+      "시작 유형을 '자동' 또는 '수동'으로 변경하고 '시작' 버튼을 누릅니다.",
+      "'Background Intelligent Transfer Service(BITS)' 및 'Cryptographic Services'도 동일하게 시작으로 설정합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'services.msc' and press Enter.",
+      "Locate 'Windows Update' service, right-click and open Properties.",
+      "Set Startup type to 'Automatic', click 'Start', then Apply.",
+      "Verify that BITS and Cryptographic Services are also set to Running."
+    ],
+    "script": "Set-Service -Name wuauserv -StartupType Automatic; Start-Service -Name wuauserv; Set-Service -Name bits -StartupType Automatic; Start-Service -Name bits",
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-windows-update-errors"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070422",
+      "wuauserv",
+      "서비스 비활성화",
+      "업데이트 오류"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-update-0x800f081f",
+    "category": "업데이트",
+    "code": "0x800F081F",
+    "title": "Windows 누적 업데이트 소스 파일 누락 (0x800F081F)",
+    "title_en": "Windows Cumulative Update Source Files Missing (0x800F081F)",
+    "symptoms": ".NET Framework 3.5 설치 또는 최신 누적 보안 업데이트 진행 시 소스 파일을 찾을 수 없어 0x800F081F 오류가 발생합니다.",
+    "symptoms_en": "Installation of .NET Framework 3.5 or cumulative security updates fails because required source files cannot be found.",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell 또는 CMD를 실행합니다.",
+      "Dism /Online /Cleanup-Image /ScanHealth 명령을 실행하여 이미지 무결성을 검사합니다.",
+      "Dism /Online /Cleanup-Image /RestoreHealth 명령으로 손상된 시스템 구성요소를 온라인 복구합니다.",
+      "완료 후 sfc /scannow 명령을 가동하여 시스템 파일을 최종 점검합니다."
+    ],
+    "manualSteps_en": [
+      "Open PowerShell as Administrator.",
+      "Run: 'Dism /Online /Cleanup-Image /ScanHealth'.",
+      "Run: 'Dism /Online /Cleanup-Image /RestoreHealth' to restore missing components from Windows Update servers.",
+      "Run: 'sfc /scannow' to verify system files."
+    ],
+    "script": "Dism.exe /Online /Cleanup-Image /RestoreHealth; sfc /scannow",
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/application-management/dotnet-framework-35-installation-error-0x800f081f"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "0x800f081f",
+      "DISM",
+      "넷프레임워크",
+      ".NET",
+      "RestoreHealth"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-update-0x80070643",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "KB5034441 복구 파티션 용량 부족 업데이트 실패 (0x80070643)",
+    "title_en": "Windows Recovery Environment (WinRE) Update Failure (0x80070643)",
+    "symptoms": "Windows RE(복구 환경) 파티션의 여유 공간이 부족하여 보안 업데이트(KB5034441 등) 설치 시 0x80070643 오류가 무한 반복됩니다.",
+    "symptoms_en": "WinRE partition does not have sufficient free space to install BitLocker vulnerability patches, failing repeatedly with 0x80070643.",
+    "manualSteps": [
+      "관리자 권한 CMD에서 'reagentc /info'를 입력하여 복구 파티션 상태를 확인합니다.",
+      "'reagentc /disable'을 입력하여 임시로 WinRE를 비활성화합니다.",
+      "디스크 관리(diskmgmt.msc) 또는 diskpart를 이용하여 OS C: 드라이브를 250MB 축소하고 복구 파티션을 확장합니다.",
+      "'reagentc /enable'을 입력하여 WinRE를 재가동한 뒤 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Check WinRE status via 'reagentc /info' in Admin CMD.",
+      "Disable WinRE temporarily: 'reagentc /disable'.",
+      "Shrink OS partition by 250MB and extend Recovery Partition.",
+      "Re-enable WinRE: 'reagentc /enable' and retry Windows Update."
+    ],
+    "script": "reagentc /info; Write-Host 'WinRE partition inspection completed'",
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5028997-instructions-to-manually-resize-your-partition-to-install-the-winre-update-4da21244-e0ce-4ff0-bc37-9f445e342880"
+    ],
+    "windowsVersions": [
+      "Windows 10",
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "KB5034441",
+      "WinRE",
+      "복구 파티션",
+      "reagentc"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-network-0x800704cf",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "네트워크 위치에 연결할 수 없음 (0x800704cf)",
+    "title_en": "The Network Location Cannot Be Reached (0x800704cf)",
+    "symptoms": "Microsoft 계정 로그인, 스토어 접속 또는 사내 공유 폴더 접근 시 '네트워크 위치에 연결할 수 없습니다' 오류가 표시됩니다.",
+    "symptoms_en": "Cannot sign in to Microsoft account or access local network shares, displaying error 0x800704cf.",
+    "manualSteps": [
+      "장치 관리자를 열고 '네트워크 어댑터' 항목을 확장합니다.",
+      "보기 > '숨겨진 장치 표시'를 클릭한 뒤, 비활성화된 이전 TAP 또는 가상 어댑터를 제거합니다.",
+      "네트워크 연결(ncpa.cpl)에서 사용 중인 이더넷/Wi-Fi 어댑터 속성을 열어 'Microsoft 네트워크용 클라이언트' 체크 해제 후 재체크합니다.",
+      "CMD에서 'netsh winsock reset' 실행 후 PC를 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager, click View > Show hidden devices.",
+      "Uninstall unused virtual network adapters or VPN TAP drivers.",
+      "Open 'ncpa.cpl', open adapter properties, toggle 'Client for Microsoft Networks'.",
+      "Run 'netsh winsock reset' in CMD and restart computer."
+    ],
+    "script": "netsh winsock reset; netsh int ip reset; ipconfig /flushdns",
+    "sourceUrls": [
+      "https://answers.microsoft.com/en-us/windows/forum/all/error-0x800704cf"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704cf",
+      "네트워크위치",
+      "네트워크 오류",
+      "winsock"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-system-kmode",
+    "category": "시스템/블루스크린",
+    "code": "KMODE_EXCEPTION_NOT_HANDLED",
+    "title": "Kmode Exception Not Handled 블루스크린 (0x0000001E)",
+    "title_en": "KMODE_EXCEPTION_NOT_HANDLED Blue Screen (0x0000001E)",
+    "symptoms": "커널 모드 프로그램이 예외를 발생시켰으나 오류 처리기가 이를 처리하지 못해 블루스크린 크래시가 발생합니다. 종종 특정 .sys 드라이버 파일이 언급됩니다.",
+    "symptoms_en": "Kernel mode exception wasn't caught by the handler, often referencing faulty hardware drivers like netwtw.sys or nvlddmkm.sys.",
+    "manualSteps": [
+      "오류 화면에 표시된 파일명(예: nvlddmkm.sys, amdppm.sys)을 메모합니다.",
+      "그래픽 카드 또는 무선 랜 드라이버 공식 제조사 웹사이트에서 최신 WHQL 드라이버로 클린 설치합니다.",
+      "Windows 메모리 진단 도구(mdsched.exe)를 실행하여 RAM 불량 여부를 검사합니다.",
+      "CMD에서 'chkdsk C: /f /r'을 실행하여 디스크 배드섹터를 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Note down the failing driver module (e.g. nvlddmkm.sys) on BSOD.",
+      "Perform a clean installation of GPU/Network drivers using DDU.",
+      "Run Windows Memory Diagnostic tool ('mdsched.exe') to check RAM integrity.",
+      "Run 'chkdsk C: /f /r' to verify disk health."
+    ],
+    "script": "sfc /scannow; Dism.exe /Online /Cleanup-Image /RestoreHealth",
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x1e--kmode-exception-not-handled"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "KMODE_EXCEPTION_NOT_HANDLED",
+      "0x0000001E",
+      "블루스크린",
+      "BSOD",
+      "드라이버크래시"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-system-pagefault",
+    "category": "시스템/블루스크린",
+    "code": "PAGE_FAULT_IN_NONPAGED_AREA",
+    "title": "Page Fault In Nonpaged Area 블루스크린 (0x00000050)",
+    "title_en": "PAGE_FAULT_IN_NONPAGED_AREA Blue Screen (0x00000050)",
+    "symptoms": "유효하지 않은 시스템 메모리를 참조할 때 발생하며, 메모리 접촉 불량, 가상 메모리(페이징 파일) 손상 또는 백신 충돌이 주원인입니다.",
+    "symptoms_en": "Invalid system memory address reference, caused by faulty RAM sticks, corrupted pagefile, or antivirus conflict.",
+    "manualSteps": [
+      "PC 본체를 열어 RAM 슬롯을 골드핑거 지우개로 세척 후 재장착합니다.",
+      "제어판 > 시스템 > 고급 시스템 설정 > 성능 '설정' > 고급 > 가상 메모리 '변경'을 엽니다.",
+      "'모든 드라이브에 대한 페이징 파일 크기 자동 관리'를 체크 해제 후 '페이징 파일 없음'으로 설정 후 재부팅, 다시 '시스템이 관리하는 크기'로 재설정합니다.",
+      "최근 설치된 서드파티 백신 프로그램을 임시 삭제합니다."
+    ],
+    "manualSteps_en": [
+      "Reseat RAM modules into motherboard slots after cleaning pins.",
+      "Recreate Windows Paging File via Advanced System Settings > Virtual Memory.",
+      "Run 'sfc /scannow' to repair corrupted system files.",
+      "Temporarily uninstall third-party antivirus utilities."
+    ],
+    "script": "sfc /scannow; Get-WmiObject win32_pagefileusage",
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x50--page-fault-in-nonpaged-area"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "PAGE_FAULT_IN_NONPAGED_AREA",
+      "0x00000050",
+      "메모리",
+      "RAM",
+      "가상메모리"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-store-0x803f8001",
+    "category": "스토어/앱",
+    "code": "0x803F8001",
+    "title": "Microsoft Store 앱 라이선스 확인 실패 (0x803F8001)",
+    "title_en": "Microsoft Store Check Your Account / Game Launch Error (0x803F8001)",
+    "symptoms": "Minecraft, Xbox 앱 또는 스토어 앱 실행 시 '현재 계정에서 이 앱을 사용할 수 없습니다' 또는 0x803F8001 오류 코드가 출력됩니다.",
+    "symptoms_en": "Minecraft, Xbox app, or Store apps fail to launch with 'Check your account' or error code 0x803F8001.",
+    "manualSteps": [
+      "Microsoft Store 및 Xbox 앱에서 로그아웃한 뒤 동일한 정품 구매 계정으로 재로그인합니다.",
+      "설정 > 시간 및 언어에서 날짜 및 시간과 표준 시간대를 '자동으로 설정'으로 동기화합니다.",
+      "Win + R을 누르고 'wsreset.exe'를 실행하여 스토어 캐시를 초기화합니다.",
+      "설정 > 앱 > 설치된 앱 > '게임 서비스(Gaming Services)' 고급 옵션에서 '복구' 및 '초기화'를 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Sign out from Microsoft Store and Xbox App, then sign back in with correct account.",
+      "Ensure Date & Time and Time Zone are synchronized automatically in Settings.",
+      "Run 'wsreset.exe' to clear Microsoft Store cache.",
+      "Reset 'Gaming Services' and 'Microsoft Store' in Settings > Apps."
+    ],
+    "script": "wsreset.exe; Get-AppxPackage *WindowsStore* | Reset-AppxPackage",
+    "sourceUrls": [
+      "https://support.xbox.com/en-US/help/errors/error-code-0x803F8001"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x803F8001",
+      "Microsoft Store",
+      "스토어",
+      "마인크래프트",
+      "Xbox",
+      "wsreset"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-store-0x80073d05",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Windows 앱 패키지 배포 데이터 삭제 실패 (0x80073D05)",
+    "title_en": "Windows Store App Package Deployment Error (0x80073D05)",
+    "symptoms": "앱 설치 또는 업데이트 도중 기존 패키지 폴더의 잔여 데이터 삭제 권한 부족으로 인해 설치가 취소됩니다.",
+    "symptoms_en": "Error occurs when trying to install or update a store app because the previous package folder cannot be removed.",
+    "manualSteps": [
+      "Win + R을 누르고 '%localappdata%\\Packages' 경로로 이동합니다.",
+      "오류가 발생하는 해당 앱 이름의 폴더(예: Microsoft.WindowsStore_...)를 찾아 이름을 '.old'로 변경하거나 삭제합니다.",
+      "삭제되지 않을 경우 안전 모드로 부팅하여 해당 디렉터리를 정리합니다.",
+      "스토어에서 앱을 다시 다운로드합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to '%localappdata%\\Packages'.",
+      "Find the problematic app folder and append '.old' or delete it.",
+      "Re-open Microsoft Store and retry the download."
+    ],
+    "script": "wsreset.exe",
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/application-management/app-install-issues"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "Packages",
+      "스토어앱설치",
+      "배포오류"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-activation-0xc004f074",
+    "category": "정품인증",
+    "code": "0xC004F074",
+    "title": "KMS 정품 인증 서버에 연결할 수 없음 (0xC004F074)",
+    "title_en": "Key Management Service (KMS) Activation Failed (0xC004F074)",
+    "symptoms": "회사 또는 학교의 KMS 호스트에 연결할 수 없어 Windows 라이선스 정품 인증이 만료되거나 실패합니다.",
+    "symptoms_en": "Windows cannot contact the Key Management Service (KMS) host, resulting in activation failure.",
+    "manualSteps": [
+      "사내 인트라넷 또는 VPN에 올바르게 연결되어 있는지 확인합니다.",
+      "관리자 권한 명령 프롬프트에서 'slmgr.vbs /dli'를 실행하여 현재 라이선스 채널을 확인합니다.",
+      "개인 라이선스를 보유한 경우 'slmgr.vbs /ipk <25자리-제품키>'를 입력하여 올바른 제품 키를 등록합니다.",
+      "'slmgr.vbs /ato'를 실행하여 온라인 정품 인증을 즉시 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Ensure PC is connected to enterprise network or corporate VPN.",
+      "Run 'slmgr.vbs /dli' in Admin CMD to check license details.",
+      "Install official Retail/OEM product key: 'slmgr.vbs /ipk <YOUR-KEY>'.",
+      "Trigger activation: 'slmgr.vbs /ato'."
+    ],
+    "script": "slmgr.vbs /dli; slmgr.vbs /ato",
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/troubleshoot-activation-error-0xc004f074"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "0xC004F074",
+      "정품인증",
+      "KMS",
+      "slmgr",
+      "라이선스"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-hardware-code43",
+    "category": "하드웨어/드라이버",
+    "code": "Code 43",
+    "title": "문제가 보고되었기 때문에 이 장치를 중지했습니다 (코드 43)",
+    "title_en": "Windows has stopped this device because it has reported problems (Code 43)",
+    "symptoms": "장치 관리자에서 그래픽 카드 또는 USB 장치에 노란색 느낌표 아이콘과 함께 '코드 43' 오류가 표시되며 작동하지 않습니다.",
+    "symptoms_en": "Device Manager shows yellow exclamation mark with Code 43 on graphics card or USB device, causing malfunction.",
+    "manualSteps": [
+      "DDU(Display Driver Uninstaller) 유틸리티를 안전 모드에서 실행하여 기존 그래픽 드라이버를 완전히 클린 제거합니다.",
+      "NVIDIA 또는 AMD 공식 홈페이지에서 최신 인증 드라이버를 다운로드하여 재설치합니다.",
+      "노트북의 경우 전원 어댑터 및 배터리를 분리하고 전원 버튼을 30초간 길게 눌러 메인보드 잔류 전원을 방전(EC 리셋)합니다.",
+      "장치 관리자에서 해당 장치를 마우스 우클릭 후 '디바이스 제거' 선택 후 상단 '하드웨어 변경 사항 검색'을 클릭합니다."
+    ],
+    "manualSteps_en": [
+      "Uninstall display drivers using Display Driver Uninstaller (DDU) in Safe Mode.",
+      "Reinstall the latest official drivers from GPU manufacturer.",
+      "Perform hard power reset to clear residual capacitors on motherboard.",
+      "Right-click device in Device Manager, select 'Uninstall', then scan for hardware changes."
+    ],
+    "script": "pnputil /scan-devices; Write-Host 'Hardware scan requested'",
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/error-codes-in-device-manager-in-windows-f0e86359-b4d3-41c9-9440-abb61604521f"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Code 43",
+      "코드 43",
+      "그래픽카드",
+      "장치관리자",
+      "느낌표"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-performance-disk100",
+    "category": "성능/프리징",
+    "code": "DISK_USAGE_100",
+    "title": "Windows 10/11 작업 관리자 디스크 사용률 100% 프리징",
+    "title_en": "100% Disk Usage and System Freezing in Task Manager",
+    "symptoms": "아무 작업도 하지 않는데 작업 관리자에서 C: 드라이브 디스크 사용률이 100%로 고정되며 PC가 극도로 버벅이고 멈춥니다.",
+    "symptoms_en": "Disk usage spikes to 100% continuously in Task Manager without heavy active tasks, causing severe lags and freezes.",
+    "manualSteps": [
+      "Win + R > services.msc를 실행하여 'Connected User Experiences and Telemetry' 및 'SysMain(이전 SuperFetch)' 서비스를 찾습니다.",
+      "각각 속성에서 시작 유형을 '사용 안 함'으로 변경하고 서비스를 '중지'합니다.",
+      "설정 > 시스템 > 알림에서 'Windows에 대한 팁과 제안 받기' 옵션을 비활성화합니다.",
+      "관리자 권한 CMD에서 'chkdsk C: /f'를 예약하여 다음 부팅 시 디스크 오류를 검사합니다."
+    ],
+    "manualSteps_en": [
+      "Open services.msc, disable 'SysMain' and 'Connected User Experiences and Telemetry'.",
+      "Turn off 'Get tips and suggestions when using Windows' in Settings > Notifications.",
+      "Run 'chkdsk C: /f' to fix disk file system errors.",
+      "Update storage controller (AHCI/NVMe) drivers."
+    ],
+    "script": "Stop-Service -Name SysMain -Force; Set-Service -Name SysMain -StartupType Disabled; Write-Host 'SysMain optimized successfully'",
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/tips-to-improve-pc-performance-in-windows-b3b3ef4b-f4e2-4d71-83d5-e24a23b7b8a0"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "디스크 100%",
+      "SysMain",
+      "Superfetch",
+      "프리징",
+      "느려짐",
+      "SSD 버벅임"
+    ],
+    "isLatest": true,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "kb-storage-0x80070570",
+    "category": "파일 시스템/저장소",
+    "code": "0x80070570",
+    "title": "파일 또는 디렉터리가 손상되었거나 읽을 수 없음 (0x80070570)",
+    "title_en": "The file or directory is corrupted and unreadable (0x80070570)",
+    "symptoms": "외장 하드, USB 드라이브 또는 특정 폴더 접근/삭제 시 0x80070570 오류가 발생하며 파일 조작이 불가능합니다.",
+    "symptoms_en": "Files or folders on internal or external drives cannot be accessed or deleted due to filesystem corruption.",
+    "manualSteps": [
+      "관리자 권한 명령 프롬프트(CMD)를 엽니다.",
+      "손상된 드라이브 문자가 E: 라면 'chkdsk E: /f /r' 명령어를 실행합니다.",
+      "배드섹터 복구 및 인덱스 테이블 검사가 끝날 때까지 대기합니다.",
+      "완료 후 탐색기를 재실행하여 파일 정상 접근 여부를 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Execute 'chkdsk <DriveLetter>: /f /r' (e.g. 'chkdsk E: /f /r').",
+      "Wait for filesystem index repair and bad cluster recovery to complete.",
+      "Verify access to the files in File Explorer."
+    ],
+    "script": "chkdsk C: /scan",
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/chkdsk"
+    ],
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070570",
+      "chkdsk",
+      "파일손상",
+      "외장하드",
+      "디스크오류"
+    ],
+    "isLatest": false,
+    "createdAt": "2026-09-03T07:45:54.488Z"
+  }
+];

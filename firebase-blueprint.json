@@ -1,0 +1,182 @@
+{
+  "entities": {
+    "Issue": {
+      "title": "Windows Issue",
+      "description": "A known Windows issue with troubleshooting steps.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "symptoms": { "type": "string" },
+        "script": { "type": "string" },
+        "manualSteps": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "source": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "verificationStatus": { 
+          "type": "string", 
+          "enum": ["pending", "verified", "needs_update", "obsolete"] 
+        },
+        "aiFeedback": { "type": "string" },
+        "windowsVersions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "isLatest": { "type": "boolean", "description": "Mark if the issue is recently trending or updated." }
+      },
+      "required": ["id", "category", "code", "title", "symptoms", "manualSteps"]
+    },
+    "SystemConfig": {
+      "title": "System Configuration",
+      "description": "Global system settings and status.",
+      "type": "object",
+      "properties": {
+        "lastSyncAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SearchLog": {
+      "title": "Search Log",
+      "description": "Logs of user search queries for troubleshooting.",
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" },
+        "version": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["query", "version", "timestamp"]
+    },
+    "Feedback": {
+      "title": "User Feedback",
+      "description": "Feedback on whether a troubleshooting step was successful.",
+      "type": "object",
+      "properties": {
+        "issueId": { "type": "string" },
+        "isSolved": { "type": "boolean" },
+        "comment": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["issueId", "isSolved", "timestamp"]
+    },
+    "AdminLog": {
+      "title": "Admin Activity Log",
+      "description": "Logs of administrative actions like editing or deleting issues.",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["create", "update", "delete"] },
+        "targetId": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "adminEmail": { "type": "string" }
+      },
+      "required": ["action", "targetId", "timestamp", "adminEmail"]
+    },
+    "Bookmark": {
+      "title": "User Bookmark",
+      "description": "A saved issue for a specific user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "issueId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "issueId", "timestamp"]
+    },
+    "UserActivity": {
+      "title": "User Activity",
+      "description": "Record of user searches and views.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["search", "view"] },
+        "targetId": { "type": "string" },
+        "query": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "timestamp"]
+    },
+    "AppErrorLog": {
+      "title": "Application Error Log",
+      "description": "Logs of runtime errors, AI failures, and API issues.",
+      "type": "object",
+      "properties": {
+        "message": { "type": "string" },
+        "stack": { "type": "string" },
+        "component": { "type": "string" },
+        "severity": { "type": "string", "enum": ["error", "warning", "fatal"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["message", "severity", "timestamp"]
+    },
+    "VisitorLog": {
+      "title": "Visitor Session Log",
+      "description": "Log of visitor sessions, device info, active routes, and visit metrics.",
+      "type": "object",
+      "properties": {
+        "visitorId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "ip": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "browser": { "type": "string" },
+        "os": { "type": "string" },
+        "deviceType": { "type": "string", "enum": ["desktop", "mobile", "tablet"] },
+        "language": { "type": "string" },
+        "activeTab": { "type": "string" },
+        "visitCount": { "type": "number" },
+        "activityCount": { "type": "number" },
+        "entryUrl": { "type": "string" },
+        "firstVisitedAt": { "type": "string", "format": "date-time" },
+        "lastActiveAt": { "type": "string", "format": "date-time" },
+        "isBlocked": { "type": "boolean" }
+      },
+      "required": ["visitorId", "lastActiveAt"]
+    }
+  },
+  "firestore": {
+    "/issues/{issueId}": {
+      "schema": { "$ref": "#/entities/Issue" },
+      "description": "Collection of known Windows issues."
+    },
+    "/system_config/{configId}": {
+      "schema": { "$ref": "#/entities/SystemConfig" },
+      "description": "Global system configuration documents."
+    },
+    "/search_logs/{logId}": {
+      "schema": { "$ref": "#/entities/SearchLog" },
+      "description": "Logs of user search queries."
+    },
+    "/feedback/{feedbackId}": {
+      "schema": { "$ref": "#/entities/Feedback" },
+      "description": "User feedback on troubleshooting steps."
+    },
+    "/admin_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminLog" },
+      "description": "Administrative activity logs."
+    },
+    "/app_error_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AppErrorLog" },
+      "description": "Runtime application error logs."
+    },
+    "/bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "#/entities/Bookmark" },
+      "description": "User's saved issues."
+    },
+    "/user_activities/{activityId}": {
+      "schema": { "$ref": "#/entities/UserActivity" },
+      "description": "Log of individual user history."
+    },
+    "/visitor_logs/{visitorLogId}": {
+      "schema": { "$ref": "#/entities/VisitorLog" },
+      "description": "Collection of active and historic visitor logs."
+    }
+  }
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "sync-log-1790669725097",
+    "timestamp": "2026-09-29T17:15:25.097+09:00",
+    "type": "failure",
+    "source": "runAiSync",
+    "message": "엔진 실행 중 치명적 오류 발생 (GEMINI_API_KEY): This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+  },
+  {
+    "id": "sync-log-1790669723746",
+    "timestamp": "2026-09-29T17:15:23.746+09:00",
+    "type": "start",
+    "source": "runAiSync",
+    "message": "AI 엔진 가동 (Key: GEMINI_API_KEY, Model: gemini-3.5-flash)"
+  },
+  {
+    "id": "sync-log-1790669723655",
+    "timestamp": "2026-09-29T17:15:23.655+09:00",
+    "type": "failure",
+    "source": "runAiSync",
+    "message": "엔진 실행 중 치명적 오류 발생 (CUSTOM_API_KEY): This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+  },
+  {
+    "id": "sync-log-1790669722889",
+    "timestamp": "2026-09-29T17:15:22.889+09:00",
+    "type": "start",
+    "source": "runAiSync",
+    "message": "AI 엔진 가동 (Key: CUSTOM_API_KEY, Model: gemini-3.5-flash)"
+  },
+  {
+    "id": "sync-log-1790669722797",
+    "timestamp": "2026-09-29T17:15:22.797+09:00",
+    "type": "failure",
+    "source": "runAiSync",
+    "message": "엔진 실행 중 치명적 오류 발생 (My_Project_40329): This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+  },
+  {
+    "id": "sync-log-1790669721811",
+    "timestamp": "2026-09-29T17:15:21.811+09:00",
+    "type": "start",
+    "source": "runAiSync",
+    "message": "AI 엔진 가동 (Key: My_Project_40329, Model: gemini-3.5-flash)"
+  },
+  {
+    "id": "sync-log-1790668908705",
+    "timestamp": "2026-09-29T17:01:48.705+09:00",
+    "type": "failure",
+    "source": "runAiSync",
+    "message": "엔진 실행 중 치명적 오류 발생 (GEMINI_API_KEY): This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+  },
+  {
+    "id": "sync-log-1790668907365",
+    "timestamp": "2026-09-29T17:01:47.365+09:00",
+    "type": "info",
+    "source": "runAiSync",
+    "message": "구글 실시간 검색 그라운딩 한도를 초과하여 일반 지식 검색 모드로 대체 실행합니다. (이유: You exceeded your current quota, please check your plan and billing details. For more information on)"
+  },
+  {
+    "id": "sync-log-1790668906891",
+    "timestamp": "2026-09-29T17:01:46.891+09:00",
+    "type": "start",
+    "source": "runAiSync",
+    "message": "AI 엔진 가동 (Key: GEMINI_API_KEY, Model: gemini-3.5-flash)"
+  },
+  {
+    "id": "sync-log-1790668860498",
+    "timestamp": "2026-09-29T17:01:00.498+09:00",
+    "type": "failure",
+    "source": "runAiSync",
+    "message": "엔진 실행 중 치명적 오류 발생 (CUSTOM_API_KEY): This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+  },
+  {
+    "id": "sync-log-1790668859675",
+    "timestamp": "2026-09-29T17:00:59.675+09:00",
+    "type": "info",
+    "source": "runAiSync",
+    "message": "구글 실시간 검색 그라운딩 한도를 초과하여 일반 지식 검색 모드로 대체 실행합니다. (이유: You exceeded your current quota, please check your plan and billing details. For more information on)"
+  },
+  {
+    "id": "sync-log-1790668859224",
+    "timestamp": "2026-09-29T17:00:59.224+09:00",
+    "type": "start",
+    "source": "runAiSync",
+    "message": "AI 엔진 가동 (Key: CUSTOM_API_KEY, Model: gemini-3.5-flash)"
+  },
+  {
+    "id": "sync-log-1790668849071",
+    "timestamp": "2026-09-29T17:00:49.071+09:00",
+    "type": "failure",
+    "source": "runAiSync",
+    "message": "엔진 실행 중 치명적 오류 발생 (My_Project_40329): This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+  },
+  {
+    "id": "sync-log-1790668823711",
+    "timestamp": "2026-09-29T17:00:23.711+09:00",
+    "type": "info",
+    "source": "runAiSync",
+    "message": "구글 실시간 검색 그라운딩 한도를 초과하여 일반 지식 검색 모드로 대체 실행합니다. (이유: You exceeded your current quota, please check your plan and billing details. For more information on)"
+  },
+  {
+    "id": "sync-log-1790668823193",
+    "timestamp": "2026-09-29T17:00:23.193+09:00",
+    "type": "start",
+    "source": "runAiSync",
+    "message": "AI 엔진 가동 (Key: My_Project_40329, Model: gemini-3.5-flash)"
+  }
+]

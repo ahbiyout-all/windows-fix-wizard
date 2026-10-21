@@ -1,0 +1,10 @@
+{
+  "name": "Windows Fix Wizard",
+  "description": "AI-powered Windows troubleshooting tool that provides official Microsoft solutions and generates fix scripts. Uses Gemini for deep diagnosis.",
+  "requestFramePermissions": [
+    "clipboard"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

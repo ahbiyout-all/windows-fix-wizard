@@ -1,0 +1,136 @@
+name: Windows Fix Wizard - Release Build & Installer Packaging
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic Version override (leave blank to read from package.json)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-package:
+    name: 🔨 Build & Package Installer (Windows / Cross-Platform)
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: 📥 Check out repository code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ⚙️ Set up Node.js 22 (LTS Runtime)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: 📦 Install project dependencies
+        shell: bash
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: 🔍 Extract Dynamic Version (Single Source of Truth)
+        id: get_version
+        shell: pwsh
+        run: |
+          $inputVer = "${{ github.event.inputs.version }}"
+          if ($inputVer -and $inputVer.Trim() -ne "") {
+            $ver = $inputVer.Trim().TrimStart("v")
+          } else {
+            $pkg = Get-Content -Raw -Path "./package.json" | ConvertFrom-Json
+            $ver = $pkg.version
+            if (-not $ver) {
+              # Fallback: parse from docs/PATCH_NOTE.md header
+              $patchHeader = Get-Content -Path "./docs/PATCH_NOTE.md" -TotalCount 10 | Select-String -Pattern "v(\d+\.\d+\.\d+)"
+              if ($patchHeader.Matches) {
+                $ver = $patchHeader.Matches[0].Groups[1].Value
+              } else {
+                $ver = "3.9.0"
+              }
+            }
+          }
+          Write-Host "Determined Application Release Version: v$ver"
+          "APP_VER=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "tag_name=v$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: 🏗️ Build Application Assets
+        shell: bash
+        run: |
+          npm run build
+
+      - name: 🛠️ Set up Inno Setup Compiler
+        shell: pwsh
+        run: |
+          # Check or install Inno Setup via Chocolatey
+          if (-not (Get-Command "iscc" -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress
+            $innoPath = "${env:ProgramFiles(x86)}\Inno Setup 6"
+            if (Test-Path $innoPath) {
+              Write-Host "Adding $innoPath to PATH"
+              "$innoPath" | Out-File -FilePath $env:GITHUB_PATH -Append
+            }
+          }
+
+      - name: 📦 Compile Unpacked Installer (Strictly Installer Artifact Only)
+        shell: pwsh
+        run: |
+          $ver = "$env:APP_VER"
+          New-Item -ItemType Directory -Force -Path "./release_assets" | Out-Null
+          
+          Write-Host "Compiling Inno Setup script with version: $ver"
+          & iscc "/DMyAppVersion=$ver" "/O./release_assets" ./scripts/installer.iss
+          
+          # Verify installer was created
+          $installer = Get-ChildItem -Path "./release_assets" -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "CRITICAL: Installer (.exe) was not generated in ./release_assets!"
+            exit 1
+          }
+          
+          Write-Host "Generated installer: $($installer.FullName)"
+          
+          # Compute SHA-256 Checksum for security verification
+          $hash = Get-FileHash -Path $installer.FullName -Algorithm SHA256
+          "$($hash.Hash)  $($installer.Name)" | Out-File -FilePath "./release_assets/SHA256SUMS.txt" -Encoding ascii
+          
+          Write-Host "Installer package prepared. Release contains strictly installer assets without docs/portable dumps."
+          Get-ChildItem -Path "./release_assets"
+
+      - name: 🚀 Publish to GitHub Releases (Installer Assets Only)
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag_name }}
+          name: "Windows Fix Wizard ${{ steps.get_version.outputs.tag_name }}"
+          body: |
+            ### Windows Fix Wizard ${{ steps.get_version.outputs.tag_name }} Release
+            
+            **제작자 및 공식 채널:**
+            - **개발자**: AhBiYout (GitHub: [AhBiYout-all](https://github.com/AhBiYout-all))
+            - **저장소**: [https://github.com/AhBiYout-all/windows-fix-wizard](https://github.com/AhBiYout-all/windows-fix-wizard)
+            - **공식 구글 블로그**: [https://ahbiyoutvibe.blogspot.com/](https://ahbiyoutvibe.blogspot.com/)
+            - **소속**: [CISNet (https://www.cisnet.co.kr)](https://www.cisnet.co.kr)
+            
+            ---
+            
+            #### 📦 배포 설치 파일 (Installer Only)
+            - **설치 프로그램**: `Windows-Fix-Wizard-Setup-v${{ steps.get_version.outputs.version }}.exe`
+            - **설치 방식**: 개별 파일 폴더 풀림(Unpacked Multi-File) 설치
+            - **사전 방화벽 조용 등록**: `Windows Fix Wizard` 및 `Windows Fix Wizard v${{ steps.get_version.outputs.version }}` 자동 등록
+            - **무인 설치 지원**: `/SILENT`, `/VERYSILENT`, `/SUPPRESSMSGBOXES` 지원
+            - **기존 버전 감지**: 재설치 시 사용자 덮어쓰기/삭제 확인 다이얼로그 지원
+          files: |
+            release_assets/*.exe
+            release_assets/SHA256SUMS.txt
+          draft: false
+          prerelease: false
