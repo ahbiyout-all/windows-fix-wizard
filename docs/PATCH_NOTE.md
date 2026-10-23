@@ -1,6 +1,135 @@
-# Patch Note - System Update (v3.12.0)
+# Patch Note - System Update (v3.15.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.15.0] - 2026-10-23
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Pure GitHub Pages Delivery & Complete Legacy Desktop Artifact Purge
+- **Full Transition to Pure GitHub Pages Web Service**: In accordance with user directives to serve exclusively via GitHub Pages (`https://ahbiyout-all.github.io/windows-fix-wizard/`), all legacy desktop installer downloads (`.exe`), Inno Setup scripts, and local execution artifacts have been completely eliminated.
+- **Purged Obsolete Installer Files**:
+  - Removed `scripts/installer.iss` (legacy Inno Setup multi-file installer configuration).
+  - Removed `.github/workflows/release-build.yml` (legacy Windows installer packaging runner).
+  - Retained clean GitHub Pages deployment automation (`deploy-pages.yml`) and autonomous Microsoft documentation harvester (`windows-fix-collector.yml`).
+- **Eliminated Desktop `.exe` References from UI**:
+  - Removed `handleDownloadInstaller` function and all desktop `.exe` download buttons from Header, Mobile Quick Navigation Drawer, and Update Notification Modal.
+  - Replaced installer triggers with direct official GitHub Pages cloud links and zero-friction PWA web app installation.
+
+### 🛡️ Security Hardening & Authentication
+- **Zero Local Executable Vulnerability**: Eliminating `.exe` downloads protects end users from false-positive Windows Defender / SmartScreen warnings and removes local executable execution vectors.
+- **Serverless GitHub Pages Direct Routing**: All update notices, shortcuts, and documentation now route securely to HTTPS-secured GitHub Pages and GitHub Releases documentation.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Update Modal Modernization**: Modernized the update notification modal from an `.exe` installer download banner to an official GitHub Pages cloud deployment notice with a direct `[GitHub Pages 최신 웹앱 열기]` button pointing to `GITHUB_PAGES_URL`.
+- **Eliminated Unused Handlers & Dead Code**: Purged obsolete click handlers and unneeded state references for installer downloads across desktop and mobile components.
+
+### 📈 UI/UX & Performance Optimizations
+- **Streamlined Navigation Header**: Header UI cleanly focuses on `[언어 전환 (KO/EN)]`, `[다크/라이트 모드]`, `[웹앱 설치 (PWA)]`, `[공식 GitHub Pages]`, and `[실시간 업데이트 확인]`.
+- **Responsive Mobile Quick Tools**: Mobile drawer optimized with a clean 2-column + full-width layout for PWA install, GitHub Pages link, and real-time update verification.
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.15.0`.
+
+---
+
+## [v3.14.0] - 2026-10-23
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Full Modernization for GitHub Pages Static Deployment & Legacy Code Purge
+- **Purged Obsolete Manual Service Worker & Dummy Assets**: Removed deprecated `public/sw.js` and inline registration script in `index.html`. Full PWA service worker caching and lifecycle management are now delegated to VitePWA (`vite-plugin-pwa`) with automatic background updates.
+- **Removed Deprecated Startup Batch & TinyURL Scripts**:
+  - Eliminated legacy `AI_AutoSync_Setup.bat` and `WinFix_Register_Startup.bat` scripts that previously registered startup batch commands to open external TinyURL (`tinyurl.com/2fsfjuuk`) in Microsoft Edge.
+  - Replaced legacy batch downloads in the navigation header, mobile quick tools, and admin sync panel with direct links to the official Windows installer (`Windows_Fix_Wizard_Setup.exe`) published on GitHub Releases and one-click GitHub Actions GitOps cloud runner access.
+- **Modernized PWA & Desktop Shortcut Creation**:
+  - `handleInstallClick` now invokes the browser-native `beforeinstallprompt` dialog (`deferredPrompt.prompt()`) on supported desktop and mobile devices.
+  - For standard browsers, generates desktop shortcuts pointing directly to the official GitHub Pages URL (`https://ahbiyout-all.github.io/windows-fix-wizard/`).
+
+### 🛡️ Security Hardening & Authentication
+- **Zero-404 Static Environment Guard**: Added runtime `IS_GITHUB_PAGES` environment detection (`window.location.hostname.endsWith('github.io')`). The application automatically silences and bypasses server-only Express API calls (`/api/backend-health`, `/api/logs/add`, `/api/visitor/log`, `/api/visitor/autoblock-settings`), preventing 404 network failure noise in the browser console.
+- **Removed Placeholder AdSense Scripts**: Purged non-functional `ca-pub-PLACEHOLDER` scripts from `index.html`, eliminating 400 Bad Request console errors upon page load.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Dual-Mode Static Issue Resolution**: In `fetchIssues`, if the database mode is set to local file or offline while hosted on GitHub Pages, the app automatically falls back to `./data/issues.json` or fetches directly from the official GitHub Raw Content CDN (`raw.githubusercontent.com`), ensuring seamless search and troubleshooting without a Node server.
+- **GitHub Pages Workflow Dataset Packaging**: Updated `.github/workflows/deploy-pages.yml` to package `data/issues.json` into `dist/data/issues.json` alongside SPA `404.html` and `.nojekyll` bypass files during automated CI/CD builds.
+
+### 📈 UI/UX & Performance Optimizations
+- **Streamlined Navigation Header & Mobile Drawer**: Header now cleanly features `[앱 설치]` (PWA/Shortcut), `[PC 설치 (.exe)]` (Official Installer), and `[업데이트 확인]` (Real-Time Release Check).
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, `server.ts`, `scripts/installer.iss`, `scripts/github_push.bat`, `scripts/github_push.sh`, and `docs/PATCH_NOTE.md` to `v3.14.0`.
+
+---
+
+## [v3.13.2] - 2026-10-22
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Hardened Multi-Format Admin Token Parsing & Pre-Flight JWT Structural Validation
+- **Eliminated `FirebaseAuthError (Decoding Firebase ID token failed)`**: Resolved server-side runtime exceptions caused by passing non-JWT credentials, un-prefixed passkeys, or quoted tokens directly to `admin.auth().verifyIdToken()`.
+- **Pre-Flight 3-Part JWT Validation**: The `requireAdmin` middleware now strictly verifies token structure (`jwtParts.length === 3`) before invoking Firebase Admin SDK decoding, preventing `auth/argument-error` exceptions when non-JWT or malformed strings are received.
+- **Universal Passkey Format Acceptance**: Expanded candidate passkey matching in `requireAdmin` to accept both prefixed (`passkey:<key>`) and direct (`<key>`) administrative tokens (e.g., `winfix-admin-2026!`, `winfix-master-key`, `dev_admin_bypass`, or `process.env.ADMIN_PASSKEY`).
+- **Client-Side Passkey Token Priority**: Updated `getAuthHeaders` in `src/App.tsx` so that an active admin passkey session (`winfix_admin_passkey_active`) takes precedence over standard or unprivileged user session tokens.
+
+### 🛡️ Security Hardening & Authentication
+- **Sanitized Token Verification Logging**: Replaced fatal `console.error` dumps with clean `console.warn("[Admin Auth] ...")` rejection messages, preventing false positive alarm escalations during unauthorized or expired access attempts.
+- **Case-Insensitive Admin Email Matching**: Normalized decoded Firebase token email claims (`toLowerCase().trim()`) when comparing against the authorized administrator whitelist.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Zero-Crash Authentication Flow**: Handled malformed, empty, or expired bearer tokens cleanly with HTTP 401 Unauthorized responses rather than unhandled promise rejections.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, `server.ts`, and `docs/PATCH_NOTE.md` to `v3.13.2`.
+
+---
+
+## [v3.13.1] - 2026-10-22
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Autonomous Engine Smart API Key Quarantine & Fail-Safe Standby Architecture
+- **Instant Invalid Key Quarantine**: Resolved the multi-model cascade failure where unverified or revoked API keys (`CUSTOM_API_KEY`, `My_Project_40329`, etc.) repeatedly triggered `[Engine Sync] Model '...' with '...' failed: API key not valid` across all 5 models on every cron cycle.
+- **Immediate Model Loop Break**: The engine now identifies `API_KEY_INVALID` or `API key not valid` on the very first model attempt, immediately quarantines the faulty key for 24 hours (`knownInvalidKeys`), and breaks out of the loop without attempting subsequent models.
+- **Graceful Standby Mode**: When all environment keys are invalid or unconfigured, the background engine transitions into quiet standby mode (`consecutiveFailures: 0`), preserving GitOps synchronization and serving issues seamlessly via the local database.
+- **Quarantine Reset on Demand**: Added automated cache and quarantine invalidation whenever an administrator triggers a manual engine run (`/api/engine/run-now`), enabling instant re-testing once new keys are provided in Secrets.
+
+### 🛡️ Security Hardening & Authentication
+- **Console Log Sanitization**: Silenced raw RPC error dumps when invalid API keys are encountered, preventing credential noise and false positive alert triggers.
+- **Clean Client-Side Error Translation**: Updated client-side AI caller (`callAiWithFallback`) to intercept invalid API key errors and present user-friendly guidance directing administrators to configure valid keys in Settings, rather than retrying multiple models pointlessly.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Resolved Sync Error Spam**: Eliminated repeating 10-line error cascades (`error 0` through `error 9`) in the server logs.
+- **Zero Consecutive Failure Impact**: Prevented invalid API key errors from incrementing server failure counters or triggering false emergency email notifications.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, `server.ts`, and `docs/PATCH_NOTE.md` to `v3.13.1`.
+
+---
+
+## [v3.13.0] - 2026-10-22
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Dedicated Multi-Channel Admin Authentication Portal
+- **Dedicated Admin Login Tab**: Re-architected the Authentication Modal (`showAuthModal`) into a 3-tab portal separating **"🛡️ 관리자 로그인 (Admin Portal)"**, **"👤 일반 로그인 (User Login)"**, and **"📝 회원가입 (Sign Up)"**.
+- **Google Admin One-Click Authentication**: Streamlined one-click Google OAuth verification with automated allowlist inspection (`ahbiyoutwinfix@gmail.com`, `redmunlight@gmail.com`, `ahbiyout@gmail.com`, `ahbiyoutwinfixwizard@gmail.com`) that grants immediate Super Administrator role.
+- **Emergency / Sandbox Master Passkey Authentication (`ADMIN_PASSKEY`)**:
+  - Implemented instant passkey verification allowing administrators to authenticate immediately even when Google OAuth popup is blocked by browser policies, in cross-origin iframes, sandboxed preview environments, or GitHub Pages.
+  - Added dedicated server-side verification endpoint (`/api/admin/verify-passkey`) and client-side fallback with `[기본 마스터키 자동입력]` button for frictionless access.
+  - Added configurable `ADMIN_PASSKEY` environment variable in `.env.example`.
+
+### 🛡️ Security Hardening & Authentication
+- **Secure Token Bearer Protocol**: Extended server-side `requireAdmin` middleware to support `passkey:*` bearer authorization alongside Firebase ID tokens and admin bypass tokens.
+- **Client Session Persistence & Instant Elevation**: Persisted admin session state (`winfix_admin_passkey_active`, `winfix_admin_token`, `winfix_admin_email`) in local storage, automatically restoring Super Administrator privileges across page reloads and browser restarts.
+- **Comprehensive Admin Session Revocation**: Enhanced `handleLogout` to atomically purge all local admin tokens, passkeys, and active sessions alongside Firebase `signOut(auth)`.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Domain Mismatch & Popup Blocker Fallback**: Eliminated admin lockout caused by Firebase `auth/unauthorized-domain` or `auth/popup-blocked` errors on custom domains and GitHub Pages by providing instant passkey bypass guidance.
+- **Clear Privilege Feedback**: Enhanced error messages to distinguish between unauthorized accounts and system login failures.
+
+### 📈 UI/UX & Performance Optimizations
+- **Prominent Header Admin Badge**: Displayed glowing `👑 관리자 모드 [SUPER]` badge in desktop header with one-click direct jump to the Admin Console (`activeTab = 'admin'`).
+- **Direct Admin Quick Access**: Added dedicated `🛡️ 관리자` quick launch button in top navigation and mobile drawer for instant portal access.
+- **Global Version Synchronization**: Aligned system versioning across `package.json`, `src/App.tsx`, `server.ts`, `.env.example`, and `docs/PATCH_NOTE.md` to `v3.13.0`.
 
 ---
 

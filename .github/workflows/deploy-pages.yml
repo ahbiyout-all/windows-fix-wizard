@@ -38,9 +38,11 @@ jobs:
 
       - name: 🏗️ Build Web Application for GitHub Pages
         run: |
-          npx vite build --base=./
+          npm run build:pages
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
+          mkdir -p dist/data
+          cp data/issues.json dist/data/issues.json 2>/dev/null || true
 
       - name: 🌐 Configure GitHub Pages
         uses: actions/configure-pages@v5

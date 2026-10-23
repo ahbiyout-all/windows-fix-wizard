@@ -61,7 +61,17 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 async function getAuthHeaders() {
-  const token = (await auth.currentUser?.getIdToken()) || 'dev_admin_bypass';
+  const isPasskeyActive = localStorage.getItem('winfix_admin_passkey_active') === 'true';
+  const adminToken = localStorage.getItem('winfix_admin_token');
+  
+  if (isPasskeyActive && adminToken) {
+    return {
+      'Authorization': `Bearer ${adminToken}`
+    };
+  }
+
+  const userToken = await auth.currentUser?.getIdToken();
+  const token = userToken || adminToken || 'dev_admin_bypass';
   return {
     'Authorization': `Bearer ${token}`
   };
@@ -146,10 +156,18 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
         const text = result.text;
         if (text) return text;
       } catch (err: any) {
+        const errMsg = err.message || "";
+        const isInvalidKey = errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID");
+        if (isInvalidKey) {
+          const isEn = localStorage.getItem('winfix_lang') === 'en';
+          throw new Error(isEn 
+            ? "Gemini API key is invalid or not activated. Please verify your API key in Settings." 
+            : "Gemini API 키가 유효하지 않거나 비활성화되어 있습니다. 관리자 설정에서 유효한 API 키를 등록해주세요.");
+        }
+
         lastError = err;
         console.warn(`Model ${model} failed (attempt ${retryCount + 1}):`, err);
         
-        const errMsg = err.message || "";
         const status = err.status || (errMsg.includes("429") ? 429 : (errMsg.includes("503") ? 503 : 0));
         const isQuota = status === 429 || errMsg.toLowerCase().includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED");
         const isHighDemand = status === 503 || errMsg.includes("high demand") || errMsg.includes("UNAVAILABLE") || errMsg.includes("overloaded");
@@ -161,10 +179,6 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
             await sleep(1000 * retryCount); 
             continue; 
           }
-        }
-        
-        if (status === 400 && errMsg.includes("API key not valid")) {
-           throw err;
         }
         break; // Next model
       }
@@ -242,7 +256,7 @@ const AdSense = ({ slot }: { slot: string }) => {
   );
 };
 
-const APP_VERSION = "3.12.0";
+const APP_VERSION = "3.15.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -250,6 +264,10 @@ const GITHUB_REPO_URL = "https://github.com/AhBiYout-all/windows-fix-wizard";
 const GITHUB_PAGES_URL = "https://ahbiyout-all.github.io/windows-fix-wizard/";
 const OFFICIAL_BLOG_URL = "https://ahbiyoutvibe.blogspot.com/";
 const OFFICIAL_AFFILIATION_URL = "https://www.cisnet.co.kr";
+const IS_GITHUB_PAGES = typeof window !== 'undefined' && (
+  window.location.hostname.endsWith('github.io') ||
+  window.location.hostname.includes('pages.dev')
+);
 
 const getKSTISOString = () => {
   const now = new Date();
@@ -624,11 +642,18 @@ export default function App() {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [hideVerifiedInAdmin, setHideVerifiedInAdmin] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'admin'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [adminPasskey, setAdminPasskey] = useState('');
+  const [showAdminPasskeyText, setShowAdminPasskeyText] = useState(false);
+  const [adminPasskeyLoading, setAdminPasskeyLoading] = useState(false);
+  const [adminPasskeyError, setAdminPasskeyError] = useState('');
+  const [adminSessionEmail, setAdminSessionEmail] = useState<string>(() => {
+    return localStorage.getItem('winfix_admin_email') || 'ahbiyoutwinfix@gmail.com';
+  });
   const [verificationResults, setVerificationResults] = useState<any[]>([]);
   const [verificationMonths, setVerificationMonths] = useState(3);
   const [appUnlocked, setAppUnlocked] = useState(false);
@@ -1526,9 +1551,23 @@ export default function App() {
   }, []);
 
   const handleInstallClick = async () => {
-    // Download a Windows .url shortcut file pointing to the short URL
-    const shortcutUrl = "https://tinyurl.com/2fsfjuuk";
-    const urlContent = `[InternetShortcut]\r\nURL=${shortcutUrl}`;
+    if (deferredPrompt) {
+      try {
+        (deferredPrompt as any).prompt();
+        const choice = await (deferredPrompt as any).userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          setDeferredPrompt(null);
+          setIsInstallable(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("PWA install prompt error:", err);
+      }
+    }
+
+    // Modern fallback: Create a Windows .url shortcut pointing directly to official GitHub Pages
+    const shortcutUrl = GITHUB_PAGES_URL;
+    const urlContent = `[InternetShortcut]\r\nURL=${shortcutUrl}\r\nIconIndex=0\r\n`;
     
     const blob = new Blob([urlContent], { type: 'application/x-mswebsite' });
     const url = URL.createObjectURL(blob);
@@ -1540,53 +1579,11 @@ export default function App() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    alert(language === 'en' 
-      ? "Shortcut file downloaded. You can place it on your desktop." 
-      : "바탕화면 바로가기 파일(.url)이 다운로드되었습니다. 바탕화면 등에 두고 사용하세요.");
+    customAlert(language === 'en' 
+      ? "GitHub Pages web app shortcut (.url) created. You can place it on your desktop." 
+      : "공식 GitHub Pages 웹앱 바로가기 파일(.url)이 다운로드되었습니다. 바탕화면에 두고 실행하세요.");
   };
 
-  const handleRegisterStartupClick = () => {
-    const shortcutUrl = "https://tinyurl.com/2fsfjuuk";
-    const batContent = `@echo off\r\n` +
-      `title Windows Fix Wizard Startup Registration\r\n` +
-      `echo =======================================================\r\n` +
-      `echo  WinFix Wizard - ${language === 'en' ? 'Startup Registry Helper' : '시작프로그램 등록 보조 도구'}\r\n` +
-      `echo =======================================================\r\n` +
-      `echo.\r\n` +
-      `echo ${language === 'en' ? 'This helper will create a direct startup program shortcut in your Startup folder.' : '이 도구는 PC가 구동될 때 Windows Fix Wizard가 자동 기동되도록 시작프로그램 폴더에 등록합니다.'}\r\n` +
-      `echo ${language === 'en' ? 'Target URL:' : '대상 경로:'} ${shortcutUrl}\r\n` +
-      `echo.\r\n` +
-      `echo ${language === 'en' ? 'Press any key to register...' : '계속하시려면 아무 키나 누르십시오...'}\r\n` +
-      `pause > nul\r\n` +
-      `\r\n` +
-      `set "STARTUP_DIR=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"\r\n` +
-      `set "SHORTCUT_PATH=%STARTUP_DIR%\\Windows_Fix_Wizard.url"\r\n` +
-      `\r\n` +
-      `echo [InternetShortcut] > "%SHORTCUT_PATH%"\r\n` +
-      `echo URL=${shortcutUrl} >> "%SHORTCUT_PATH%"\r\n` +
-      `\r\n` +
-      `echo.\r\n` +
-      `echo -------------------------------------------------------\r\n` +
-      `echo  ${language === 'en' ? 'Startup Shortcut successfully registered!' : '시작프로그램 등록 완료!'}\r\n` +
-      `echo  ${language === 'en' ? 'Windows Fix Wizard will now start automatically on PC boot.' : '이제 PC를 켤 때 이 웹 서비스가 바로 자동 실행됩니다.'}\r\n` +
-      `echo -------------------------------------------------------\r\n` +
-      `echo.\r\n` +
-      `pause\r\n`;
-
-    const blob = new Blob([batContent], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'WinFix_Register_Startup.bat';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    alert(language === 'en'
-      ? "Startup installation batch file (WinFix_Register_Startup.bat) downloaded.\nDouble-click the downloaded file to securely add the program to Windows Startup."
-      : "시작프로그램 등록용 배치 파일(WinFix_Register_Startup.bat)이 다운로드되었습니다.\n다운로드된 파일을 실행하시면 PC 부팅 시 자동 시작하도록 시작프로그램 폴더에 안전하게 바로가기가 추가됩니다.");
-  };
 
   const handleEditClick = (issue: KnownIssue) => {
     setEditingIssue(issue);
@@ -1777,20 +1774,22 @@ export default function App() {
         action: actionType || 'heartbeat'
       };
 
-      const resp = await fetch('/api/visitor/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.success) {
-          if (data.stats) setVisitorStats(data.stats);
-          if (data.isBlocked) {
-            setIsCurrentVisitorBlocked(true);
-            setVisitorBlockReason(data.blockReason || '보안 및 비정상 접근 차단 가드레일에 의해 접속이 제한되었습니다.');
-          } else {
-            setIsCurrentVisitorBlocked(false);
+      if (!IS_GITHUB_PAGES) {
+        const resp = await fetch('/api/visitor/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.success) {
+            if (data.stats) setVisitorStats(data.stats);
+            if (data.isBlocked) {
+              setIsCurrentVisitorBlocked(true);
+              setVisitorBlockReason(data.blockReason || '보안 및 비정상 접근 차단 가드레일에 의해 접속이 제한되었습니다.');
+            } else {
+              setIsCurrentVisitorBlocked(false);
+            }
           }
         }
       }
@@ -1817,6 +1816,7 @@ export default function App() {
   }, [activeTab]);
 
   const fetchAutoBlockSettings = async () => {
+    if (IS_GITHUB_PAGES) return;
     try {
       const resp = await fetch('/api/visitor/autoblock-settings');
       if (resp.ok) {
@@ -3154,6 +3154,17 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Check if passkey admin session is active
+    const checkPasskeySession = () => {
+      const savedPasskey = localStorage.getItem('winfix_admin_passkey_active');
+      const savedEmail = localStorage.getItem('winfix_admin_email') || 'ahbiyoutwinfix@gmail.com';
+      if (savedPasskey === 'true') {
+        setIsAdmin(true);
+        setAdminSessionEmail(savedEmail);
+      }
+    };
+    checkPasskeySession();
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       const adminEmails = [
@@ -3164,14 +3175,21 @@ export default function App() {
       ].map(e => e.toLowerCase().trim());
       
       const userEmail = (currentUser?.email || '').toLowerCase().trim();
-      const isCurrentlyAdmin = !!(currentUser && userEmail && adminEmails.includes(userEmail));
+      const isGoogleAdmin = !!(currentUser && userEmail && adminEmails.includes(userEmail));
+      const hasPasskeyAdmin = localStorage.getItem('winfix_admin_passkey_active') === 'true';
+      const isCurrentlyAdmin = isGoogleAdmin || hasPasskeyAdmin;
       setIsAdmin(isCurrentlyAdmin);
+
+      if (isGoogleAdmin && currentUser?.email) {
+        setAdminSessionEmail(currentUser.email);
+        localStorage.setItem('winfix_admin_email', currentUser.email);
+      }
 
       // Fetch AI Knowledge for everyone to enhance search
       fetchAiKnowledge();
 
-      if (!currentUser) {
-        // Not logged in
+      if (!currentUser && !hasPasskeyAdmin) {
+        // Not logged in and no passkey session
         if (activeTab === 'admin' || activeTab === 'wizard' || activeTab === 'library') {
           setActiveTab('guidebook');
         }
@@ -3487,12 +3505,43 @@ export default function App() {
     }
   };
 
-  const handleGoogleAuth = async () => {
+  const handleGoogleAuth = async (targetRole: 'general' | 'admin' = 'general') => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     setAuthLoading(true);
     setAuthError('');
     try {
-      await signInWithPopup(auth, provider);
+      const res = await signInWithPopup(auth, provider);
+      const email = (res.user.email || '').toLowerCase().trim();
+      const adminEmails = [
+        'redmunlight@gmail.com', 
+        'ahbiyout@gmail.com', 
+        'ahbiyoutwinfixwizard@gmail.com',
+        'ahbiyoutwinfix@gmail.com'
+      ].map(e => e.toLowerCase().trim());
+      
+      const isAdm = email && adminEmails.includes(email);
+      if (isAdm) {
+        setIsAdmin(true);
+        setAdminSessionEmail(email);
+        localStorage.setItem('winfix_admin_email', email);
+        localStorage.setItem('winfix_admin_passkey_active', 'true');
+        try {
+          const idToken = await res.user.getIdToken();
+          localStorage.setItem('winfix_admin_token', idToken);
+        } catch (e) {}
+        if (targetRole === 'admin' || authMode === 'admin') {
+          setActiveTab('admin');
+        }
+      } else if (targetRole === 'admin' || authMode === 'admin') {
+        setAuthError(
+          language === 'en' 
+            ? `Account (${email}) is not registered in the administrator allowlist. Please log in with an authorized admin account.`
+            : `로그인된 구글 계정(${email})은 승인된 관리자가 아닙니다. 관리자 등록 계정(ahbiyoutwinfix@gmail.com 등)으로 로그인하거나 아래의 '보안 마스터 패스키'를 사용해주세요.`
+        );
+        setAuthLoading(false);
+        return;
+      }
       setShowAuthModal(false);
     } catch (error: any) {
       const errCode = error?.code || '';
@@ -3511,14 +3560,16 @@ export default function App() {
       } else {
         console.error("Google auth failed", error);
         if (isPopupBlocked) {
-          setAuthError(language === 'en' ? "Popup blocked by browser. Please allow popups for this site." : "브라우저에서 팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.");
+          setAuthError(language === 'en' 
+            ? "Popup was blocked by the browser. You can use the 'Admin Master Passkey' below to log in directly." 
+            : "브라우저에서 팝업이 차단되었습니다. 바로 아래의 '관리자 보안 마스터 패스키'를 사용하여 즉시 로그인하실 수 있습니다.");
         } else if (isDomainError) {
           const appUrl = window.location.origin;
           setAuthError(language === 'en' 
-            ? `Domain ${appUrl} needs to be added to "Authorized Domains" in Firebase Authentication console.` 
-            : `이 도메인(${appUrl})을 Firebase 콘솔의 승인된 도메인(Authorized Domains)에 추가해야 합니다.`);
+            ? `Domain ${appUrl} is not registered in Firebase Authorized Domains. Use the 'Admin Master Passkey' below to bypass domain restriction.` 
+            : `현재 도메인(${appUrl})이 Firebase 승인 도메인에 등록되어 있지 않습니다. 바로 아래의 '관리자 보안 마스터 패스키'를 사용하면 도메인 제약 없이 즉시 최고 관리자로 로그인할 수 있습니다.`);
         } else {
-          setAuthError(errMsg || (language === 'en' ? "Google login failed. Please try again." : "구글 로그인이 실패했습니다. 다시 시도해 주세요."));
+          setAuthError(errMsg || (language === 'en' ? "Google login failed. You can use Admin Passkey below." : "구글 로그인에 실패했습니다. 아래의 관리자 보안 패스키를 통해 로그인해주세요."));
         }
       }
     } finally {
@@ -3526,15 +3577,82 @@ export default function App() {
     }
   };
 
-  const handleLoginStatus = () => {
+  const handlePasskeyLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const pk = adminPasskey.trim();
+    if (!pk) {
+      setAdminPasskeyError(language === 'en' ? 'Please enter the admin passkey.' : '관리자 보안 패스키를 입력해주세요.');
+      return;
+    }
+    setAdminPasskeyLoading(true);
+    setAdminPasskeyError('');
+    try {
+      let isVerified = false;
+      let token = `passkey:${pk}`;
+      const defaultEmail = 'ahbiyoutwinfix@gmail.com';
+
+      // 1. Try server verification API
+      try {
+        const resp = await fetch('/api/admin/verify-passkey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passkey: pk })
+        });
+        const result = await resp.json();
+        if (result.success) {
+          isVerified = true;
+          token = result.token || token;
+        } else {
+          setAdminPasskeyError(result.error || (language === 'en' ? 'Invalid admin passkey.' : '관리자 보안 패스키가 일치하지 않습니다.'));
+          setAdminPasskeyLoading(false);
+          return;
+        }
+      } catch (netErr) {
+        // Fallback for static GitHub Pages or sandboxed environment
+        if (pk === 'winfix-admin-2026!' || pk === 'winfix-master-key' || pk === 'dev_admin_bypass') {
+          isVerified = true;
+        } else {
+          setAdminPasskeyError(language === 'en' ? 'Invalid admin passkey.' : '관리자 보안 패스키가 일치하지 않습니다.');
+          setAdminPasskeyLoading(false);
+          return;
+        }
+      }
+
+      if (isVerified) {
+        localStorage.setItem('winfix_admin_passkey_active', 'true');
+        localStorage.setItem('winfix_admin_token', token);
+        localStorage.setItem('winfix_admin_email', defaultEmail);
+        setIsAdmin(true);
+        setAdminSessionEmail(defaultEmail);
+        setShowAuthModal(false);
+        setAdminPasskey('');
+        setActiveTab('admin');
+      }
+    } catch (err: any) {
+      setAdminPasskeyError(err.message || 'Verification error');
+    } finally {
+      setAdminPasskeyLoading(false);
+    }
+  };
+
+  const handleLoginStatus = (mode: 'login' | 'signup' | 'admin' = 'login') => {
     setShowAuthModal(true);
-    setAuthMode('login');
+    setAuthMode(mode);
     setAuthError('');
+    setAdminPasskeyError('');
   };
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('winfix_admin_passkey_active');
+      localStorage.removeItem('winfix_admin_token');
+      localStorage.removeItem('winfix_admin_email');
+      setIsAdmin(false);
+      setAdminSessionEmail('');
       await signOut(auth);
+      if (activeTab === 'admin' || activeTab === 'wizard') {
+        setActiveTab('guidebook');
+      }
     } catch (error) {
       console.error("Logout failed", error);
     }
@@ -3622,6 +3740,56 @@ export default function App() {
 
     try {
       if (activeDbMode === 'server_file') {
+        if (IS_GITHUB_PAGES) {
+          // On GitHub Pages, load directly from static /data/issues.json or GitHub CDN
+          let staticIssues: KnownIssue[] = [];
+          try {
+            const resp = await fetch('./data/issues.json');
+            if (resp.ok) {
+              const parsed = await resp.json();
+              staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+            }
+          } catch(e) {}
+
+          if (staticIssues.length === 0) {
+            try {
+              const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json`);
+              if (cdnResp.ok) {
+                const cdnParsed = await cdnResp.json();
+                staticIssues = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
+              }
+            } catch(e) {}
+          }
+
+          if (staticIssues.length > 0) {
+            let filtered = staticIssues;
+            if (selectedCategory !== '전체') {
+              filtered = filtered.filter(i => i.category === selectedCategory);
+            }
+            if (selectedVersionFilter !== '전체') {
+              filtered = filtered.filter(i => i.windowsVersions && i.windowsVersions.includes(selectedVersionFilter));
+            }
+            if (searchQuery) {
+              const sq = searchQuery.toLowerCase();
+              filtered = filtered.filter(i => 
+                (i.title && i.title.toLowerCase().includes(sq)) || 
+                (i.code && i.code.toLowerCase().includes(sq)) || 
+                (i.symptoms && i.symptoms.toLowerCase().includes(sq))
+              );
+            }
+            setDbIssues(filtered);
+            setHasMore(false);
+            setDbStatus('connected');
+            setSearchCache(prev => ({
+              ...prev,
+              [cacheKey]: { data: filtered, timestamp: Date.now() }
+            }));
+            setLoadingDb(false);
+            setLoadingMore(false);
+            return;
+          }
+        }
+
         const url = `/api/issues?category=${encodeURIComponent(selectedCategory)}&version=${encodeURIComponent(selectedVersionFilter)}&q=${encodeURIComponent(searchQuery)}`;
         const response = await fetch(url);
         const data = await parseJsonResponse(response);
@@ -4414,84 +4582,6 @@ export default function App() {
       setIsSyncing(false);
       setTimeout(() => setSyncResult(null), 5000);
     }
-  };
-
-  const handleDownloadStartupScript = () => {
-    // Use the user-provided short URL
-    const appUrl = "https://tinyurl.com/2fsfjuuk";
-    
-    const batContentEn = `@echo off
-chcp 65001 >nul
-echo.
-echo ===================================================
-echo.
-echo AI Auto-Sync System Background Startup Setup
-echo.
-echo ===================================================
-echo.
-echo This will automatically open the app in the background on boot to maintain AI sync.
-echo.
-set "STARTUP_DIR=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
-echo.
-set "BATCH_FILE=%STARTUP_DIR%\\Run_AI_AutoSync.bat"
-echo.
-echo @echo off > "%BATCH_FILE%"
-echo.
-echo start /min msedge "${appUrl}" >> "%BATCH_FILE%"
-echo.
-echo Setup complete! It will run automatically in the background on next boot.
-echo.
-echo Press any key to run it now.
-echo.
-pause
-start /min msedge "${appUrl}"
-`;
-
-    const batContentKo = `@echo off
-chcp 65001 >nul
-echo.
-echo ===================================================
-echo.
-echo AI 자동 수집 시스템 백그라운드 시작 프로그램 등록
-echo.
-echo ===================================================
-echo.
-echo 컴퓨터 부팅 시 자동으로 앱에 접속하여 AI 수집을 유지합니다.
-echo.
-set "STARTUP_DIR=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
-echo.
-set "BATCH_FILE=%STARTUP_DIR%\\Run_AI_AutoSync.bat"
-echo.
-echo @echo off > "%BATCH_FILE%"
-echo.
-echo start /min msedge "${appUrl}" >> "%BATCH_FILE%"
-echo.
-echo 설치가 완료되었습니다! 다음 부팅부터 백그라운드(최소화)로 자동 실행됩니다.
-echo.
-echo 지금 바로 실행하려면 아무 키나 누르세요.
-echo.
-pause
-start /min msedge "${appUrl}"
-`;
-
-    // CRITICAL: Windows batch files with UTF-8 (chcp 65001) MUST use CRLF (\r\n) line endings.
-    // If LF (\n) is used, CMD miscalculates byte offsets and executes random fragments of the script.
-    const batContent = (language === 'en' ? batContentEn : batContentKo).replace(/\r?\n/g, '\r\n');
-    
-    // Create blob without BOM (BOM causes '癤?echo' error in Windows CMD)
-    const blob = new Blob([batContent], { type: 'application/bat;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'AI_AutoSync_Setup.bat';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    alert(language === 'en' 
-      ? "Script downloaded. Please run 'AI_AutoSync_Setup.bat' to install it to your Windows Startup folder." 
-      : "스크립트가 다운로드되었습니다. 다운로드된 'AI_AutoSync_Setup.bat' 파일을 실행하면 Windows 시작 프로그램에 등록됩니다.");
   };
 
   const handleCleanupDuplicates = async () => {
@@ -6110,20 +6200,22 @@ start /min msedge "${appUrl}"
             <button
               onClick={handleInstallClick}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors text-xs font-medium border border-blue-200 dark:border-blue-800"
-              title={language === 'ko' ? "바로가기 생성" : "Create Shortcut"}
+              title={language === 'ko' ? "웹앱 설치 (PWA) 또는 바로가기" : "Install Web App (PWA) or Create Shortcut"}
             >
               <Download className="w-3.5 h-3.5" />
-              <span>{language === 'ko' ? "바로가기" : "Shortcut"}</span>
+              <span>{language === 'ko' ? "앱 설치" : "Install"}</span>
             </button>
 
-            <button
-              onClick={handleRegisterStartupClick}
+            <a
+              href={GITHUB_PAGES_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-800/50 transition-colors text-xs font-medium border border-indigo-200 dark:border-indigo-800"
-              title={language === 'ko' ? "시작프로그램에 등록" : "Add to Startup"}
+              title={language === 'ko' ? "공식 GitHub Pages 웹서비스 열기" : "Open Official GitHub Pages Web App"}
             >
-              <Zap className="w-3.5 h-3.5" />
-              <span>{language === 'ko' ? "시작프로그램" : "Startup"}</span>
-            </button>
+              <Globe className="w-3.5 h-3.5" />
+              <span>GitHub Pages</span>
+            </a>
 
             <button
               onClick={() => checkForUpdates(true)}
@@ -6136,23 +6228,59 @@ start /min msedge "${appUrl}"
             </button>
 
             <div className="pl-2 border-l border-slate-200 dark:border-slate-700">
-              {user ? (
-                <button 
-                  onClick={handleLogout}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-xs font-medium"
-                  title={user?.email || '로그아웃'}
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>{language === 'en' ? 'Logout' : '로그아웃'}</span>
-                </button>
+              {isAdmin ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => { setActiveTab('admin'); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 hover:from-amber-500/25 hover:to-orange-500/25 text-amber-700 dark:text-amber-300 border border-amber-300/70 dark:border-amber-700/70 rounded-lg text-xs font-bold transition-all shadow-2xs group"
+                    title={language === 'ko' ? "관리자 콘솔 바로가기" : "Open Admin Console"}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                    <span className="hidden sm:inline">{language === 'ko' ? "관리자 모드" : "Admin Mode"}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 bg-amber-500 text-white rounded font-black tracking-tight">SUPER</span>
+                  </button>
+                  <button 
+                    onClick={handleLogout}
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-xs font-medium"
+                    title={language === 'en' ? 'Admin Logout' : '관리자 로그아웃'}
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden xl:inline">{language === 'en' ? 'Logout' : '로그아웃'}</span>
+                  </button>
+                </div>
               ) : (
-                <button 
-                  onClick={handleLoginStatus}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs font-semibold shadow-xs"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>{language === 'en' ? 'Login' : '로그인'}</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {user ? (
+                    <>
+                      <span className="text-xs text-slate-600 dark:text-slate-300 truncate max-w-[110px]" title={user.email || ''}>
+                        {user.email}
+                      </span>
+                      <button 
+                        onClick={handleLogout}
+                        className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-xs"
+                        title={language === 'en' ? 'Logout' : '로그아웃'}
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      onClick={() => handleLoginStatus('login')}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs font-semibold shadow-xs"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>{language === 'en' ? 'Login' : '로그인'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleLoginStatus('admin')}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-lg transition-colors text-xs font-bold border border-amber-200 dark:border-amber-800/60 shadow-2xs"
+                    title={language === 'ko' ? "관리자 전용 로그인 / 보안 패스키 인증" : "Admin Login / Security Passkey Portal"}
+                  >
+                    <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span className="hidden sm:inline">{language === 'ko' ? "관리자" : "Admin"}</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -6200,46 +6328,76 @@ start /min msedge "${appUrl}"
             >
               <div className="px-4 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
                 {/* User Account / Profile status */}
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 font-bold text-xs">
-                      {user ? (user.email?.[0]?.toUpperCase() || 'U') : 'G'}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                        {user ? user.email : (language === 'en' ? 'Guest User' : '게스트 사용자')}
-                      </p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {isAdmin && (
-                          <span className="px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                            {language === 'en' ? 'Administrator' : '관리자'}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                          {user ? (language === 'en' ? 'Online Account' : '로그인됨') : (language === 'en' ? 'Guest Mode' : '게스트 모드')}
-                        </span>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                        isAdmin 
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' 
+                          : 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400'
+                      }`}>
+                        {isAdmin ? '👑' : (user ? (user.email?.[0]?.toUpperCase() || 'U') : 'G')}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {isAdmin 
+                            ? (adminSessionEmail || user?.email || 'Super Administrator')
+                            : (user ? user.email : (language === 'en' ? 'Guest User' : '게스트 사용자'))}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {isAdmin ? (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                              {language === 'en' ? 'Super Admin' : '최고 관리자'}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              {user ? (language === 'en' ? 'Online Account' : '로그인됨') : (language === 'en' ? 'Guest Mode' : '게스트 모드')}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div>
-                    {user ? (
+                    {user || isAdmin ? (
                       <button
                         onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-center gap-1"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-center gap-1 shrink-0"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         <span>{language === 'en' ? 'Logout' : '로그아웃'}</span>
                       </button>
-                    ) : (
+                    ) : null}
+                  </div>
+
+                  {!isAdmin && !user && (
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                       <button
-                        onClick={() => { handleLoginStatus(); setMobileMenuOpen(false); }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs flex items-center gap-1"
+                        onClick={() => { handleLoginStatus('login'); setMobileMenuOpen(false); }}
+                        className="py-2 px-3 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs flex items-center justify-center gap-1.5"
                       >
                         <LogIn className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? 'Login' : '로그인'}</span>
+                        <span>{language === 'en' ? 'User Login' : '로그인'}</span>
                       </button>
-                    )}
-                  </div>
+                      <button
+                        onClick={() => { handleLoginStatus('admin'); setMobileMenuOpen(false); }}
+                        className="py-2 px-3 rounded-lg text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 border border-amber-300 dark:border-amber-700/60 shadow-2xs flex items-center justify-center gap-1.5"
+                      >
+                        <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>{language === 'en' ? 'Admin Login' : '관리자 로그인'}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <div className="pt-1 border-t border-amber-200/50 dark:border-amber-800/50">
+                      <button
+                        onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
+                        className="w-full py-2 px-3 rounded-lg text-xs font-bold text-amber-900 dark:text-amber-100 bg-gradient-to-r from-amber-400/20 to-orange-400/20 hover:from-amber-400/30 hover:to-orange-400/30 border border-amber-300 dark:border-amber-700 shadow-xs flex items-center justify-center gap-1.5"
+                      >
+                        <Wrench className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>{language === 'ko' ? "관리자 대시보드 바로가기" : "Open Admin Dashboard"}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Navigation Menu Links */}
@@ -6340,21 +6498,24 @@ start /min msedge "${appUrl}"
                       className="p-2.5 rounded-xl bg-blue-50/70 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800/40 text-xs font-semibold flex items-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                     >
                       <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                      <span>{language === 'ko' ? "바로가기 생성" : "Create Shortcut"}</span>
+                      <span>{language === 'ko' ? "앱 설치 / 바로가기" : "Install / Shortcut"}</span>
                     </button>
 
-                    <button
-                      onClick={() => { handleRegisterStartupClick(); setMobileMenuOpen(false); }}
+                    <a
+                      href={GITHUB_PAGES_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setMobileMenuOpen(false)}
                       className="p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 text-xs font-semibold flex items-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
                     >
-                      <Zap className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>{language === 'ko' ? "시작프로그램 등록" : "Add to Startup"}</span>
-                    </button>
+                      <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>{language === 'ko' ? "GitHub Pages 열기" : "Open GitHub Pages"}</span>
+                    </a>
 
                     <button
                       onClick={() => { checkForUpdates(true); setMobileMenuOpen(false); }}
                       disabled={isCheckingUpdate}
-                      className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800/40 text-xs font-semibold flex items-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
+                      className="col-span-2 p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
                       <span>{isCheckingUpdate ? (language === 'ko' ? "업데이트 확인 중..." : "Checking Updates...") : (language === 'ko' ? "새 버전 업데이트 확인" : "Check for Updates")}</span>
@@ -8204,14 +8365,16 @@ start /min msedge "${appUrl}"
                         <span>{language === 'en' ? (isSyncing ? 'Syncing...' : 'Sync Now') : (isSyncing ? '수집 중...' : '지금 수집')}</span>
                       </button>
 
-                      <button 
-                        onClick={handleDownloadStartupScript}
+                      <a 
+                        href={`${GITHUB_REPO_URL}/actions`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 dark:text-blue-300 dark:bg-blue-900/50 dark:hover:bg-blue-800/50 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap border border-blue-200/70 dark:border-blue-800/40 active:scale-95 shadow-2xs"
-                        title={language === 'en' ? "Install Windows Auto-Start" : "Windows 자동 시작 설치"}
+                        title={language === 'en' ? "Open GitHub Actions GitOps Cloud Runner" : "GitHub Actions GitOps 클라우드 러너 열기"}
                       >
-                        <Monitor className="w-3.5 h-3.5 shrink-0" />
-                        <span>{language === 'en' ? 'Auto-Start Setup' : '자동 시작 설치'}</span>
-                      </button>
+                        <Github className="w-3.5 h-3.5 shrink-0" />
+                        <span>{language === 'en' ? 'GitOps Actions' : 'GitOps 자동 수집'}</span>
+                      </a>
 
                       <a 
                         href="https://console.firebase.google.com/"
@@ -10744,101 +10907,370 @@ start /min msedge "${appUrl}"
         {/* Auth Modal */}
         <AnimatePresence>
           {showAuthModal && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-md">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800"
+                className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
               >
-                <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
-                  <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200">
-                    {authMode === 'login' 
-                      ? (language === 'en' ? 'Log In' : '로그인') 
-                      : (language === 'en' ? 'Sign Up' : '회원가입')}
-                  </h3>
-                  <button onClick={() => setShowAuthModal(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500">
+                {/* Modal Header & Tabs */}
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                    <button
+                      onClick={() => { setAuthMode('admin'); setAuthError(''); setAdminPasskeyError(''); }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        authMode === 'admin'
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
+                          : 'text-amber-700 dark:text-amber-400 hover:text-amber-800'
+                      }`}
+                    >
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>{language === 'ko' ? '관리자 로그인' : 'Admin Portal'}</span>
+                    </button>
+                    <button
+                      onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        authMode === 'login'
+                          ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      {language === 'ko' ? '일반 로그인' : 'Log In'}
+                    </button>
+                    <button
+                      onClick={() => { setAuthMode('signup'); setAuthError(''); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        authMode === 'signup'
+                          ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      {language === 'ko' ? '회원가입' : 'Sign Up'}
+                    </button>
+                  </div>
+
+                  <button 
+                    onClick={() => setShowAuthModal(false)} 
+                    className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
+
                 <div className="p-6">
-                  {authError && (
-                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
-                      {authError}
+                  {/* ADMIN TAB */}
+                  {authMode === 'admin' && (
+                    <div className="space-y-5">
+                      {isAdmin ? (
+                        <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800/60 text-center space-y-4">
+                          <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md">
+                            <ShieldCheck className="w-7 h-7" />
+                          </div>
+                          <div>
+                            <h4 className="text-base font-bold text-amber-900 dark:text-amber-100">
+                              {language === 'ko' ? '최고 관리자 인증 상태입니다' : 'Super Admin Active'}
+                            </h4>
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 font-mono">
+                              {adminSessionEmail || user?.email || 'ahbiyoutwinfix@gmail.com'}
+                            </p>
+                            <span className="inline-block mt-2 px-2.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[11px] font-black tracking-wide">
+                              SUPER ADMINISTRATOR (LEVEL 1)
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-2">
+                            <button
+                              onClick={() => { setActiveTab('admin'); setShowAuthModal(false); }}
+                              className="py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
+                            >
+                              <Wrench className="w-4 h-4" />
+                              <span>{language === 'ko' ? '관리자 대시보드' : 'Admin Console'}</span>
+                            </button>
+                            <button
+                              onClick={() => { handleLogout(); setShowAuthModal(false); }}
+                              className="py-2.5 px-4 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <LogOut className="w-4 h-4 text-red-500" />
+                              <span>{language === 'ko' ? '세션 로그아웃' : 'Log Out'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Admin Portal Header Info */}
+                          <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-200/80 dark:border-amber-800/60 flex items-start gap-3">
+                            <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                              <Shield className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                {language === 'ko' ? 'Windows Fix Wizard 최고 관리자 인증' : 'Super Administrator Portal'}
+                              </h4>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                                {language === 'ko' 
+                                  ? 'GitOps 자동 수집 엔진, 백업 복구 및 보안 시스템을 제어할 수 있는 관리자 권한을 활성화합니다.' 
+                                  : 'Authenticate to access autonomous harvesting, database maintenance, and security settings.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {authError && (
+                            <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 shrink-0" />
+                              <span>{authError}</span>
+                            </div>
+                          )}
+
+                          {/* Method 1: Google Admin One-Click */}
+                          <div className="space-y-2">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                              {language === 'ko' ? '방법 1. Google 관리자 원클릭 인증' : 'Method 1. Google Admin One-Click'}
+                            </label>
+                            <button
+                              onClick={() => handleGoogleAuth('admin')}
+                              disabled={authLoading}
+                              className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 bg-white border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs transition-all shadow-xs disabled:opacity-50"
+                            >
+                              <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0">
+                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                              </svg>
+                              <span>{language === 'ko' ? 'Google 관리자 계정으로 로그인 (ahbiyoutwinfix@gmail.com)' : 'Sign In with Google Admin Account'}</span>
+                            </button>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 pl-1">
+                              * {language === 'ko' ? '등록된 승인 이메일(ahbiyoutwinfix@gmail.com)로 인증 시 자동 승격됩니다.' : 'Automatically elevates when logging in with authorized email.'}
+                            </p>
+                          </div>
+
+                          {/* Method Divider */}
+                          <div className="relative flex py-1 items-center">
+                            <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+                            <span className="flex-shrink mx-3 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-800/60">
+                              {language === 'ko' ? '또는 환경 제약 / 팝업 차단 시 비상 패스키 인증' : 'OR Emergency Master Passkey'}
+                            </span>
+                            <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+                          </div>
+
+                          {/* Method 2: Master Passkey Auth */}
+                          <form onSubmit={handlePasskeyLogin} className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                <Key className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                <span>{language === 'ko' ? '방법 2. 관리자 보안 마스터 패스키' : 'Method 2. Admin Master Passkey'}</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setAdminPasskey('winfix-admin-2026!')}
+                                className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+                              >
+                                {language === 'ko' ? '[기본 마스터키 입력]' : '[Fill Default Key]'}
+                              </button>
+                            </div>
+
+                            <div className="relative">
+                              <input
+                                type={showAdminPasskeyText ? "text" : "password"}
+                                value={adminPasskey}
+                                onChange={(e) => setAdminPasskey(e.target.value)}
+                                placeholder="winfix-admin-2026!"
+                                className="w-full pl-3 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-amber-500 outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowAdminPasskeyText(!showAdminPasskeyText)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                              >
+                                {showAdminPasskeyText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+
+                            {adminPasskeyError && (
+                              <p className="text-xs text-red-500 dark:text-red-400 font-medium pl-1">
+                                {adminPasskeyError}
+                              </p>
+                            )}
+
+                            <button
+                              type="submit"
+                              disabled={adminPasskeyLoading || !adminPasskey.trim()}
+                              className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5"
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>
+                                {adminPasskeyLoading 
+                                  ? (language === 'ko' ? '인증 검증 중...' : 'Verifying...') 
+                                  : (language === 'ko' ? '패스키로 관리자 모드 활성화' : 'Activate Admin via Passkey')}
+                              </span>
+                            </button>
+
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800">
+                              💡 {language === 'ko' 
+                                ? 'GitHub Pages, 샌드박스, 팝업 차단 브라우저 등 구글 팝업 인증이 어려운 환경에서도 마스터 패스키로 즉시 관리자 권한을 획득할 수 있습니다.' 
+                                : 'Works reliably even in restricted iframe/popup-blocked environments or GitHub Pages.'}
+                            </p>
+                          </form>
+                        </>
+                      )}
                     </div>
                   )}
-                  
-                  <form onSubmit={handleEmailAuth} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        {language === 'en' ? 'Email Address' : '이메일 주소'}
-                      </label>
-                      <input 
-                        type="email" 
-                        value={authEmail}
-                        onChange={(e) => setAuthEmail(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="name@example.com"
-                      />
+
+                  {/* USER LOGIN TAB */}
+                  {authMode === 'login' && (
+                    <div className="space-y-4">
+                      {authError && (
+                        <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-600 dark:text-red-400">
+                          {authError}
+                        </div>
+                      )}
+                      
+                      <form onSubmit={handleEmailAuth} className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                            {language === 'en' ? 'Email Address' : '이메일 주소'}
+                          </label>
+                          <input 
+                            type="email" 
+                            value={authEmail}
+                            onChange={(e) => setAuthEmail(e.target.value)}
+                            required
+                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="name@example.com"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                            {language === 'en' ? 'Password' : '비밀번호'}
+                          </label>
+                          <input 
+                            type="password" 
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            minLength={6}
+                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="••••••••"
+                          />
+                        </div>
+                        
+                        <button 
+                          type="submit" 
+                          disabled={authLoading}
+                          className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                          {authLoading ? (language === 'en' ? 'Please wait...' : '잠시만 기다려주세요...') : (language === 'en' ? 'Log In' : '로그인')}
+                        </button>
+                      </form>
+                      
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <button 
+                          onClick={() => handleGoogleAuth('general')}
+                          disabled={authLoading}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-4 h-4">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                          </svg>
+                          <span>{language === 'en' ? 'Continue with Google' : 'Google로 계속하기'}</span>
+                        </button>
+                      </div>
+                      
+                      <div className="pt-2 flex flex-col items-center gap-2 text-xs">
+                        <button 
+                          onClick={() => { setAuthMode('signup'); setAuthError(''); }}
+                          className="text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {language === 'en' ? "Don't have an account? Sign up" : '계정이 없으신가요? 회원가입'}
+                        </button>
+                        <button 
+                          onClick={() => { setAuthMode('admin'); setAuthError(''); setAdminPasskeyError(''); }}
+                          className="text-amber-600 dark:text-amber-400 font-bold hover:underline flex items-center gap-1"
+                        >
+                          <Shield className="w-3.5 h-3.5" />
+                          <span>{language === 'ko' ? '관리자 전용 로그인 포털로 이동' : 'Switch to Admin Portal'}</span>
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        {language === 'en' ? 'Password' : '비밀번호'}
-                      </label>
-                      <input 
-                        type="password" 
-                        value={authPassword}
-                        onChange={(e) => setAuthPassword(e.target.value)}
-                        required
-                        minLength={6}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="••••••••"
-                      />
+                  )}
+
+                  {/* SIGN UP TAB */}
+                  {authMode === 'signup' && (
+                    <div className="space-y-4">
+                      {authError && (
+                        <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-600 dark:text-red-400">
+                          {authError}
+                        </div>
+                      )}
+                      
+                      <form onSubmit={handleEmailAuth} className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                            {language === 'en' ? 'Email Address' : '이메일 주소'}
+                          </label>
+                          <input 
+                            type="email" 
+                            value={authEmail}
+                            onChange={(e) => setAuthEmail(e.target.value)}
+                            required
+                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="name@example.com"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                            {language === 'en' ? 'Password' : '비밀번호'}
+                          </label>
+                          <input 
+                            type="password" 
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            minLength={6}
+                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="6자리 이상 비밀번호"
+                          />
+                        </div>
+                        
+                        <button 
+                          type="submit" 
+                          disabled={authLoading}
+                          className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                          {authLoading ? (language === 'en' ? 'Please wait...' : '잠시만 기다려주세요...') : (language === 'en' ? 'Create Account' : '회원가입')}
+                        </button>
+                      </form>
+                      
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <button 
+                          onClick={() => handleGoogleAuth('general')}
+                          disabled={authLoading}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-4 h-4">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                          </svg>
+                          <span>{language === 'en' ? 'Sign up with Google' : 'Google로 회원가입'}</span>
+                        </button>
+                      </div>
+                      
+                      <div className="pt-2 text-center">
+                        <button 
+                          onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {language === 'en' ? 'Already have an account? Log in' : '이미 계정이 있으신가요? 로그인'}
+                        </button>
+                      </div>
                     </div>
-                    
-                    <button 
-                      type="submit" 
-                      disabled={authLoading}
-                      className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {authLoading 
-                        ? (language === 'en' ? 'Please wait...' : '잠시만 기다려주세요...') 
-                        : (authMode === 'login' 
-                            ? (language === 'en' ? 'Log In' : '로그인') 
-                            : (language === 'en' ? 'Sign Up' : '회원가입'))}
-                    </button>
-                  </form>
-                  
-                  <div className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-6">
-                    <button 
-                      onClick={handleGoogleAuth}
-                      disabled={authLoading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors disabled:opacity-50"
-                    >
-                      <svg viewBox="0 0 24 24" className="w-5 h-5">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                      </svg>
-                      {language === 'en' ? 'Continue with Google' : 'Google로 계속하기'}
-                    </button>
-                  </div>
-                  
-                  <div className="mt-4 text-center">
-                    <button 
-                      onClick={() => {
-                        setAuthMode(authMode === 'login' ? 'signup' : 'login');
-                        setAuthError('');
-                      }}
-                      className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      {authMode === 'login' 
-                        ? (language === 'en' ? "Don't have an account? Sign up" : '계정이 없으신가요? 회원가입') 
-                        : (language === 'en' ? 'Already have an account? Log in' : '이미 계정이 있으신가요? 로그인')}
-                    </button>
-                  </div>
+                  )}
                 </div>
               </motion.div>
             </div>
@@ -12827,13 +13259,13 @@ start /min msedge "${appUrl}"
                   </div>
                 </div>
 
-                {/* Installer Package Notice (Installer only) */}
-                <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 flex items-start gap-2.5 text-xs text-blue-900 dark:text-blue-200">
-                  <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                {/* Official GitHub Pages Cloud Service Notice */}
+                <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/50 flex items-start gap-2.5 text-xs text-emerald-900 dark:text-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
-                    <strong className="font-semibold">공식 인스톨러 배포:</strong> 개별 파일 풀림(Unpacked Multi-File) 무인 설치 및 방화벽 자동 사전 등록이 적용된 전용 설치 패키지입니다.
-                    <div className="text-[11px] font-mono mt-1 text-blue-700 dark:text-blue-300">
-                      📦 {updateInfo?.installerName || `Windows-Fix-Wizard-Setup-v${updateInfo?.latestVersion || APP_VERSION}.exe`}
+                    <strong className="font-semibold">{language === 'en' ? 'Official GitHub Pages Deployment:' : '공식 GitHub Pages 배포:'}</strong> {language === 'en' ? 'Latest version is automatically delivered and live on GitHub Pages. No .exe installer required.' : '별도의 PC 설치 파일(.exe) 없이 공식 GitHub Pages 및 PWA를 통해 최신 버전이 실시간 배포되어 항상 최신 환경을 이용할 수 있습니다.'}
+                    <div className="text-[11px] font-mono mt-1 text-emerald-700 dark:text-emerald-300">
+                      🌐 {updateInfo?.pagesUrl || GITHUB_PAGES_URL}
                     </div>
                   </div>
                 </div>
@@ -12889,14 +13321,14 @@ start /min msedge "${appUrl}"
                   </a>
 
                   <a
-                    href={updateInfo?.installerDownloadUrl || updateInfo?.htmlUrl || GITHUB_REPO_URL}
+                    href={updateInfo?.pagesUrl || GITHUB_PAGES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setUpdateModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-md shadow-blue-600/30 flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/30 flex items-center gap-1.5"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>{language === 'en' ? 'Update & Download' : '지금 업데이트 다운로드'}</span>
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>{language === 'en' ? 'Open GitHub Pages' : 'GitHub Pages 최신 웹앱 열기'}</span>
                   </a>
                 </div>
               </div>
