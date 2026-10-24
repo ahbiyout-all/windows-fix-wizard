@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import JSZip from 'jszip';
 import { GoogleGenAI, Type } from '@google/genai';
 import { 
-  Terminal, Search, AlertCircle, Wrench, CheckCircle2, Copy, LayoutList,
+  Terminal, Search, AlertCircle, AlertOctagon, Wrench, CheckCircle2, Copy, LayoutList,
   ExternalLink, ShieldCheck, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, ChevronsUp, ChevronsDown, Info, BookOpen, 
   RefreshCw, Wifi, Monitor, ShoppingBag, Key, Shield, Database, Globe, LogIn, LogOut, AlertTriangle, Moon, Sun, Download, Upload, Edit2, Trash2, X, XCircle, Save, ThumbsUp, ThumbsDown, FileCheck, Sparkles, Flame, Settings, Cloud, Zap, Layers, ShieldAlert, Check, ArrowRight, Activity, Sliders, Mail, RotateCcw,
   Heart, Bookmark, Clock, History, User as UserIcon, Filter, Users, UserCheck, Smartphone, Laptop, Tablet, Ban, Eye, EyeOff, Server, Bot, HelpCircle, LifeBuoy, Menu,
-  Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2
+  Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2, Mic, MicOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, getDocs, getDoc, setDoc, doc, query as firestoreQuery, limit, startAfter, orderBy, where, QueryDocumentSnapshot, updateDoc, deleteDoc, writeBatch, getCountFromServer } from 'firebase/firestore';
@@ -578,6 +578,66 @@ export default function App() {
   });
 
   const [query, setQuery] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const handleToggleSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert(language === 'en' 
+        ? 'Voice dictation is not supported in this browser. Please try Google Chrome or Microsoft Edge.' 
+        : '현재 브라우저에서는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge 브라우저를 사용해 주세요.');
+      return;
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = language === 'en' ? 'en-US' : 'ko-KR';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setQuery(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start speech recognition:", err);
+      setIsListening(false);
+    }
+  };
+
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TroubleshootingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -6704,10 +6764,34 @@ export default function App() {
                       type="text"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 p-3 placeholder-slate-400 dark:placeholder-slate-500"
+                      className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 pr-12 p-3 placeholder-slate-400 dark:placeholder-slate-500"
                       placeholder={language === 'en' ? "Enter error code (e.g., 0x80070005) or symptoms..." : "오류 코드 (예: 0x80070005) 또는 증상을 입력하세요..."}
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={handleToggleSpeechRecognition}
+                      className={`absolute inset-y-0 right-0 flex items-center pr-3 my-auto transition-all ${
+                        isListening 
+                          ? 'text-rose-600 dark:text-rose-400' 
+                          : 'text-slate-400 hover:text-blue-600 dark:hover:text-blue-400'
+                      }`}
+                      title={
+                        isListening 
+                          ? (language === 'en' ? 'Listening... Click to stop voice dictation' : '음성 듣는 중... 클릭하여 받아쓰기 중지')
+                          : (language === 'en' ? 'Voice Dictation (Speech to Text)' : '음성 받아쓰기 (마이크 입력)')
+                      }
+                      aria-label={language === 'en' ? 'Voice Dictation' : '음성 받아쓰기'}
+                    >
+                      {isListening ? (
+                        <span className="relative flex items-center justify-center">
+                          <span className="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-rose-400 opacity-75"></span>
+                          <MicOff className="w-5 h-5 relative z-10 text-rose-600 dark:text-rose-400" />
+                        </span>
+                      ) : (
+                        <Mic className="w-5 h-5" />
+                      )}
+                    </button>
                   </div>
 
                   <button
@@ -6734,9 +6818,30 @@ export default function App() {
                   </button>
                 </div>
                 
-                <div className="flex flex-col gap-2 mt-2">
+                <AnimatePresence>
+                  {isListening && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="flex items-center gap-2 p-2.5 px-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-medium shadow-2xs"
+                    >
+                      <span className="relative flex h-2.5 w-2.5 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600"></span>
+                      </span>
+                      <span>
+                        {language === 'en' 
+                          ? 'Listening... Speak your Windows error code or symptom clearly into your microphone.' 
+                          : '마이크 음성을 듣는 중입니다... Windows 오류 코드나 증상을 말씀하세요.'}
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="flex flex-col gap-2 mt-1">
                   <p className="text-xs text-slate-500 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 text-amber-500" />
+                    <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
                     {language === 'en' ? 'Please be careful not to include personal information (name, IP address, email, corporate secrets, etc.) in your search terms.' : '검색어에 개인정보(이름, IP 주소, 이메일, 사내 기밀 등)가 포함되지 않도록 주의해 주세요.'}
                   </p>
                 </div>
@@ -12244,34 +12349,104 @@ export default function App() {
                       </div>
                     ))}
 
-                    {showLogsModal === 'error' && appErrorLogs.map((log) => (
-                      <div key={log.id} className="p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-rose-100 dark:border-rose-900/30 text-sm">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className={`font-bold uppercase text-[10px] px-2 py-0.5 rounded shrink-0 ${
-                            log.severity === 'fatal' ? 'bg-rose-600 text-white' : 
-                            log.severity === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                          }`}>
-                            {log.severity}
+                    {showLogsModal === 'error' && appErrorLogs.length > 0 && (
+                      <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
+                        <div className="p-2.5 sm:p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-center justify-between shadow-2xs">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <AlertOctagon className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                            <span className="text-[10px] sm:text-xs font-bold text-rose-700 dark:text-rose-300 uppercase tracking-wider truncate">FATAL</span>
+                          </div>
+                          <span className="text-sm sm:text-base font-black text-rose-700 dark:text-rose-300 tabular-nums ml-1">
+                            {appErrorLogs.filter(l => l.severity === 'fatal').length}
                           </span>
-                          <span className="text-slate-400 text-[10px] font-mono shrink-0 ml-2">{log.timestamp?.toDate().toLocaleString()}</span>
                         </div>
-                        <div className="mb-2">
-                          <p className="text-slate-900 dark:text-slate-100 font-bold break-words leading-relaxed">{log.message}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">Component: {log.component}</p>
+
+                        <div className="p-2.5 sm:p-3 bg-red-50/80 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl flex items-center justify-between shadow-2xs">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+                            <span className="text-[10px] sm:text-xs font-bold text-red-700 dark:text-red-300 uppercase tracking-wider truncate">ERROR</span>
+                          </div>
+                          <span className="text-sm sm:text-base font-black text-red-700 dark:text-red-300 tabular-nums ml-1">
+                            {appErrorLogs.filter(l => l.severity === 'error').length}
+                          </span>
                         </div>
-                        {log.stack && (
-                          <details className="mt-2">
-                            <summary className="text-[10px] text-blue-500 cursor-pointer hover:underline">View Stack</summary>
-                            <pre className="text-[9px] bg-black text-emerald-400 p-2 mt-1 rounded overflow-x-auto max-h-32 font-mono">
-                              {typeof log.stack === 'object' ? JSON.stringify(log.stack, null, 2) : log.stack}
-                            </pre>
-                          </details>
-                        )}
-                        <div className="mt-2 flex justify-between text-[10px] text-slate-400">
-                          <span className="truncate">User: {log.userId}</span>
+
+                        <div className="p-2.5 sm:p-3 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl flex items-center justify-between shadow-2xs">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                            <span className="text-[10px] sm:text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider truncate">WARN</span>
+                          </div>
+                          <span className="text-sm sm:text-base font-black text-amber-700 dark:text-amber-300 tabular-nums ml-1">
+                            {appErrorLogs.filter(l => l.severity === 'warning').length}
+                          </span>
                         </div>
                       </div>
-                    ))}
+                    )}
+
+                    {showLogsModal === 'error' && appErrorLogs.map((log) => {
+                      const isFatal = log.severity === 'fatal';
+                      const isError = log.severity === 'error';
+                      const isWarning = log.severity === 'warning';
+
+                      return (
+                        <div 
+                          key={log.id || Math.random()} 
+                          className={`p-3.5 sm:p-4 rounded-xl border text-sm transition-all shadow-2xs ${
+                            isFatal ? 'border-l-4 border-l-rose-600 border-rose-200 dark:border-rose-900/50 bg-rose-50/40 dark:bg-rose-950/20' :
+                            isError ? 'border-l-4 border-l-red-500 border-red-200 dark:border-red-900/40 bg-slate-50 dark:bg-slate-800/50' :
+                            'border-l-4 border-l-amber-500 border-amber-200 dark:border-amber-900/40 bg-amber-50/20 dark:bg-amber-950/10'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-2.5">
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Visual status indicator badge with explicit severity icon & color coding */}
+                              {isFatal && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs border border-rose-700">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-300 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                  </span>
+                                  <AlertOctagon className="w-3.5 h-3.5 text-white" />
+                                  <span>FATAL</span>
+                                </span>
+                              )}
+                              {isError && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200 dark:border-red-800/60 shadow-2xs">
+                                  <span className="inline-block h-2 w-2 rounded-full bg-red-500"></span>
+                                  <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                                  <span>ERROR</span>
+                                </span>
+                              )}
+                              {isWarning && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-2xs">
+                                  <span className="inline-block h-2 w-2 rounded-full bg-amber-500"></span>
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                  <span>WARNING</span>
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-slate-400 text-[10px] font-mono shrink-0 ml-2">
+                              {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : String(log.timestamp || '')}
+                            </span>
+                          </div>
+                          <div className="mb-2">
+                            <p className="text-slate-900 dark:text-slate-100 font-bold break-words leading-relaxed">{log.message}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Component: {log.component || 'Unknown'}</p>
+                          </div>
+                          {log.stack && (
+                            <details className="mt-2">
+                              <summary className="text-[10px] text-blue-500 cursor-pointer hover:underline font-medium">View Stack Trace</summary>
+                              <pre className="text-[9px] bg-black text-emerald-400 p-2.5 mt-1 rounded-lg overflow-x-auto max-h-36 font-mono leading-tight">
+                                {typeof log.stack === 'object' ? JSON.stringify(log.stack, null, 2) : log.stack}
+                              </pre>
+                            </details>
+                          )}
+                          <div className="mt-2 flex justify-between text-[10px] text-slate-400">
+                            <span className="truncate">User: {log.userId || 'Anonymous'}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
 
                     {showLogsModal === 'backend_logs' && backendLogs.map((log) => (
                       <div key={log.id || Math.random()} className="p-4 bg-slate-900 dark:bg-black rounded-xl border border-slate-800 text-xs font-mono">

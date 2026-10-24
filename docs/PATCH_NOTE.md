@@ -1,6 +1,52 @@
-# Patch Note - System Update (v3.15.0)
+# Patch Note - System Update (v3.16.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.16.0] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Voice Dictation (Speech to Text) Search Input Integration
+- **Web Speech API Dictation**: Added a microphone icon button inside the AI Diagnostic (Wizard tab) search input field allowing users to dictate Windows error codes and symptoms hands-free using browser Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`).
+- **Interactive Listening Feedback**: Features real-time visual feedback with an animated pulsing microphone icon (`Mic` / `MicOff`) and active listening banner when voice dictation is active.
+- **Language Support**: Automatically selects `ko-KR` for Korean language interface and `en-US` for English interface.
+- **Graceful Fallback**: Displays informative guidance when dictation is used in browsers without SpeechRecognition API support.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.16.0`.
+
+---
+
+## [v3.15.2] - 2026-10-24
+
+### 📈 UI/UX & Visual Enhancements
+
+#### 1. Visual Severity Icons Alignment in Admin Error Modal
+- **Specific Lucide Severity Icons**: Updated the Admin error log modal and overview grid with the requested iconography:
+  - **`FATAL` Severity**: `AlertOctagon` icon with animated pulsing indicator dot on a crimson badge (`bg-rose-600 text-white`).
+  - **`ERROR` Severity**: `AlertTriangle` icon on a red badge (`bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300`).
+  - **`WARNING` Severity**: `AlertCircle` icon on an amber badge (`bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300`).
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.15.2`.
+
+---
+
+## [v3.15.1] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Color-Coded Status Badges & Visual Severity Indicators in Admin Error Modal
+- **Enhanced Visual Severity Indicators**: Added color-coded status badges and visual indicator dots next to error log entries in the Admin error log modal:
+  - **`FATAL` Severity**: Distinctive crimson badge (`bg-rose-600 text-white`) with animated pulsing status dot (`animate-ping`) and `ShieldAlert` icon for immediate urgent visibility.
+  - **`ERROR` Severity**: High-visibility red badge (`bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300`) with solid red status dot and `AlertCircle` icon.
+  - **`WARNING` Severity**: Amber warning badge (`bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300`) with solid amber status dot and `AlertTriangle` icon.
+- **Card Side Border Color-Coding**: Error log entry cards now feature left-accent borders (`border-l-4`) matched to severity level (`border-l-rose-600`, `border-l-red-500`, `border-l-amber-500`).
+- **Log Severity Summary Banner**: Added a top summary grid showing real-time count breakdowns for `FATAL`, `ERROR`, and `WARNING` entries at a glance.
+
+### 📈 UI/UX & Performance Optimizations
+- **Improved Log Readability**: Standardized stack trace summary and timestamp formatting in the error log detail view.
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.15.1`.
 
 ---
 
