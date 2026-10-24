@@ -1,6 +1,49 @@
-# Patch Note - System Update (v3.16.0)
+# Patch Note - System Update (v3.19.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.19.0] - 2026-10-24
+
+### 🛡️ Security Hardening & Open Source Compliance
+
+#### 1. Official Standard MIT License File (`/LICENSE`)
+- **Root Directory Open Source License Creation**: Created standard `/LICENSE` file in the repository root directory.
+- **Copyright Ownership & Development Timeline**: Configured copyright ownership to `AhBiYout` with development start through current year range (`Copyright (c) 2024-2026 AhBiYout`).
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.19.0`.
+
+---
+
+## [v3.18.0] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Real-Time Live Streaming & Auto-scroll Toggle Switch for Backend Engine Logs
+- **Auto-scroll to Bottom Toggle Switch**: Added a dedicated, high-contrast toggle switch ("하단 자동 스크롤" / "Auto-scroll to bottom") in the Backend Engine logs modal header. Enables administrators to keep the viewport pinned to the latest log entries as they stream in.
+- **Real-time 3-Second Live Stream Polling**: Integrated automated background polling (`useEffect` with 3s interval) when viewing Backend Engine logs, allowing administrators to watch live logs stream in real-time as background tasks or manual runs execute.
+- **Interactive Log Controls**: Added a "LIVE STREAMING" animated pulsing status badge, a manual "최하단으로 이동" (Jump to Bottom) button, a "새로고침" (Refresh) trigger, and a direct "엔진 즉시 가동" (Run Engine Now) action button inside the log viewer toolbar.
+- **Chronological Log Stream**: Formatted log entries in chronological order (oldest at top, newest at bottom) with level badges (`[INFO]`, `[WARN]`, `[ERROR]`), formatted timestamps, and expandable JSON details.
+
+### 📈 UI/UX & Performance Optimizations
+- **Auto-scroll Preference Persistence**: Persists user auto-scroll preferences in `localStorage` (`winfix_autoscroll_backend_logs`).
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.18.0`.
+
+---
+
+## [v3.17.0] - 2026-10-24
+
+### 🛡️ Security Hardening & Authentication
+
+#### 1. Pre-Flight API Key Sanity & Format Verification Engine (`isValidGeminiApiKey`)
+- **Proactive Key Pre-Flight Filtering**: Added strict format pre-validation (`isValidGeminiApiKey` in `server.ts` and `isValidApiKeyFormat` in `src/App.tsx`) to filter out dummy/placeholder API key entries (`CUSTOM_API_KEY`, `My_Project_40329`, `GEMINI_API_KEY`, or keys missing the `AIza` prefix) before initiating backend sync or client API requests.
+- **Eliminated Verification Error Logs**: Unconfigured or invalid environment keys are now flagged as placeholders (`isPlaceholder: true`) during key collection (`getAllAvailableKeys`), gracefully bypassing unnecessary network requests and preventing repeated `[Engine Sync] Key '...' verification failed` console log entries.
+- **Quarantine Management**: Real invalid keys encountered at runtime are quarantined quietly without triggering unhandled system error alerts or false-positive alarms.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, `server.ts`, and `docs/PATCH_NOTE.md` to `v3.17.0`.
 
 ---
 

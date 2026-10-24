@@ -77,6 +77,29 @@ async function getAuthHeaders() {
   };
 }
 
+export const isValidApiKeyFormat = (key: string): boolean => {
+  if (!key || typeof key !== 'string') return false;
+  const clean = key.trim();
+  if (clean.length < 30) return false;
+  const upper = clean.toUpperCase();
+  if (
+    upper === 'MY_GEMINI_API_KEY' ||
+    upper === 'YOUR_GEMINI_API_KEY' ||
+    upper === 'CUSTOM_API_KEY' ||
+    upper === 'GEMINI_API_KEY' ||
+    upper === 'GOOGLE_API_KEY' ||
+    upper === 'MY_PROJECT_40329' ||
+    upper === 'AI_STUDIO_DEFAULT' ||
+    upper === 'SET_ME_IN_SECRETS' ||
+    clean.toLowerCase().includes('placeholder') ||
+    clean.toLowerCase().includes('your_api_key')
+  ) {
+    return false;
+  }
+  if (!clean.startsWith('AIza')) return false;
+  return true;
+};
+
 // Initialize Gemini
 export type ApiKeyConfig = {
   keys: { name: string, key: string, isActive: boolean, isCustom: boolean }[];
@@ -92,14 +115,14 @@ export const getApiKeyConfig = (): ApiKeyConfig => {
     }
   } catch(e) {}
   
-  // Ensure env keys always exist in the config if not manually removed
+  // Ensure env keys always exist in the config if not manually removed and valid
   const envKey = process.env.GEMINI_API_KEY;
-  if (envKey && !config.keys.some(k => k.key === envKey)) {
+  if (envKey && isValidApiKeyFormat(envKey) && !config.keys.some(k => k.key === envKey)) {
     config.keys.push({ name: 'Default App Key', key: envKey, isActive: true, isCustom: false });
   }
 
   const customEnvKey = process.env.CUSTOM_API_KEY;
-  if (customEnvKey && !config.keys.some(k => k.key === customEnvKey)) {
+  if (customEnvKey && isValidApiKeyFormat(customEnvKey) && !config.keys.some(k => k.key === customEnvKey)) {
     config.keys.push({ name: 'Secret Custom Key', key: customEnvKey, isActive: true, isCustom: false });
   }
 
@@ -256,7 +279,7 @@ const AdSense = ({ slot }: { slot: string }) => {
   );
 };
 
-const APP_VERSION = "3.15.0";
+const APP_VERSION = "3.19.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -788,6 +811,11 @@ export default function App() {
   const [backendPage, setBackendPage] = useState(0);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState<'admin' | 'search' | 'feedback' | 'error' | 'backend_logs' | 'visitor' | null>(null);
+  const [autoScrollBackendLogs, setAutoScrollBackendLogs] = useState<boolean>(() => {
+    return localStorage.getItem('winfix_autoscroll_backend_logs') !== 'false';
+  });
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const logsBottomRef = useRef<HTMLDivElement>(null);
 
   // Visitor Management States
   const [visitorId] = useState<string>(() => {
@@ -2598,6 +2626,38 @@ export default function App() {
     
     setIsLoadingBackendLogs(false);
   };
+
+  useEffect(() => {
+    localStorage.setItem('winfix_autoscroll_backend_logs', autoScrollBackendLogs.toString());
+  }, [autoScrollBackendLogs]);
+
+  // Auto-scroll to bottom when backend logs update or modal opens
+  useEffect(() => {
+    if (showLogsModal === 'backend_logs' && autoScrollBackendLogs) {
+      const scrollTimer = setTimeout(() => {
+        if (logsBottomRef.current) {
+          logsBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+        } else if (logsContainerRef.current) {
+          logsContainerRef.current.scrollTo({
+            top: logsContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+      return () => clearTimeout(scrollTimer);
+    }
+  }, [backendLogs, showLogsModal, autoScrollBackendLogs]);
+
+  // Real-time 3-second live polling when backend logs modal is open
+  useEffect(() => {
+    if (showLogsModal !== 'backend_logs' || !isAdmin) return;
+
+    const interval = setInterval(() => {
+      fetchBackendLogs(false);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [showLogsModal, isAdmin]);
 
   const [isReclassifying, setIsReclassifying] = useState(false);
   const [reclassifyProgress, setReclassifyProgress] = useState({ current: 0, total: 0 });
@@ -11773,7 +11833,7 @@ export default function App() {
                   )}
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div ref={logsContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6">
                   {showLogsModal === 'visitor' ? (
                     <div className="space-y-6">
                       {/* Visitor Quick Overview Banner */}
@@ -12448,19 +12508,110 @@ export default function App() {
                       );
                     })}
 
-                    {showLogsModal === 'backend_logs' && backendLogs.map((log) => (
-                      <div key={log.id || Math.random()} className="p-4 bg-slate-900 dark:bg-black rounded-xl border border-slate-800 text-xs font-mono">
-                        <div className="flex justify-between mb-2 text-slate-500">
-                          <span className={`${
-                            log.level === 'ERROR' ? 'text-rose-500' : 
-                            log.level === 'WARN' ? 'text-amber-500' : 'text-emerald-500'
-                          } font-bold`}>[{log.level || 'INFO'}]</span>
-                          <span>{log.timestamp?.toLocaleString()}</span>
+                    {showLogsModal === 'backend_logs' && (
+                      <div className="space-y-3">
+                        <div className="p-3.5 bg-slate-900/90 dark:bg-black/90 rounded-2xl border border-slate-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                              </span>
+                              <span className="font-bold text-emerald-400 font-mono tracking-wider">
+                                LIVE STREAMING
+                              </span>
+                            </div>
+                            <span className="text-slate-700 dark:text-slate-800 hidden sm:inline">|</span>
+                            <span className="text-slate-300 font-medium">
+                              {language === 'en' ? 'Real-time 3s auto-refresh' : '3초 실시간 자동 수신 중'}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-400 font-mono text-[10px] font-bold border border-slate-700">
+                              {backendLogs.length} {language === 'en' ? 'logs' : '건 수집'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
+                            {/* Run Engine Button */}
+                            <button
+                              onClick={runEngineNow}
+                              disabled={isEngineActionLoading}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 active:scale-95 shrink-0"
+                              title={language === 'en' ? 'Trigger Engine Run Now' : '엔진 즉시 수동 실행'}
+                            >
+                              <Zap className={`w-3.5 h-3.5 ${isEngineActionLoading ? 'animate-spin' : ''}`} />
+                              <span>{isEngineActionLoading ? (language === 'en' ? 'Running...' : '가동 중...') : (language === 'en' ? 'Run Engine' : '엔진 가동')}</span>
+                            </button>
+
+                            {/* Auto-scroll toggle switch */}
+                            <label className="flex items-center gap-2 cursor-pointer select-none bg-slate-800/80 hover:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700/80 transition-colors">
+                              <span className="text-slate-200 font-bold text-[11px] whitespace-nowrap">
+                                {language === 'en' ? 'Auto-scroll' : '하단 자동 스크롤'}
+                              </span>
+                              <div className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                  type="checkbox" 
+                                  checked={autoScrollBackendLogs} 
+                                  onChange={(e) => setAutoScrollBackendLogs(e.target.checked)}
+                                  className="sr-only peer" 
+                                />
+                                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                              </div>
+                            </label>
+
+                            {/* Jump to bottom button */}
+                            <button
+                              onClick={() => {
+                                if (logsBottomRef.current) {
+                                  logsBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+                                } else if (logsContainerRef.current) {
+                                  logsContainerRef.current.scrollTo({
+                                    top: logsContainerRef.current.scrollHeight,
+                                    behavior: 'smooth'
+                                  });
+                                }
+                              }}
+                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors text-xs border border-slate-700 shrink-0"
+                              title={language === 'en' ? 'Jump to bottom' : '최하단으로 이동'}
+                            >
+                              <ChevronsDown className="w-4 h-4" />
+                            </button>
+
+                            {/* Refresh button */}
+                            <button
+                              onClick={() => fetchBackendLogs(false)}
+                              disabled={isLoadingBackendLogs}
+                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors text-xs border border-slate-700 shrink-0 disabled:opacity-50"
+                              title={language === 'en' ? 'Refresh Logs' : '새로고침'}
+                            >
+                              <RefreshCw className={`w-4 h-4 ${isLoadingBackendLogs ? 'animate-spin' : ''}`} />
+                            </button>
+                          </div>
                         </div>
-                        <p className="text-slate-100 leading-relaxed">{log.message}</p>
-                        {log.details && <p className="mt-2 text-slate-500 italic opacity-70">Details: {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}</p>}
+
+                        {[...backendLogs]
+                          .sort((a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime())
+                          .map((log) => (
+                            <div key={log.id || Math.random()} className="p-3.5 bg-slate-950 dark:bg-black rounded-xl border border-slate-800 text-xs font-mono shadow-2xs">
+                              <div className="flex justify-between mb-1.5 text-slate-500 text-[11px]">
+                                <span className={`${
+                                  log.level === 'ERROR' ? 'text-rose-500 font-black' : 
+                                  log.level === 'WARN' ? 'text-amber-500 font-bold' : 'text-emerald-400 font-bold'
+                                }`}>[{log.level || 'INFO'}]</span>
+                                <span className="tabular-nums text-slate-400">
+                                  {log.timestamp ? new Date(log.timestamp).toLocaleString() : ''}
+                                </span>
+                              </div>
+                              <p className="text-slate-100 leading-relaxed break-words">{log.message}</p>
+                              {log.details && (
+                                <p className="mt-1.5 text-slate-400 italic opacity-80 text-[11px] bg-slate-900/60 p-2 rounded border border-slate-800/60 font-mono break-all">
+                                  Details: {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        <div ref={logsBottomRef} />
                       </div>
-                    ))}
+                    )}
 
                     {((showLogsModal === 'admin' && adminLogs.length === 0) || 
                       (showLogsModal === 'search' && searchLogs.length === 0) || 

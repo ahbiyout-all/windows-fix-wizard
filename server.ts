@@ -432,6 +432,42 @@ let lastSyncError = "";
 let lastSyncErrorTime = 0;
 const knownInvalidKeys = new Set<string>();
 
+function isValidGeminiApiKey(value: string): { isValid: boolean; reason: string } {
+  if (!value || typeof value !== "string") {
+    return { isValid: false, reason: "Empty Value" };
+  }
+  const clean = value.trim();
+  if (clean.length < 30) {
+    return { isValid: false, reason: "Key Length Too Short (<30 chars)" };
+  }
+  const upper = clean.toUpperCase();
+  const lower = clean.toLowerCase();
+
+  if (
+    upper === "MY_GEMINI_API_KEY" ||
+    upper === "YOUR_GEMINI_API_KEY" ||
+    upper === "CUSTOM_API_KEY" ||
+    upper === "GEMINI_API_KEY" ||
+    upper === "GOOGLE_API_KEY" ||
+    upper === "API_KEY" ||
+    upper === "MY_PROJECT_40329" ||
+    upper === "AI_STUDIO_DEFAULT" ||
+    upper === "SET_ME_IN_SECRETS" ||
+    lower === "undefined" ||
+    lower === "null" ||
+    lower.includes("placeholder") ||
+    lower.includes("your_api_key")
+  ) {
+    return { isValid: false, reason: "Unset or Placeholder Key Value" };
+  }
+
+  if (!clean.startsWith("AIza")) {
+    return { isValid: false, reason: "Invalid Gemini Key Format (Must start with AIza)" };
+  }
+
+  return { isValid: true, reason: "" };
+}
+
 function getAllAvailableKeys() {
   const customNames = ["CUSTOM_API_KEY", "My_Project_40329"];
   const defaultNames = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "API_KEY"];
@@ -448,17 +484,21 @@ function getAllAvailableKeys() {
     }
   }
 
-  // Ensure default names exist (even if empty) for debugging logic if needed, 
-  // but above we already grab from env. So we can just map.
   return keys.map(k => {
     let placeholderReason = "";
-    if (knownInvalidKeys.has(k.name)) placeholderReason = "Invalid/Deactivated API Key";
-    else if (k.value === "MY_GEMINI_API_KEY" || k.value === "YOUR_GEMINI_API_KEY") placeholderReason = "Default Placeholder";
-    else if (k.value === "AI_STUDIO_DEFAULT" || k.value === "SET_ME_IN_SECRETS") placeholderReason = "System Placeholder";
-    else if (k.value.toLowerCase() === "undefined" || k.value.toLowerCase() === "null") placeholderReason = "Invalid String";
-    else if (k.value.length < 20) placeholderReason = "Too Short";
+    if (knownInvalidKeys.has(k.name)) {
+      placeholderReason = "Invalid/Deactivated API Key (Quarantined)";
+    } else {
+      const check = isValidGeminiApiKey(k.value);
+      if (!check.isValid) {
+        placeholderReason = check.reason;
+      }
+    }
     
-    const masked = `${k.value.substring(0, 3)}***${k.value.substring(Math.max(0, k.value.length - 3))}`;
+    const masked = k.value.length >= 6 
+      ? `${k.value.substring(0, 3)}***${k.value.substring(k.value.length - 3)}`
+      : "***";
+
     return { ...k, isPlaceholder: placeholderReason !== "", placeholderReason, masked };
   });
 }
