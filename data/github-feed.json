@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-24T12:23:30.959Z",
+  "lastCollectedAt": "2026-10-24T18:19:20.512Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "시스템/블루스크린",
+  "targetCategory": "오디오/사운드",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 26,
+  "totalIssuesCount": 28,
   "newIssues": [
     {
-      "id": "gh-0x00000133-mvmde3db",
-      "code": "0x00000133",
-      "title": "NVMe SSD 및 드라이버 충돌로 인한 DPC_WATCHDOG_VIOLATION 블루스크린 (0x00000133) 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x88890004-mvmq3osg",
+      "code": "0x88890004",
+      "title": "Windows 10/11 WASAPI 오디오 끝점 무효화 및 오디오 출력 중단 오류 (0x88890004)",
+      "category": "오디오/사운드"
     },
     {
-      "id": "gh-0x00000139-mvmde3db",
-      "code": "0x00000139",
-      "title": "커널 보안 구조 손상 및 메모리 무결성 충돌로 인한 KERNEL_SECURITY_CHECK_FAILURE 블루스크린 (0x00000139) 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x00000437-mvmq3osg",
+      "code": "0x00000437",
+      "title": "Windows Audio 및 Audio Endpoint Builder 서비스 시작 실패 오류 (Error 1079 / 0x00000437)",
+      "category": "오디오/사운드"
     }
   ]
 }
