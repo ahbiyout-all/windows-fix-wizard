@@ -1,15 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-21T09:16:26.485Z",
+  "lastCollectedAt": "2026-10-24T12:23:30.959Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "업데이트",
-  "newlyAddedCount": 1,
-  "totalIssuesCount": 24,
+  "targetCategory": "시스템/블루스크린",
+  "newlyAddedCount": 2,
+  "totalIssuesCount": 26,
   "newIssues": [
     {
-      "id": "gh-0x800f0922-mvhwdyid",
-      "code": "0x800f0922",
-      "title": "Windows 누적 업데이트 설치 실패 오류 (0x800f0922)",
-      "category": "업데이트"
+      "id": "gh-0x00000133-mvmde3db",
+      "code": "0x00000133",
+      "title": "NVMe SSD 및 드라이버 충돌로 인한 DPC_WATCHDOG_VIOLATION 블루스크린 (0x00000133) 해결 방법",
+      "category": "시스템/블루스크린"
+    },
+    {
+      "id": "gh-0x00000139-mvmde3db",
+      "code": "0x00000139",
+      "title": "커널 보안 구조 손상 및 메모리 무결성 충돌로 인한 KERNEL_SECURITY_CHECK_FAILURE 블루스크린 (0x00000139) 해결 방법",
+      "category": "시스템/블루스크린"
     }
   ]
 }
