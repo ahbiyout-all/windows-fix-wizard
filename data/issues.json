@@ -1321,5 +1321,97 @@
     "updatedAt": "2026-10-25T06:25:25.060Z",
     "verifiedAt": "2026-10-25T06:25:25.060Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007003b-mvnst7a5",
+    "category": "네트워크",
+    "code": "0x8007003B",
+    "title": "SMB 네트워크 공유 파일 전송 중 예기치 않은 네트워크 오류 발생 (0x8007003B)",
+    "title_en": "Unexpected Network Error Occurred During SMB File Transfer (0x8007003B)",
+    "symptoms": "Windows 10/11에서 네트워크 공유 폴더(SMB)로 대용량 파일을 복사하거나 이동할 때 '예기치 않은 네트워크 오류가 발생했습니다 (0x8007003B)' 메시지와 함께 전송이 중단되는 현상입니다. 최근 누적 업데이트 후 TCP 자동 조정(TCP Auto-Tuning) 수신 창 설정 차이 또는 보안 프로그램의 네트워크 패킷 검사 간섭으로 주로 발생합니다.",
+    "symptoms_en": "Occurs when copying or transferring large files across SMB network shared folders in Windows 10/11, terminating with the error 'An unexpected network error occurred (0x8007003B)'. This issue is commonly triggered by TCP Auto-Tuning window size mismatches or real-time packet inspection by security software following Windows updates.",
+    "script": "netsh int tcp set global autotuninglevel=disabled\r\nnetsh winsock reset\r\nWrite-Output \"TCP Auto-Tuning disabled and Winsock stack reset successfully.\"",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(cmd)를 실행합니다.",
+      "'netsh int tcp set global autotuninglevel=disabled' 명령을 입력하여 TCP 수신 창 자동 조정을 비활성화합니다.",
+      "실행 창(Win + R)에 'ncpa.cpl'을 입력하고 사용 중인 네트워크 어댑터 속성 > '구성' > '고급' 탭에서 'Large Send Offload (LSO)' 관련 항목을 비활성화(Disabled)로 변경합니다.",
+      "Windows Defender 방화벽 또는 3사 백신 프로그램의 실시간 네트워크 감시 기능을 일시 중지하고 컴퓨터를 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Execute 'netsh int tcp set global autotuninglevel=disabled' to turn off TCP auto-tuning level.",
+      "Press Win + R, type 'ncpa.cpl', right-click active network adapter > Properties > Configure > Advanced tab, and set 'Large Send Offload (LSO)' options to Disabled.",
+      "Temporarily pause real-time network scanning in Windows Defender Firewall or third-party antivirus and restart the PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/troubleshoot-smb-file-transfer-rate",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-16650b31-5db8-01d8-ba4a-00d9485d4359"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007003B",
+      "SMB 공유 오류",
+      "네트워크 파일 복사 실패",
+      "TCP Auto Tuning",
+      "Unexpected Network Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T12:22:56.284Z",
+    "updatedAt": "2026-10-25T12:22:56.284Z",
+    "verifiedAt": "2026-10-25T12:22:56.284Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee2-mvnst7a5",
+    "category": "네트워크",
+    "code": "0x80072EE2",
+    "title": "네트워크 연결 시간 초과 오류 및 서버 응답 없음 (0x80072EE2)",
+    "title_en": "Network Connection Timeout and Server Unresponsive Error (0x80072EE2)",
+    "symptoms": "Windows 10/11 환경에서 웹 브라우징, Windows 업데이트 서버 통신 또는 네트워크 앱 실행 시 '연결 시간이 초과되었습니다 (ERROR_INTERNET_TIMEOUT / 0x80072EE2)' 오류가 발생하는 현상입니다. DNS 캐시 오염, 손상된 Winsock / TCP IP 스택, 프록시 미해제 또는 VPN 어댑터 잔재로 인해 네트워크 요청에 대한 응답을 받지 못할 때 나타납니다.",
+    "symptoms_en": "Appears when Windows 10/11 fails to connect to web services, Windows Update endpoints, or network resources, returning 'ERROR_INTERNET_TIMEOUT (0x80072EE2)'. Caused by corrupted DNS cache, damaged Winsock/TCP-IP stack, orphaned proxy settings, or residual VPN network adapters following system updates.",
+    "script": "netsh winsock reset\r\nnetsh int ip reset\r\nipconfig /flushdns\r\nnetsh winhttp reset proxy\r\nWrite-Output \"Network stack, DNS cache, and WinHTTP proxy configuration reset successfully.\"",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell을 실행하고 'ipconfig /flushdns' 및 'netsh winsock reset' 명령을 실행합니다.",
+      "설정(Win + I) > 네트워크 및 인터넷 > 프록시로 이동하여 '자동으로 설정 감지'를 활성화하고 '수동 프록시 서버 사용'을 끔으로 설정합니다.",
+      "실행 창(Win + R)에 'ncpa.cpl'을 입력하고 사용 중인 네트워크 어댑터 속성의 'Internet Protocol Version 4 (TCP/IPv4)'에서 기본 DNS 서버를 8.8.8.8 및 8.8.4.4(Google Public DNS)로 지정합니다.",
+      "사용 중인 VPN 및 제3자 방화벽 앱을 일시적으로 비활성화한 후 시스템을 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Launch PowerShell as Administrator and run 'ipconfig /flushdns' followed by 'netsh winsock reset'.",
+      "Navigate to Settings > Network & internet > Proxy, turn ON 'Automatically detect settings', and turn OFF manual proxy server.",
+      "Press Win + R, enter 'ncpa.cpl', open 'Internet Protocol Version 4 (TCP/IPv4)' properties of your network connection, and set Primary/Secondary DNS to 8.8.8.8 and 8.8.4.4.",
+      "Temporarily disable active VPN connections and third-party firewall applications, then restart your system."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-update-errors-troubleshooting",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-16650b31-5db8-01d8-ba4a-00d9485d4359"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE2",
+      "ERROR_INTERNET_TIMEOUT",
+      "네트워크 연결 시간 초과",
+      "DNS Flush",
+      "Winsock Reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T12:22:56.284Z",
+    "updatedAt": "2026-10-25T12:22:56.284Z",
+    "verifiedAt": "2026-10-25T12:22:56.284Z",
+    "verificationStatus": "verified"
   }
 ]
