@@ -1,20 +1,20 @@
 {
-  "lastCollectedAt": "2026-10-25T00:21:15.895Z",
-  "modelUsed": "gemini-3.1-flash-lite",
+  "lastCollectedAt": "2026-10-25T06:25:25.060Z",
+  "modelUsed": "gemini-3.5-flash",
   "targetCategory": "보안/백신",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 30,
+  "totalIssuesCount": 32,
   "newIssues": [
     {
-      "id": "gh-0x80070641-mvn314hj",
-      "code": "0x80070641",
-      "title": "Windows Defender 실시간 보호 서비스 실행 불가 및 업데이트 오류",
+      "id": "gh-0x80070424-mvng1fes",
+      "code": "0x80070424",
+      "title": "Windows 보안 센터 및 Defender 서비스 누락/중단 오류 (0x80070424)",
       "category": "보안/백신"
     },
     {
-      "id": "gh-0x800705b4-mvn314hk",
-      "code": "0x800705b4",
-      "title": "Windows 보안 앱의 격리된 보안 위협 검사 실패",
+      "id": "gh-0x800704ec-mvng1fes",
+      "code": "0x800704ec",
+      "title": "Windows Defender 그룹 정책 차단 오류 (0x800704ec)",
       "category": "보안/백신"
     }
   ]

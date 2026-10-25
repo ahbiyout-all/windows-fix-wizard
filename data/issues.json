@@ -1229,5 +1229,97 @@
     "updatedAt": "2026-10-25T00:21:15.895Z",
     "verifiedAt": "2026-10-25T00:21:15.895Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070424-mvng1fes",
+    "category": "보안/백신",
+    "code": "0x80070424",
+    "title": "Windows 보안 센터 및 Defender 서비스 누락/중단 오류 (0x80070424)",
+    "title_en": "Windows Security Center and Defender Service Missing Error (0x80070424)",
+    "symptoms": "Windows 10/11 누적 업데이트 실행 후 또는 악성코드 치료 과정 이후 Windows 보안 앱이 열리지 않거나, 지정된 서비스가 설치되지 않았다는 메시지(0x80070424)와 함께 보안 센터 및 Defender 서비스가 중단되는 현상입니다.",
+    "symptoms_en": "After installing Windows 10/11 updates or undergoing malware remediation, the Windows Security app fails to launch or displays error 0x80070424, stating that the specified service does not exist as an installed service.",
+    "script": "Get-Service -Name wscsvc, WinDefend, SecurityHealthService -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType; Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Reset-AppxPackage",
+    "manualSteps": [
+      "Windows 검색창에 'services.msc'를 입력하여 서비스 관리자를 연 후 'Security Center' 및 'Windows Defender Antivirus Service'가 목록에 존재하는지 확인합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'sfc /scannow'를 입력하여 손상된 시스템 파일 및 보안 서비스 항목을 수리합니다.",
+      "이어 'DISM /Online /Cleanup-Image /RestoreHealth' 명령을 실행하여 Windows 구성 요소 저장소를 복구합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 `Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\\\AppXManifest.xml\"}`을 실행하여 Windows 보안 UI 앱을 재등록한 후 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Type 'services.msc' in Windows Search, open Services manager, and verify if 'Security Center' and 'Windows Defender Antivirus Service' exist.",
+      "Run Command Prompt as administrator and execute 'sfc /scannow' to repair missing or corrupted system and service files.",
+      "Run 'DISM /Online /Cleanup-Image /RestoreHealth' to repair the Windows component store image.",
+      "Open PowerShell as administrator and execute `Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\\\AppXManifest.xml\"}` to re-register the Windows Security App, then restart."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/troubleshoot-windows-defender-service-errors-0x80070424",
+      "https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070424",
+      "Windows Security error 0x80070424",
+      "Windows Defender service missing",
+      "보안 센터 서비스 오류",
+      "SecHealthUI reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T06:25:25.060Z",
+    "updatedAt": "2026-10-25T06:25:25.060Z",
+    "verifiedAt": "2026-10-25T06:25:25.060Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704ec-mvng1fes",
+    "category": "보안/백신",
+    "code": "0x800704ec",
+    "title": "Windows Defender 그룹 정책 차단 오류 (0x800704ec)",
+    "title_en": "Windows Defender Blocked by Policy Error (0x800704ec)",
+    "symptoms": "타사 백신(McAfee, Norton 등)을 제거한 후 또는 Windows 10/11 기능 업데이트 적용 후 Microsoft Defender를 활성화하려고 할 때 '이 프로그램은 그룹 정책에 의해 차단되었습니다' 문구와 함께 0x800704ec 오류가 발생하는 현상입니다.",
+    "symptoms_en": "When attempting to enable Microsoft Defender after uninstalling third-party antivirus software or applying Windows 10/11 updates, error 0x800704ec appears stating 'This program is blocked by group policy'.",
+    "script": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender' -Name 'DisableAntiSpyware' -ErrorAction SilentlyContinue; Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender' -Name 'DisableAntiVirus' -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "Win + R 키를 누르고 'gpedit.msc'를 입력하여 로컬 그룹 정책 편집기를 실행합니다 (Windows Pro 이상).",
+      "컴퓨터 구성 > 관리 템플릿 > Windows 구성 요소 > Microsoft Defender 백신으로 이동하여 'Microsoft Defender 백신 끄기' 옵션을 '구성되지 않음'으로 변경합니다.",
+      "Windows Home 버전인 경우 Win + R 키를 누르고 'regedit'를 입력하여 레지스트리 편집기를 실행합니다.",
+      "`HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows Defender` 경로로 이동한 뒤 `DisableAntiSpyware` 및 `DisableAntiVirus` 값을 삭제하거나 '0'으로 변경하고 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'gpedit.msc', and launch Local Group Policy Editor (Windows Pro or higher).",
+      "Navigate to Computer Configuration > Administrative Templates > Windows Components > Microsoft Defender Antivirus, and set 'Turn off Microsoft Defender Antivirus' to 'Not Configured'.",
+      "For Windows Home edition, press Win + R, type 'regedit', and open the Registry Editor.",
+      "Navigate to `HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows Defender`, delete or set the DWORD values `DisableAntiSpyware` and `DisableAntiVirus` to '0', then restart the PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-endpoint/prevent-updates-defender-antivirus",
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-179892c2-1531-1502-0e90-342b30d32a39"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704ec",
+      "Windows Defender group policy error",
+      "DisableAntiSpyware",
+      "Windows 보안 백신 차단 해제",
+      "Defender 0x800704ec"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T06:25:25.060Z",
+    "updatedAt": "2026-10-25T06:25:25.060Z",
+    "verifiedAt": "2026-10-25T06:25:25.060Z",
+    "verificationStatus": "verified"
   }
 ]
