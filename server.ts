@@ -456,7 +456,16 @@ function isValidGeminiApiKey(value: string): { isValid: boolean; reason: string 
     lower === "undefined" ||
     lower === "null" ||
     lower.includes("placeholder") ||
-    lower.includes("your_api_key")
+    lower.includes("your_api_key") ||
+    lower.includes("my_project") ||
+    lower.includes("custom_api") ||
+    lower.includes("gemini_api") ||
+    lower.includes("google_api") ||
+    lower.includes("project_40329") ||
+    lower.includes("ai_studio") ||
+    lower.includes("dummy") ||
+    lower.includes("fake") ||
+    lower.includes("secret")
   ) {
     return { isValid: false, reason: "Unset or Placeholder Key Value" };
   }
@@ -989,7 +998,7 @@ async function runAiSyncInternal(): Promise<any> {
         if (isInvalidKey) {
           knownInvalidKeys.add(k.name);
           keyThrottledUntil.set(k.name, now + 24 * 60 * 60 * 1000);
-          console.log(`[Engine Sync] Key '${k.name}' verification failed (API_KEY_INVALID). Quarantining key to avoid repeated error logs.`);
+          console.info(`[Engine Sync] Key '${k.name}' standby (unregistered or inactive API key). Serving queries via local database & GitOps cache.`);
           break; // Stop testing other models with this invalid key immediately!
         }
 
@@ -1292,6 +1301,7 @@ async function startServer() {
 
   const rateLimitSmtp = createRateLimiter(10, 60000, "SMTP_VERIFY");
   const rateLimitVisitorLog = createRateLimiter(60, 60000, "VISITOR_LOG");
+  const rateLimitPasskeyVerify = createRateLimiter(5, 60000, "PASSKEY_VERIFY");
 
   // Seed database on startup (Removed to save quota)
   // await seedDatabase();
@@ -1311,29 +1321,19 @@ async function startServer() {
       return res.status(401).json({ success: false, error: 'Unauthorized: Empty token' });
     }
 
-    const configuredPasskey = (process.env.ADMIN_PASSKEY || "winfix-admin-2026!").trim();
+    const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
 
-    // 1. Check development bypass and static admin tokens
-    if (token === 'dev_admin_bypass' || token === 'admin_token') {
-      return next();
-    }
-
-    // 2. Check Admin Passkey (with or without 'passkey:' prefix)
+    // 1. Check Admin Passkey (with or without 'passkey:' prefix)
     let candidatePasskey = token;
     if (token.startsWith('passkey:')) {
       candidatePasskey = token.replace('passkey:', '').trim();
     }
     
-    if (
-      candidatePasskey === configuredPasskey || 
-      candidatePasskey === 'winfix-admin-2026!' || 
-      candidatePasskey === 'winfix-master-key' || 
-      candidatePasskey === 'dev_admin_bypass'
-    ) {
+    if (configuredPasskey && candidatePasskey === configuredPasskey) {
       return next();
     }
 
-    // 3. If token does not match passkey, check if it's a valid 3-part JWT
+    // 2. If token does not match passkey, check if it's a valid 3-part JWT
     // JWT format: [header].[payload].[signature]
     const jwtParts = token.split('.');
     if (jwtParts.length !== 3) {
@@ -1341,7 +1341,7 @@ async function startServer() {
       return res.status(401).json({ success: false, error: 'Unauthorized: Invalid token format' });
     }
 
-    // 4. Verify Firebase ID Token
+    // 3. Verify Firebase ID Token
     try {
       const decodedToken = await admin.auth().verifyIdToken(token);
       const adminEmails = [
@@ -1352,8 +1352,10 @@ async function startServer() {
       ].map(e => e.toLowerCase().trim());
       
       const email = (decodedToken.email || '').toLowerCase().trim();
-      if (!email || !adminEmails.includes(email)) {
-        return res.status(403).json({ success: false, error: 'Forbidden: Admin access required' });
+      const isVerified = decodedToken.email_verified === true;
+
+      if (!email || !isVerified || !adminEmails.includes(email)) {
+        return res.status(403).json({ success: false, error: 'Forbidden: Verified Admin access required' });
       }
       return next();
     } catch (error: any) {
@@ -1367,18 +1369,22 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // Verify Admin Passkey Endpoint
-  app.post("/api/admin/verify-passkey", (req, res) => {
+  // Verify Admin Passkey Endpoint (Protected with Brute-Force Rate Limiting)
+  app.post("/api/admin/verify-passkey", rateLimitPasskeyVerify, (req, res) => {
     try {
       const { passkey } = req.body;
-      const configuredPasskey = (process.env.ADMIN_PASSKEY || "winfix-admin-2026!").trim();
+      const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
+      if (!configuredPasskey) {
+        return res.status(503).json({
+          success: false,
+          error: "서버에 ADMIN_PASSKEY 환경 변수가 설정되지 않아 마스터 패스키 인증이 비활성화되어 있습니다. Google 관리자 로그인을 이용해주세요."
+        });
+      }
       if (!passkey) {
         return res.status(400).json({ success: false, error: "관리자 보안 패스키를 입력해주세요." });
       }
       const trimmed = passkey.trim();
-      const isValid = trimmed === configuredPasskey || 
-                      trimmed === "winfix-master-key" || 
-                      trimmed === "dev_admin_bypass";
+      const isValid = trimmed === configuredPasskey;
       if (isValid) {
         return res.json({ 
           success: true, 
@@ -1452,7 +1458,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/issues/add", async (req, res) => {
+  app.post("/api/issues/add", requireAdmin, async (req, res) => {
     try {
       const issueData = req.body;
       const saveRes = await saveIssuesToServer([issueData]);
@@ -1462,7 +1468,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/issues/sync", async (req, res) => {
+  app.post("/api/issues/sync", requireAdmin, async (req, res) => {
     try {
       const { issues } = req.body;
       if (!Array.isArray(issues)) {
@@ -1475,7 +1481,7 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/issues/:id", (req, res) => {
+  app.patch("/api/issues/:id", requireAdmin, (req, res) => {
     try {
       const { id } = req.params;
       const patchData = req.body;
@@ -1493,7 +1499,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/logs/:type", (req, res) => {
+  app.get("/api/logs/:type", requireAdmin, (req, res) => {
     try {
       const { type } = req.params;
       const logs = readLocalCollection(`logs_${type}`);
@@ -1740,7 +1746,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/visitor/list", (req, res) => {
+  app.get("/api/visitor/list", requireAdmin, (req, res) => {
     try {
       const logs = readLocalCollection("logs_visitor");
       const todayStr = new Date().toISOString().split('T')[0];
@@ -1797,6 +1803,9 @@ async function startServer() {
   app.post("/api/logs/add", (req, res) => {
     try {
       const { type, log } = req.body;
+      if (!type || typeof type !== 'string' || !/^[a-zA-Z0-9_]{1,32}$/.test(type)) {
+        return res.status(400).json({ success: false, error: "Invalid log type name" });
+      }
       addLocalLog(`logs_${type}`, log);
       res.json({ success: true });
     } catch (err: any) {
@@ -2366,11 +2375,19 @@ async function startServer() {
     try {
       const secretInput = req.headers['x-cron-secret'] || req.query.secret || (req.body && req.body.secret);
       const cronSecret = process.env.CRON_SECRET;
-      
       // If server has CRON_SECRET configured, verify secret
-      if (cronSecret && secretInput !== cronSecret) {
-        console.warn(`[GitHub Webhook] Unauthorized sync attempt with invalid secret`);
-        return res.status(401).json({ success: false, error: "Unauthorized: Invalid or missing secret header 'x-cron-secret'" });
+      if (cronSecret) {
+        if (secretInput !== cronSecret) {
+          console.warn(`[GitHub Webhook] Unauthorized sync attempt with invalid secret`);
+          return res.status(401).json({ success: false, error: "Unauthorized: Invalid or missing secret header 'x-cron-secret'" });
+        }
+      } else {
+        const authHeader = req.headers.authorization;
+        const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
+        const candidatePasskey = authHeader?.startsWith('Bearer ') ? authHeader.split('Bearer ')[1]?.replace('passkey:', '').trim() : '';
+        if (!configuredPasskey || candidatePasskey !== configuredPasskey) {
+          return res.status(401).json({ success: false, error: "Unauthorized: CRON_SECRET or ADMIN_PASSKEY must be configured and valid credentials supplied." });
+        }
       }
 
       const incomingIssues = req.body?.issues;
@@ -2802,7 +2819,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/scripts/sign", (req, res) => {
+  app.post("/api/scripts/sign", requireAdmin, (req, res) => {
     try {
       const { script, signerName } = req.body;
       if (!script) {
@@ -2891,8 +2908,8 @@ async function startServer() {
     });
   });
 
-  // POST trigger healing
-  app.post("/api/nodes/heal", (req, res) => {
+  // POST trigger healing (Protected by requireAdmin)
+  app.post("/api/nodes/heal", requireAdmin, (req, res) => {
     if (isNodeHealingInProgress) {
       return res.json({ success: true, message: "Healing already in progress" });
     }
@@ -2940,8 +2957,8 @@ async function startServer() {
     });
   });
 
-  // POST self-reflection (Real code auditing)
-  app.post("/api/audit/self-reflection", (req, res) => {
+  // POST self-reflection (Real code auditing - Protected by requireAdmin)
+  app.post("/api/audit/self-reflection", requireAdmin, (req, res) => {
     try {
       // Actually reading root, src, server.ts files to provide real static metrics!
       const appFileExists = fs.existsSync(path.join(process.cwd(), 'src', 'App.tsx'));

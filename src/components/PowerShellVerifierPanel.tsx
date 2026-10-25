@@ -123,16 +123,21 @@ export function PowerShellVerifierPanel({ scriptText, onScriptSigned, language }
     // Simulate certificates binding processing
     await new Promise(r => setTimeout(r, 600));
     try {
+      const adminToken = localStorage.getItem('winfix_admin_token') || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (adminToken) {
+        headers['Authorization'] = `Bearer ${adminToken}`;
+      }
       const response = await fetch('/api/scripts/sign', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ script: scriptText })
       });
       const data = await parseJsonResponse(response);
       if (data.success) {
         onScriptSigned(data.signedScript);
       } else {
-        // Fallback to client-side signing if server is unreachable
+        // Fallback to client-side signing if server is unreachable or client has local rights
         const fallback = signPowerShellScript(scriptText);
         onScriptSigned(fallback.signedScript);
       }

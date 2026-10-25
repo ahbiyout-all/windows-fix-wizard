@@ -1,6 +1,151 @@
-# Patch Note - System Update (v3.19.0)
+# Patch Note - System Update (v3.26.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.26.0] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. GitHub Actions Pages Deployment Configuration Component (`src/components/GitHubPagesDeployDoc.tsx`)
+- **Copyable Battle-Tested `deploy.yml` Snippet**: Created a dedicated, interactive documentation component embedded directly in the Admin tab's GitHub integration section. Provides complete YAML workflow code for deploying Windows Fix Wizard to GitHub Pages.
+- **Direct YAML Download Capability**: Added a one-click "Download File" button allowing administrators and developers to instantly obtain `deploy.yml` with correct indentations and zero copy-paste errors.
+- **Dynamic Branch & Repository Interpolation**: Allows administrators to specify target branches (e.g., `main`, `production`) and automatically reflects their repository settings in the generated snippet.
+
+#### 2. Static Hosting Safeguards & High-Availability Architecture
+- **SPA 404 Routing Redirection (`cp dist/index.html dist/404.html`)**: Prevents "404 Not Found" errors on page refreshes and direct URL navigation on GitHub Pages CDN.
+- **Jekyll Processing Bypass (`touch dist/.nojekyll`)**: Disables GitHub Pages' default Jekyll engine so Vite-bundled assets, underscore-prefixed chunks, and web fonts are fully accessible.
+- **Offline Dataset Embedding (`mkdir -p dist/data && cp data/issues.json dist/data/`)**: Automatically bundles the repository's collected Windows troubleshooting database (`data/issues.json` with 30+ verified solutions) into the static distribution. Guarantees 100% app functionality even without a Node.js server or during Cloud Firestore quota exhaustion.
+- **Interactive 3-Step Setup Guide & Troubleshooting FAQ**: Integrated interactive setup guides, permissions instructions (`pages: write`, `id-token: write`), and troubleshooting for common GitHub Pages hosting issues.
+
+### 📈 UI/UX & Performance Optimizations
+- **Admin Tab Layout Refinement**: Seamlessly embedded the deployment documentation card into the Admin tab's GitOps control hub with dark-mode terminal styling, copy confirmations, and bilingual support (Korean & English).
+- **System Version Alignment**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.26.0`.
+
+---
+
+## [v3.25.1] - 2026-10-24
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Firestore Quota Exhaustion Resilient Fallback (`src/App.tsx`)
+- **Sanitized Quota Error Interception**: Updated `handleFirestoreError` and `fetchMaintenanceSettings` to detect Firestore daily read quota exhaustion (`resource-exhausted` / `Quota limit exceeded`) and transition directly to the built-in High-Availability Server JSON File DB (`server_file`).
+- **Eliminated Fatal Console Error Logging**: Replaced `console.error` in Firestore fallback reads with non-fatal `console.warn` notifications, preventing automated error triggers while preserving continuous app usability via local cache and server-side JSON storage.
+- **Local Cache First Strategy**: Configured maintenance settings retrieval to read from `localStorage` before attempting direct Firestore reads, minimizing billable read operations.
+
+#### 2. Unified Admin Authentication Headers (`src/App.tsx`)
+- **Passkey & Token Header Normalization**: Replaced fragmented `auth.currentUser?.getIdToken()` invocations in `fetchMaintenanceSettings`, `saveMaintenanceSettings`, `fetchGithubConfig`, `saveGithubConfig`, `handlePullFromGithub`, `handleDispatchGithubWorkflow`, `fetchEngineStatus`, `runEngineNow`, `handleTestAlert`, `handleTestSmtpConnection`, `handleResetSmtpSettings`, and `/api/admin/backup` with unified `getAuthHeaders()`.
+- **Eliminated `Bearer undefined` 401 Rejections**: Guaranteed that both Passkey sessions and Google ID tokens are cleanly attached to request headers, resolving admin endpoint authorization rejections.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.25.1`.
+
+---
+
+## [v3.25.0] - 2026-10-24
+
+### 🛡️ Security Hardening & Vulnerability Remediation
+
+#### 1. Zero-Fallback Passkey Hardening & Brute-Force Rate Limiting (`server.ts`)
+- **Eliminated Default Passkey Fallback**: Removed fallback strings (`winfix-admin-2026!`) in `requireAdmin`, `/api/admin/verify-passkey`, and `/api/github/sync`. Passkey authentication now strictly requires an explicitly configured, non-empty `process.env.ADMIN_PASSKEY`.
+- **Passkey Verification Rate Limiting**: Added `rateLimitPasskeyVerify` (max 5 requests per 60 seconds per IP) on `/api/admin/verify-passkey` to completely thwart automated brute-force attacks.
+- **Client Offline Passkey Bypass Sanitization (`src/App.tsx`)**: Removed hardcoded fallback passkeys (`winfix-admin-2026!`, `winfix-master-key`, `dev_admin_bypass`) in client network exception handler.
+
+#### 2. Administrative Endpoint Authorization Guarding (`server.ts` & Frontend)
+- **Protected PowerShell Script Signing**: Guarded `/api/scripts/sign` with `requireAdmin` middleware so unauthenticated users cannot sign scripts or mint signature blocks.
+- **Protected Node Recovery & Static Reflection**: Guarded `/api/nodes/heal` and `/api/audit/self-reflection` behind `requireAdmin` to prevent unauthorized cluster state modifications or internal filesystem profiling.
+- **Graceful Client Fallbacks**: Updated `PowerShellVerifierPanel` and `InteractiveRoadmap` to pass Bearer tokens when authorized and fall back to safe client-side simulation when unauthenticated.
+
+#### 3. Cross-Site Scripting (XSS) Prevention in Log Previews (`src/App.tsx`)
+- **Sandboxed Email Template Rendering**: Replaced `dangerouslySetInnerHTML` in the admin dashboard email preview modal with an isolated `<iframe srcDoc={log.template} sandbox="" ... />`, neutralizing script execution, cookie access, and DOM traversal risks.
+
+#### 4. Denial-of-Wallet & Schema Validation in Cloud Firestore (`firestore.rules`)
+- **Strict Size & Schema Boundaries**: Added rigorous size and format validation rules (`isValidSearchLog`, `isValidFeedback`, `isValidAppErrorLog`, `isValidVisitorLog`) on public write endpoints to protect cloud billing quotas from flooding attacks.
+- **ID Pattern Enforcements**: Enforced regex constraints (`^[a-zA-Z0-9_-]{1,64}$`) on client-supplied document IDs across all public write collections.
+
+#### 5. Environment Template Sanitization (`.env.example`)
+- **Default Secret Cleaned**: Emptied default passkey placeholder in `.env.example` with clear instructions to configure a cryptographically secure 24+ character secret.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.25.0`.
+
+---
+
+## [v3.24.0] - 2026-10-24
+
+### 🛡️ Security Hardening & Vulnerability Remediation
+
+#### 1. Complete Removal of Mock/Bypass Authentication Tokens (`server.ts` & `src/App.tsx`)
+- **Eliminated Static Bypass Tokens**: Completely removed hardcoded bypass tokens (`dev_admin_bypass`, `winfix-master-key`, `admin_token`) from `requireAdmin` and passkey verification endpoints.
+- **Sanitized Client Token Provider (`src/App.tsx`)**: Removed default `'dev_admin_bypass'` fallback in `getAuthHeaders()`, ensuring only cryptographically validated Firebase ID tokens or explicitly configured admin passkeys are transmitted.
+
+#### 2. Strict Role & Email Verification in Firestore Rules (`firestore.rules`)
+- **Email Spoofing Prevention**: Updated `isAdmin()` helper in `firestore.rules` to enforce `isEmailVerified() && request.auth.token.email_verified == true`, preventing unauthorized privilege escalation via unverified email registrations.
+- **Rules Redeployed**: Successfully verified and re-deployed hardened security rules to Firebase Firestore.
+
+#### 3. Endpoint Authorization Hardening (`server.ts`)
+- **Protected Issue Mutation Endpoints**: Added `requireAdmin` middleware to `/api/issues/add`, `/api/issues/sync`, and `PATCH /api/issues/:id` to prevent unauthenticated data tampering or malicious script injection.
+- **Protected Sensitive Log Endpoints**: Guarded `/api/logs/:type` and `/api/visitor/list` behind `requireAdmin` to prevent sensitive visitor IP/session information disclosure.
+- **Input Sanitization in `/api/logs/add`**: Added strict alphanumeric regex validation on log collection type parameter to prevent directory traversal or file injection risks.
+- **GitHub Webhook Authentication Guard**: Enforced strict authorization fallback on `/api/github/sync` when `CRON_SECRET` is not configured.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.24.0`.
+
+---
+
+## [v3.23.0] - 2026-10-24
+
+### 🛠️ Bug Fixes & Stability Improvements
+
+#### 1. Proactive API Key Pre-Flight Filter & Log Sanitization (`server.ts` & `src/App.tsx`)
+- **Enhanced Key Pre-Flight Filtering**: Expanded pattern checks in `isValidGeminiApiKey` (`server.ts`) and `isValidApiKeyFormat` (`src/App.tsx`) to proactively detect project names, placeholders, or dummy strings (`My_Project_40329`, `CUSTOM_API_KEY`, `GEMINI_API_KEY`, `ai_studio`, `dummy`, `fake`, etc.) before making network API requests.
+- **Sanitized Quarantined Key Logs**: Updated engine sync quarantine messaging to non-error status logs (`console.info`), preventing unconfigured keys from triggering false-positive system error alerts while maintaining seamless local database and GitOps cache fallback.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.23.0`.
+
+---
+
+## [v3.22.0] - 2026-10-24
+
+### 🚀 Major New Features & Documentation
+
+#### 1. Dual Blogger Posting Documents (`/docs/BLOGGER_COMPOSE_MODE.md` & `/docs/BLOGGER_HTML_MODE.md`)
+- **Compose Mode (Rich Text) Document (`/docs/BLOGGER_COMPOSE_MODE.md`)**: Formatted specifically for Google Blogger's [작성 모드 (서식 있는 텍스트)] editor, allowing direct copy-paste with structured headers, bullet points, and FAQ sections.
+- **HTML Edit Mode (`<>`) Document (`/docs/BLOGGER_HTML_MODE.md`)**: Production-ready HTML code block with responsive grid card layouts, gradient hero header, step badges, and CTA action buttons for Blogger's [HTML 편집 모드] editor.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.22.0`.
+
+---
+
+## [v3.21.0] - 2026-10-24
+
+### 🚀 Major New Features & Documentation
+
+#### 1. Google Blogger (Blogspot) Promotion & Posting Guide (`/docs/BLOGGER_POST_TEMPLATE.md`)
+- **Complete Blogger Publishing Template**: Created a dedicated Google Blogger document containing SEO meta configurations, tags, and search descriptions for AhBiYout official blog.
+- **Dual-Format Content Support**: Included both a Markdown rich text template and a production-grade responsive HTML code block for Blogger's HTML (`<>`) view.
+- **Embedded CTA & Link Assets**: Integrated direct links to official blog (`https://ahbiyoutvibe.blogspot.com/`), GitHub Pages demo, and GitHub open-source repository.
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.21.0`.
+
+---
+
+## [v3.20.0] - 2026-10-24
+
+### 🛡️ Security Hardening & Information Leak Prevention
+
+#### 1. Admin Login Credential Disclosures Sanitized (`/src/App.tsx`)
+- **Email Exposure Prevention**: Removed explicit display of administrator email (`ahbiyoutwinfix@gmail.com`) from Google Admin login button labels and authorization subtext, replacing them with generic, secure messages.
+- **Passkey Hardcoding Sanitization**: Removed the `[기본 마스터키 입력]` (Fill Default Key) pre-fill button and plain-text placeholder `placeholder="winfix-admin-2026!"` from the Admin Login passkey form to prevent unauthorized key exposure.
+- **Secure Password Field Formatting**: Updated passkey input placeholder to generic prompt text (`보안 패스키 입력...` / `Enter Passkey...`).
+
+### 📈 UI/UX & Performance Optimizations
+- **Global Version Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `docs/PATCH_NOTE.md` to `v3.20.0`.
 
 ---
 

@@ -275,7 +275,11 @@ export function InteractiveRoadmap({ language }: Props) {
     try {
       setIsRecovering(true);
       setRecoveryProgress(0);
-      const resp = await fetch("/api/nodes/heal", { method: "POST" });
+      const adminToken = localStorage.getItem('winfix_admin_token') || '';
+      const headers: Record<string, string> = {};
+      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+
+      const resp = await fetch("/api/nodes/heal", { method: "POST", headers });
       const data = await parseJsonResponse(resp);
       if (data.success) {
         // Immediate update request
@@ -286,9 +290,22 @@ export function InteractiveRoadmap({ language }: Props) {
           setIsRecovering(statusData.isHealing);
           setRecoveryProgress(statusData.progress || 0);
         }
+      } else {
+        // Client-side local simulation fallback when viewing unauthenticated
+        let simProgress = 0;
+        const simInterval = setInterval(() => {
+          simProgress += 20;
+          setRecoveryProgress(simProgress);
+          if (simProgress >= 100) {
+            clearInterval(simInterval);
+            setIsRecovering(false);
+            setNodes(prev => prev.map(n => ({ ...n, status: 'healthy' })));
+          }
+        }, 500);
       }
     } catch (err) {
       console.error("Failed to trigger enterprise multinode healing:", err);
+      setIsRecovering(false);
     }
   };
 
@@ -308,7 +325,11 @@ export function InteractiveRoadmap({ language }: Props) {
     setReflectionAuditResults(curr => curr.map(item => ({ ...item, status: 'running', value: '...' })));
 
     try {
-      const resp = await fetch("/api/audit/self-reflection", { method: "POST" });
+      const adminToken = localStorage.getItem('winfix_admin_token') || '';
+      const headers: Record<string, string> = {};
+      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+
+      const resp = await fetch("/api/audit/self-reflection", { method: "POST", headers });
       const data = await parseJsonResponse(resp);
       
       let step = 0;

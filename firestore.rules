@@ -17,6 +17,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && 
+        isEmailVerified() &&
         request.auth.token.email in [
           'redmunlight@gmail.com', 
           'ahbiyout@gmail.com', 
@@ -37,6 +38,29 @@ service cloud.firestore {
              data.code is string && data.code.size() <= 500 &&
              data.title is string && data.title.size() <= 2000 &&
              data.symptoms is string && data.symptoms.size() <= 50000;
+    }
+
+    function isValidSearchLog(data) {
+      return data.keys().hasAll(['query']) &&
+             data.query is string && data.query.size() <= 300;
+    }
+
+    function isValidFeedback(data) {
+      return (!('comment' in data) || (data.comment is string && data.comment.size() <= 2000)) &&
+             (!('issueId' in data) || (data.issueId is string && data.issueId.size() <= 128));
+    }
+
+    function isValidAppErrorLog(data) {
+      return data.keys().hasAll(['message', 'severity']) &&
+             data.message is string && data.message.size() <= 5000 &&
+             data.severity in ['error', 'warning', 'fatal'];
+    }
+
+    function isValidVisitorLog(data) {
+      return data.keys().hasAll(['visitorId']) &&
+             data.visitorId is string && data.visitorId.size() <= 128 &&
+             (!('ip' in data) || (data.ip is string && data.ip.size() <= 64)) &&
+             (!('userAgent' in data) || (data.userAgent is string && data.userAgent.size() <= 500));
     }
 
     // Issues collection
@@ -67,25 +91,24 @@ service cloud.firestore {
 
     // Search Logs
     match /search_logs/{logId} {
-      allow create: if true; // Allow anonymous logging
+      allow create: if isValidId(logId) && isValidSearchLog(request.resource.data);
       allow read, update, delete: if isAdmin();
     }
 
     // Feedback
     match /feedback/{feedbackId} {
-      allow create: if true; // Allow user feedback
+      allow create: if isValidId(feedbackId) && isValidFeedback(request.resource.data);
       allow read, update, delete: if isAdmin();
     }
 
     // Admin Logs
     match /admin_logs/{logId} {
-      allow read, write: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, write, delete: if isAdmin();
     }
 
     // Application Error Logs
     match /app_error_logs/{logId} {
-      allow create: if true; // Allow anyone to report errors
+      allow create: if isValidId(logId) && isValidAppErrorLog(request.resource.data);
       allow read, update, delete: if isAdmin();
     }
 
@@ -115,7 +138,7 @@ service cloud.firestore {
 
     // Visitor Logs for visitor tracking and management
     match /visitor_logs/{logId} {
-      allow create, update: if true; // Allow anonymous and logged-in visitor logging
+      allow create, update: if isValidId(logId) && isValidVisitorLog(request.resource.data);
       allow read, delete: if isAdmin();
     }
   }

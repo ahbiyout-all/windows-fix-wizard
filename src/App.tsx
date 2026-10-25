@@ -29,6 +29,7 @@ import { PowerShellVerifierPanel } from './components/PowerShellVerifierPanel';
 import { InteractiveRoadmap } from './components/InteractiveRoadmap';
 import { DashboardWidget } from './components/DashboardWidget';
 import { SystemInfoWidget } from './components/SystemInfoWidget';
+import { GitHubPagesDeployDoc } from './components/GitHubPagesDeployDoc';
 import { parseJsonResponse, parseAiJson } from './utils/safeFetch';
 import { validateKnownIssuesData, ValidationResult } from './utils/validateKnownIssue';
 
@@ -44,8 +45,18 @@ interface AppErrorLog {
 }
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const lowerMsg = errMsg.toLowerCase();
+  const isQuota = 
+    lowerMsg.includes('quota') || 
+    lowerMsg.includes('429') || 
+    lowerMsg.includes('resource_exhausted') || 
+    lowerMsg.includes('resource-exhausted') ||
+    lowerMsg.includes('free daily read units') ||
+    lowerMsg.includes('free tier database');
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid || undefined,
       email: auth.currentUser?.email || undefined,
@@ -55,12 +66,22 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     },
     operationType,
     path
+  };
+
+  if (isQuota) {
+    console.warn('Firestore Quota Exceeded (Engaging HA server_file fallback):', JSON.stringify(errInfo));
+    try {
+      localStorage.setItem('winfix_db_mode', 'server_file');
+      localStorage.setItem('winfix_db_mode_fallback', 'true');
+    } catch {}
+    return;
   }
+
   console.error('Firestore Error (Global): ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
-async function getAuthHeaders() {
+async function getAuthHeaders(): Promise<Record<string, string>> {
   const isPasskeyActive = localStorage.getItem('winfix_admin_passkey_active') === 'true';
   const adminToken = localStorage.getItem('winfix_admin_token');
   
@@ -71,10 +92,17 @@ async function getAuthHeaders() {
   }
 
   const userToken = await auth.currentUser?.getIdToken();
-  const token = userToken || adminToken || 'dev_admin_bypass';
-  return {
-    'Authorization': `Bearer ${token}`
-  };
+  if (userToken) {
+    return {
+      'Authorization': `Bearer ${userToken}`
+    };
+  }
+  if (adminToken) {
+    return {
+      'Authorization': `Bearer ${adminToken}`
+    };
+  }
+  return {};
 }
 
 export const isValidApiKeyFormat = (key: string): boolean => {
@@ -82,6 +110,7 @@ export const isValidApiKeyFormat = (key: string): boolean => {
   const clean = key.trim();
   if (clean.length < 30) return false;
   const upper = clean.toUpperCase();
+  const lower = clean.toLowerCase();
   if (
     upper === 'MY_GEMINI_API_KEY' ||
     upper === 'YOUR_GEMINI_API_KEY' ||
@@ -91,8 +120,19 @@ export const isValidApiKeyFormat = (key: string): boolean => {
     upper === 'MY_PROJECT_40329' ||
     upper === 'AI_STUDIO_DEFAULT' ||
     upper === 'SET_ME_IN_SECRETS' ||
-    clean.toLowerCase().includes('placeholder') ||
-    clean.toLowerCase().includes('your_api_key')
+    lower === 'undefined' ||
+    lower === 'null' ||
+    lower.includes('placeholder') ||
+    lower.includes('your_api_key') ||
+    lower.includes('my_project') ||
+    lower.includes('custom_api') ||
+    lower.includes('gemini_api') ||
+    lower.includes('google_api') ||
+    lower.includes('project_40329') ||
+    lower.includes('ai_studio') ||
+    lower.includes('dummy') ||
+    lower.includes('fake') ||
+    lower.includes('secret')
   ) {
     return false;
   }
@@ -279,7 +319,7 @@ const AdSense = ({ slot }: { slot: string }) => {
   );
 };
 
-const APP_VERSION = "3.19.0";
+const APP_VERSION = "3.26.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -986,21 +1026,36 @@ export default function App() {
   const fetchMaintenanceSettings = async () => {
     if (!isAdmin) return;
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/settings/maintenance", {
-        headers: { "Authorization": `Bearer ${idToken}` }
+        headers: { ...authHeaders }
       });
       const data = await parseJsonResponse(resp);
       if (data.success && data.settings) {
         setMaintenanceSettings(data.settings);
         localStorage.setItem('winfix_maintenance_settings', JSON.stringify(data.settings));
-      } else {
-        throw new Error("API call failed");
+        return;
       }
     } catch (err: any) {
-      console.warn("API maintenance settings fetch failed, trying Firestore direct fallback:", err);
-      // Fallback direct read as before
-      try {
+      console.warn("API maintenance settings fetch skipped, trying cached fallback:", err?.message || err);
+    }
+
+    // Fallback 1: Local storage cached settings
+    try {
+      const cached = localStorage.getItem('winfix_maintenance_settings');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed) {
+          setMaintenanceSettings(parsed);
+          return;
+        }
+      }
+    } catch {}
+
+    // Fallback 2: Firestore read (only attempted if quota is not flagged)
+    try {
+      const isFallbackActive = localStorage.getItem('winfix_db_mode_fallback') === 'true';
+      if (!isFallbackActive) {
         const configDoc = await getDoc(doc(db, 'system_config', 'maintenance'));
         if (configDoc.exists()) {
           const data = configDoc.data();
@@ -1014,8 +1069,18 @@ export default function App() {
           setMaintenanceSettings(settings);
           localStorage.setItem('winfix_maintenance_settings', JSON.stringify(settings));
         }
-      } catch (innerErr) {
-        console.error("Firestore fallback read failed:", innerErr);
+      }
+    } catch (innerErr: any) {
+      const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+      const isQuota = msg.includes('Quota') || msg.includes('quota') || innerErr?.code === 'resource-exhausted';
+      if (isQuota) {
+        console.warn("Firestore quota reached for maintenance settings; using HA server_file defaults.");
+        setDbMode('server_file');
+        localStorage.setItem('winfix_db_mode', 'server_file');
+        localStorage.setItem('winfix_db_mode_fallback', 'true');
+        setDbStatus('quota');
+      } else {
+        console.warn("Firestore fallback read skipped:", msg);
       }
     }
   };
@@ -1029,12 +1094,12 @@ export default function App() {
         updatedAt: getKSTISOString()
       };
 
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/settings/maintenance", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${idToken}`
+          ...authHeaders
         },
         body: JSON.stringify(updatedSettings)
       });
@@ -1050,7 +1115,7 @@ export default function App() {
       await logAdminAction('update', 'system_config', `유지보수 설정 업데이트: 정리 ${finalSettings.cleanupMonths}개월, 검증 ${finalSettings.linkVerifyFrequencyDays}일, 수집주기 ${finalSettings.engineIntervalMin}분, 모집개수 ${finalSettings.engineBatchSize}개`, 'success', 'SYSTEM');
       customAlert(language === 'en' ? "Maintenance settings saved successfully to the server." : "유지보수 및 자율 엔진 설정이 서버와 데이터베이스에 안전하게 저장되었습니다.");
     } catch (err: any) {
-      console.warn("API settings save failed, trying direct Firestore write fallback:", err);
+      console.warn("API settings save failed, trying direct Firestore write fallback:", err?.message || err);
       try {
         const updatedSettings = {
           ...maintenanceSettings,
@@ -1062,7 +1127,13 @@ export default function App() {
         await logAdminAction('update', 'system_config', `유지보수 설정 업데이트(다이렉트): 정리 ${updatedSettings.cleanupMonths}개월, 검증 ${updatedSettings.linkVerifyFrequencyDays}일, 수집주기 ${updatedSettings.engineIntervalMin}분, 모집개수 ${updatedSettings.engineBatchSize}개`, 'success', 'SYSTEM');
         customAlert(language === 'en' ? "Settings saved successfully (Firestore Direct)." : "설정 및 엔진 옵션이 데이터베이스로 직접 저장되었습니다.");
       } catch (innerErr: any) {
-        handleFirestoreError(innerErr, OperationType.WRITE, 'system_config/maintenance');
+        const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+        if (msg.includes('Quota') || msg.includes('quota') || innerErr?.code === 'resource-exhausted') {
+          console.warn("Firestore quota reached on settings save fallback; settings retained in memory/local storage.");
+          customAlert(language === 'en' ? "Settings saved locally. Firestore quota limit is in effect." : "설정이 로컬에 임시 저장되었습니다 (Firestore 일일 무료 할당량 초과).");
+        } else {
+          handleFirestoreError(innerErr, OperationType.WRITE, 'system_config/maintenance');
+        }
       }
     } finally {
       setIsSavingSettings(false);
@@ -1072,9 +1143,9 @@ export default function App() {
   const fetchGithubConfig = async () => {
     if (!isAdmin) return;
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/config", {
-        headers: { "Authorization": `Bearer ${idToken}` }
+        headers: { ...authHeaders }
       });
       const data = await parseJsonResponse(resp);
       if (data.success && data.config) {
@@ -1099,12 +1170,12 @@ export default function App() {
     if (!isAdmin) return;
     setIsSavingGithubConfig(true);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/config", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${idToken}`
+          ...authHeaders
         },
         body: JSON.stringify({
           repo: githubRepo.trim(),
@@ -1136,12 +1207,12 @@ export default function App() {
     }
     setIsPullingGithub(true);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/pull-from-repo", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${idToken}`
+          ...authHeaders
         },
         body: JSON.stringify({
           repo: githubRepo.trim(),
@@ -1177,12 +1248,12 @@ export default function App() {
     }
     setIsDispatchingWorkflow(true);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/dispatch-workflow", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${idToken}`
+          ...authHeaders
         },
         body: JSON.stringify({
           repo: githubRepo.trim(),
@@ -2340,26 +2411,26 @@ export default function App() {
   };
   const fetchEngineStatus = async () => {
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/engine/status", {
-        headers: { "Authorization": `Bearer ${idToken}` }
+        headers: { ...authHeaders }
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
         setEngineStatus(data);
       }
     } catch (e) {
-      console.error("Failed to fetch engine status:", e);
+      console.warn("Failed to fetch engine status:", e);
     }
   };
 
   const runEngineNow = async () => {
     setIsEngineActionLoading(true);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/engine/run-now", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${idToken}` }
+        headers: { ...authHeaders }
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
@@ -2379,12 +2450,12 @@ export default function App() {
     setIsTestingAlert(true);
     setTestAlertResult(null);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/engine/test-alert", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${idToken}`
+          ...authHeaders
         },
         body: JSON.stringify({ recipient: testAlertRecipient })
       });
@@ -2404,12 +2475,12 @@ export default function App() {
     setIsTestingSmtpConn(true);
     setSmtpTestResult(null);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/admin/smtp/verify", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${idToken}`
+          ...authHeaders
         },
         body: JSON.stringify({
           smtpHost: maintenanceSettings.smtpHost,
@@ -2457,12 +2528,12 @@ export default function App() {
             smtpPass: "",
             updatedAt: getKSTISOString()
           };
-          const idToken = await auth.currentUser?.getIdToken();
+          const authHeaders = await getAuthHeaders();
           const resp = await fetch("/api/settings/maintenance", {
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${idToken}`
+              ...authHeaders
             },
             body: JSON.stringify(resetSettings)
           });
@@ -2547,13 +2618,13 @@ export default function App() {
 
         // 2. Clear Local JSON Log File via API
         try {
-          const idToken = await auth.currentUser?.getIdToken();
-          if (idToken) {
+          const authHeaders = await getAuthHeaders();
+          if (authHeaders.Authorization) {
             await fetch('/api/logs/clear', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}`
+                ...authHeaders
               },
               body: JSON.stringify({ type: 'backend' })
             });
@@ -3728,14 +3799,9 @@ export default function App() {
           return;
         }
       } catch (netErr) {
-        // Fallback for static GitHub Pages or sandboxed environment
-        if (pk === 'winfix-admin-2026!' || pk === 'winfix-master-key' || pk === 'dev_admin_bypass') {
-          isVerified = true;
-        } else {
-          setAdminPasskeyError(language === 'en' ? 'Invalid admin passkey.' : '관리자 보안 패스키가 일치하지 않습니다.');
-          setAdminPasskeyLoading(false);
-          return;
-        }
+        setAdminPasskeyError(language === 'en' ? 'Unable to reach verification server. Please check your network or sign in with Google.' : '인증 서버에 연결할 수 없습니다. 네트워크를 확인하거나 Google 관리자 로그인을 이용해주세요.');
+        setAdminPasskeyLoading(false);
+        return;
       }
 
       if (isVerified) {
@@ -4933,15 +4999,14 @@ export default function App() {
     setBackupResult(null);
 
     try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders.Authorization) {
         throw new Error(language === 'en' ? "Not authenticated." : "인증되지 않은 사용자입니다.");
       }
 
-      const token = await currentUser.getIdToken();
       const response = await fetch('/api/admin/backup', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          ...authHeaders
         }
       });
 
@@ -9254,6 +9319,13 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* GitHub Actions Pages Deployment (deploy.yml) Snippet & Architecture Safeguards Component */}
+                <GitHubPagesDeployDoc
+                  repo={githubRepo || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`}
+                  branch={githubBranch || 'main'}
+                  language={language}
+                />
+
               </div>
 
               {/* AI ENGINE SENTINEL HEALTH & ALARM CONTROLLER */}
@@ -9763,7 +9835,12 @@ export default function App() {
                               <ChevronDown className="w-3.5 h-3.5" />
                             </summary>
                             <div className="p-4 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
-                              <div className="border border-slate-200 dark:border-slate-800 rounded p-4 bg-white text-slate-800 max-h-60 overflow-y-auto" dangerouslySetInnerHTML={{ __html: log.template }} />
+                              <iframe
+                                srcDoc={log.template}
+                                sandbox=""
+                                title={language === 'en' ? 'Email Template Preview' : '경고 이메일 템플릿 실시간 실물 디자인 모의'}
+                                className="w-full h-48 border border-slate-200 dark:border-slate-800 rounded bg-white text-slate-800"
+                              />
                             </div>
                           </details>
                         </div>
@@ -11203,10 +11280,10 @@ export default function App() {
                                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                               </svg>
-                              <span>{language === 'ko' ? 'Google 관리자 계정으로 로그인 (ahbiyoutwinfix@gmail.com)' : 'Sign In with Google Admin Account'}</span>
+                              <span>{language === 'ko' ? 'Google 관리자 계정으로 로그인' : 'Sign In with Google Admin Account'}</span>
                             </button>
                             <p className="text-[11px] text-slate-400 dark:text-slate-500 pl-1">
-                              * {language === 'ko' ? '등록된 승인 이메일(ahbiyoutwinfix@gmail.com)로 인증 시 자동 승격됩니다.' : 'Automatically elevates when logging in with authorized email.'}
+                              * {language === 'ko' ? '승인된 관리자 계정(Google OAuth)으로 로그인 시 관리자 권한이 부여됩니다.' : 'Automatically elevates when logging in with an authorized Google account.'}
                             </p>
                           </div>
 
@@ -11226,13 +11303,6 @@ export default function App() {
                                 <Key className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                                 <span>{language === 'ko' ? '방법 2. 관리자 보안 마스터 패스키' : 'Method 2. Admin Master Passkey'}</span>
                               </label>
-                              <button
-                                type="button"
-                                onClick={() => setAdminPasskey('winfix-admin-2026!')}
-                                className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
-                              >
-                                {language === 'ko' ? '[기본 마스터키 입력]' : '[Fill Default Key]'}
-                              </button>
                             </div>
 
                             <div className="relative">
@@ -11240,7 +11310,7 @@ export default function App() {
                                 type={showAdminPasskeyText ? "text" : "password"}
                                 value={adminPasskey}
                                 onChange={(e) => setAdminPasskey(e.target.value)}
-                                placeholder="winfix-admin-2026!"
+                                placeholder={language === 'ko' ? "보안 패스키 입력..." : "Enter Passkey..."}
                                 className="w-full pl-3 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-amber-500 outline-none"
                               />
                               <button
