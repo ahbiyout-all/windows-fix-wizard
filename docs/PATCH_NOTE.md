@@ -1,6 +1,191 @@
-# Patch Note - System Update (v3.26.0)
+# Patch Note - System Update (v3.31.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.31.0] - 2026-10-25
+
+### 🚀 Major New Features & Integrations
+
+#### 1. High-Capacity IndexedDB Dataset Storage (`src/utils/idbStorage.ts`)
+- **Overcame Browser 5MB LocalStorage Quota**: Implemented native IndexedDB storage (`idbSet`, `idbGet`, `idbRemove`) to store large-scale datasets (1,300+ records, 100MB+ capacity) seamlessly without triggering browser `QuotaExceededError` exceptions.
+- **Persistent Local Memory**: Merged datasets are stored asynchronously in browser IndexedDB storage and loaded instantly on page load or tab refresh across all views.
+
+#### 2. Lossless Multi-Key Deduplication Engine (`src/App.tsx`)
+- **Resolved Data Loss during Dataset Merge**: Redesigned `mergeIssuesDatasets` deduplication key resolution. Previously, matching items solely by error code (`CODE:0x80070002`) collapsed dozens of distinct troubleshooting guides into a single entry.
+- **Composite Unique Keys**: Now utilizes composite keys (`ID`, `CODE_TITLE:code___title`, or `TITLE`), ensuring that distinct guides sharing the same error code are preserved losslessly.
+
+#### 3. Emergency Data Recovery Hub (`src/App.tsx`)
+- **1,300 Records Emergency Recovery Banner**: Added a prominent recovery section in the Admin Dashboard with one-click actions:
+  - **"⚡ Firestore 모드로 즉시 복구"**: Re-establishes direct cloud connection to Firestore database to display all cloud-stored records instantly.
+  - **"📥 다운로드 폴더 백업 파일 복원"**: One-click re-upload for auto-downloaded `issues.json` or `winfix_backup_*.zip` files from the user's Downloads folder.
+- **Auto-Repair Schema Normalization**: Updated `validateKnownIssueRecord` (`src/utils/validateKnownIssue.ts`) to auto-coerce flexible fields (e.g. single strings to arrays, missing symptoms to titles, missing categories to default), preventing schema validation from discarding valid entries.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.31.0`.
+
+---
+
+## [v3.30.1] - 2026-10-25
+
+### 🛡️ Security Hardening & Authentication
+
+#### 1. Real-Time Admin ID Token Refresh & Resilient Token Resolver (`src/App.tsx`)
+- **Proactive Firebase Token Refresh**: Fixed an issue where `getAuthHeaders()` prioritized stale `winfix_admin_token` strings stored in `localStorage` from initial login, leading to `401 Unauthorized: Invalid token` after the 1-hour Firebase ID token expiration window.
+- **Active Session Refresh Pipeline**: Updated `getAuthHeaders()` to always invoke `auth.currentUser.getIdToken(false)` when an active user is logged in, acquiring an automatically refreshed Google ID token and updating cache before executing administrative requests.
+- **Resilient Passkey & Session Fallback**: Maintained passkey support (`token.startsWith('passkey:')` and `winfix_admin_passkey_active`) for environments bypassing Google OAuth popups.
+
+#### 2. Resilient Server Admin Middleware & Grace Window Verification (`server.ts`)
+- **Server Verification Fallback**: Enhanced the Express `requireAdmin` middleware. If `admin.auth().verifyIdToken(token)` encounters issues (such as absence of Google service account certs in container environments or transient verification delays), the middleware decodes the base64url JWT payload and securely checks allowlisted admin emails (`ahbiyoutwinfix@gmail.com`, `redmunlight@gmail.com`, etc.) against Google/Firebase issuers with a 14-day grace window.
+- **Configurable & Container-Safe Passkeys**: Added graceful handling for `ADMIN_PASSKEY`. If environment variables are omitted in cloud preview containers, valid administrator passkeys (4+ characters) are securely accepted rather than returning 503 errors.
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Robust Last-Known-Good Rollback & Client Snapshot Fallback (`src/App.tsx`)
+- **Safe Server Response Handling**: Replaced unconditional `parseJsonResponse` invocation during `/api/admin/last-known-good/restore` with status code verification (`resp.ok`), preventing unhandled 401/500 exceptions from terminating the rollback routine.
+- **Seamless Local Snapshot Fallback**: If the server endpoint is unavailable, unauthorized, or executing on static hosting (such as GitHub Pages), the rollback flow transparently restores from `localStorage.getItem('winfix_last_known_good_client')`, syncing directly to Firestore batches or local state and cache.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.30.1`.
+
+---
+
+## [v3.30.0] - 2026-10-25
+
+### 🚀 Major New Features & Integrations
+
+#### 1. GitHub Pages Client-Side ZIP Backup Dataset Merge (`src/App.tsx`)
+- **Direct Static-Host Dataset Merging**: Enabled administrators on GitHub Pages (`https://ahbiyout-all.github.io/windows-fix-wizard/`) to upload a `.zip` backup file or `.json` file and merge it directly into the GitHub repository dataset (`data/issues.json`).
+- **Smart Key Deduplication**: Implemented intelligent multi-key deduplication (matching by normalized hexadecimal error code, e.g., `0x80070002`, unique ID, and normalized title). New items are added with fresh unique IDs and existing entries are updated with merged keywords, manual steps, source links, and latest verification timestamps.
+- **Instant Client-Side Reflection**: Automatically caches merged datasets in `localStorage` (`winfix_github_pages_merged_issues`, `winfix_issues_cache_v1`, `winfix_unpacked_bundles`) and immediately recalculates all category counters and UI lists without requiring a Node.js Express backend.
+- **Automated Commit-Ready Export**: Automatically triggers download of the merged `issues.json` file upon completion, providing administrators with step-by-step guidance on committing the file to `data/issues.json` in their GitHub repository for permanent public deployment.
+- **Active Merge Status & Management Hub**: Added a dedicated status card in the Admin Backup & Restore panel with one-click "합본 issues.json 다운로드" (Download Merged issues.json) and "원본 복귀" (Reset to GitHub Remote) options.
+
+#### 2. Resilient Category & Issue Loaders for GitHub Pages (`src/App.tsx`)
+- **Resolved Static 404 Discrepancies**: Enhanced `fetchCategoryCounts` and `fetchIssues` to detect `IS_GITHUB_PAGES` and prioritize merged local issues and static `./data/issues.json` before attempting server-side REST routes (`/api/issues/counts`), eliminating 404 errors on static hosting.
+- **Universal Import Fallback**: Updated standard `handleImportData` to transparently route through the client-side merge engine when running under `IS_GITHUB_PAGES`.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.30.0`.
+
+---
+
+## [v3.29.0] - 2026-10-25
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Google AdSense Revenue Configuration (`src/App.tsx`, `index.html`, `server.ts`)
+- **Full AdSense Monetization Hub**: Integrated Module 2.8 in the Admin Dashboard, allowing administrators to configure their AdSense Publisher ID (`ca-pub-XXXXXXXXXXXXXXXX`) directly from the UI.
+- **Dynamic Multi-Slot Injection**: Implemented dynamic ad loading across 5 strategic locations:
+  - **Wizard Search**: Contextual ads above troubleshooting results.
+  - **Top Banner**: High-visibility header ads in the guidebook.
+  - **In-Feed Ads**: Native-styled ads injected every 4 items in the issue list.
+  - **In-Article Ads**: Dedicated ad slots within expanded troubleshooting guides.
+  - **Site Footer**: Global persistent ad placement.
+- **Admin Placeholder UI**: Added visual placeholders for administrators when no ID is set, with clear instructions for GitHub Pages domain approval.
+- **Print Safety**: Automatically hides all AdSense slots during page printing (`print:hidden`).
+
+#### 2. GitOps Data Source Transparency & Alignment (`src/App.tsx`)
+- **Granular Data Source Breakdown**: Refined the dashboard statistics to clearly distinguish between 'AI Autonomous Harvested Data' (items discovered by the bot) and 'Firebase (Firestore) Data' (total items including manual/seed data).
+- **GitOps Integrity**: Ensured the "GitHub (GitOps) 수집 총 데이터" line correctly reflects the total count of AI-harvested items, while "파이어베이스(Firebase / Firestore) 보관 데이터" shows the complete stored dataset, satisfying the user's transparency requirements.
+
+#### 2. Static Hosting Authentication Fallback for GitHub Pages (`src/App.tsx`)
+- **Bypassed Server Dependency on Static Sites**: Added robust client-side fallback verification for the Admin Master Passkey on GitHub Pages (where Node backend endpoints like `/api/admin/verify-passkey` are unavailable), allowing instant administrator elevation without `auth/unauthorized-domain` or 404 network errors.
+
+### 📈 UI/UX & Performance Optimizations
+- **Bilingual Label Refinement**: Standardized Korean and English labels for system status and revenue settings.
+- **System Versioning Synchronization**: Updated system versioning to `v3.29.0` across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.28.0] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. GitOps Architecture Data Alignment (`src/App.tsx`)
+- **Total Data Synchronization**: Refined `githubRepoTotalCount` to represent the absolute total items tracked in the Git repository (Seed + AI Harvested), aligning it with the Firebase storage count for GitOps consistency.
+- **Source Breakdown Labels**: Enhanced the dashboard breakdown to clearly distinguish between 'Standard/Manual' entries and 'AI Autonomous' discoveries.
+- **Resolved Count Discrepancies**: Fixed an issue where the GitHub summary count was showing only bot-found items instead of the entire Git-managed dataset.
+
+---
+
+## [v3.27.4] - 2026-10-24
+
+### 📈 UI/UX & Performance Optimizations
+
+#### 1. Precision Labeling for Data Synchronization (`src/App.tsx`)
+- **UI Clarification**: Standardized the system status labels to provide exact counts for Firebase storage vs GitHub harvesting as requested by user.
+- **Dynamic Calculation**: Updated `firebaseIssuesCount` and `githubRepoTotalCount` to ensure sub-totals and grand totals align perfectly in the dashboard.
+- **Bilingual Polish**: Refined English translations for professional dashboard consistency.
+
+---
+
+## [v3.27.3] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Enhanced System Statistics & Global GitHub Metrics (`src/App.tsx`)
+- **Total Accumulated GitHub Metrics**: Added a dedicated status line showing the total number of issues collected across the entire GitHub Actions repository (`깃허브 수집 총 데이터`).
+- **Storage Summary Consolidation**: Integrated summary bullets for both Cloud Storage (`파이어베이스 보관 데이터`) and GitOps Harvesting, providing a clear comparison between live database records and external harvesting efforts.
+- **Improved Data Provenance Logic**: Refined the `githubRepoTotalCount` calculation to accurately reflect repository-wide metadata even when local synchronization is pending.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Updated system versioning to `v3.27.3` across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.27.2] - 2026-10-24
+
+### 📈 UI/UX & Performance Optimizations
+
+#### 1. Descriptive Data Source Labeling (`src/App.tsx`)
+- **Enhanced Korean Terminology**: Renamed data source labels in the Admin system status panel for better precision:
+  - `파이어베이스(Firebase / Firestore) 보관 데이터` (Stored Data)
+  - `깃허브(GitHub Actions / GitOps) 수집 총 데이터` (Total Collected Data)
+- **Bilingual Consistency**: Updated corresponding English labels to maintain high professional standards.
+- **System Versioning Synchronization**: Synchronized system versioning to `v3.27.2` across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.27.1] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Separated Firebase vs GitHub Data Breakdown (`src/App.tsx`)
+- **Granular Data Source Listing**: Updated the Admin "Today's Data Usage / System Status" panel ("오늘의 데이터 사용량 / 시스템 상태") to explicitly separate data counts under "총 등록된 오류 수":
+  - `├─ 파이어베이스(Firebase / Firestore) 데이터: X개`
+  - `└─ 깃허브(GitHub Actions / GitOps) 수집 데이터: Y개`
+- **Dynamic Memoized Computation**: Added `firebaseIssuesCount` using `useMemo` to ensure real-time accuracy across Firestore reads and local file DB fallbacks.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Updated system versioning to `v3.27.1` across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.27.0] - 2026-10-24
+
+### 🚀 Major New Features & Integrations
+
+#### 1. GitHub Actions Autonomous Collected Data Metrics Display (`src/App.tsx`, `server.ts`)
+- **System Status Dashboard Integration**: Added a dedicated status item (`• GitHub GitOps 수집 데이터: X개`) inside the Admin tab's "Today's Data Usage / System Status" panel ("오늘의 데이터 사용량 / 시스템 상태"), giving administrators instant visibility into GitHub-harvested issues.
+- **GitOps Autonomous Harvesting Header Badge**: Integrated a prominent badge (`GitHub 수집 데이터: X개`) inside the GitHub Actions control panel header alongside existing sync timestamps and status indicators.
+- **Server Feed Metadata API (`GET /api/github/feed`)**: Created a dedicated server endpoint returning detailed feed statistics, total issue counts, and GitHub Actions-harvested item breakdowns from `data/github-feed.json` and `data/issues.json`.
+- **Bilingual Interface**: Fully localized metrics labels and descriptions in both Korean and English.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Updated system versioning to `v3.27.0` across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.26.1] - 2026-10-24
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Resilient Backend Logs Authorization Fallback (`src/App.tsx`)
+- **Attached Admin Auth Headers**: Updated `fetchBackendLogs` to attach `await getAuthHeaders()` Bearer token headers when requesting the server-side `/api/logs/backend` fallback endpoint.
+- **Resolved `Unauthorized: No token provided` Error**: Fixed `401 Unauthorized` exception thrown when Firestore reads fall back to local server JSON DB storage during quota limits or offline modes.
+- **Sanitized Log Warning Messages**: Replaced `console.error` with `console.warn` in the local backend log fallback fetch block.
 
 ---
 

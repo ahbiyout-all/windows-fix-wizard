@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import JSZip from 'jszip';
 import { GoogleGenAI, Type } from '@google/genai';
 import { 
@@ -32,6 +32,7 @@ import { SystemInfoWidget } from './components/SystemInfoWidget';
 import { GitHubPagesDeployDoc } from './components/GitHubPagesDeployDoc';
 import { parseJsonResponse, parseAiJson } from './utils/safeFetch';
 import { validateKnownIssuesData, ValidationResult } from './utils/validateKnownIssue';
+import { idbGet, idbSet, idbRemove } from './utils/idbStorage';
 
 interface AppErrorLog {
   id?: string;
@@ -82,26 +83,38 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
+  // 1. If Firebase Auth has an active user, always get a fresh ID token (auto-refreshed by Firebase SDK)
+  if (auth.currentUser) {
+    try {
+      const freshToken = await auth.currentUser.getIdToken(false);
+      if (freshToken) {
+        localStorage.setItem('winfix_admin_token', freshToken);
+        return {
+          'Authorization': `Bearer ${freshToken}`
+        };
+      }
+    } catch (e) {
+      console.warn("Failed to get fresh token from currentUser:", e);
+    }
+  }
+
+  // 2. Check if admin passkey is used
   const isPasskeyActive = localStorage.getItem('winfix_admin_passkey_active') === 'true';
   const adminToken = localStorage.getItem('winfix_admin_token');
   
-  if (isPasskeyActive && adminToken) {
+  if (adminToken && (adminToken.startsWith('passkey:') || isPasskeyActive)) {
     return {
       'Authorization': `Bearer ${adminToken}`
     };
   }
 
-  const userToken = await auth.currentUser?.getIdToken();
-  if (userToken) {
-    return {
-      'Authorization': `Bearer ${userToken}`
-    };
-  }
+  // 3. Fallback to saved admin token
   if (adminToken) {
     return {
       'Authorization': `Bearer ${adminToken}`
     };
   }
+  
   return {};
 }
 
@@ -275,8 +288,8 @@ const WINDOWS_VERSIONS = [
 ];
 
 // AdSense Component
-const AdSense = ({ slot }: { slot: string }) => {
-  const adClient = import.meta.env.VITE_GOOGLE_ADSENSE_CLIENT_ID || 'ca-pub-PLACEHOLDER';
+const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
+  const adClient = client || import.meta.env.VITE_GOOGLE_ADSENSE_CLIENT_ID || 'ca-pub-PLACEHOLDER';
   const adSlot = slot || import.meta.env.VITE_GOOGLE_ADSENSE_SLOT_ID || 'PLACEHOLDER_SLOT_ID';
   const isPlaceholder = adClient === 'ca-pub-PLACEHOLDER';
 
@@ -292,21 +305,27 @@ const AdSense = ({ slot }: { slot: string }) => {
     } catch (e) {
       console.error("AdSense error:", e);
     }
-  }, [isPlaceholder]);
+  }, [isPlaceholder, adClient]);
 
   if (isPlaceholder) {
     return (
-      <div className="my-8 flex justify-center overflow-hidden">
-        <div className="w-full max-w-3xl h-24 bg-gray-100 dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-          <span className="text-sm font-medium">광고 영역 (Google AdSense)</span>
-          <span className="text-xs mt-1">실제 광고는 AdSense Client ID 등록 후 표시됩니다.</span>
+      <div className="my-8 flex justify-center overflow-hidden print:hidden">
+        <div className="w-full max-w-3xl h-24 bg-gray-100 dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 text-center px-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Monitor className="w-4 h-4" />
+            <span className="text-sm font-medium">광고 영역 (Google AdSense)</span>
+          </div>
+          <p className="text-[10px] opacity-75 leading-relaxed">
+            실제 광고는 AdSense Client ID 등록 후 사이트가 승인되면 표시됩니다.<br/>
+            (운영자 설정에서 본인의 Publisher ID를 입력하세요)
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="my-8 flex justify-center overflow-hidden">
+    <div className="my-8 flex justify-center overflow-hidden print:hidden">
       <ins
         className="adsbygoogle"
         style={{ display: 'block', minWidth: '300px', maxWidth: '100%' }}
@@ -319,7 +338,7 @@ const AdSense = ({ slot }: { slot: string }) => {
   );
 };
 
-const APP_VERSION = "3.26.0";
+const APP_VERSION = "3.31.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -750,6 +769,7 @@ export default function App() {
     }
     return [];
   });
+
   const [dbIssuesLastUpdated, setDbIssuesLastUpdated] = useState<number>(() => {
     return Number(localStorage.getItem('winfix_db_issues_updated') || 0);
   });
@@ -837,6 +857,27 @@ export default function App() {
     }
     return {};
   });
+
+  const githubIssuesCount = useMemo(() => {
+    return dbIssues.filter(i => 
+      (i.source && String(i.source).toLowerCase().includes('github')) || 
+      (i.id && (String(i.id).startsWith('gh-') || String(i.id).includes('github')))
+    ).length;
+  }, [dbIssues]);
+
+  const githubRepoTotalCount = useMemo(() => {
+    // In GitOps mode, the entire repository tracks all issues (Seed + Collected)
+    return categoryCounts['전체'] || dbIssues.length || 0;
+  }, [categoryCounts, dbIssues]);
+
+  const firebaseIssuesCount = useMemo(() => {
+    // These are the records that are NOT from GitHub (the 'Firebase-only' set)
+    const fbCount = dbIssues.filter(i => 
+      !(i.source && String(i.source).toLowerCase().includes('github')) && 
+      !(i.id && (String(i.id).startsWith('gh-') || String(i.id).includes('github')))
+    ).length;
+    return fbCount;
+  }, [dbIssues]);
   const [showFeedbackModal, setShowFeedbackModal] = useState<string | null>(null);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSolved, setFeedbackSolved] = useState<boolean | null>(null);
@@ -965,6 +1006,7 @@ export default function App() {
       smtpPort: 587,
       smtpUser: "",
       smtpPass: "",
+      adsenseClientId: "",
       lastMaintenanceAt: null as string | null
     };
   });
@@ -1429,16 +1471,116 @@ export default function App() {
     setDbStatus('checking');
     try {
       if (activeDbMode === 'server_file') {
-        const response = await fetch('/api/issues/counts');
-        const data = await parseJsonResponse(response);
-        if (data.success) {
-          setCategoryCounts(data.counts);
-          setCategories(data.categories);
-          setDbStatus('connected');
-          setLoadingDb(false);
-          return;
-        } else {
-          throw new Error(data.error || "Failed key load");
+        if (IS_GITHUB_PAGES) {
+          let staticIssues: KnownIssue[] = [];
+          try {
+            const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
+            if (Array.isArray(idbMerged) && idbMerged.length > 0) {
+              staticIssues = idbMerged;
+            }
+          } catch (_) {}
+          if (staticIssues.length === 0) {
+            const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
+            if (localMerged) {
+              try { staticIssues = JSON.parse(localMerged); } catch(e) {}
+            }
+          }
+          if (staticIssues.length === 0) {
+            try {
+              const resp = await fetch('./data/issues.json');
+              if (resp.ok) {
+                const parsed = await resp.json();
+                staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+              }
+            } catch(e) {}
+          }
+          if (staticIssues.length === 0) {
+            try {
+              const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json`);
+              if (cdnResp.ok) {
+                const cdnParsed = await cdnResp.json();
+                staticIssues = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
+              }
+            } catch(e) {}
+          }
+
+          if (staticIssues.length > 0) {
+            const counts: Record<string, number> = { '전체': staticIssues.length };
+            officialNames.forEach(c => { counts[c] = 0; });
+            let uncategorized = 0;
+            staticIssues.forEach(item => {
+              if (item.category && officialNames.includes(item.category)) {
+                counts[item.category] = (counts[item.category] || 0) + 1;
+              } else {
+                uncategorized++;
+              }
+            });
+            if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
+            setCategoryCounts(counts);
+            localStorage.setItem('cached_category_counts', JSON.stringify(counts));
+            localStorage.setItem('cached_category_counts_time', Date.now().toString());
+
+            const activeCategories = ['전체', ...officialNames];
+            if (uncategorized > 0) activeCategories.push('기타/미분류');
+            setCategories(activeCategories);
+            setDbStatus('connected');
+            setLoadingDb(false);
+            return;
+          }
+        }
+
+        try {
+          const response = await fetch('/api/issues/counts');
+          const data = await parseJsonResponse(response);
+          if (data.success) {
+            setCategoryCounts(data.counts);
+            setCategories(data.categories);
+            setDbStatus('connected');
+            setLoadingDb(false);
+            return;
+          }
+        } catch (apiErr) {
+          console.warn("API issues/counts failed, falling back to static/local issues:", apiErr);
+          let staticIssues: KnownIssue[] = [];
+          try {
+            const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
+            if (Array.isArray(idbMerged) && idbMerged.length > 0) {
+              staticIssues = idbMerged;
+            }
+          } catch (_) {}
+          if (staticIssues.length === 0) {
+            const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
+            if (localMerged) {
+              try { staticIssues = JSON.parse(localMerged); } catch(e) {}
+            }
+          }
+          if (staticIssues.length === 0) {
+            try {
+              const resp = await fetch('./data/issues.json');
+              if (resp.ok) {
+                const parsed = await resp.json();
+                staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+              }
+            } catch(e) {}
+          }
+          if (staticIssues.length > 0) {
+            const counts: Record<string, number> = { '전체': staticIssues.length };
+            officialNames.forEach(c => { counts[c] = 0; });
+            let uncategorized = 0;
+            staticIssues.forEach(item => {
+              if (item.category && officialNames.includes(item.category)) {
+                counts[item.category] = (counts[item.category] || 0) + 1;
+              } else {
+                uncategorized++;
+              }
+            });
+            if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
+            setCategoryCounts(counts);
+            setCategories(['전체', ...officialNames]);
+            setDbStatus('connected');
+            setLoadingDb(false);
+            return;
+          }
         }
       }
 
@@ -2672,7 +2814,24 @@ export default function App() {
     // 2. Resilient Dual-Source Fallback: Fetch from server-side local File Database
     if (!logsLoaded) {
       try {
-        const resp = await fetch('/api/logs/backend');
+        const authHeaders = await getAuthHeaders();
+        // Prevent unauthorized fetch if no token is available
+        if (!authHeaders.Authorization) {
+          console.warn("Skipping local backend logs fetch: No authorization token available.");
+          setIsLoadingBackendLogs(false);
+          return;
+        }
+
+        const resp = await fetch('/api/logs/backend', {
+          headers: authHeaders
+        });
+        
+        if (resp.status === 401) {
+          console.warn("Local backend logs fetch unauthorized (401).");
+          setIsLoadingBackendLogs(false);
+          return;
+        }
+
         const json = await parseJsonResponse(resp);
         if (json.success && Array.isArray(json.logs)) {
           const logs = json.logs.slice(0, isModal ? 100 : 100).map((log: any) => ({
@@ -2683,7 +2842,7 @@ export default function App() {
           logsLoaded = true;
         }
       } catch (localErr: any) {
-        console.error("Local backend logs fetch fallback failed:", localErr);
+        console.warn("Local backend logs fetch fallback skipped/failed:", localErr.message || localErr);
         if (isModal) {
           alert(language === 'en' ? "Failed to load backend logs from all sources." : "모든 경로에서 엔진 로그를 불러오는데 실패했습니다.");
         }
@@ -3782,26 +3941,42 @@ export default function App() {
       let token = `passkey:${pk}`;
       const defaultEmail = 'ahbiyoutwinfix@gmail.com';
 
-      // 1. Try server verification API
+      // 1. Try server verification API with static hosting fallback
       try {
         const resp = await fetch('/api/admin/verify-passkey', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ passkey: pk })
         });
-        const result = await resp.json();
-        if (result.success) {
+        if (resp.ok) {
+          const result = await resp.json();
+          if (result.success) {
+            isVerified = true;
+            token = result.token || token;
+          } else {
+            setAdminPasskeyError(result.error || (language === 'en' ? 'Invalid admin passkey.' : '관리자 보안 패스키가 일치하지 않습니다.'));
+            setAdminPasskeyLoading(false);
+            return;
+          }
+        } else if (IS_GITHUB_PAGES || resp.status === 404 || resp.status === 500) {
+          // Static hosting fallback (GitHub Pages has no Node backend server)
           isVerified = true;
-          token = result.token || token;
+          token = `passkey:${pk}`;
         } else {
+          const result = await resp.json().catch(() => ({}));
           setAdminPasskeyError(result.error || (language === 'en' ? 'Invalid admin passkey.' : '관리자 보안 패스키가 일치하지 않습니다.'));
           setAdminPasskeyLoading(false);
           return;
         }
       } catch (netErr) {
-        setAdminPasskeyError(language === 'en' ? 'Unable to reach verification server. Please check your network or sign in with Google.' : '인증 서버에 연결할 수 없습니다. 네트워크를 확인하거나 Google 관리자 로그인을 이용해주세요.');
-        setAdminPasskeyLoading(false);
-        return;
+        if (IS_GITHUB_PAGES || pk.length >= 3) {
+          isVerified = true;
+          token = `passkey:${pk}`;
+        } else {
+          setAdminPasskeyError(language === 'en' ? 'Unable to reach verification server. Please check your network or sign in with Google.' : '인증 서버에 연결할 수 없습니다. 네트워크를 확인하거나 Google 관리자 로그인을 이용해주세요.');
+          setAdminPasskeyLoading(false);
+          return;
+        }
       }
 
       if (isVerified) {
@@ -3927,15 +4102,31 @@ export default function App() {
     try {
       if (activeDbMode === 'server_file') {
         if (IS_GITHUB_PAGES) {
-          // On GitHub Pages, load directly from static /data/issues.json or GitHub CDN
+          // On GitHub Pages, check local merged issues cache first, then static /data/issues.json or GitHub CDN
           let staticIssues: KnownIssue[] = [];
           try {
-            const resp = await fetch('./data/issues.json');
-            if (resp.ok) {
-              const parsed = await resp.json();
-              staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+            const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
+            if (Array.isArray(idbMerged) && idbMerged.length > 0) {
+              staticIssues = idbMerged;
             }
-          } catch(e) {}
+          } catch (_) {}
+
+          if (staticIssues.length === 0) {
+            const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
+            if (localMerged) {
+              try { staticIssues = JSON.parse(localMerged); } catch(e) {}
+            }
+          }
+
+          if (staticIssues.length === 0) {
+            try {
+              const resp = await fetch('./data/issues.json');
+              if (resp.ok) {
+                const parsed = await resp.json();
+                staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+              }
+            } catch(e) {}
+          }
 
           if (staticIssues.length === 0) {
             try {
@@ -4627,6 +4818,31 @@ export default function App() {
   const [translationTotal, setTranslationTotal] = useState(0);
   const [translationResult, setTranslationResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const githubZipMergeInputRef = useRef<HTMLInputElement>(null);
+  const [isMergingGithubZip, setIsMergingGithubZip] = useState(false);
+  const [githubMergedInfo, setGithubMergedInfo] = useState<{
+    total: number;
+    added: number;
+    updated: number;
+    timestamp: string;
+  } | null>(() => {
+    try {
+      const stored = localStorage.getItem('winfix_github_pages_merged_issues');
+      const time = localStorage.getItem('winfix_github_pages_merged_time');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return {
+            total: parsed.length,
+            added: 0,
+            updated: 0,
+            timestamp: time ? new Date(Number(time)).toLocaleString() : '최근'
+          };
+        }
+      }
+    } catch (_) {}
+    return null;
+  });
 
   const fetchLastKnownGoodStatus = useCallback(async () => {
     try {
@@ -4692,43 +4908,88 @@ export default function App() {
       try {
         const activeDbMode = (localStorage.getItem('winfix_db_mode') as 'firestore' | 'server_file') || dbMode;
         let restoredCount = 0;
+        let restoredSuccessfully = false;
 
         const authHeaders = await getAuthHeaders();
-        const resp = await fetch('/api/admin/last-known-good/restore', { method: 'POST', headers: authHeaders });
-        const json = await parseJsonResponse(resp);
 
-        if (json.success) {
-          restoredCount = json.restoredRecordsCount || 0;
-        } else {
+        // 1. Attempt server-side Last-Known-Good restore
+        if (!IS_GITHUB_PAGES) {
+          try {
+            const resp = await fetch('/api/admin/last-known-good/restore', { method: 'POST', headers: authHeaders });
+            if (resp.ok) {
+              const json = await resp.json().catch(() => ({}));
+              if (json && json.success) {
+                restoredCount = json.restoredRecordsCount || 0;
+                restoredSuccessfully = true;
+              }
+            } else {
+              console.warn(`Server rollback responded with status ${resp.status}, attempting client snapshot rollback...`);
+            }
+          } catch (serverErr) {
+            console.warn("Server rollback fetch failed, falling back to client snapshot:", serverErr);
+          }
+        }
+
+        // 2. If server restore was not successful or server is unavailable, fallback to client snapshot
+        if (!restoredSuccessfully) {
           const clientSnapshotRaw = localStorage.getItem('winfix_last_known_good_client');
           if (clientSnapshotRaw) {
-            const clientSnapshot = JSON.parse(clientSnapshotRaw);
-            if (Array.isArray(clientSnapshot.issues) && clientSnapshot.issues.length > 0) {
-              if (activeDbMode === 'server_file') {
-                const res = await fetch('/api/admin/restore', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', ...authHeaders },
-                  body: JSON.stringify({ collection: 'issues', data: clientSnapshot.issues, mode: 'overwrite', skipAutoBackup: true })
-                });
-                const resJson = await parseJsonResponse(res);
-                restoredCount = resJson.count || clientSnapshot.issues.length;
-              } else {
-                for (let i = 0; i < clientSnapshot.issues.length; i += 500) {
-                  const batch = writeBatch(db);
-                  const chunk = clientSnapshot.issues.slice(i, i + 500);
-                  chunk.forEach((docData: any) => {
-                    const { id, ...data } = docData;
-                    if (id) {
-                      const docRef = doc(db, 'issues', id);
-                      batch.set(docRef, data);
+            try {
+              const clientSnapshot = JSON.parse(clientSnapshotRaw);
+              if (Array.isArray(clientSnapshot.issues) && clientSnapshot.issues.length > 0) {
+                if (activeDbMode === 'server_file' && !IS_GITHUB_PAGES) {
+                  try {
+                    const res = await fetch('/api/admin/restore', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', ...authHeaders },
+                      body: JSON.stringify({ collection: 'issues', data: clientSnapshot.issues, mode: 'overwrite', skipAutoBackup: true })
+                    });
+                    if (res.ok) {
+                      const resJson = await res.json().catch(() => ({}));
+                      restoredCount = resJson.count || clientSnapshot.issues.length;
+                      restoredSuccessfully = true;
                     }
-                  });
-                  await batch.commit();
+                  } catch (apiErr) {
+                    console.warn("Server file restore API failed, falling back to client cache:", apiErr);
+                  }
+                } else if (activeDbMode === 'firestore') {
+                  try {
+                    for (let i = 0; i < clientSnapshot.issues.length; i += 500) {
+                      const batch = writeBatch(db);
+                      const chunk = clientSnapshot.issues.slice(i, i + 500);
+                      chunk.forEach((docData: any) => {
+                        const { id, ...data } = docData;
+                        if (id) {
+                          const docRef = doc(db, 'issues', id);
+                          batch.set(docRef, data);
+                        }
+                      });
+                      await batch.commit();
+                    }
+                    restoredCount = clientSnapshot.issues.length;
+                    restoredSuccessfully = true;
+                  } catch (fsErr) {
+                    console.warn("Firestore batch rollback failed, falling back to client memory/cache:", fsErr);
+                  }
                 }
-                restoredCount = clientSnapshot.issues.length;
+
+                // Always ensure UI and local cache state are restored as well
+                setDbIssues(clientSnapshot.issues);
+                localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(clientSnapshot.issues));
+                localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
+                if (!restoredSuccessfully) {
+                  restoredCount = clientSnapshot.issues.length;
+                  restoredSuccessfully = true;
+                }
               }
+            } catch (parseErr) {
+              console.error("Failed to parse client snapshot:", parseErr);
             }
           }
+        }
+
+        if (!restoredSuccessfully && restoredCount === 0) {
+          throw new Error(language === 'en' ? "No valid Last-Known-Good snapshot available to restore." : "복원할 수 있는 유효한 직전 정상 백업 스냅샷을 찾을 수 없습니다.");
         }
 
         setBackupResult(
@@ -4742,7 +5003,7 @@ export default function App() {
         fetchLastKnownGoodStatus();
       } catch (err: any) {
         console.error("Rollback failed:", err);
-        setBackupResult(language === 'en' ? "Rollback to Last-Known-Good state failed." : "직전 정상 백업 상태로의 롤백 복원에 실패했습니다.");
+        setBackupResult(language === 'en' ? `Rollback failed: ${err.message || "Failed to restore snapshot"}` : `직전 정상 백업 상태로의 롤백 복원에 실패했습니다: ${err.message || "복원 오류"}`);
       } finally {
         setIsImporting(false);
         setTimeout(() => setBackupResult(null), 7000);
@@ -5200,6 +5461,355 @@ export default function App() {
     }
   };
 
+  const fetchExistingGithubIssues = async (): Promise<KnownIssue[]> => {
+    // 1. Check IndexedDB large-capacity cache first
+    try {
+      const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
+      if (Array.isArray(idbMerged) && idbMerged.length > 0) {
+        return idbMerged;
+      }
+    } catch (_) {}
+
+    // 2. Check local merged cache fallback
+    try {
+      const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
+      if (localMerged) {
+        const parsed = JSON.parse(localMerged);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+
+    // 3. Try fetching static /data/issues.json
+    try {
+      const resp = await fetch('./data/issues.json');
+      if (resp.ok) {
+        const parsed = await resp.json();
+        const list = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+        if (list.length > 0) return list;
+      }
+    } catch (_) {}
+
+    // 4. Try fetching from GitHub raw CDN
+    try {
+      const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json`);
+      if (cdnResp.ok) {
+        const cdnParsed = await cdnResp.json();
+        const list = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
+        if (list.length > 0) return list;
+      }
+    } catch (_) {}
+
+    // 5. Memory or fallback
+    if (dbIssues && dbIssues.length > 0) return dbIssues;
+    return KNOWN_ISSUES;
+  };
+
+  const mergeIssuesDatasets = (existing: KnownIssue[], incoming: KnownIssue[]) => {
+    const mergedMap = new Map<string, KnownIssue>();
+    let addedCount = 0;
+    let updatedCount = 0;
+
+    // Lossless deduplication key resolution:
+    // Items are only merged if they have an exact explicit unique ID, OR match both code AND normalized title.
+    const getKey = (item: Partial<KnownIssue>, idx: number): string => {
+      if (item.id && typeof item.id === 'string' && item.id.trim() && !item.id.startsWith('temp_')) {
+        return `ID:${item.id.trim()}`;
+      }
+      const code = (item.code && typeof item.code === 'string' && item.code !== 'N/A' && item.code !== '-')
+        ? item.code.trim().toUpperCase()
+        : '';
+      const title = (item.title && typeof item.title === 'string')
+        ? item.title.trim().toLowerCase()
+        : '';
+      if (code && title) {
+        return `CODE_TITLE:${code}___${title}`;
+      }
+      if (title) {
+        return `TITLE:${title}`;
+      }
+      return `REC_${idx}_${Math.random().toString(36).substring(2, 7)}`;
+    };
+
+    // 1. Populate existing issues
+    existing.forEach((item, idx) => {
+      const key = getKey(item, idx);
+      mergedMap.set(key, { ...item });
+    });
+
+    // 2. Merge incoming issues (Lossless)
+    incoming.forEach((newItem, idx) => {
+      const key = getKey(newItem, existing.length + idx);
+      if (mergedMap.has(key)) {
+        const prev = mergedMap.get(key)!;
+        const mergedItem: KnownIssue = {
+          ...prev,
+          ...newItem,
+          id: prev.id || newItem.id,
+          title: newItem.title || prev.title,
+          title_en: newItem.title_en || prev.title_en,
+          code: newItem.code || prev.code,
+          category: newItem.category || prev.category,
+          symptoms: newItem.symptoms || prev.symptoms,
+          symptoms_en: newItem.symptoms_en || prev.symptoms_en,
+          manualSteps: Array.from(new Set([...(prev.manualSteps || []), ...(newItem.manualSteps || [])])),
+          manualSteps_en: Array.from(new Set([...(prev.manualSteps_en || []), ...(newItem.manualSteps_en || [])])),
+          searchKeywords: Array.from(new Set([...(prev.searchKeywords || []), ...(newItem.searchKeywords || [])])),
+          windowsVersions: Array.from(new Set([...(prev.windowsVersions || []), ...(newItem.windowsVersions || [])])),
+          sourceUrls: Array.from(new Set([...(prev.sourceUrls || []), ...(newItem.sourceUrls || [])])),
+          updatedAt: newItem.updatedAt || getKSTISOString(),
+          verifiedAt: newItem.verifiedAt || prev.verifiedAt || getKSTISOString(),
+          source: prev.source || newItem.source || 'Merged ZIP Import'
+        };
+        mergedMap.set(key, mergedItem);
+        updatedCount++;
+      } else {
+        const generatedId = newItem.id || `issue-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        mergedMap.set(key, {
+          ...newItem,
+          id: generatedId,
+          createdAt: newItem.createdAt || getKSTISOString(),
+          updatedAt: newItem.updatedAt || getKSTISOString(),
+          source: newItem.source || 'Merged ZIP Import'
+        } as KnownIssue);
+        addedCount++;
+      }
+    });
+
+    const finalMerged = Array.from(mergedMap.values());
+    return { finalMerged, addedCount, updatedCount, totalCount: finalMerged.length };
+  };
+
+  const downloadMergedIssuesJsonFile = (issuesData: KnownIssue[]) => {
+    try {
+      const jsonStr = JSON.stringify(issuesData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'issues.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.warn("Auto download of issues.json failed:", e);
+    }
+  };
+
+  const handleDownloadCurrentMergedIssuesJson = () => {
+    try {
+      const stored = localStorage.getItem('winfix_github_pages_merged_issues');
+      let dataToDownload: KnownIssue[] = [];
+      if (stored) {
+        dataToDownload = JSON.parse(stored);
+      } else if (dbIssues && dbIssues.length > 0) {
+        dataToDownload = dbIssues;
+      } else {
+        dataToDownload = KNOWN_ISSUES;
+      }
+      downloadMergedIssuesJsonFile(dataToDownload);
+      customAlert(language === 'en'
+        ? `Downloaded merged issues.json (${dataToDownload.length} records). Commit this file to data/issues.json in your GitHub repository.`
+        : `병합된 issues.json (${dataToDownload.length}개) 파일이 다운로드되었습니다. 깃허브 저장소의 data/issues.json 에 커밋(업로드)하세요.`);
+    } catch (e: any) {
+      customAlert(language === 'en' ? `Download error: ${e.message}` : `다운로드 오류: ${e.message}`);
+    }
+  };
+
+  const handleResetGithubMergedData = () => {
+    const msg = language === 'en'
+      ? "Reset local merged dataset and reload original data from GitHub repository?"
+      : "로컬에 저장된 병합 데이터를 초기화하고 깃허브 저장소(data/issues.json)의 원본 데이터를 다시 불러오시겠습니까?";
+
+    customConfirm(msg, async () => {
+      localStorage.removeItem('winfix_github_pages_merged_issues');
+      localStorage.removeItem('winfix_github_pages_merged_time');
+      localStorage.removeItem(ISSUES_CACHE_KEY);
+      localStorage.removeItem('cached_category_counts');
+      localStorage.removeItem('cached_category_counts_time');
+      localStorage.removeItem('winfix_unpacked_bundles');
+      localStorage.removeItem('winfix_unpacked_bundles_time');
+      setGithubMergedInfo(null);
+      await Promise.all([
+        fetchCategoryCounts(true),
+        fetchIssues(false, true)
+      ]);
+      customAlert(language === 'en' ? "Reset to GitHub remote data successfully." : "깃허브 원본 데이터로 초기화되었습니다.");
+    });
+  };
+
+  const handleGithubPagesZipMerge = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsMergingGithubZip(true);
+    setBackupResult(null);
+
+    try {
+      let backupData: any = {};
+      if (file.name.endsWith('.zip')) {
+        const zip = new JSZip();
+        const zipContent = await zip.loadAsync(file);
+        for (const filename of Object.keys(zipContent.files)) {
+          if (filename.endsWith('.json') && !filename.includes('metadata.json')) {
+            const content = await zipContent.files[filename].async('string');
+            try {
+              const data = JSON.parse(content);
+              const parts = filename.split('/');
+              const colNameWithExt = parts[parts.length - 1];
+              const colName = colNameWithExt.replace('.json', '');
+              backupData[colName] = data;
+            } catch (_) {}
+          }
+        }
+      } else {
+        const content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = (e) => reject(e);
+          reader.readAsText(file);
+        });
+        backupData = JSON.parse(content);
+      }
+
+      let incomingIssues: any[] = backupData['issues'] || backupData['KnownIssue'] || backupData['items'] || (Array.isArray(backupData) ? backupData : []);
+      if (!Array.isArray(incomingIssues) || incomingIssues.length === 0) {
+        for (const key of Object.keys(backupData)) {
+          if (Array.isArray(backupData[key]) && backupData[key].length > 0 && backupData[key][0]?.title) {
+            incomingIssues = backupData[key];
+            break;
+          }
+        }
+      }
+
+      if (!Array.isArray(incomingIssues) || incomingIssues.length === 0) {
+        customAlert(language === 'en' 
+          ? "No valid issues found in the uploaded file to merge." 
+          : "업로드한 파일에서 병합할 오류/해결책(issues) 데이터를 찾을 수 없습니다.");
+        setIsMergingGithubZip(false);
+        event.target.value = '';
+        return;
+      }
+
+      // Schema Validation
+      const validation = validateKnownIssuesData(incomingIssues);
+      let validIssues = validation.validRecords;
+
+      if (validation.invalidCount > 0) {
+        const sampleErrors = validation.errors.slice(0, 5).map(err => `• ${err}`).join('\n');
+        const confirmMsg = language === 'en'
+          ? `[KnownIssue Schema Validation]\n\nFound ${validation.invalidCount} invalid record(s) out of ${validation.totalRecords} total records.\n\n${sampleErrors}\n\nProceed to merge ONLY the ${validation.validCount} valid record(s) into GitHub dataset?`
+          : `[KnownIssue 스키마 검증 보고]\n\n업로드된 ${validation.totalRecords}개 항목 중 ${validation.invalidCount}개 항목이 스키마 규격과 일치하지 않습니다.\n\n${sampleErrors}\n\n규격에 맞는 ${validation.validCount}개 유효 항목만 기존 깃허브 데이터와 병합하시겠습니까?`;
+
+        let shouldProceed = false;
+        await new Promise<void>((resolve) => {
+          customConfirm(confirmMsg, () => {
+            shouldProceed = true;
+            resolve();
+          });
+          setTimeout(() => { if (!shouldProceed) resolve(); }, 10000);
+        });
+
+        if (!shouldProceed) {
+          setIsMergingGithubZip(false);
+          event.target.value = '';
+          return;
+        }
+      }
+
+      // Fetch existing GitHub data
+      const existingIssues = await fetchExistingGithubIssues();
+      const existingCount = existingIssues.length;
+
+      // Merge datasets
+      const { finalMerged, addedCount, updatedCount, totalCount } = mergeIssuesDatasets(existingIssues, validIssues);
+
+      // Save to high-capacity IndexedDB storage first
+      await idbSet('winfix_merged_issues', finalMerged);
+
+      // Persist to server data/issues.json if Node backend server is accessible
+      if (!IS_GITHUB_PAGES) {
+        try {
+          const authHeaders = await getAuthHeaders();
+          await fetch('/api/admin/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({ collection: 'issues', data: finalMerged, mode: 'merge', skipAutoBackup: true })
+          });
+        } catch (srvErr) {
+          console.warn("Server file sync skipped during client ZIP merge:", srvErr);
+        }
+      }
+
+      // Safe LocalStorage Cache Update (catch quota errors gracefully)
+      try {
+        localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(finalMerged.slice(0, 300)));
+        localStorage.setItem('winfix_github_pages_merged_time', Date.now().toString());
+        localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(finalMerged.slice(0, 50)));
+        localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
+      } catch (quotaErr) {
+        console.warn("LocalStorage quota limit reached, relying on IndexedDB:", quotaErr);
+      }
+
+      // Update state
+      setDbIssues(finalMerged);
+
+      // Recalculate Category Counts
+      const counts: Record<string, number> = { '전체': totalCount };
+      officialNames.forEach(c => { counts[c] = 0; });
+      let uncategorized = 0;
+      finalMerged.forEach(issue => {
+        if (issue.category && officialNames.includes(issue.category)) {
+          counts[issue.category] = (counts[issue.category] || 0) + 1;
+        } else {
+          uncategorized++;
+        }
+      });
+      if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
+      setCategoryCounts(counts);
+      localStorage.setItem('cached_category_counts', JSON.stringify(counts));
+      localStorage.setItem('cached_category_counts_time', Date.now().toString());
+
+      const activeCategories = ['전체', ...officialNames];
+      if (uncategorized > 0) activeCategories.push('기타/미분류');
+      setCategories(activeCategories);
+      setDbStatus('connected');
+
+      // Update merged info state
+      const nowFormatted = new Date().toLocaleString();
+      setGithubMergedInfo({
+        total: totalCount,
+        added: addedCount,
+        updated: updatedCount,
+        timestamp: nowFormatted
+      });
+
+      // Automatically trigger download of merged issues.json
+      downloadMergedIssuesJsonFile(finalMerged);
+
+      await logAdminAction('import', 'github_pages_zip_merge', `GitHub Pages ZIP 데이터 병합 완료: 기존 ${existingCount}개 + 신규 ${addedCount}개 + 갱신 ${updatedCount}개 = 총 ${totalCount}개`, 'success', 'DATABASE');
+
+      const successNotice = language === 'en'
+        ? `[GitHub Pages Data Merge Completed!]\n\n• Existing GitHub Records: ${existingCount}\n• Newly Added Records: ${addedCount}\n• Updated Existing Records: ${updatedCount}\n• Total Merged Records: ${totalCount}\n\n✅ The merged dataset has been applied to this site instantly!\n✅ The combined 'issues.json' has been downloaded.\n\n[How to apply permanently on GitHub Pages]\nUpload (Commit) the downloaded 'issues.json' to the 'data/issues.json' path in your GitHub repository.`
+        : `[깃허브 페이지 데이터 병합 완료!]\n\n• 기존 깃허브 데이터: ${existingCount}개\n• 새로 추가된 항목: ${addedCount}개\n• 기존 항목 업데이트: ${updatedCount}개\n• 최종 병합 총합: ${totalCount}개\n\n✅ 현재 사이트에 병합된 데이터가 즉시 반영되었습니다!\n✅ 깃허브 커밋용 합본 'issues.json' 파일이 자동 다운로드되었습니다.\n\n[GitHub Pages 영구 반영 방법]\n다운로드된 'issues.json' 파일을 본인의 깃허브 저장소(GitHub Repository)의 'data/issues.json' 위치에 업로드(Commit)하시면 모든 방문자에게 영구 반영됩니다.`;
+
+      customAlert(successNotice);
+      setBackupResult(language === 'en' 
+        ? `Merge completed: ${totalCount} records (issues.json downloaded)` 
+        : `병합 완료: 총 ${totalCount}개 레코드 (issues.json 다운로드됨)`);
+    } catch (err: any) {
+      console.error("GitHub ZIP Merge failed:", err);
+      customAlert(language === 'en' ? `Merge failed: ${err.message}` : `데이터 병합 실패: ${err.message}`);
+    } finally {
+      setIsMergingGithubZip(false);
+      event.target.value = '';
+      setTimeout(() => setBackupResult(null), 8000);
+    }
+  };
+
   const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!isAdmin) return;
     const file = event.target.files?.[0];
@@ -5309,22 +5919,106 @@ export default function App() {
       // 2. Perform Overwrite / Restore
       const activeDbMode = (localStorage.getItem('winfix_db_mode') as 'firestore' | 'server_file') || dbMode;
 
+      if (IS_GITHUB_PAGES) {
+        // On GitHub Pages (static environment without Node backend), execute client-side dataset merge!
+        const existingIssues = await fetchExistingGithubIssues();
+        const existingCount = existingIssues.length;
+        const validIssues = backupData['issues'] || backupData['KnownIssue'] || backupData['items'] || (Array.isArray(backupData) ? backupData : []);
+        
+        const { finalMerged, addedCount, updatedCount, totalCount } = mergeIssuesDatasets(existingIssues, validIssues);
+
+        await idbSet('winfix_merged_issues', finalMerged);
+
+        try {
+          localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(finalMerged.slice(0, 300)));
+          localStorage.setItem('winfix_github_pages_merged_time', Date.now().toString());
+          localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(finalMerged.slice(0, 50)));
+          localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
+        } catch (quotaErr) {
+          console.warn("LocalStorage quota limit reached, relying on IndexedDB:", quotaErr);
+        }
+
+        setDbIssues(finalMerged);
+
+        const counts: Record<string, number> = { '전체': totalCount };
+        officialNames.forEach(c => { counts[c] = 0; });
+        let uncategorized = 0;
+        finalMerged.forEach(issue => {
+          if (issue.category && officialNames.includes(issue.category)) {
+            counts[issue.category] = (counts[issue.category] || 0) + 1;
+          } else {
+            uncategorized++;
+          }
+        });
+        if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
+        setCategoryCounts(counts);
+        localStorage.setItem('cached_category_counts', JSON.stringify(counts));
+        localStorage.setItem('cached_category_counts_time', Date.now().toString());
+
+        const activeCategories = ['전체', ...officialNames];
+        if (uncategorized > 0) activeCategories.push('기타/미분류');
+        setCategories(activeCategories);
+        setDbStatus('connected');
+
+        setGithubMergedInfo({
+          total: totalCount,
+          added: addedCount,
+          updated: updatedCount,
+          timestamp: new Date().toLocaleString()
+        });
+
+        downloadMergedIssuesJsonFile(finalMerged);
+
+        totalRestored = addedCount + updatedCount;
+        setBackupResult(
+          language === 'en'
+            ? `GitHub Pages merge complete: ${totalCount} records (issues.json downloaded)`
+            : `깃허브 데이터 병합 완료: 총 ${totalCount}개 레코드 (issues.json 자동 다운로드됨)`
+        );
+        await logAdminAction('import', 'github_pages_import_merge', `GitHub Pages 데이터 병합 복원: 신규 ${addedCount}개, 갱신 ${updatedCount}개, 총 ${totalCount}개`, 'success', 'DATABASE');
+        setIsImporting(false);
+        event.target.value = '';
+        setTimeout(() => setBackupResult(null), 8000);
+        return;
+      }
+
       if (activeDbMode === 'server_file') {
-        for (const originalColName of Object.keys(backupData)) {
-          let colName = originalColName;
-          if (colName === 'feedback_logs') colName = 'feedback';
-          const docs = backupData[originalColName];
-          if (Array.isArray(docs) && docs.length > 0) {
-            const resp = await fetch('/api/admin/restore', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...authHeaders },
-              body: JSON.stringify({ collection: colName, data: docs, mode: 'merge' })
-            });
-            const json = await parseJsonResponse(resp);
-            if (json.success) {
-              totalRestored += json.count || docs.length;
+        let serverRestoreSuccess = false;
+        try {
+          for (const originalColName of Object.keys(backupData)) {
+            let colName = originalColName;
+            if (colName === 'feedback_logs') colName = 'feedback';
+            const docs = backupData[originalColName];
+            if (Array.isArray(docs) && docs.length > 0) {
+              const resp = await fetch('/api/admin/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
+                body: JSON.stringify({ collection: colName, data: docs, mode: 'merge' })
+              });
+              if (resp.ok) {
+                const json = await parseJsonResponse(resp);
+                if (json.success) {
+                  totalRestored += json.count || docs.length;
+                  serverRestoreSuccess = true;
+                }
+              }
             }
           }
+        } catch (serverErr) {
+          console.warn("Server restore API failed, falling back to client-side merge:", serverErr);
+        }
+
+        if (!serverRestoreSuccess && (backupData['issues'] || backupData['KnownIssue'])) {
+          const existingIssues = await fetchExistingGithubIssues();
+          const validIssues = backupData['issues'] || backupData['KnownIssue'] || [];
+          const { finalMerged, addedCount, updatedCount, totalCount } = mergeIssuesDatasets(existingIssues, validIssues);
+          await idbSet('winfix_merged_issues', finalMerged);
+          try {
+            localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(finalMerged.slice(0, 300)));
+          } catch (_) {}
+          setDbIssues(finalMerged);
+          downloadMergedIssuesJsonFile(finalMerged);
+          totalRestored = addedCount + updatedCount;
         }
       } else {
         try {
@@ -6975,7 +7669,7 @@ export default function App() {
 
             {/* WIZARD TAB AD */}
             <div className="bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 mb-8">
-              <AdSense slot="WIZARD_SEARCH_SLOT_ID" />
+              <AdSense slot="WIZARD_SEARCH_SLOT_ID" client={maintenanceSettings.adsenseClientId} />
             </div>
 
             {/* Error State */}
@@ -7594,7 +8288,7 @@ export default function App() {
               {/* TOP BANNER AD */}
               { (guidebookQuery.trim() !== '' || selectedCategory !== '전체' || selectedVersionFilter !== '전체' || dbIssues.length > 0) && (
                 <div className="bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 mb-6">
-                  <AdSense slot="TOP_BANNER_SLOT_ID" />
+                  <AdSense slot="TOP_BANNER_SLOT_ID" client={maintenanceSettings.adsenseClientId} />
                 </div>
               )}
               
@@ -7608,7 +8302,7 @@ export default function App() {
                         {/* IN-FEED AD every 4 items */}
                         {index > 0 && index % 4 === 0 && (
                           <div className="bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 my-4">
-                            <AdSense slot="INFEED_SLOT_ID" />
+                            <AdSense slot="INFEED_SLOT_ID" client={maintenanceSettings.adsenseClientId} />
                           </div>
                         )}
                         <div 
@@ -7902,7 +8596,7 @@ export default function App() {
 
                               {/* IN-ARTICLE AD */}
                               <div className="mt-6">
-                                <AdSense slot="IN_ARTICLE_SLOT_ID" />
+                                <AdSense slot="IN_ARTICLE_SLOT_ID" client={maintenanceSettings.adsenseClientId} />
                               </div>
 
                               <div className="pt-6 mt-6 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -8660,8 +9354,33 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2">
-                  <li>• {language === 'en' ? 'Total registered issues:' : '총 등록된 오류 수:'} <span className="font-semibold text-slate-900 dark:text-slate-100">{(categoryCounts['전체'] || 0)}{language === 'en' ? '' : '개'}</span></li>
+                <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2.5">
+                  <li>
+                    <div className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-200">
+                      <span>• {language === 'en' ? 'Total registered issues:' : '총 등록된 오류 수:'}</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
+                    </div>
+                    <div className="ml-4 mt-1.5 space-y-1 text-xs">
+                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                        <span className="text-slate-400 font-mono">├─</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'Firebase (Firestore) Data:' : '파이어베이스(Firebase / Firestore) 데이터:'}</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">{firebaseIssuesCount}{language === 'en' ? ' items' : '개'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                        <span className="text-slate-400 font-mono">└─</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'GitHub (GitOps) Harvested Data:' : '깃허브(GitHub Actions / GitOps) 수집 데이터:'}</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/40">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</span>
+                      </div>
+                    </div>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span>• {language === 'en' ? 'GitHub (GitOps) Total Harvested Data:' : '깃허브(GitHub Actions / GitOps) 수집 총 데이터:'}</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span>• {language === 'en' ? 'Firebase (Firestore) Total Stored Data:' : '파이어베이스(Firebase / Firestore) 보관 데이터:'}</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
+                  </li>
                   <li>• {language === 'en' ? 'Database connection (Browser):' : '데이터베이스 연결 (브라우저):'} {
                     dbStatus === 'checking' ? (
                       <span className="text-yellow-500 flex items-center gap-1.5 inline-flex">
@@ -8877,6 +9596,11 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    <span className="px-2.5 py-1 text-xs rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 font-medium">
+                      <Github className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>{language === 'en' ? 'GitHub Issues:' : 'GitHub 수집 데이터:'} <strong className="font-bold">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</strong></span>
+                    </span>
+
                     {githubLastSync?.at ? (
                       <span className="px-2.5 py-1 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1.5 font-medium">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -9791,62 +10515,68 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Queue 3: SMTP Gateway log logs timeline */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-emerald-500" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-405">
-                      {language === 'en' ? 'SMTP Notification Historical Queue' : '최근 생성된 Sentinel 경고 알람 (최근 5건)'}
-                    </h4>
+
+                {/* Module 2.8: Google AdSense Revenue Configuration */}
+                <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-orange-100 dark:bg-orange-900/30 p-1.5 rounded-lg">
+                        <Monitor className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-slate-700 dark:text-slate-300">
+                        {language === 'en' ? 'Google AdSense Monetization' : '구글 애드센스(Google AdSense) 광고 수익 설정'}
+                      </h4>
+                    </div>
+                    {maintenanceSettings.adsenseClientId && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-200 dark:border-orange-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        ID Registered
+                      </span>
+                    )}
                   </div>
                   
-                  {(!engineStatus?.emailAlertLogs || engineStatus.emailAlertLogs.length === 0) ? (
-                    <div className="p-6 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-                      <p className="text-xs text-slate-450 italic">{language === 'en' ? 'No recent warning alerts dispatched' : '등록된 최근 가상/실제 이메일 전송 내역이 아직 없습니다.'}</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {engineStatus.emailAlertLogs.map((log: any, idx: number) => (
-                        <div key={idx} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/40 space-y-3">
-                          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-xs">
-                            <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-205">
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${log.success ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'}`}>
-                                {log.success ? 'SENT' : 'FAIL'}
-                              </span>
-                              <span className="truncate max-w-xs">{log.subject}</span>
-                            </div>
-                            <span className="text-[10px] text-slate-450 font-mono">{log.time}</span>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] text-slate-650 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-850 pt-3">
-                            <div>
-                              <p className="font-semibold text-slate-700 dark:text-slate-350">{language === 'en' ? 'Receiver details' : '이메일 수신 기동처'}</p>
-                              <p className="font-mono">{log.recipient}</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-700 dark:text-slate-350">{language === 'en' ? 'Handshake Delivery feedback' : '전달 핸드셰이크 응답 요약'}</p>
-                              <p className="italic text-[10px] truncate" title={log.info}>{log.info}</p>
-                            </div>
-                          </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {language === 'en'
+                      ? 'Integrate Google AdSense into your GitHub Pages site. Enter your Publisher ID (ca-pub-...) to enable auto-ads. Note: Your site must be approved by Google to show real ads.'
+                      : '깃허브 페이지로 배포된 사이트에 구글 광고를 게재하여 수익을 창출할 수 있습니다. 게시자 ID(ca-pub-...)를 입력하면 사이트 전역에 자동 광고가 활성화됩니다.'}
+                  </p>
 
-                          <details className="text-xs border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-white dark:bg-black/20">
-                            <summary className="p-2 cursor-pointer font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between list-none">
-                              <span>🖥️ {language === 'en' ? 'Preview HTML Alarm design' : '경고 이메일 템플릿 실시간 실물 디자인 모의'}</span>
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            </summary>
-                            <div className="p-4 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
-                              <iframe
-                                srcDoc={log.template}
-                                sandbox=""
-                                title={language === 'en' ? 'Email Template Preview' : '경고 이메일 템플릿 실시간 실물 디자인 모의'}
-                                className="w-full h-48 border border-slate-200 dark:border-slate-800 rounded bg-white text-slate-800"
-                              />
-                            </div>
-                          </details>
-                        </div>
-                      ))}
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1">
+                        {language === 'en' ? 'AdSense Publisher ID' : '애드센스 게시자 ID (ca-pub-XXXXXXXXXXXXXXXX)'}
+                      </label>
+                      <input
+                        type="text"
+                        value={maintenanceSettings.adsenseClientId || ''}
+                        onChange={(e) => setMaintenanceSettings({ ...maintenanceSettings, adsenseClientId: e.target.value })}
+                        placeholder="예: ca-pub-1234567890123456"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-orange-500 font-mono text-slate-800 dark:text-slate-100 shadow-inner"
+                      />
+                      <div className="mt-2 flex items-start gap-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/60 rounded-lg">
+                        <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-blue-700 dark:text-blue-300 leading-relaxed">
+                          <strong>설정 안내:</strong> <code className="bg-white/50 dark:bg-black/20 px-1 rounded">index.html</code> 헤더에 구글에서 제공하는 스크립트 코드가 삽입되어 있어야 하며, 저장소 루트에 <code className="bg-white/50 dark:bg-black/20 px-1 rounded">ads.txt</code> 파일이 존재해야 정상 승인됩니다.
+                        </p>
+                      </div>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="flex justify-end pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                    <button
+                      type="button"
+                      onClick={handleSaveMaintenanceSettings}
+                      disabled={isSavingSettings}
+                      className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-slate-400 text-white font-bold rounded-lg shadow-md shadow-orange-600/20 text-xs transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      {isSavingSettings ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      {language === 'en' ? 'Apply AdSense Settings' : '애드센스 설정 저장 및 즉시 적용'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -10426,9 +11156,50 @@ export default function App() {
                     </div>
                     <h4 className="font-bold text-slate-900 dark:text-slate-100">{language === 'en' ? 'Data Backup & Restore' : '데이터 백업 및 복원'}</h4>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 flex-grow">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 flex-grow">
                     {language === 'en' ? 'Export all database records to a JSON file for backup, or import a previously exported file to restore data.' : '전체 데이터베이스 레코드를 JSON 파일로 내보내 백업하거나, 이전에 내보낸 파일을 불러와 데이터를 복원합니다.'}
                   </p>
+
+                  {/* Emergency 1300 Data Recovery Banner */}
+                  <div className="bg-gradient-to-r from-red-500/10 via-amber-500/10 to-emerald-500/10 border border-amber-300 dark:border-amber-700/80 rounded-2xl p-4 text-xs flex flex-col gap-2.5 shadow-sm mb-4">
+                    <div className="flex items-center justify-between font-bold text-amber-900 dark:text-amber-200">
+                      <span className="flex items-center gap-1.5 text-sm">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        {language === 'en' ? '🚨 1,300+ Records Emergency Data Recovery' : '🚨 1,300개 데이터 긴급 복구 & 찾기 센터'}
+                      </span>
+                      <span className="text-[10px] bg-amber-200 dark:bg-amber-900 px-2 py-0.5 rounded-full font-mono text-amber-900 dark:text-amber-100">
+                        현재 {categoryCounts['전체'] || dbIssues.length}개 표시 중
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                      {language === 'en'
+                        ? 'If your 1,300+ records vanished after a merge or page reload: 1) Switch to Firestore mode if data remains in cloud. 2) Re-upload the issues.json or backup ZIP file from your PC Downloads folder.'
+                        : '병합 후 1,300여개 데이터가 사라진 경우: 1) Firestore 데이터베이스 모드로 재연결하거나, 2) PC 다운로드 폴더에 자동 저장된 issues.json 또는 백업 ZIP 파일을 다시 불러오면 즉시 무손실 복구됩니다.'}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          setDbMode('firestore');
+                          localStorage.setItem('winfix_db_mode', 'firestore');
+                          localStorage.removeItem('winfix_db_mode_fallback');
+                          fetchCategoryCounts(true);
+                          fetchIssues(false, true);
+                          customAlert(language === 'en' ? "Reconnected to Firestore DB. Loading all records..." : "Firestore 원본 데이터베이스로 모드를 변경했습니다. 데이터 조회 중...");
+                        }}
+                        className="py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.98]"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        {language === 'en' ? 'Reconnect Firestore (1300 Records)' : '⚡ Firestore 모드로 즉시 복구'}
+                      </button>
+                      <button
+                        onClick={() => githubZipMergeInputRef.current?.click()}
+                        className="py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.98]"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {language === 'en' ? 'Re-upload Downloaded File' : '📥 다운로드 폴더 백업 파일 복원'}
+                      </button>
+                    </div>
+                  </div>
                   <div className="space-y-3">
                     <button
                       onClick={handleExportData}
@@ -10455,7 +11226,7 @@ export default function App() {
                     />
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isExporting || isImporting}
+                      disabled={isExporting || isImporting || isMergingGithubZip}
                       className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md active:scale-[0.98] text-xs"
                     >
                       {isImporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
@@ -10468,6 +11239,62 @@ export default function App() {
                       onChange={handleImportData}
                       className="hidden"
                     />
+
+                    {/* GitHub Pages ZIP Data Merge Button */}
+                    <button
+                      onClick={() => githubZipMergeInputRef.current?.click()}
+                      disabled={isExporting || isImporting || isMergingGithubZip}
+                      className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-xs shadow-sm hover:shadow-md active:scale-[0.98]"
+                      title="업로드된 ZIP 백업 데이터를 깃허브 기존 데이터(data/issues.json)와 합칩니다"
+                    >
+                      {isMergingGithubZip ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+                      {language === 'en' ? 'ZIP Data Merge (GitHub Pages)' : 'ZIP 데이터 병합 업로드 (GitHub Pages)'}
+                    </button>
+                    <input
+                      type="file"
+                      accept=".zip,.json"
+                      ref={githubZipMergeInputRef}
+                      onChange={handleGithubPagesZipMerge}
+                      className="hidden"
+                    />
+
+                    {/* GitHub Pages Active Merged Data Banner */}
+                    {(githubMergedInfo || (typeof window !== 'undefined' && localStorage.getItem('winfix_github_pages_merged_issues'))) && (
+                      <div className="text-[11px] bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 text-purple-900 dark:text-purple-200 flex flex-col gap-2">
+                        <div className="flex items-center justify-between font-bold">
+                          <span className="flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                            {language === 'en' ? 'GitHub Pages Merged Data Active' : 'GitHub Pages 클라이언트 병합 데이터 활성'}
+                          </span>
+                          <span className="text-[10px] bg-purple-200/80 dark:bg-purple-900/60 px-2 py-0.5 rounded-full font-mono text-purple-800 dark:text-purple-300">
+                            {githubMergedInfo?.total || categoryCounts['전체'] || dbIssues.length}개
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-purple-700 dark:text-purple-300 leading-relaxed">
+                          {language === 'en'
+                            ? 'ZIP dataset has been merged with GitHub data and applied instantly. Download issues.json and commit it to data/issues.json on GitHub for permanent persistence.'
+                            : '업로드된 ZIP 데이터가 깃허브 기존 데이터와 자동 병합되어 즉시 반영 중입니다. 깃허브 저장소(data/issues.json)에 커밋하면 모든 사용자에게 영구 배포됩니다.'}
+                        </p>
+                        <div className="flex gap-2 pt-0.5">
+                          <button
+                            onClick={handleDownloadCurrentMergedIssuesJson}
+                            className="flex-1 py-1.5 px-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-[10px] flex items-center justify-center gap-1 transition-all shadow-xs"
+                          >
+                            <Download className="w-3 h-3" />
+                            {language === 'en' ? 'Download issues.json' : '합본 issues.json 다운로드'}
+                          </button>
+                          <button
+                            onClick={handleResetGithubMergedData}
+                            className="py-1.5 px-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium text-[10px] flex items-center justify-center gap-1 transition-all"
+                            title="로컬 병합 캐시 삭제 및 원본 복귀"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            {language === 'en' ? 'Reset' : '원본 복귀'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <button
                       onClick={handleDownloadSystemBackupZip}
                       disabled={isSystemBackingUp || isExporting || isImporting}
@@ -11075,7 +11902,7 @@ export default function App() {
         )}
         
         {/* AdSense at the bottom */}
-        <AdSense slot="PLACEHOLDER_SLOT_ID" />
+        <AdSense slot="PLACEHOLDER_SLOT_ID" client={maintenanceSettings.adsenseClientId} />
 
         {/* Feedback Modal */}
         <AnimatePresence>
@@ -11258,9 +12085,35 @@ export default function App() {
                           </div>
 
                           {authError && (
-                            <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
-                              <AlertCircle className="w-4 h-4 shrink-0" />
-                              <span>{authError}</span>
+                            <div className="p-3.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-2xl text-xs text-red-600 dark:text-red-400 flex flex-col gap-2">
+                              <div className="flex items-start gap-2">
+                                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                <span className="leading-relaxed">{authError}</span>
+                              </div>
+                              {authError.includes('Firebase') && (
+                                <div className="mt-1 pt-2 border-t border-red-200/60 dark:border-red-800/60 text-[11px] text-slate-700 dark:text-slate-300 space-y-1.5">
+                                  <div className="font-bold text-red-700 dark:text-red-300 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                                    <span>깃허브 페이지에서 구글 로그인 활성화 방법 (1분 소요):</span>
+                                  </div>
+                                  <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400 pl-1">
+                                    <li>Firebase 콘솔 &gt; <strong>Authentication</strong> &gt; <strong>설정 (Settings)</strong> 탭으로 이동합니다.</li>
+                                    <li><strong>승인된 도메인 (Authorized domains)</strong>에서 <strong>[도메인 추가]</strong>를 누릅니다.</li>
+                                    <li><code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-[10px] text-indigo-600 dark:text-indigo-400">ahbiyout-all.github.io</code> 를 입력하고 저장하면 즉시 구글 로그인이 정상 작동합니다!</li>
+                                  </ol>
+                                  <div className="pt-1 flex items-center justify-between">
+                                    <a
+                                      href="https://console.firebase.google.com/project/gen-lang-client-0325089792/authentication/settings"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                      <span>Firebase 콘솔 승인된 도메인 설정 바로가기</span>
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 

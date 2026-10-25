@@ -27,41 +27,59 @@ export function validateKnownIssueRecord(item: any, index: number = 0): { isVali
     };
   }
 
-  // Required Fields Validation
-  if (!item.id || typeof item.id !== 'string' || item.id.trim() === '') {
-    warnings.push(`${label}: 'id' is missing or not a string.`);
+  // Auto-repair and normalize common variations
+  if (!item.title && (item.name || item.issueTitle || item.errorName)) {
+    item.title = item.name || item.issueTitle || item.errorName;
   }
-
   if (!item.title || typeof item.title !== 'string' || item.title.trim() === '') {
     errors.push(`${label}: 'title' is required and must be a non-empty string.`);
   }
 
   if (item.symptoms === undefined || item.symptoms === null || typeof item.symptoms !== 'string') {
-    errors.push(`${label}: 'symptoms' is required and must be a string.`);
+    if (item.description && typeof item.description === 'string') {
+      item.symptoms = item.description;
+    } else if (item.title) {
+      item.symptoms = item.title;
+    } else {
+      errors.push(`${label}: 'symptoms' is required and must be a string.`);
+    }
   }
 
   if (!item.category || typeof item.category !== 'string' || item.category.trim() === '') {
-    errors.push(`${label}: 'category' is required and must be a non-empty string.`);
+    item.category = '기타/미분류';
   }
 
   if (item.code === undefined || item.code === null || typeof item.code !== 'string') {
-    warnings.push(`${label}: 'code' should be a string.`);
+    item.code = 'N/A';
   }
 
-  // Required / Expected Arrays Validation
+  // Required / Expected Arrays Validation with Auto-Coercion
   if (item.manualSteps === undefined || item.manualSteps === null) {
-    errors.push(`${label}: 'manualSteps' is required and must be an Array.`);
+    item.manualSteps = ['Windows 설정 > 시스템 > 문제 해결 도구를 실행합니다.'];
   } else if (!Array.isArray(item.manualSteps)) {
-    errors.push(`${label}: 'manualSteps' must be an Array.`);
+    if (typeof item.manualSteps === 'string') {
+      item.manualSteps = [item.manualSteps];
+    } else {
+      item.manualSteps = ['Windows 설정 > 시스템 > 문제 해결 도구를 실행합니다.'];
+    }
   } else {
-    const nonStringStep = item.manualSteps.some((step: any) => typeof step !== 'string');
-    if (nonStringStep) {
-      errors.push(`${label}: 'manualSteps' elements must all be strings.`);
+    item.manualSteps = item.manualSteps.map((s: any) => typeof s === 'string' ? s : String(s)).filter((s: string) => s.trim().length > 0);
+    if (item.manualSteps.length === 0) {
+      item.manualSteps = ['Windows 설정 > 시스템 > 문제 해결 도구를 실행합니다.'];
     }
   }
 
   if (item.sourceUrls !== undefined && item.sourceUrls !== null && !Array.isArray(item.sourceUrls)) {
-    errors.push(`${label}: 'sourceUrls' must be an Array of strings.`);
+    if (typeof item.sourceUrls === 'string') {
+      item.sourceUrls = [item.sourceUrls];
+    } else {
+      item.sourceUrls = [];
+    }
+  }
+
+  // Generate ID if missing
+  if (!item.id || typeof item.id !== 'string' || item.id.trim() === '') {
+    item.id = `issue-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   }
 
   // Optional string fields check
