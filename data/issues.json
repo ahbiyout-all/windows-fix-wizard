@@ -1139,5 +1139,95 @@
     "updatedAt": "2026-10-24T18:19:20.512Z",
     "verifiedAt": "2026-10-24T18:19:20.512Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070641-mvn314hj",
+    "category": "보안/백신",
+    "code": "0x80070641",
+    "title": "Windows Defender 실시간 보호 서비스 실행 불가 및 업데이트 오류",
+    "title_en": "Windows Defender Real-time Protection Service Failure and Update Error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 이후 보안 서비스가 시작되지 않거나, Defender 서비스 자체가 중지되어 백신 활성화가 불가능한 현상.",
+    "symptoms_en": "Security services fail to start or Windows Defender service remains stopped, preventing antivirus activation after recent Windows 11 23H2/24H2 updates.",
+    "script": "Get-Service WinDefend | Set-Service -StartupType Automatic -PassThru | Start-Service",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 실행합니다.",
+      "sc config WinDefend start= auto 명령어를 입력하여 서비스 시작 유형을 자동화합니다.",
+      "net start WinDefend 명령어로 서비스를 강제 재시작합니다.",
+      "시스템을 재부팅하여 보안 서비스가 활성화되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Run Command Prompt as Administrator.",
+      "Enter the command 'sc config WinDefend start= auto' to set the service startup type to automatic.",
+      "Force restart the service using the command 'net start WinDefend'.",
+      "Reboot the system and verify if the security service is now active."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows Defender 실행 오류",
+      "0x80070641",
+      "Windows 보안 서비스 중지",
+      "Windows Defender service not starting",
+      "antivirus update error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T00:21:15.895Z",
+    "updatedAt": "2026-10-25T00:21:15.895Z",
+    "verifiedAt": "2026-10-25T00:21:15.895Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800705b4-mvn314hk",
+    "category": "보안/백신",
+    "code": "0x800705b4",
+    "title": "Windows 보안 앱의 격리된 보안 위협 검사 실패",
+    "title_en": "Windows Security App Isolation/Threat Scan Failure",
+    "symptoms": "최신 보안 업데이트 이후 Windows 보안 앱 내에서 위협 검사를 실행할 때 '예기치 않은 오류'가 발생하며 실시간 보호가 비활성화됨.",
+    "symptoms_en": "An 'unexpected error' occurs when running threat scans in the Windows Security app following recent security updates, causing real-time protection to be disabled.",
+    "script": "Get-AppxPackage *Microsoft.SecHealthUI* | Reset-AppxPackage",
+    "manualSteps": [
+      "설정 > 앱 > 설치된 앱으로 이동합니다.",
+      "Windows 보안 앱을 검색한 후 고급 옵션을 클릭합니다.",
+      "초기화(Reset) 버튼을 눌러 앱 설정을 초기화합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 'sfc /scannow'를 입력하여 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > Apps > Installed apps.",
+      "Search for 'Windows Security', then click 'Advanced options'.",
+      "Click the 'Reset' button to reset the app configuration.",
+      "Run PowerShell as Administrator and execute 'sfc /scannow' to repair system files."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-a65c2763-718f-7b70-e448-f3d2f2d96924"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 보안 앱 초기화",
+      "0x800705b4",
+      "백신 위협 검사 오류",
+      "Windows Security app reset",
+      "threat scan failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T00:21:15.895Z",
+    "updatedAt": "2026-10-25T00:21:15.895Z",
+    "verifiedAt": "2026-10-25T00:21:15.895Z",
+    "verificationStatus": "verified"
   }
 ]

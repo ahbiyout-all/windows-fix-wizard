@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-24T18:19:20.512Z",
-  "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "오디오/사운드",
+  "lastCollectedAt": "2026-10-25T00:21:15.895Z",
+  "modelUsed": "gemini-3.1-flash-lite",
+  "targetCategory": "보안/백신",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 28,
+  "totalIssuesCount": 30,
   "newIssues": [
     {
-      "id": "gh-0x88890004-mvmq3osg",
-      "code": "0x88890004",
-      "title": "Windows 10/11 WASAPI 오디오 끝점 무효화 및 오디오 출력 중단 오류 (0x88890004)",
-      "category": "오디오/사운드"
+      "id": "gh-0x80070641-mvn314hj",
+      "code": "0x80070641",
+      "title": "Windows Defender 실시간 보호 서비스 실행 불가 및 업데이트 오류",
+      "category": "보안/백신"
     },
     {
-      "id": "gh-0x00000437-mvmq3osg",
-      "code": "0x00000437",
-      "title": "Windows Audio 및 Audio Endpoint Builder 서비스 시작 실패 오류 (Error 1079 / 0x00000437)",
-      "category": "오디오/사운드"
+      "id": "gh-0x800705b4-mvn314hk",
+      "code": "0x800705b4",
+      "title": "Windows 보안 앱의 격리된 보안 위협 검사 실패",
+      "category": "보안/백신"
     }
   ]
 }
