@@ -1551,5 +1551,52 @@
     "updatedAt": "2026-10-26T06:32:58.664Z",
     "verifiedAt": "2026-10-26T06:32:58.664Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0988-mvpkxzqy",
+    "category": "업데이트",
+    "code": "0x800f0988",
+    "title": "Windows 10/11 구성 요소 저장소 손상 업데이트 오류 (0x800f0988)",
+    "title_en": "Windows 10/11 Component Store Corruption Update Error (0x800f0988)",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 다운로드 및 적용 단계에서 '변경 사항 취소 중' 메시지와 함께 0x800f0988 오류가 발생합니다. WinSxS 데이터베이스 및 캐시 간 업데이트 데이터 정합성이 일치하지 않거나 이전 업데이트 잔재 파일이 패키지 적용을 방해할 때 나타납니다.",
+    "symptoms_en": "During the download or application phase of recent Windows 10/11 cumulative updates, the process fails with error 0x800f0988 and displays 'Undoing changes'. This happens when update data consistency fails in the WinSxS store or leftover update cache blocks installation.",
+    "script": "Dism /Online /Cleanup-Image /StartComponentCleanup; sfc /scannow",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell을 실행하고 'Dism /Online /Cleanup-Image /StartComponentCleanup' 명령으로 이전 업데이트 청소를 진행합니다.",
+      "관리자 CMD에서 'net stop wuauserv' 및 'net stop cryptsvc'를 입력하여 관련 서비스를 정지합니다.",
+      "'C:\\Windows\\SoftwareDistribution' 폴더의 내용을 삭제하여 업데이트 캐시를 초기화합니다.",
+      "'net start wuauserv' 및 'net start cryptsvc'로 서비스를 재시작한 후 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Run PowerShell as administrator and execute 'Dism /Online /Cleanup-Image /StartComponentCleanup' to clean up superseded update components.",
+      "Stop update services by running 'net stop wuauserv' and 'net stop cryptsvc' in an elevated Command Prompt.",
+      "Clear the update cache by deleting contents inside 'C:\\Windows\\SoftwareDistribution'.",
+      "Restart the services using 'net start wuauserv' and 'net start cryptsvc', then retry Windows Update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x800f0988-or-0x800f081f-when-installing-updates-7132e4d0-bf6e-473f-85f0-622f6723ef98",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0988",
+      "Windows Update Error 0x800f0988",
+      "윈도우 업데이트 0x800f0988",
+      "StartComponentCleanup",
+      "ERROR_SXS_COMPONENT_STORE_CORRUPT",
+      "SoftwareDistribution Reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T18:18:15.226Z",
+    "updatedAt": "2026-10-26T18:18:15.226Z",
+    "verifiedAt": "2026-10-26T18:18:15.226Z",
+    "verificationStatus": "verified"
   }
 ]
