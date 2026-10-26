@@ -1,21 +1,15 @@
 {
-  "lastCollectedAt": "2026-10-25T12:22:56.284Z",
+  "lastCollectedAt": "2026-10-26T00:30:21.960Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "네트워크",
-  "newlyAddedCount": 2,
-  "totalIssuesCount": 34,
+  "targetCategory": "정품인증",
+  "newlyAddedCount": 1,
+  "totalIssuesCount": 35,
   "newIssues": [
     {
-      "id": "gh-0x8007003b-mvnst7a5",
-      "code": "0x8007003B",
-      "title": "SMB 네트워크 공유 파일 전송 중 예기치 않은 네트워크 오류 발생 (0x8007003B)",
-      "category": "네트워크"
-    },
-    {
-      "id": "gh-0x80072ee2-mvnst7a5",
-      "code": "0x80072EE2",
-      "title": "네트워크 연결 시간 초과 오류 및 서버 응답 없음 (0x80072EE2)",
-      "category": "네트워크"
+      "id": "gh-0xc004f213-mvoisoi0",
+      "code": "0xC004F213",
+      "title": "하드웨어 교체 후 Windows 제품 키 미발견 오류 (0xC004F213)",
+      "category": "정품인증"
     }
   ]
 }

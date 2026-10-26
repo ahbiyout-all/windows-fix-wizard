@@ -1413,5 +1413,51 @@
     "updatedAt": "2026-10-25T12:22:56.284Z",
     "verifiedAt": "2026-10-25T12:22:56.284Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f213-mvoisoi0",
+    "category": "정품인증",
+    "code": "0xC004F213",
+    "title": "하드웨어 교체 후 Windows 제품 키 미발견 오류 (0xC004F213)",
+    "title_en": "Windows No Product Key Found Error After Hardware Replacement (0xC004F213)",
+    "symptoms": "메인보드, CPU 등 주요 하드웨어를 교체한 후 Windows에서 디바이스에 제품 키가 설치되어 있지 않음을 감지하여 0xC004F213 오류가 발생합니다. 마이크로소프트 계정에 디지털 라이선스가 제대로 연결되어 있지 않거나 하드웨어 변경 후 디바이스 재연결 프로세스가 완료되지 않았을 때 나타납니다.",
+    "symptoms_en": "Error 0xC004F213 occurs after replacing major hardware (such as the motherboard or CPU) when Windows fails to find a valid product key associated with the device. It indicates that the digital license is not linked or the hardware change reactivation process has not been completed.",
+    "script": "try { (Get-CimInstance -Query 'select * from SoftwareLicensingService').OA3xOriginalProductKey } catch { Write-Output 'OEM Key not embedded in BIOS' }",
+    "manualSteps": [
+      "설정 > 시스템 > 정품 인증으로 이동하여 '문제 해결(Troubleshoot)'을 클릭합니다.",
+      "'최근에 이 디바이스의 하드웨어를 변경했습니다' 링크를 선택합니다.",
+      "마이크로소프트 계정(MSA)으로 로그인한 후 현재 사용 중인 디바이스를 목록에서 선택하고 '지금 사용 중인 디바이스입니다'를 체크한 후 '정품 인증'을 누릅니다.",
+      "만약 메인보드에 포함된 OEM 키가 있는 경우, PowerShell에서 감지된 OEM 키를 복사하여 '제품 키 변경' 메뉴에 다시 입력합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Activation and click 'Troubleshoot'.",
+      "Select the link 'I changed hardware on this device recently'.",
+      "Sign in with your Microsoft Account (MSA), select your current device from the list, check 'This is the device I'm using right now', and click 'Activate'.",
+      "If an embedded OEM product key exists on the new motherboard, copy the detected key and re-enter it under 'Change product key'."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/reactivating-windows-after-a-hardware-change-2c0e962a-444c-141a-9d0d-c69476dd3d45",
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09fd5b5e-444e-4a73-8d6a-79cd6d64d45b"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F213",
+      "하드웨어 변경 정품인증",
+      "Windows 11 activation 0xC004F213",
+      "디지털 라이선스 하드웨어 변경",
+      "No product key found"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T00:30:21.960Z",
+    "updatedAt": "2026-10-26T00:30:21.960Z",
+    "verifiedAt": "2026-10-26T00:30:21.960Z",
+    "verificationStatus": "verified"
   }
 ]
