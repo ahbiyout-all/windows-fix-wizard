@@ -1,15 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-26T00:30:21.960Z",
+  "lastCollectedAt": "2026-10-26T06:32:58.664Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "정품인증",
-  "newlyAddedCount": 1,
-  "totalIssuesCount": 35,
+  "targetCategory": "업데이트",
+  "newlyAddedCount": 2,
+  "totalIssuesCount": 37,
   "newIssues": [
     {
-      "id": "gh-0xc004f213-mvoisoi0",
-      "code": "0xC004F213",
-      "title": "하드웨어 교체 후 Windows 제품 키 미발견 오류 (0xC004F213)",
-      "category": "정품인증"
+      "id": "gh-0x800f0831-mvovr02w",
+      "code": "0x800f0831",
+      "title": "Windows 누적 업데이트 패키지 누락 설치 실패 오류 (0x800f0831)",
+      "category": "업데이트"
+    },
+    {
+      "id": "gh-0x80070005-mvovr02w",
+      "code": "0x80070005",
+      "title": "Windows 업데이트 액세스 거부 및 권한 오류 (0x80070005)",
+      "category": "업데이트"
     }
   ]
 }

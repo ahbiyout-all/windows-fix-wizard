@@ -1459,5 +1459,97 @@
     "updatedAt": "2026-10-26T00:30:21.960Z",
     "verifiedAt": "2026-10-26T00:30:21.960Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0831-mvovr02w",
+    "category": "업데이트",
+    "code": "0x800f0831",
+    "title": "Windows 누적 업데이트 패키지 누락 설치 실패 오류 (0x800f0831)",
+    "title_en": "Windows Update Installation Failure Error 0x800f0831",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 진행 중 이전 업데이트의 구성 요소(CBS 매니페스트 또는 패키지 파일)가 누락되어 업데이트 설치가 멈추거나 0x800f0831 오류 코드와 함께 변경 사항이 취소되는 증상이 발생합니다.",
+    "symptoms_en": "During cumulative update installation on Windows 10/11, missing manifest files or corrupted previous package stores cause update failures accompanied by error code 0x800f0831 and system rollback.",
+    "script": "Get-Service -Name wuauserv, bits, cryptsvc | Select-Object Name, Status, StartType\nWrite-Host 'Checking CBS Log for missing package references...'\nif (Test-Path 'C:\\Windows\\Logs\\CBS\\CBS.log') {\n    Select-String -Path 'C:\\Windows\\Logs\\CBS\\CBS.log' -Pattern '0x800f0831' -Context 0,2 | Select-Object -First 5\n}",
+    "manualSteps": [
+      "DISM 명령어를 사용하여 손상된 시스템 구성 요소 저장소를 복구합니다: 관리자 프롬프트에서 'sfc /scannow' 실행 후 'Dism /Online /Cleanup-Image /RestoreHealth' 명령을 실행합니다.",
+      "오류 로그(C:\\Windows\\Logs\\CBS\\CBS.log)에서 누락된 KB 번호를 확인하고, Microsoft Update 카탈로그 웹사이트에서 해당 선행 업데이트 KB 패키지를 검색하여 직접 수동 설치합니다.",
+      "Windows Update 관련 서비스(wuauserv, bits, cryptsvc)를 중지한 후 SoftwareDistribution 캐시 폴더를 재설정하고 서비스를 재시작합니다.",
+      "모든 방법으로 해결되지 않을 경우 Microsoft Update 카탈로그에서 현재 시도 중인 누적 업데이트 MSU 파일을 수동으로 다운로드 받아 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Run DISM tool to repair the corrupted component store: Execute 'sfc /scannow' followed by 'Dism /Online /Cleanup-Image /RestoreHealth' in an elevated Terminal/Command Prompt.",
+      "Check C:\\Windows\\Logs\\CBS\\CBS.log for missing package KB numbers, search for the prerequisite KB manually on Microsoft Update Catalog, and install it.",
+      "Stop Windows Update services (wuauserv, bits, cryptsvc), rename/clear the SoftwareDistribution cache folder, and restart the services.",
+      "If unresolved, manually download the standalone update package (.msu) for the failing update from Microsoft Update Catalog and install it directly."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/error-0x800f0831-installing-update",
+      "https://support.microsoft.com/en-us/topic/windows-update-troubleshooter-19ffdef1-0396-3925-2a3a-356f21223943"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0831",
+      "Windows update error 0x800f0831",
+      "CBS_E_STORE_CORRUPTION",
+      "윈도우 업데이트 오류 0x800f0831",
+      "누적 업데이트 설치 실패"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T06:32:58.664Z",
+    "updatedAt": "2026-10-26T06:32:58.664Z",
+    "verifiedAt": "2026-10-26T06:32:58.664Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070005-mvovr02w",
+    "category": "업데이트",
+    "code": "0x80070005",
+    "title": "Windows 업데이트 액세스 거부 및 권한 오류 (0x80070005)",
+    "title_en": "Windows Update Access Denied Error 0x80070005",
+    "symptoms": "Windows 10/11 업데이트 다운로드 및 설치 단계에서 시스템 디렉토리(SoftwareDistribution 또는 catroot2)에 대한 파일 접근 권한 부족이나 타사 보안 프로그램의 차단으로 인해 0x80070005 오류가 발생하며 업데이트가 중단됩니다.",
+    "symptoms_en": "Windows 10/11 update process fails with error code 0x80070005 during download or installation due to access permission restrictions on system update folders or interference from third-party security software.",
+    "script": "$paths = @('C:\\Windows\\SoftwareDistribution', 'C:\\Windows\\System32\\catroot2')\nforeach ($path in $paths) {\n    if (Test-Path $path) {\n        $acl = Get-Acl -Path $path\n        [PSCustomObject]@{ Path = $path; Owner = $acl.Owner; AccessToString = $acl.AccessToString.Substring(0, [Math]::Min(100, $acl.AccessToString.Length)) }\n    }\n}",
+    "manualSteps": [
+      "설정 > 시스템 > 문제 해결 > 기타 문제 해결사에서 'Windows 업데이트' 문제 해결사를 실행합니다.",
+      "타사 실시간 감시 백신 프로그램이나 방화벽 소프트웨어를 임시로 비활성화한 후 업데이트를 다시 시도합니다.",
+      "관리자 권한 프롬프트에서 'net stop wuauserv', 'net stop bits' 실행 후 C:\\Windows\\SoftwareDistribution 및 catroot2 폴더의 이름을 변경하여 캐시를 재설정하고 서비스를 재시작합니다.",
+      "시스템 파일 및 권한 무결성을 검사하기 위해 관리자 PowerShell에서 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth'를 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Troubleshoot > Other troubleshooters and run the Windows Update troubleshooter.",
+      "Temporarily disable third-party antivirus software or firewalls that might lock system update directories.",
+      "Open Command Prompt as Administrator, stop 'wuauserv' and 'bits' services, rename SoftwareDistribution and catroot2 folders to reset cache, then restart services.",
+      "Execute 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' in Administrator PowerShell to verify and restore system file permissions."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x80070005-4c07c724-4054-4a47-a86d-0045f20a8301",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-update-issues-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070005",
+      "Windows update error 0x80070005",
+      "액세스가 거부되었습니다 윈도우 업데이트",
+      "Windows update access denied",
+      "SoftwareDistribution 권한 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T06:32:58.664Z",
+    "updatedAt": "2026-10-26T06:32:58.664Z",
+    "verifiedAt": "2026-10-26T06:32:58.664Z",
+    "verificationStatus": "verified"
   }
 ]
