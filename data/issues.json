@@ -1789,5 +1789,99 @@
     "updatedAt": "2026-10-27T11:40:25.456Z",
     "verifiedAt": "2026-10-27T11:40:25.456Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070035-mvqyr8s5",
+    "category": "네트워크",
+    "code": "0x80070035",
+    "title": "Windows 10/11 SMB 네트워크 공유 접근 실패 오류 (0x80070035) 해결 방법",
+    "title_en": "Fix Windows 10/11 SMB Network Path Not Found Error (0x80070035)",
+    "symptoms": "최신 Windows 11(24H2/23H2) 및 Windows 10 업데이트 설치 이후 로컬 네트워크 공유 폴더 또는 NAS 장치에 접근할 때 '지정한 네트워크 경로를 찾을 수 없습니다 (0x80070035)' 오류가 발생합니다. 최신 보안 정책 개정으로 인해 보안되지 않은 SMB 게스트 차단 및 NTLM/SMB 서명 요구 사항이 강화되어 타사 파일 서버 접속이 차단되는 현상입니다.",
+    "symptoms_en": "After installing recent Windows 11 (24H2/23H2) and Windows 10 updates, users encounter error '0x80070035: The network path was not found' when attempting to access shared network folders or NAS devices. Tightened OS security defaults disable insecure SMB guest logons and strictly require SMB signing, blocking access to third-party file servers.",
+    "script": "# TCP/IP 스택 리셋 및 네트워크 서비스 재설정\nnetsh winsock reset\nnetsh int ip reset\nipconfig /flushdns\nGet-SmbClientConfiguration | Select-Object EnableBandwidthThrottling, EnableSecuritySignature, RequireSecuritySignature",
+    "manualSteps": [
+      "로컬 그룹 정책 편집기(gpedit.msc)를 실행하여 [컴퓨터 구성] > [관리 템플릿] > [네트워크] > [Lanman 워크스테이션]으로 이동한 후 '보안되지 않은 게스트 로그온 사용' 정책을 '사용'으로 변경합니다.",
+      "[제어판] > [네트워크 및 공유 센터] > [고급 공유 설정]에서 '네트워크 검색 켜기' 및 '파일 및 프린터 공유 켜기' 항목을 활성화합니다.",
+      "[제어판] > [자격 증명 관리자] > [Windows 자격 증명]으로 이동하여 접속하려는 NAS 또는 공유 컴퓨터의 IP/계정 정보를 직접 추가합니다.",
+      "명령 프롬프트(관리자)에서 'sc config lanmanworkstation start= auto' 명령을 실행하여 관련 시스템 서비스 자동 시작 설정을 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Local Group Policy Editor (gpedit.msc), navigate to Computer Configuration > Administrative Templates > Network > Lanman Workstation, and set 'Enable insecure guest logons' to Enabled.",
+      "Open Control Panel > Network and Sharing Center > Advanced sharing settings and ensure 'Turn on network discovery' and 'Turn on file and printer sharing' are both enabled.",
+      "Go to Control Panel > Credential Manager > Windows Credentials, then manually add the target NAS or shared computer's IP address and user credentials.",
+      "Run Command Prompt as Administrator and execute 'sc config lanmanworkstation start= auto' to ensure the required workstation service runs automatically."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/troubleshoot/windows-server/networking/error-0x80070035-cannot-find-network-path",
+      "https://support.microsoft.com/topic/file-sharing-over-a-network-in-windows-b587046d-96ce-4410-a6cb-020b61010b99"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070035",
+      "네트워크 경로를 찾을 수 없습니다",
+      "SMB 공유 오류",
+      "NAS 접속 불가",
+      "Lanman 게스트 로그온",
+      "Network path not found"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T17:32:41.141Z",
+    "updatedAt": "2026-10-27T17:32:41.141Z",
+    "verifiedAt": "2026-10-27T17:32:41.141Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mvqyr8s5",
+    "category": "네트워크",
+    "code": "0x800704CF",
+    "title": "Windows 10/11 네트워크 위치에 도달할 수 없음 오류 (0x800704CF) 해결 방법",
+    "title_en": "Fix Windows 10/11 Network Location Cannot Be Reached Error (0x800704CF)",
+    "symptoms": "Windows 10/11 시스템에서 Microsoft 계정 로그인, OneDrive 동기화, 도메인 네트워크 연결 시 'ERROR_NETWORK_UNREACHABLE (0x800704CF: 네트워크 위치에 도달할 수 없습니다)' 오류가 발생합니다. 최신 누적 업데이트 적용 후 네트워크 어댑터의 가상 미니포트 바인딩 손상, TCP/IP 프로토콜 스택 오류 또는 WinHTTP 프록시 설정 충돌로 발생하는 네트워크 단선 현상입니다.",
+    "symptoms_en": "When logging into a Microsoft account, syncing OneDrive, or connecting to domain network resources in Windows 10/11, users receive error 'ERROR_NETWORK_UNREACHABLE (0x800704CF) - The network location cannot be reached'. This issue is caused by corrupted network adapter bindings, TCP/IP stack glitches, or stale WinHTTP proxy configurations following updates.",
+    "script": "# 네트워크 바인딩 및 프로토콜 초기화\nnetsh winsock reset\nnetsh int ip reset\nnetsh winhttp reset proxy\nipconfig /release\nipconfig /renew\nipconfig /flushdns",
+    "manualSteps": [
+      "[장치 관리자]를 열어 [네트워크 어댑터] 항목을 확장하고 사용 중인 이더넷/Wi-Fi 어댑터를 우클릭하여 '장치 제거'를 실행한 후 시스템을 재부팅하여 드라이버를 자동 재설치합니다.",
+      "[설정] > [네트워크 및 인터넷] > [고급 네트워크 설정]으로 이동하여 '네트워크 초기화'를 클릭하고 5분 후 재부팅 과정을 진행합니다.",
+      "[제어판] > [네트워크 및 공유 센터] > [어댑터 설정 변경]에서 속성 창을 열어 'Microsoft 네트워크용 클라이언트' 및 '인터넷 프로토콜 버전 4(TCP/IPv4)' 항목의 체크 상태를 확인하고 재바인딩합니다.",
+      "명령 프롬프트(관리자)에서 'netsh winhttp reset proxy'를 입력하여 프록시 설정 리셋을 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager, expand Network adapters, right-click your network controller, select 'Uninstall device', and restart the system to let Windows reinstall standard drivers automatically.",
+      "Go to Settings > Network & internet > Advanced network settings, select 'Network reset', and wait for the system restart sequence.",
+      "Navigate to Control Panel > Network and Sharing Center > Change adapter settings, open Properties on your active adapter, and verify Client for Microsoft Networks and IPv4 protocol bindings.",
+      "Run Command Prompt as Administrator and execute 'netsh winhttp reset proxy' to clear stale HTTP proxy settings."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/windows/fix-network-connection-issues-in-windows-70404449-a09b-43a4-a574-b49fb55e2241",
+      "https://learn.microsoft.com/troubleshoot/windows-client/networking/network-connectivity-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704CF",
+      "네트워크 위치에 도달할 수 없습니다",
+      "ERROR_NETWORK_UNREACHABLE",
+      "네트워크 어댑터 초기화",
+      "OneDrive 네트워크 오류",
+      "Network location cannot be reached"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T17:32:41.141Z",
+    "updatedAt": "2026-10-27T17:32:41.141Z",
+    "verifiedAt": "2026-10-27T17:32:41.141Z",
+    "verificationStatus": "verified"
   }
 ]

@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-27T11:40:25.456Z",
+  "lastCollectedAt": "2026-10-27T17:32:41.141Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "업데이트",
+  "targetCategory": "네트워크",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 42,
+  "totalIssuesCount": 44,
   "newIssues": [
     {
-      "id": "gh-0x80070643-mvqm68dt",
-      "code": "0x80070643",
-      "title": "Windows RE 복구 파티션 용량 부족으로 인한 업데이트 설치 실패 (0x80070643)",
-      "category": "업데이트"
+      "id": "gh-0x80070035-mvqyr8s5",
+      "code": "0x80070035",
+      "title": "Windows 10/11 SMB 네트워크 공유 접근 실패 오류 (0x80070035) 해결 방법",
+      "category": "네트워크"
     },
     {
-      "id": "gh-0x800f081f-mvqm68dt",
-      "code": "0x800f081f",
-      "title": "Windows 업데이트 CBS 구성 요소 및 원본 파일 손상 오류 (0x800f081f)",
-      "category": "업데이트"
+      "id": "gh-0x800704cf-mvqyr8s5",
+      "code": "0x800704CF",
+      "title": "Windows 10/11 네트워크 위치에 도달할 수 없음 오류 (0x800704CF) 해결 방법",
+      "category": "네트워크"
     }
   ]
 }
