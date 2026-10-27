@@ -362,14 +362,17 @@ async function saveIssuesToServer(issuesData: any[]) {
 
       // Check duplicates in local array database
       let matchedLocalIdx = -1;
-      if (issueData.code && issueData.code !== 'N/A') {
-        matchedLocalIdx = localIssues.findIndex(i => i.code?.toUpperCase() === issueData.code?.toUpperCase());
+      if (issueData.id && typeof issueData.id === 'string' && !issueData.id.startsWith('temp_')) {
+        matchedLocalIdx = localIssues.findIndex(i => i.id === issueData.id);
       }
-      if (matchedLocalIdx === -1 && issueData.title_en) {
-        matchedLocalIdx = localIssues.findIndex(i => i.title_en?.toLowerCase() === issueData.title_en?.toLowerCase());
+      if (matchedLocalIdx === -1 && issueData.code && issueData.code !== 'N/A' && issueData.title) {
+        matchedLocalIdx = localIssues.findIndex(i => 
+          i.code?.toUpperCase() === issueData.code?.toUpperCase() && 
+          i.title?.toLowerCase().trim() === issueData.title?.toLowerCase().trim()
+        );
       }
       if (matchedLocalIdx === -1 && issueData.title) {
-        matchedLocalIdx = localIssues.findIndex(i => i.title === issueData.title);
+        matchedLocalIdx = localIssues.findIndex(i => i.title?.toLowerCase().trim() === issueData.title?.toLowerCase().trim());
       }
 
       let issueId = `ai-cron-${Date.now()}-${addedCount}`;

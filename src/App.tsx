@@ -338,7 +338,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.31.0";
+const APP_VERSION = "3.32.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1265,6 +1265,18 @@ export default function App() {
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
+        // Clear stale client caches so fresh GitHub dataset is loaded and rendered immediately
+        await idbRemove('winfix_merged_issues');
+        localStorage.removeItem('winfix_github_pages_merged_issues');
+        localStorage.removeItem('winfix_github_pages_merged_time');
+        localStorage.removeItem(ISSUES_CACHE_KEY);
+        localStorage.removeItem(ISSUES_CACHE_KEY + '_time');
+        localStorage.removeItem('cached_category_counts');
+        localStorage.removeItem('cached_category_counts_time');
+        localStorage.removeItem('winfix_unpacked_bundles');
+        localStorage.removeItem('winfix_unpacked_bundles_time');
+        setGithubMergedInfo(null);
+
         customAlert(data.message || (language === 'en' ? "Successfully synced data from GitHub!" : "GitHub에서 데이터를 성공적으로 동기화했습니다!"));
         await Promise.all([
           fetchCategoryCounts(true),
@@ -4120,7 +4132,7 @@ export default function App() {
 
           if (staticIssues.length === 0) {
             try {
-              const resp = await fetch('./data/issues.json');
+              const resp = await fetch(`./data/issues.json?t=${Date.now()}`);
               if (resp.ok) {
                 const parsed = await resp.json();
                 staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
@@ -4130,7 +4142,7 @@ export default function App() {
 
           if (staticIssues.length === 0) {
             try {
-              const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json`);
+              const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`);
               if (cdnResp.ok) {
                 const cdnParsed = await cdnResp.json();
                 staticIssues = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
@@ -5483,7 +5495,7 @@ export default function App() {
 
     // 3. Try fetching static /data/issues.json
     try {
-      const resp = await fetch('./data/issues.json');
+      const resp = await fetch(`./data/issues.json?t=${Date.now()}`);
       if (resp.ok) {
         const parsed = await resp.json();
         const list = Array.isArray(parsed) ? parsed : (parsed.issues || []);
@@ -5493,7 +5505,7 @@ export default function App() {
 
     // 4. Try fetching from GitHub raw CDN
     try {
-      const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json`);
+      const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`);
       if (cdnResp.ok) {
         const cdnParsed = await cdnResp.json();
         const list = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);

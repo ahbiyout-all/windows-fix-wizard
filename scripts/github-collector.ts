@@ -210,14 +210,17 @@ JSON Schema:
 
     if (!title) continue;
 
-    // Check duplication
-    const normalizedCode = code.toLowerCase();
-    const isDupCode = normalizedCode && avoidCodes.has(normalizedCode);
+    // Check duplication (only skip if exact title matches or both code and title match)
+    const normalizedCode = code.toLowerCase().trim();
+    const normalizedTitle = title.toLowerCase().replace(/\s+/g, '');
     const isDupTitle = existingIssues.some(
-      ex => ex.title.toLowerCase().replace(/\s+/g, '') === title.toLowerCase().replace(/\s+/g, '')
+      ex => ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
+    );
+    const isDupCodeAndTitle = existingIssues.some(
+      ex => ex.code && ex.code.toLowerCase().trim() === normalizedCode && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
     );
 
-    if (isDupCode || isDupTitle) {
+    if (isDupTitle || isDupCodeAndTitle) {
       console.log(`⏭️ Skipping duplicate issue: [${code}] ${title}`);
       continue;
     }

@@ -1,6 +1,26 @@
-# Patch Note - System Update (v3.31.0)
+# Patch Note - System Update (v3.32.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.32.0] - 2026-10-26
+
+### 🔧 Bug Fixes & GitHub Sync Improvements
+
+#### 1. Real-Time GitHub Sync Client Cache Invalidation (`src/App.tsx`)
+- **Resolved Stale Client Cache Discrepancy**: Fixed an issue where executing "GitHub에서 불러와 동기화" (`handlePullFromGithub`) did not clear client-side IndexedDB (`winfix_merged_issues`) or LocalStorage caches. This previously caused the UI to continue displaying stale cached records despite a successful GitHub sync.
+- **Instant UI Refresh**: Automatically clears IndexedDB and LocalStorage cache keys upon GitHub pull, forcing immediate re-fetching and rendering of the fresh GitHub dataset.
+
+#### 2. CDN HTTP Cache-Busting (`src/App.tsx`)
+- **Bypassed GitHub Raw CDN Caching**: Appended cache-buster timestamp query parameters (`?t=${Date.now()}`) to all static `./data/issues.json` and GitHub raw CDN fetch endpoints, preventing browsers from returning stale HTTP 304 cached responses.
+
+#### 3. Lossless Multi-Issue Server Deduplication (`server.ts`, `scripts/github-collector.ts`)
+- **Prevented Overwriting Distinct Guides**: Fixed duplicate matching in `saveIssuesToServer` and `github-collector.ts`. Previously, matching solely by error code (`CODE:0x80070002`) overwrote distinct guides that shared the same error code.
+- **Title-Aware Deduplication**: Now requires both error code and title to match before treating an issue as a duplicate.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.32.0`.
 
 ---
 
