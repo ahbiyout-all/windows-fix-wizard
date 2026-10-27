@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-27T17:32:41.141Z",
+  "lastCollectedAt": "2026-10-27T21:51:43.740Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "네트워크",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 44,
+  "totalIssuesCount": 46,
   "newIssues": [
     {
-      "id": "gh-0x80070035-mvqyr8s5",
-      "code": "0x80070035",
-      "title": "Windows 10/11 SMB 네트워크 공유 접근 실패 오류 (0x80070035) 해결 방법",
-      "category": "네트워크"
+      "id": "gh-0xc004c003-mvr80dj1",
+      "code": "0xC004C003",
+      "title": "Windows 10/11 정품 인증 오류 0xC004C003 해결 방법",
+      "category": "정품인증"
     },
     {
-      "id": "gh-0x800704cf-mvqyr8s5",
-      "code": "0x800704CF",
-      "title": "Windows 10/11 네트워크 위치에 도달할 수 없음 오류 (0x800704CF) 해결 방법",
-      "category": "네트워크"
+      "id": "gh-0xc004f074-mvr80dj1",
+      "code": "0xC004F074",
+      "title": "Windows 10/11 KMS 정품 인증 오류 0xC004F074 해결 방법",
+      "category": "정품인증"
     }
   ]
 }

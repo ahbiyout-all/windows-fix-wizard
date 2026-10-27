@@ -1883,5 +1883,97 @@
     "updatedAt": "2026-10-27T17:32:41.141Z",
     "verifiedAt": "2026-10-27T17:32:41.141Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mvr80dj1",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004C003",
+    "symptoms": "Windows 10 또는 Windows 11에서 제품 키를 입력하거나 누적 업데이트 후 '입력한 제품 키가 작동하지 않습니다' 또는 '정품 인증 서버에서 지정한 제품 키가 차단된 것으로 확인되었습니다'라는 메시지와 함께 오류 코드 0xC004C003이 발생합니다. 최근 마이크로소프트의 Windows 7/8 이전 제품 키 차단 정책 업데이트 및 정품 인증 라이선스 서버 동기화 지연으로 인해 주로 나타납니다.",
+    "symptoms_en": "Occurs during Windows 10 or Windows 11 product key entry or after cumulative updates with the error message 'The product key you entered didn't work' or 'The activation server determined the specified product key has been blocked' (0xC004C003). This is frequently caused by Microsoft's policy changes blocking legacy Windows 7/8 keys or digital license sync issues.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingProduct | Where-Object { $_.PartialProductKey } | Select-Object Name, LicenseStatus, PartialProductKey; slmgr.vbs /dli",
+    "manualSteps": [
+      "시작 > 설정 > 시스템 > 정품 인증으로 이동하여 정품 인증 상태 및 '문제 해결' 도구를 실행합니다.",
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행한 뒤 slmgr.vbs /ipk <유효한_제품_키> 명령을 입력하여 올바른 키를 재등록합니다.",
+      "이전 Windows 7/8 키를 사용 중인 경우 마이크로소프트 정책 변경에 따라 정품 Windows 10/11 디지털 라이선스 제품 키로 교체해야 합니다.",
+      "Microsoft 계정에 연결된 디지털 라이선스인 경우 동일한 계정으로 로그인되어 있는지 확인하고 디지털 라이선스로 재인증합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Start > Settings > System > Activation, then click and run the 'Troubleshoot' option.",
+      "Open Command Prompt as Administrator and run 'slmgr.vbs /ipk <Valid_Product_Key>' to re-register a valid key.",
+      "If using an old Windows 7/8 key, replace it with a valid Windows 10/11 key due to Microsoft's updated activation policy.",
+      "Ensure you are signed in with the correct Microsoft account that holds the digital entitlement and re-activate."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-090702b9-d7b3-462e-a9df-a5723d2e6900",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 오류",
+      "Windows 11 activation error 0xC004C003",
+      "제품 키 차단 오류",
+      "Windows 10 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T21:51:43.740Z",
+    "updatedAt": "2026-10-27T21:51:43.740Z",
+    "verifiedAt": "2026-10-27T21:51:43.740Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f074-mvr80dj1",
+    "category": "정품인증",
+    "code": "0xC004F074",
+    "title": "Windows 10/11 KMS 정품 인증 오류 0xC004F074 해결 방법",
+    "title_en": "How to Fix Windows 10/11 KMS Activation Error 0xC004F074",
+    "symptoms": "기업, 학교 등 조직 네트워크 환경에서 Windows 10 또는 Windows 11 정품 인증 시 '키 관리 서비스(KMS)에 연결할 수 없습니다'라는 메시지와 함께 0xC004F074 오류가 발생합니다. 시스템 시간과 KMS 서버 간의 시간 차이(NTP 시차), KMS 서버 호스트 이름 DNS 확인 실패, 또는 최근 보안 업데이트 후 TCP 1688 포트가 차단되었을 때 발생합니다.",
+    "symptoms_en": "Appears in organization or enterprise networks when activating Windows 10 or Windows 11, displaying 'The Key Management Service (KMS) is unavailable' along with error code 0xC004F074. This is caused by NTP time desynchronization between client and KMS host, DNS lookup failures, or blocked TCP port 1688 after security updates.",
+    "script": "w32tm /resync; Test-NetConnection -Port 1688 -WarningAction SilentlyContinue",
+    "manualSteps": [
+      "관리자 권한 명령 프롬프트에서 'w32tm /resync'를 실행하여 클라이언트 PC의 날짜 및 시간을 KMS 서버 시간과 동기화합니다.",
+      "명령 프롬프트에서 'slmgr.vbs /skms <KMS_서버_주소>:1688'을 입력하여 KMS 호스트 서버 주소를 수동 지정합니다.",
+      "명령 프롬프트에서 'slmgr.vbs /ato' 명령을 실행하여 정품 인증을 즉시 재시도합니다.",
+      "조직 내 방화벽 또는 네트워크 설정에서 outbound TCP Port 1688 차단 여부를 점검합니다."
+    ],
+    "manualSteps_en": [
+      "Run 'w32tm /resync' in Administrator Command Prompt to synchronize system date and time with the domain time server.",
+      "Set the correct KMS host server address manually by running 'slmgr.vbs /skms <KMS_Server_Address>:1688'.",
+      "Execute 'slmgr.vbs /ato' in the elevated prompt to force online Windows activation against the KMS host.",
+      "Verify that outbound firewall settings allow communication over TCP Port 1688."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/error-0xc004f074-activate-windows",
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-090702b9-d7b3-462e-a9df-a5723d2e6900"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F074",
+      "KMS 정품인증 오류",
+      "Windows 11 KMS error 0xC004F074",
+      "키 관리 서비스 오류",
+      "Windows 10 정품인증 0xC004F074"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T21:51:43.740Z",
+    "updatedAt": "2026-10-27T21:51:43.740Z",
+    "verifiedAt": "2026-10-27T21:51:43.740Z",
+    "verificationStatus": "verified"
   }
 ]
