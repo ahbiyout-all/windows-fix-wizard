@@ -1598,5 +1598,99 @@
     "updatedAt": "2026-10-26T18:18:15.226Z",
     "verifiedAt": "2026-10-26T18:18:15.226Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073b01-mvq5gacc",
+    "category": "보안/백신",
+    "code": "0x80073b01",
+    "title": "Windows Defender 서비스 초기화 실패 오류 (0x80073b01)",
+    "title_en": "Windows Defender Service Initialization Error (0x80073b01)",
+    "symptoms": "최근 Windows 10/11 보안 업데이트 후 Microsoft Defender를 실행하려 할 때 '이 프로그램을 초기화하지 못했습니다 (0x80073b01)' 오류 메세지가 출력되며 실시간 감시 기능이 켜지지 않는 현상입니다. 타사 백신 소프트웨어의 잔재 파일, 레지스트리 바이러스 정의 손상 또는 보안 센터 서비스 간 충돌로 인해 발생합니다.",
+    "symptoms_en": "When launching Microsoft Defender after recent Windows 10/11 security updates, users receive error 'Failed to initialize this program (0x80073b01)' and real-time protection fails to start. This occurs due to leftover third-party antivirus registry keys, corrupted definition files, or service conflicts within Windows Security.",
+    "script": "Get-Service -Name \"WinDefend\", \"SecurityHealthService\", \"wscsvc\" | Select-Object Name, Status, StartType\nWrite-Host \"Defender 보안 정의 초기화 수행 중...\" -ForegroundColor Green\nif (Test-Path \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\") {\n    Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-RemoveDefinitions -All\" -Wait -WindowStyle Hidden\n    Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-SignatureUpdate\" -Wait -WindowStyle Hidden\n}",
+    "manualSteps": [
+      "키보드의 Windows 키 + R을 누르고 services.msc를 입력하여 서비스 관리자를 엽니다.",
+      "'Microsoft Defender Antivirus Service' 및 'Windows Security Service' 항목을 찾아 시작 유형을 '자동'으로 변경하고 서비스를 시작합니다.",
+      "타사 바이러스 백신이 완전히 제거되었는지 확인하고 최신 전용 제거 툴(Uninstaller)로 잔재 폴더 및 레지스트리를 정리합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 sfc /scannow 명령어를 입력하여 시스템 파일을 복구합니다.",
+      "PC를 재부팅한 후 Windows 보안 앱에서 '업데이트 확인'을 클릭하여 최신 보안 인텔리전스를 다운로드합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type services.msc, and press Enter to open Services manager.",
+      "Locate 'Microsoft Defender Antivirus Service' and 'Windows Security Service', set their Startup Type to 'Automatic', and start them.",
+      "Ensure third-party antivirus software is completely uninstalled, using dedicated cleanup tools to remove residual registry keys.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to repair corrupted system files.",
+      "Restart the PC and click 'Check for updates' in the Windows Security app to download the latest security intelligence."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/how-to-troubleshoot-definition-update-issues-for-windows-defender-11488c9f-356c-0f9c-7f30-f20387431c36",
+      "https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073b01",
+      "Windows Defender 초기화 실패",
+      "Defender service error 0x80073b01",
+      "Microsoft Defender 실시간 보호 오류",
+      "Windows 보안 센터 백신 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T03:52:21.084Z",
+    "updatedAt": "2026-10-27T03:52:21.084Z",
+    "verifiedAt": "2026-10-27T03:52:21.084Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80240022-mvq5gacc",
+    "category": "보안/백신",
+    "code": "0x80240022",
+    "title": "Windows Defender 보안 인텔리전스 업데이트 실패 (0x80240022)",
+    "title_en": "Windows Defender Security Intelligence Update Error (0x80240022)",
+    "symptoms": "Windows 10/11에서 Microsoft Defender의 보안 인텔리전스(백신 데이터베이스) 업데이트 다운로드 중 0x80240022 오류가 발생하며 업데이트가 반복적으로 실패하는 현상입니다. 최근 누적 업데이트 적용 후 Background Intelligent Transfer Service(BITS) 동기화 오류 또는 SignatureUpdate 캐시 폴더의 권한 손상으로 인해 발생합니다.",
+    "symptoms_en": "Security Intelligence (antivirus definition) updates for Microsoft Defender repeatedly fail with error code 0x80240022 on Windows 10/11. This issue stems from Background Intelligent Transfer Service (BITS) sync glitches or permission corruption in the SignatureUpdate cache folder following recent Windows updates.",
+    "script": "Stop-Service -Name wuauserv, bits, WinDefend -Force -ErrorAction SilentlyContinue\n$defPath = \"C:\\ProgramData\\Microsoft\\Windows Defender\\Definition Updates\"\nif (Test-Path $defPath) {\n    Get-ChildItem -Path $defPath -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue\n}\nStart-Service -Name bits, wuauserv, WinDefend -ErrorAction SilentlyContinue\nif (Test-Path \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\") {\n    Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-SignatureUpdate\" -NoNewWindow\n}",
+    "manualSteps": [
+      "시작 메뉴에서 'cmd'를 검색하고 관리자 권한으로 명령 프롬프트를 실행합니다.",
+      "\"cd C:\\Program Files\\Windows Defender\" 명령어로 이동한 후 \"MpCmdRun.exe -RemoveDefinitions -All\"을 입력하여 손상된 정의 파일 캐시를 제거합니다.",
+      "\"MpCmdRun.exe -SignatureUpdate\" 명령어를 입력하여 보안 인텔리전스를 수동으로 다시 다운로드합니다.",
+      "문제가 지속될 경우 Microsoft Security Intelligence 공식 포털(microsoft.com/en-us/wdsi/definitions)에서 오프라인 정의 업데이트 파일(.exe)을 직접 다운로드하여 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'cmd' in the Start menu and run Command Prompt as Administrator.",
+      "Navigate using 'cd C:\\Program Files\\Windows Defender' and type 'MpCmdRun.exe -RemoveDefinitions -All' to clear damaged definition cache.",
+      "Run 'MpCmdRun.exe -SignatureUpdate' to manually trigger a fresh security intelligence update download.",
+      "If the issue persists, download and run the standalone Security Intelligence update installer directly from Microsoft Security Intelligence Portal (microsoft.com/en-us/wdsi/definitions)."
+    ],
+    "sourceUrls": [
+      "https://www.microsoft.com/en-us/wdsi/definitions",
+      "https://learn.microsoft.com/en-us/defender-endpoint/manage-updates-baselines-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80240022",
+      "Windows Defender 업데이트 오류 0x80240022",
+      "Security Intelligence Update error 0x80240022",
+      "Microsoft Defender 백신 업데이트 실패",
+      "MpCmdRun SignatureUpdate error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T03:52:21.084Z",
+    "updatedAt": "2026-10-27T03:52:21.084Z",
+    "verifiedAt": "2026-10-27T03:52:21.084Z",
+    "verificationStatus": "verified"
   }
 ]

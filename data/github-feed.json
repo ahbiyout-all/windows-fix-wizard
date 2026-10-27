@@ -1,15 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-26T18:18:15.226Z",
+  "lastCollectedAt": "2026-10-27T03:52:21.084Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "업데이트",
-  "newlyAddedCount": 1,
-  "totalIssuesCount": 38,
+  "targetCategory": "보안/백신",
+  "newlyAddedCount": 2,
+  "totalIssuesCount": 40,
   "newIssues": [
     {
-      "id": "gh-0x800f0988-mvpkxzqy",
-      "code": "0x800f0988",
-      "title": "Windows 10/11 구성 요소 저장소 손상 업데이트 오류 (0x800f0988)",
-      "category": "업데이트"
+      "id": "gh-0x80073b01-mvq5gacc",
+      "code": "0x80073b01",
+      "title": "Windows Defender 서비스 초기화 실패 오류 (0x80073b01)",
+      "category": "보안/백신"
+    },
+    {
+      "id": "gh-0x80240022-mvq5gacc",
+      "code": "0x80240022",
+      "title": "Windows Defender 보안 인텔리전스 업데이트 실패 (0x80240022)",
+      "category": "보안/백신"
     }
   ]
 }
