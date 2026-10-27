@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-27T03:52:21.084Z",
+  "lastCollectedAt": "2026-10-27T11:40:25.456Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "보안/백신",
+  "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 40,
+  "totalIssuesCount": 42,
   "newIssues": [
     {
-      "id": "gh-0x80073b01-mvq5gacc",
-      "code": "0x80073b01",
-      "title": "Windows Defender 서비스 초기화 실패 오류 (0x80073b01)",
-      "category": "보안/백신"
+      "id": "gh-0x80070643-mvqm68dt",
+      "code": "0x80070643",
+      "title": "Windows RE 복구 파티션 용량 부족으로 인한 업데이트 설치 실패 (0x80070643)",
+      "category": "업데이트"
     },
     {
-      "id": "gh-0x80240022-mvq5gacc",
-      "code": "0x80240022",
-      "title": "Windows Defender 보안 인텔리전스 업데이트 실패 (0x80240022)",
-      "category": "보안/백신"
+      "id": "gh-0x800f081f-mvqm68dt",
+      "code": "0x800f081f",
+      "title": "Windows 업데이트 CBS 구성 요소 및 원본 파일 손상 오류 (0x800f081f)",
+      "category": "업데이트"
     }
   ]
 }

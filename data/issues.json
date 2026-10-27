@@ -1692,5 +1692,102 @@
     "updatedAt": "2026-10-27T03:52:21.084Z",
     "verifiedAt": "2026-10-27T03:52:21.084Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mvqm68dt",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows RE 복구 파티션 용량 부족으로 인한 업데이트 설치 실패 (0x80070643)",
+    "title_en": "Windows Update Failure Due to Insufficient WinRE Partition Size (0x80070643)",
+    "symptoms": "Windows 10 및 11 보안 업데이트(예: KB5034441) 설치 중 '일부 업데이트 파일이 누락되었거나 문제가 있습니다' 메시지와 함께 0x80070643 오류가 발생합니다. 복구 환경(WinRE) 파티션의 남은 여유 공간이 부족하여 패치 패키지를 정상 적용하지 못할 때 나타납니다.",
+    "symptoms_en": "During Windows 10/11 security update installations (such as KB5034441), the installation fails with error code 0x80070643 (ERROR_INSTALL_FAILURE). This occurs when the Windows Recovery Environment (WinRE) partition lacks sufficient free space to process the update package.",
+    "script": "reagentc /info; Get-Partition | Where-Object { $_.Type -eq 'Recovery' }",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행하고 'reagentc /disable'을 입력하여 WinRE 환경을 임시 비활성화합니다.",
+      "'diskpart'를 실행하여 OS 파티션을 최소 250MB 축소(shrink desired=250 minimum=250)한 뒤 기존 복구 파티션을 삭제합니다.",
+      "새로 확보한 미할당 공간에 확장된 복구 파티션을 생성하고 Primary 및 Recovery 유형으로 설정합니다.",
+      "명령 프롬프트에서 'reagentc /enable'을 실행하여 WinRE를 다시 활성화합니다.",
+      "[설정] > [Windows 업데이트]로 이동하여 [다시 시도]를 클릭하고 업데이트를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'reagentc /disable' to temporarily disable WinRE.",
+      "Run 'diskpart' to shrink the OS partition (shrink desired=250 minimum=250) and delete the existing recovery partition.",
+      "Create a new larger recovery partition in the unallocated space and set its attributes to Primary and Recovery.",
+      "Execute 'reagentc /enable' in Command Prompt to re-enable the WinRE environment.",
+      "Navigate to Settings > Windows Update and click Retry to complete the installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5028997-instructions-to-manually-resize-your-partition-to-install-the-winre-update-4941169a-3c03-4123-bc92-24d12b113944",
+      "https://learn.microsoft.com/en-us/windows/release-health/status-windows-11-23h2#3231msgdesc"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "WinRE 업데이트 오류",
+      "KB5034441",
+      "복구 파티션 용량",
+      "Windows Update 0x80070643",
+      "WinRE Partition Resize"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T11:40:25.456Z",
+    "updatedAt": "2026-10-27T11:40:25.456Z",
+    "verifiedAt": "2026-10-27T11:40:25.456Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f081f-mvqm68dt",
+    "category": "업데이트",
+    "code": "0x800f081f",
+    "title": "Windows 업데이트 CBS 구성 요소 및 원본 파일 손상 오류 (0x800f081f)",
+    "title_en": "Windows Update Component Store Corruption Error (0x800f081f)",
+    "symptoms": "Windows 10 및 11 누적 업데이트 설치 중 패치에 필요한 시스템 구성 요소 또는 CBS(Component-Based Servicing) 매니페스트 파일이 누락되거나 손상되어 'CBS_E_SOURCE_MISSING' 메시지와 함께 업데이트 설치가 중간에 중단됩니다.",
+    "symptoms_en": "During cumulative update installation on Windows 10/11, required system components or Component-Based Servicing (CBS) manifest files are missing or corrupted, resulting in update failure with error code 0x800f081f (CBS_E_SOURCE_MISSING).",
+    "script": "Write-Host 'Checking Component Store Status...' -ForegroundColor Cyan; DISM.exe /Online /Cleanup-Image /CheckHealth; sfc /verifyonly",
+    "manualSteps": [
+      "관리자 권한으로 Windows PowerShell 또는 명령 프롬프트를 실행합니다.",
+      "'DISM.exe /Online /Cleanup-Image /RestoreHealth' 명령어를 입력하여 Windows 이미지 구성 요소 저장소를 온라인 복구합니다.",
+      "'sfc /scannow' 명령어를 실행하여 시스템 파일 무결성을 검사하고 손상된 파일을 자동 복구합니다.",
+      "서비스 관리자(services.msc)를 열어 'Windows Update' 및 'Background Intelligent Transfer Service' 항목을 재시작합니다.",
+      "시스템을 재부팅한 후 [설정] > [Windows 업데이트]에서 업데이트를 다시 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows PowerShell or Command Prompt with Administrator privileges.",
+      "Execute 'DISM.exe /Online /Cleanup-Image /RestoreHealth' to repair the Windows Component Store online.",
+      "Run 'sfc /scannow' to scan system file integrity and automatically repair corrupted files.",
+      "Open Services (services.msc) and restart both 'Windows Update' and 'Background Intelligent Transfer Service'.",
+      "Restart the system and re-check for updates under Settings > Windows Update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-79aa86cb-ca52-166a-92a3-966e85d4094e",
+      "https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/repair-a-windows-image"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f081f",
+      "CBS_E_SOURCE_MISSING",
+      "Windows 업데이트 오류 0x800f081f",
+      "DISM RestoreHealth",
+      "구성 요소 저장소 손상"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T11:40:25.456Z",
+    "updatedAt": "2026-10-27T11:40:25.456Z",
+    "verifiedAt": "2026-10-27T11:40:25.456Z",
+    "verificationStatus": "verified"
   }
 ]
