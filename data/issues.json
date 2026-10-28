@@ -2069,5 +2069,97 @@
     "updatedAt": "2026-10-28T04:12:26.498Z",
     "verifiedAt": "2026-10-28T04:12:26.498Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mvs2qtti",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 실패 및 디지털 라이선스 차단 오류 (0xC004C003) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Failure Error (0xC004C003)",
+    "symptoms": "최근 Windows 10/11 업데이트 및 구형 라이선스 차단 정책 적용 이후, 이전 Windows 7/8 제품 키를 사용한 라이선스 활성화가 거부되거나 메인보드 교체 등 주요 하드웨어 변경 후 '정품 인증 서버에서 지정한 제품 키가 차단되었습니다'라는 메시지와 함께 정품 인증이 해제되며 오류 코드 0xC004C003이 발생하는 현상입니다.",
+    "symptoms_en": "Occurs when Windows activation fails with error code 0xC004C003 and a message stating that the specified product key is blocked. This frequently happens following recent Microsoft policy updates disabling legacy Windows 7/8 key migrations or after major system hardware changes such as motherboard replacement.",
+    "script": "$spp = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter \"PartialProductKey IS NOT NULL\" | Select-Object Name, ApplicationId, LicenseStatus, PartialProductKey\nWrite-Output \"--- Current Licensing Status ---\"\n$spp\nWrite-Output \"`n--- System Time & Sync Status ---\"\nw32tm /query /status",
+    "manualSteps": [
+      "[설정] > [시스템] > [정품 인증] 메뉴로 이동하여 '문제 해결(Troubleshoot)' 옵션을 실행합니다.",
+      "최근 메인보드나 CPU 등 주요 부품을 변경한 경우, 문제 해결사 내 '최근에 이 장치의 하드웨어를 변경했습니다'를 선택한 후 Microsoft 계정에 로그인하여 디지털 라이선스를 다시 연결합니다.",
+      "관리자 권한으로 명령 프롬프트를 열고 slmgr.vbs /dlv 명령을 실행하여 현재 라이선스 채널(Retail, OEM 등) 및 인증 상세 상태를 점검합니다.",
+      "유효한 Windows 10/11 전용 정품 키를 slmgr.vbs /ipk <제품키> 명령으로 새로 입력한 뒤 slmgr.vbs /ato 명령을 실행하여 온라인 정품 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Go to [Settings] > [System] > [Activation] and click the 'Troubleshoot' option.",
+      "If hardware was recently replaced, select 'I changed hardware on this device recently' inside the troubleshooter and sign in with your Microsoft account to re-link your digital license.",
+      "Open Command Prompt as Administrator and run 'slmgr.vbs /dlv' to inspect the detailed activation channel (Retail, OEM) and licensing state.",
+      "Enter a valid Windows 10/11 product key using 'slmgr.vbs /ipk <ProductKey>' and run 'slmgr.vbs /ato' to force online activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09009495-5014-4d3e-9ea9-616f03434d2f",
+      "https://learn.microsoft.com/en-us/windows/deployment/troubleshoot/windows-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 오류",
+      "제품키 차단",
+      "Windows activation error",
+      "slmgr ato"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T12:12:06.389Z",
+    "updatedAt": "2026-10-28T12:12:06.389Z",
+    "verifiedAt": "2026-10-28T12:12:06.389Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f074-mvs2qtti",
+    "category": "정품인증",
+    "code": "0xC004F074",
+    "title": "Windows 10/11 KMS 정품 인증 서버 연결 실패 및 시간 동기화 오류 (0xC004F074) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 KMS Activation Server Connection Error (0xC004F074)",
+    "symptoms": "기업 또는 학교 네트워크 환경에서 Windows 10/11 기능 업데이트 적용 후 KMS(키 관리 서비스) 호스트 서버와 통신하지 못하거나, 클라이언트 PC와 KMS 서버 간 시스템 시각 불일치(시간 동기화 오류)로 인해 '소프트웨어 라이선스 서비스에서 컴퓨터를 활성화할 수 없다고 보고했습니다' 오류 메시지와 함께 정품 인증이 만료되거나 실패하는 현상입니다.",
+    "symptoms_en": "Occurs in corporate or educational KMS environments when Windows fails to activate with error code 0xC004F074. This is caused by DNS lookup failures for the KMS host, network firewall blocking TCP port 1688, or system time desynchronization between the client computer and the activation server.",
+    "script": "Write-Output \"--- Testing System Time Resynchronization ---\"\nw32tm /resync /force\nWrite-Output \"`n--- KMS DNS SRV Record Lookup ---\"\nResolve-DnsName -Name _vlmcs._tcp -Type SRV -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "[설정] > [시간 및 언어] > [날짜 및 시간]으로 이동하여 '지금 동기화' 버튼을 클릭해 PC의 시스템 시각을 인트라넷/NTP 시간 서버와 정확히 맞춥니다.",
+      "관리자 권한 명령 프롬프트에서 nslookup -type=srv _vlmcs._tcp 명령을 실행하여 도메인 내 KMS 서버의 DNS SRV 레코드가 정상적으로 조회되는지 확인합니다.",
+      "PowerShell에서 Test-NetConnection -ComputerName <KMS서버주소> -Port 1688 명령을 실행하여 KMS 전용 포트(1688) 통신 및 방화벽 차단 여부를 점검합니다.",
+      "명령 프롬프트에서 slmgr.vbs /skms <KMS서버IP_또는_FQDN>:1688 명령으로 KMS 호스트를 수동 지정한 후 slmgr.vbs /ato 명령으로 정품 인증을 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to [Settings] > [Time & Language] > [Date & Time] and click 'Sync now' to align system time with network time servers.",
+      "Open Command Prompt as administrator and run 'nslookup -type=srv _vlmcs._tcp' to verify that the internal KMS server DNS SRV record is correctly resolved.",
+      "Run 'Test-NetConnection -ComputerName <KMS_Server_Address> -Port 1688' in PowerShell to verify network connectivity and check for firewall blockages on port 1688.",
+      "Manually set the KMS host by executing 'slmgr.vbs /skms <KMS_Server_IP>:1688' in Command Prompt, then run 'slmgr.vbs /ato' to retry activation."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/troubleshoot-kms-activation-code-0xc004f074",
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09009495-5014-4d3e-9ea9-616f03434d2f"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F074",
+      "KMS 정품인증 오류",
+      "Windows KMS activation",
+      "slmgr skms",
+      "시간 동기화 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T12:12:06.389Z",
+    "updatedAt": "2026-10-28T12:12:06.389Z",
+    "verifiedAt": "2026-10-28T12:12:06.389Z",
+    "verificationStatus": "verified"
   }
 ]

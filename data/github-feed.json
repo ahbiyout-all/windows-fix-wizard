@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-28T04:12:26.498Z",
+  "lastCollectedAt": "2026-10-28T12:12:06.389Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "스토어/앱",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 48,
+  "totalIssuesCount": 50,
   "newIssues": [
     {
-      "id": "gh-0x80073d02-mvrllz42",
-      "code": "0x80073D02",
-      "title": "Microsoft Store 앱 업데이트 및 설치 중 0x80073D02 배포 차단 오류 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0xc004c003-mvs2qtti",
+      "code": "0xC004C003",
+      "title": "Windows 10/11 정품 인증 실패 및 디지털 라이선스 차단 오류 (0xC004C003) 해결 방법",
+      "category": "정품인증"
     },
     {
-      "id": "gh-0x80073cf9-mvrllz42",
-      "code": "0x80073CF9",
-      "title": "Microsoft Store 앱 설치 실패 및 AUInstallAgent 오류 0x80073CF9 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0xc004f074-mvs2qtti",
+      "code": "0xC004F074",
+      "title": "Windows 10/11 KMS 정품 인증 서버 연결 실패 및 시간 동기화 오류 (0xC004F074) 해결 방법",
+      "category": "정품인증"
     }
   ]
 }
