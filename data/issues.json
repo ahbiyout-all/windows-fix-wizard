@@ -1975,5 +1975,99 @@
     "updatedAt": "2026-10-27T21:51:43.740Z",
     "verifiedAt": "2026-10-27T21:51:43.740Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d02-mvrllz42",
+    "category": "스토어/앱",
+    "code": "0x80073D02",
+    "title": "Microsoft Store 앱 업데이트 및 설치 중 0x80073D02 배포 차단 오류 해결 방법",
+    "title_en": "Fixing Microsoft Store App Update and Installation Error 0x80073D02",
+    "symptoms": "Windows 10 및 11 환경에서 Microsoft Store를 통해 UWP 앱(Xbox 앱, 게이밍 서비스 등)을 설치하거나 업데이트할 때 0x80073D02 오류가 발생하며 작업이 중단됩니다. 이 오류는 업데이트하려는 앱이나 관련 종속성 백그라운드 프로세스가 활성화되어 있어 패키지 수정이 잠긴 경우에 발생합니다.",
+    "symptoms_en": "Error 0x80073D02 occurs when updating or installing UWP applications (such as Xbox app or Gaming Services) via the Microsoft Store in Windows 10 and 11. This typically happens because the app or its dependent background processes are actively running, blocking package modification.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자(Ctrl + Shift + Esc)를 열고 업데이트 대상 앱 및 관련 백그라운드 프로세스(예: GamingServices, XboxApp)를 모두 종료합니다.",
+      "Windows 검색창에 'wsreset.exe'를 입력한 후 관리자 권한으로 실행하여 Store 캐시를 초기화합니다.",
+      "PowerShell을 관리자 권한으로 실행한 후 Store 재등록 스크립트를 수행합니다.",
+      "설정 > 앱 > 설치된 앱에서 'Microsoft Store'를 찾아 고급 옵션으로 이동한 후 '복구' 및 '초기화'를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager (Ctrl + Shift + Esc) and terminate the target application and any related background processes (e.g., GamingServices, XboxApp).",
+      "Type 'wsreset.exe' in the Windows Search bar and run it as administrator to clear the Microsoft Store cache.",
+      "Launch PowerShell as Administrator and run the Store re-registration script.",
+      "Go to Settings > Apps > Installed apps, find 'Microsoft Store', click Advanced Options, and perform 'Repair' and 'Reset'."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fixes-for-problems-with-apps-from-microsoft-store-93ed1bcf-9d3e-4b49-b366-224430e9d67e",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/deployment-troubleshooting-landing-page"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D02",
+      "Microsoft Store 오류",
+      "AppX deployment error 0x80073D02",
+      "스토어 앱 업데이트 실패",
+      "Windows Store Update Blocked"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T04:12:26.498Z",
+    "updatedAt": "2026-10-28T04:12:26.498Z",
+    "verifiedAt": "2026-10-28T04:12:26.498Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf9-mvrllz42",
+    "category": "스토어/앱",
+    "code": "0x80073CF9",
+    "title": "Microsoft Store 앱 설치 실패 및 AUInstallAgent 오류 0x80073CF9 해결 방법",
+    "title_en": "Resolving Microsoft Store App Installation Failure Error 0x80073CF9",
+    "symptoms": "Microsoft Store에서 앱이나 게임 다운로드를 시도할 때 '오류가 발생했습니다' 문구와 함께 0x80073CF9 코드가 반환됩니다. 이는 Windows 시스템 폴더 내 AppX 배포 임시 폴더(AUInstallAgent)가 손상되었거나 삭제되어 앱 패키지를 정상적으로 스테이징하지 못할 때 발생합니다.",
+    "symptoms_en": "Attempting to download or install applications from the Microsoft Store fails with error code 0x80073CF9. This is caused by missing or corrupted AppX deployment staging directories (such as AUInstallAgent) within the Windows system folder.",
+    "script": "$folder = \"$env:SystemRoot\\AUInstallAgent\"; if (-not (Test-Path $folder)) { New-Item -Path $folder -ItemType Directory -Force; Write-Host \"AUInstallAgent folder created successfully.\" } else { Write-Host \"AUInstallAgent folder already exists.\" }",
+    "manualSteps": [
+      "Win + R 키를 눌러 실행 창을 열고 'C:\\Windows' 경로로 이동합니다.",
+      "해당 폴더 내에 'AUInstallAgent' 이름의 새 폴더가 존재하는지 확인하고, 없다면 직접 생성합니다.",
+      "PowerShell(관리자 권한)에서 'net stop wuauserv' 및 'net stop bits'를 입력하여 업데이트 관련 서비스를 일시 정지합니다.",
+      "'C:\\Windows\\AppReadiness' 폴더가 존재하는지 확인하고, 존재하지 않는 경우 폴더를 생성합니다.",
+      "컴퓨터를 재부팅한 후 Microsoft Store에서 앱 설치를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R to open the Run dialog box and navigate to 'C:\\Windows'.",
+      "Check if a folder named 'AUInstallAgent' exists; if missing, manually create it.",
+      "Open PowerShell as Administrator and execute 'net stop wuauserv' and 'net stop bits' to temporarily pause update services.",
+      "Verify the existence of 'C:\\Windows\\AppReadiness' folder, and create it if missing.",
+      "Restart the computer and retry installing apps from the Microsoft Store."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-problems-with-apps-from-microsoft-store-521a123e-ed10-759c-7607-160bf2e6d97e",
+      "https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/troubleshoot-packaged-apps"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF9",
+      "AUInstallAgent",
+      "Microsoft Store 앱 설치 실패",
+      "Windows Store Error 0x80073CF9",
+      "AppX deployment failed 0x80073CF9"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T04:12:26.498Z",
+    "updatedAt": "2026-10-28T04:12:26.498Z",
+    "verifiedAt": "2026-10-28T04:12:26.498Z",
+    "verificationStatus": "verified"
   }
 ]
