@@ -2161,5 +2161,97 @@
     "updatedAt": "2026-10-28T12:12:06.389Z",
     "verifiedAt": "2026-10-28T12:12:06.389Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mvso9nsn",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "Windows 네트워크 경로를 찾을 수 없음 (공유 폴더 및 네트워크 드라이브 연결 실패)",
+    "title_en": "Windows Cannot Access Network Path (Network Sharing Connectivity Error)",
+    "symptoms": "최신 Windows 업데이트 후 네트워크 위치에서 공유 폴더에 접근 시 '0x800704cf' 오류가 발생하며 네트워크 검색이나 파일 공유 연결이 차단되는 현상입니다. 특히 클라이언트 식별자 충돌이나 TCP/IP 설정 오류로 인해 로컬 네트워크 리소스가 응답하지 않을 때 나타납니다.",
+    "symptoms_en": "Users experience the '0x800704cf' error when accessing shared folders after recent Windows updates. This issue occurs when the system fails to resolve network paths or when the Client for Microsoft Networks is improperly configured or corrupted.",
+    "script": "Get-NetAdapter | Disable-NetAdapter -Confirm:$false; Start-Sleep -Seconds 2; Get-NetAdapter | Enable-NetAdapter -Confirm:$false; ipconfig /flushdns; nbtstat -RR",
+    "manualSteps": [
+      "네트워크 어댑터 설정에서 'Microsoft 네트워크용 클라이언트' 체크박스를 해제했다가 다시 체크합니다.",
+      "명령 프롬프트(관리자)에서 'ipconfig /release' 및 'ipconfig /renew'를 입력하여 IP 구성을 갱신합니다.",
+      "TCP/IPv4 속성에서 'NetBIOS over TCP/IP' 설정을 '기본값'에서 '사용'으로 강제 변경합니다.",
+      "네트워크 초기화(설정 > 네트워크 및 인터넷 > 고급 네트워크 설정 > 네트워크 초기화)를 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Uncheck and re-check the 'Client for Microsoft Networks' in the Network Adapter properties.",
+      "Run 'ipconfig /release' and 'ipconfig /renew' in an elevated Command Prompt to refresh IP configurations.",
+      "Change the 'NetBIOS over TCP/IP' setting in TCP/IPv4 properties from 'Default' to 'Enable'.",
+      "Perform a Network Reset via Settings > Network & internet > Advanced network settings > Network reset."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/troubleshoot-network-connectivity-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "네트워크 오류",
+      "공유 폴더 연결",
+      "0x800704cf",
+      "Network error",
+      "Shared folder access",
+      "0x800704cf"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T22:14:36.982Z",
+    "updatedAt": "2026-10-28T22:14:36.982Z",
+    "verifiedAt": "2026-10-28T22:14:36.982Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704b3-mvso9nsn",
+    "category": "네트워크",
+    "code": "0x800704b3",
+    "title": "네트워크 경로를 찾을 수 없음 (WinHTTP 및 SMB 네트워킹 가용성 문제)",
+    "title_en": "The Network Path Was Not Found (WinHTTP and SMB Networking Availability Issue)",
+    "symptoms": "2024년 이후 업데이트된 SMB 세션 및 네트워크 인증 과정에서 WinHTTP 서비스가 올바르게 반응하지 않아 발생하는 오류입니다. 네트워크 경로를 찾을 수 없다는 메시지와 함께 특정 원격 서버 연결이 즉시 차단되거나 타임아웃됩니다.",
+    "symptoms_en": "This error occurs when the WinHTTP service fails to respond correctly during SMB session negotiation after recent updates, leading to the 'Network path not found' error when attempting to connect to remote servers or shares.",
+    "script": "netsh int ip reset; netsh winsock reset; Restart-Service -Name 'WinHttpAutoProxySvc' -Force",
+    "manualSteps": [
+      "제어판 > 프로그램 및 기능 > Windows 기능 켜기/끄기에서 'SMB 1.0/CIFS 파일 공유 지원' 항목을 확인하고 필요시 비활성화합니다.",
+      "명령 프롬프트에서 'netsh winsock reset' 명령어를 실행하여 네트워크 소켓 설정을 초기화합니다.",
+      "서비스(services.msc)에서 'WinHTTP Web Proxy Auto-Discovery Service'가 실행 중인지 확인하고 다시 시작합니다.",
+      "PC를 재부팅하여 네트워크 스택을 새로 고침합니다."
+    ],
+    "manualSteps_en": [
+      "Verify 'SMB 1.0/CIFS File Sharing Support' in Windows Features (Turn Windows features on or off) and disable it if unnecessary.",
+      "Run 'netsh winsock reset' in an elevated Command Prompt to reset the network socket settings.",
+      "Check if the 'WinHTTP Web Proxy Auto-Discovery Service' is running in services.msc and restart it.",
+      "Restart your PC to refresh the network stack."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-16f51043-d48c-c8e5-3d84-c89b25123d4e"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "네트워크 경로 오류",
+      "WinHTTP 오류",
+      "0x800704b3",
+      "Network path not found",
+      "WinHTTP issue",
+      "0x800704b3"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T22:14:36.982Z",
+    "updatedAt": "2026-10-28T22:14:36.982Z",
+    "verifiedAt": "2026-10-28T22:14:36.982Z",
+    "verificationStatus": "verified"
   }
 ]
