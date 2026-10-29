@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-28T22:14:36.982Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "네트워크",
+  "lastCollectedAt": "2026-10-29T04:34:13.395Z",
+  "modelUsed": "gemini-3.5-flash",
+  "targetCategory": "보안/백신",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 52,
+  "totalIssuesCount": 54,
   "newIssues": [
     {
-      "id": "gh-0x800704cf-mvso9nsn",
-      "code": "0x800704cf",
-      "title": "Windows 네트워크 경로를 찾을 수 없음 (공유 폴더 및 네트워크 드라이브 연결 실패)",
-      "category": "네트워크"
+      "id": "gh-0x80070643-mvt1tu6r",
+      "code": "0x80070643",
+      "title": "Windows 보안 업데이트 및 Defender 인텔리전스 설치 실패 오류 (0x80070643)",
+      "category": "보안/백신"
     },
     {
-      "id": "gh-0x800704b3-mvso9nsn",
-      "code": "0x800704b3",
-      "title": "네트워크 경로를 찾을 수 없음 (WinHTTP 및 SMB 네트워킹 가용성 문제)",
-      "category": "네트워크"
+      "id": "gh-0x8050800c-mvt1tu6s",
+      "code": "0x8050800C",
+      "title": "Windows Defender 악성코드 검사 및 위협 제거 처리 실패 오류 (0x8050800C)",
+      "category": "보안/백신"
     }
   ]
 }

@@ -2253,5 +2253,101 @@
     "updatedAt": "2026-10-28T22:14:36.982Z",
     "verifiedAt": "2026-10-28T22:14:36.982Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mvt1tu6r",
+    "category": "보안/백신",
+    "code": "0x80070643",
+    "title": "Windows 보안 업데이트 및 Defender 인텔리전스 설치 실패 오류 (0x80070643)",
+    "title_en": "Windows Security Update and Defender Intelligence Installation Failure Error (0x80070643)",
+    "symptoms": "Windows 10 및 11 시스템에서 Windows 보안 업데이트(KB5034441 등) 또는 Defender 보안 인텔리전스 정의 업데이트 설치 시 '0x80070643' 오류코드와 함께 업데이트가 실패하는 현상입니다. 복구 파티션(WinRE)의 용량 부족 또는 Defender 서명 업데이트 캐시 손상으로 인해 최신 보안 패치가 적용되지 않습니다.",
+    "symptoms_en": "On Windows 10 and 11 systems, Windows Security updates (such as KB5034441) or Defender security intelligence definition updates fail with error code '0x80070643'. This occurs due to insufficient Recovery Partition (WinRE) space or corrupted Defender signature update cache, preventing late security patches from applying.",
+    "script": "# Check Defender Status and purge definition cache\nWrite-Host \"Checking Windows Defender Status...\" -ForegroundColor Cyan\nGet-MpComputerStatus | Select-Object -Property AntivirusEnabled, RealTimeProtectionEnabled, AVSignatureVersion\n\n$mpPath = \"$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe\"\nif (Test-Path $mpPath) {\n    Write-Host \"Purging Defender Signature Cache...\" -ForegroundColor Yellow\n    Start-Process -FilePath $mpPath -ArgumentList \"-RemoveDefinitions -All\" -Wait -WindowStyle Hidden\n    Write-Host \"Updating Defender Signatures...\" -ForegroundColor Green\n    Update-MpSignature -UpdateSource MicrosoftUpdateServer\n}",
+    "manualSteps": [
+      "'cmd'를 관리자 권한으로 실행한 후 'net stop wuauserv' 및 'net stop bits'를 입력하여 업데이트 서비스를 중단합니다.",
+      "'C:\\Windows\\SoftwareDistribution' 폴더 내의 임시 다운로드 파일들을 모두 삭제합니다.",
+      "명령 프롬프트에서 'net start wuauserv' 및 'net start bits'를 실행하여 서비스를 재개합니다.",
+      "WinRE 복구 파티션 용량 부족인 경우 디스크 관리를 통해 복구 파티션 크기를 확장하거나 Microsoft 안내에 따라 WinRE 파티션을 재구성합니다.",
+      "'설정 > 업데이트 및 보안(Windows 업데이트)'에서 '업데이트 확인'을 클릭하여 설치를 다시 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'net stop wuauserv' and 'net stop bits' to stop update services.",
+      "Delete all temporary installation files inside the 'C:\\Windows\\SoftwareDistribution' directory.",
+      "Restart the services by entering 'net start wuauserv' and 'net start bits' in the Command Prompt.",
+      "If caused by insufficient WinRE partition size, expand the recovery partition using Disk Management or reconfigure it per Microsoft guidance.",
+      "Go to 'Settings > Windows Update' and click 'Check for updates' to retry the installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-windows-recovery-environment-update-for-windows-10-version-21h2-and-22h2-january-9-2024-7930f92d-1002-45e0-a7d0-1a1eb757303f",
+      "https://learn.microsoft.com/en-us/defender-xdr/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "Windows Defender Update Fail",
+      "KB5034441 Error",
+      "보안 인텔리전스 업데이트 오류",
+      "WinRE Partition Security Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T04:34:13.395Z",
+    "updatedAt": "2026-10-29T04:34:13.395Z",
+    "verifiedAt": "2026-10-29T04:34:13.395Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8050800c-mvt1tu6s",
+    "category": "보안/백신",
+    "code": "0x8050800C",
+    "title": "Windows Defender 악성코드 검사 및 위협 제거 처리 실패 오류 (0x8050800C)",
+    "title_en": "Windows Defender Threat Remediation and Scan Failure Error (0x8050800C)",
+    "symptoms": "Windows 10/11의 Windows 보안(Defender)에서 바이러스 및 위협 방지 검사 진행 중 또는 위협 제거/격리 시도 시 '0x8050800C' 오류가 발생하며 프로세스가 중단되는 현상입니다. 최신 누적 업데이트 후 정의 데이터베이스 파일 손상이나 백신 엔진(Antimalware Engine) 동기화 오류로 인해 발생합니다.",
+    "symptoms_en": "This issue occurs in Windows 10/11 Windows Security (Defender) when performing a virus & threat protection scan or attempting to remediate threats, failing with error '0x8050800C'. It is caused by corrupted definition database files or antimalware engine synchronization conflicts following recent updates.",
+    "script": "# Diagnostic and Repair Script for Defender Engine 0x8050800C\nWrite-Host \"Checking Windows Defender Antimalware Engine...\" -ForegroundColor Cyan\nGet-Service -Name WinDefend, wscsvc | Select-Object Name, Status, StartType\n\n$defPath = \"$env:ProgramData\\Microsoft\\Windows Defender\\Platform\"\nif (Test-Path $defPath) {\n    Write-Host \"Verifying Defender Platform files...\" -ForegroundColor Yellow\n    Get-ChildItem -Path $defPath -Recurse -Filter \"MpCmdRun.exe\" | Select-Object FullName\n}\n\nWrite-Host \"Triggering Signature Update & Engine Sync...\" -ForegroundColor Green\nUpdate-MpSignature -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "'Windows 보안' 앱을 열고 '바이러스 및 위협 방지' 메뉴로 이동합니다.",
+      "'바이러스 및 위협 방지 업데이트' 항목에서 '업데이트 확인'을 클릭하여 최신 백신 엔진 및 정의를 수동 다운로드합니다.",
+      "명령 프롬프트를 관리자 권한으로 열고 '\"%ProgramFiles%\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate' 명령을 실행합니다.",
+      "문제가 지속될 경우 '설정 > 앱 > 설치된 앱'에서 'Windows 보안'을 찾아 '고급 옵션'을 클릭한 후 '복구' 및 '초기화'를 진행합니다.",
+      "시스템을 재부팅한 후 수동 검사를 다시 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Open the 'Windows Security' app and navigate to 'Virus & threat protection'.",
+      "Under 'Virus & threat protection updates', click 'Check for updates' to manually fetch the latest engine and definitions.",
+      "Open Command Prompt as Administrator and execute '\"%ProgramFiles%\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate'.",
+      "If the issue persists, go to 'Settings > Apps > Installed apps', select 'Windows Security', click 'Advanced options', and perform 'Repair' and 'Reset'.",
+      "Restart the system and rerun a manual scan."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-office-365/defender-for-office-365-display-threat-protection-status",
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-12661011-6d3e-402f-a0b7-15697d090382"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8050800C",
+      "Windows Defender Scan Error",
+      "Threat Remediation Failed",
+      "Defender 엔진 오류",
+      "바이러스 검사 실패"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T04:34:13.395Z",
+    "updatedAt": "2026-10-29T04:34:13.395Z",
+    "verifiedAt": "2026-10-29T04:34:13.395Z",
+    "verificationStatus": "verified"
   }
 ]
