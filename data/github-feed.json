@@ -1,20 +1,20 @@
 {
-  "lastCollectedAt": "2026-10-29T04:34:13.395Z",
-  "modelUsed": "gemini-3.5-flash",
+  "lastCollectedAt": "2026-10-29T12:22:17.367Z",
+  "modelUsed": "gemini-3.1-flash-lite",
   "targetCategory": "보안/백신",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 54,
+  "totalIssuesCount": 56,
   "newIssues": [
     {
-      "id": "gh-0x80070643-mvt1tu6r",
+      "id": "gh-0x80070643-mvtijrx4",
       "code": "0x80070643",
-      "title": "Windows 보안 업데이트 및 Defender 인텔리전스 설치 실패 오류 (0x80070643)",
+      "title": "Windows 보안 업데이트 및 환경 복구 실패 (KB5034441)",
       "category": "보안/백신"
     },
     {
-      "id": "gh-0x8050800c-mvt1tu6s",
-      "code": "0x8050800C",
-      "title": "Windows Defender 악성코드 검사 및 위협 제거 처리 실패 오류 (0x8050800C)",
+      "id": "gh-0x80073cf3-mvtijrx4",
+      "code": "0x80073CF3",
+      "title": "Windows 보안 앱 및 통합 패키지 설치/업데이트 충돌",
       "category": "보안/백신"
     }
   ]

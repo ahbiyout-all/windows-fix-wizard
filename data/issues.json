@@ -2349,5 +2349,94 @@
     "updatedAt": "2026-10-29T04:34:13.395Z",
     "verifiedAt": "2026-10-29T04:34:13.395Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mvtijrx4",
+    "category": "보안/백신",
+    "code": "0x80070643",
+    "title": "Windows 보안 업데이트 및 환경 복구 실패 (KB5034441)",
+    "title_en": "Windows Security Update and Recovery Environment Installation Failure (KB5034441)",
+    "symptoms": "Windows 복구 파티션의 크기가 충분하지 않아 보안 관련 업데이트 설치 시 발생하는 오류로, 2024년 초부터 보고된 주요 보안 업데이트 설치 실패 문제입니다.",
+    "symptoms_en": "Failure to install security updates due to insufficient storage space in the Windows Recovery Environment (WinRE) partition, a major issue reported since early 2024.",
+    "script": "reagentc /info",
+    "manualSteps": [
+      "명령 프롬프트를 관리자 권한으로 실행합니다.",
+      "reagentc /info 명령어를 입력하여 복구 파티션 상태를 확인합니다.",
+      "Microsoft 공식 가이드에 따라 WinRE 파티션 크기를 수동으로 조정합니다.",
+      "업데이트를 다시 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Run Command Prompt as administrator.",
+      "Execute 'reagentc /info' to check the recovery partition status.",
+      "Follow the official Microsoft guide to manually resize the WinRE partition.",
+      "Retry the Windows update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-windows-recovery-environment-update-for-windows-10-version-21h2-and-22h2-january-9-2024-3486a2f6-3487-4309-8b83-a417681308a3"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "WinRE 파티션",
+      "KB5034441 오류",
+      "Security Update Failure",
+      "WinRE partition resize"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T12:22:17.367Z",
+    "updatedAt": "2026-10-29T12:22:17.367Z",
+    "verifiedAt": "2026-10-29T12:22:17.367Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf3-mvtijrx4",
+    "category": "보안/백신",
+    "code": "0x80073CF3",
+    "title": "Windows 보안 앱 및 통합 패키지 설치/업데이트 충돌",
+    "title_en": "Windows Security App and Package Installation/Update Conflict",
+    "symptoms": "2024년 윈도우 보안 모듈 업데이트 과정에서 패키지 종속성 문제로 인해 보안 앱이 설치되거나 업데이트되지 않는 현상입니다.",
+    "symptoms_en": "A conflict occurring during Windows security module updates where security apps fail to install or update due to package dependency issues identified in 2024.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Reset-AppxPackage",
+    "manualSteps": [
+      "시작 메뉴에서 'Windows 보안'을 우클릭하고 '앱 설정'으로 이동합니다.",
+      "해당 앱의 '초기화' 또는 '복구' 버튼을 클릭합니다.",
+      "PowerShell을 관리자 권한으로 열고 해당 패키지를 재등록합니다.",
+      "PC를 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Right-click 'Windows Security' in the Start menu and go to 'App settings'.",
+      "Click the 'Reset' or 'Repair' button for the app.",
+      "Open PowerShell as administrator and re-register the package.",
+      "Restart the PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-antivirus/microsoft-defender-antivirus-on-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF3",
+      "보안 앱 오류",
+      "Windows 보안 초기화",
+      "Security App Reset",
+      "Package Dependency Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T12:22:17.367Z",
+    "updatedAt": "2026-10-29T12:22:17.367Z",
+    "verifiedAt": "2026-10-29T12:22:17.367Z",
+    "verificationStatus": "verified"
   }
 ]
