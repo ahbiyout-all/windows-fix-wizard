@@ -2438,5 +2438,99 @@
     "updatedAt": "2026-10-29T12:22:17.367Z",
     "verifiedAt": "2026-10-29T12:22:17.367Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--0x00000116--mvu47y43",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (0x00000116)",
+    "title": "디스플레이 드라이버 응답 중단 및 복구 실패 오류 (VIDEO_TDR_FAILURE 0x00000116)",
+    "title_en": "Display Driver Timeout and Recovery Failure Error (VIDEO_TDR_FAILURE 0x00000116)",
+    "symptoms": "Windows 10 및 Windows 11 시스템에서 고사양 게임 실행, 비디오 렌더링, 또는 누적 업데이트 직후 화면이 순간적으로 정지되거나 검은색으로 변하며 VIDEO_TDR_FAILURE(0x00000116) 블루스크린이 발생합니다. 이는 그래픽 카드 드라이버(nvlddmkm.sys, atikmpag.sys 등)가 지정된 시간 내에 처리 명령을 완료하지 못하여 Windows TDR(Timeout Detection and Recovery) 기능이 GPU를 복구하지 못했을 때 나타납니다.",
+    "symptoms_en": "In Windows 10 and Windows 11 systems, high-load graphics tasks, video rendering, or recent cumulative updates can cause the display to freeze or go black, triggering a VIDEO_TDR_FAILURE (0x00000116) Blue Screen of Death. This occurs when the graphics driver (such as nvlddmkm.sys or atikmpag.sys) fails to respond within the designated Timeout Detection and Recovery (TDR) timeframe, preventing Windows from successfully resetting the GPU.",
+    "script": "Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, DriverDate, Status; Get-WinEvent -ListLog *System* | Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Display'} -MaxEvents 5 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Message",
+    "manualSteps": [
+      "'Win + Ctrl + Shift + B' 키 조합을 동시에 눌러 디스플레이 드라이버 그래픽 서브시스템을 즉시 재설정합니다.",
+      "장치 관리자(devmgmt.msc)를 실행하고 '디스플레이 어댑터' 항목에서 해당 그래픽 카드를 마우스 우클릭하여 '드라이버 업데이트' 또는 '드라이버 롤백'을 수행합니다.",
+      "DDU(Display Driver Uninstaller) 도구를 사용하여 안전 모드에서 기존 그래픽 드라이버를 완벽히 제거한 후 제조업체(NVIDIA/AMD/Intel) 공식 웹사이트에서 최신 WHQL 드라이버를 새로 설치합니다.",
+      "레지스트리 편집기(regedit)를 실행하여 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 경로로 이동한 후 DWORD(32비트) 값 'TdrDelay'를 생성하고 데이터 값을 8(10진수)로 설정하여 TDR 응답 대기 시간을 연장합니다."
+    ],
+    "manualSteps_en": [
+      "Press the key combination 'Win + Ctrl + Shift + B' to instantly restart and reset the display driver graphics subsystem.",
+      "Open Device Manager (devmgmt.msc), navigate to 'Display adapters', right-click your graphics card, and select 'Update driver' or 'Roll back driver'.",
+      "Use Display Driver Uninstaller (DDU) in Safe Mode to completely clean existing graphics drivers, then perform a fresh installation of the latest WHQL driver from official manufacturer websites (NVIDIA/AMD/Intel).",
+      "Open Registry Editor (regedit), navigate to 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', create a new DWORD (32-bit) value named 'TdrDelay', and set its value data to 8 (Decimal) to extend the TDR timeout threshold."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x116--video-tdr-failure",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-0899578a-ab76-d6ed-8009-2f06a737b301"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE",
+      "0x00000116",
+      "디스플레이 드라이버 오류",
+      "nvlddmkm.sys BSOD",
+      "Graphics Driver Timeout",
+      "Windows 11 디스플레이 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T22:28:57.075Z",
+    "updatedAt": "2026-10-29T22:28:57.075Z",
+    "verifiedAt": "2026-10-29T22:28:57.075Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-scheduler-internal-error--0x00000119--mvu47y43",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119)",
+    "title": "비디오 스케줄러 내부 시스템 오류 및 블루스크린 (VIDEO_SCHEDULER_INTERNAL_ERROR 0x00000119)",
+    "title_en": "Video Scheduler Internal System Error and BSOD (VIDEO_SCHEDULER_INTERNAL_ERROR 0x00000119)",
+    "symptoms": "Windows 11 23H2/24H2 또는 Windows 10 환경에서 다중 모니터 구성, 하드웨어 가속 일정 예약(HAGS) 활성화, 또는 DirectX/WDDM 시스템 업데이트 후 화면이 멈추면서 0x00000119 블루스크린 오류가 발생합니다. 이는 Windows 비디오 스케줄러가 그래픽 메모리 할당 및 GPU 작업 대기열을 관리하는 도중 동기화 실패나 치명적인 예외를 감지했을 때 발생합니다.",
+    "symptoms_en": "In Windows 11 23H2/24H2 or Windows 10, using multi-monitor setups, enabling Hardware-Accelerated GPU Scheduling (HAGS), or applying DirectX/WDDM system updates can lead to screen freezes and a 0x00000119 BSOD error. This happens when the Windows video scheduler detects a fatal synchronization anomaly while managing display memory allocations and GPU command queues.",
+    "script": "Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' -Name 'HwSchMode' -ErrorAction SilentlyContinue; Get-PnpDevice -Class 'Display' | Select-Object FriendlyName, Status, InstanceId",
+    "manualSteps": [
+      "Windows 설정 > 시스템 > 디스플레이 > 그래픽 설정으로 이동하여 '하드웨어 가속 GPU 일정 예약(HAGS)' 옵션을 '꺼짐'으로 변경하고 시스템을 재부팅합니다.",
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행하고 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth' 명령을 수행하여 손상된 비디오 스케줄러 시스템 파일을 복구합니다.",
+      "NVIDIA 제어판 또는 AMD Software를 실행하여 전원 관리 모드를 '최고 성능 선호'로 변경하여 GPU 전력 절감 상태 진입 중 발생하는 스케줄링 오류를 방지합니다.",
+      "Windows 업데이트 기록에서 최근 설치된 디스플레이 관련 업데이트나 누적 업데이트를 확인하고, 지속 발생 시 업데이트를 임시 롤백한 뒤 WDDM 규격을 정식 지원하는 최신 WHQL 그래픽 드라이버로 재설치합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Windows Settings > System > Display > Graphics Settings, turn off 'Hardware-Accelerated GPU Scheduling (HAGS)', and restart the computer.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' followed by 'DISM /Online /Cleanup-Image /RestoreHealth' to repair corrupted video subsystem files.",
+      "Open GPU Control Panel (NVIDIA Control Panel or AMD Software) and change Power Management Mode to 'Prefer maximum performance' to prevent scheduling faults during low-power states.",
+      "Check Windows Update history for recent display-related or cumulative updates; if the issue persists, temporarily roll back the update and reinstall the latest WHQL driver with full WDDM compliance."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x119---video-scheduler-internal-error",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-0899578a-ab76-d6ed-8009-2f06a737b301"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_SCHEDULER_INTERNAL_ERROR",
+      "0x00000119",
+      "비디오 스케줄러 오류",
+      "HAGS 블루스크린",
+      "WDDM error",
+      "Windows 11 그래픽 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T22:28:57.075Z",
+    "updatedAt": "2026-10-29T22:28:57.075Z",
+    "verifiedAt": "2026-10-29T22:28:57.075Z",
+    "verificationStatus": "verified"
   }
 ]

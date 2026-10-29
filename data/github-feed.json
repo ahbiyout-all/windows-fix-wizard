@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-29T12:22:17.367Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "보안/백신",
+  "lastCollectedAt": "2026-10-29T22:28:57.075Z",
+  "modelUsed": "gemini-3.5-flash",
+  "targetCategory": "디스플레이/그래픽",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 56,
+  "totalIssuesCount": 58,
   "newIssues": [
     {
-      "id": "gh-0x80070643-mvtijrx4",
-      "code": "0x80070643",
-      "title": "Windows 보안 업데이트 및 환경 복구 실패 (KB5034441)",
-      "category": "보안/백신"
+      "id": "gh-video-tdr-failure--0x00000116--mvu47y43",
+      "code": "VIDEO_TDR_FAILURE (0x00000116)",
+      "title": "디스플레이 드라이버 응답 중단 및 복구 실패 오류 (VIDEO_TDR_FAILURE 0x00000116)",
+      "category": "디스플레이/그래픽"
     },
     {
-      "id": "gh-0x80073cf3-mvtijrx4",
-      "code": "0x80073CF3",
-      "title": "Windows 보안 앱 및 통합 패키지 설치/업데이트 충돌",
-      "category": "보안/백신"
+      "id": "gh-video-scheduler-internal-error--0x00000119--mvu47y43",
+      "code": "VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119)",
+      "title": "비디오 스케줄러 내부 시스템 오류 및 블루스크린 (VIDEO_SCHEDULER_INTERNAL_ERROR 0x00000119)",
+      "category": "디스플레이/그래픽"
     }
   ]
 }
