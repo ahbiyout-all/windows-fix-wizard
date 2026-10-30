@@ -2626,5 +2626,93 @@
     "updatedAt": "2026-10-30T04:34:07.424Z",
     "verifiedAt": "2026-10-30T04:34:07.424Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803f7001-mvuxnj5c",
+    "category": "정품인증",
+    "code": "0x803f7001",
+    "title": "Windows 정품 인증을 수행할 수 없음: 라이선스 확인 실패",
+    "title_en": "Windows Activation Error: License verification failed",
+    "symptoms": "Windows 10/11 업데이트 후 하드웨어 변경 감지 또는 디지털 라이선스 연결 해제로 인해 '정품 인증을 받을 수 없음' 메시지가 표시되며 바탕 화면에 워터마크가 나타남.",
+    "symptoms_en": "After a Windows update, the system reports 'Unable to activate Windows' due to hardware changes or broken digital license associations, often resulting in an activation watermark.",
+    "script": "slmgr /ato",
+    "manualSteps": [
+      "설정 > 시스템 > 정품 인증 메뉴로 이동합니다.",
+      "문제 해결사(Troubleshoot) 단추를 클릭합니다.",
+      "최근 하드웨어 변경 사항을 선택하고 연결된 Microsoft 계정으로 로그인합니다.",
+      "장치 목록에서 현재 사용 중인 PC를 선택하고 정품 인증 버튼을 누릅니다."
+    ],
+    "manualSteps_en": [
+      "Go to Settings > System > Activation.",
+      "Click the 'Troubleshoot' button.",
+      "Select 'I changed hardware on this device recently' and sign in with your linked Microsoft Account.",
+      "Select your current PC from the device list and click Activate."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d8fb64-6768-485a-8b80-45915d312999"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 정품인증 오류",
+      "0x803f7001 해결",
+      "Windows Activation Error",
+      "License Troubleshooting"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T12:12:53.040Z",
+    "updatedAt": "2026-10-30T12:12:53.040Z",
+    "verifiedAt": "2026-10-30T12:12:53.040Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007232b-mvuxnj5c",
+    "category": "정품인증",
+    "code": "0x8007232B",
+    "title": "DNS 이름이 존재하지 않음: KMS 정품 인증 서버 연결 오류",
+    "title_en": "DNS name does not exist: KMS activation server connection error",
+    "symptoms": "기업용 볼륨 라이선스(Enterprise/Education) 환경에서 시스템 업데이트 또는 네트워크 변경 후 DNS 서버가 KMS 호스트를 찾지 못해 정품 인증이 차단됨.",
+    "symptoms_en": "In Enterprise or Education environments, system updates or network changes cause the system to fail to locate the KMS host via DNS, blocking activation.",
+    "script": "slmgr /skms kms.core.windows.net",
+    "manualSteps": [
+      "명령 프롬프트(CMD)를 관리자 권한으로 실행합니다.",
+      "slmgr /ipk [제품키] 명령어를 입력하여 올바른 볼륨 라이선스 키를 다시 입력합니다.",
+      "slmgr /ato 명령어를 입력하여 즉시 정품 인증을 시도합니다.",
+      "네트워크 관리자에게 조직의 KMS 서버 주소를 확인하여 적용합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Type 'slmgr /ipk [ProductKey]' to re-enter your valid Volume License key.",
+      "Type 'slmgr /ato' to force activation.",
+      "Contact your network administrator to verify and re-configure the organization's KMS server address."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/deployment/troubleshoot-kms-activation-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "KMS 정품인증 실패",
+      "0x8007232B 해결",
+      "Windows DNS Error",
+      "KMS Activation Server"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T12:12:53.040Z",
+    "updatedAt": "2026-10-30T12:12:53.040Z",
+    "verifiedAt": "2026-10-30T12:12:53.040Z",
+    "verificationStatus": "verified"
   }
 ]

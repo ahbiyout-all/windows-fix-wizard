@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-30T04:34:07.424Z",
-  "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "오디오/사운드",
+  "lastCollectedAt": "2026-10-30T12:12:53.040Z",
+  "modelUsed": "gemini-3.1-flash-lite",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 60,
+  "totalIssuesCount": 62,
   "newIssues": [
     {
-      "id": "gh-0x800706ba-mvuh9k8w",
-      "code": "0x800706BA",
-      "title": "Windows 오디오 서비스 응답 없음 및 RPC 서버를 사용할 수 없음 오류 (0x800706BA)",
-      "category": "오디오/사운드"
+      "id": "gh-0x803f7001-mvuxnj5c",
+      "code": "0x803f7001",
+      "title": "Windows 정품 인증을 수행할 수 없음: 라이선스 확인 실패",
+      "category": "정품인증"
     },
     {
-      "id": "gh-code-10--status-device-power-failure--mvuh9k8w",
-      "code": "Code 10 (STATUS_DEVICE_POWER_FAILURE)",
-      "title": "Intel Smart Sound Technology(Intel SST) 오디오 드라이버 시작 불가 오류 (Code 10)",
-      "category": "오디오/사운드"
+      "id": "gh-0x8007232b-mvuxnj5c",
+      "code": "0x8007232B",
+      "title": "DNS 이름이 존재하지 않음: KMS 정품 인증 서버 연결 오류",
+      "category": "정품인증"
     }
   ]
 }
