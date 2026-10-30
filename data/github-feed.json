@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-29T22:28:57.075Z",
+  "lastCollectedAt": "2026-10-30T04:34:07.424Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "디스플레이/그래픽",
+  "targetCategory": "오디오/사운드",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 58,
+  "totalIssuesCount": 60,
   "newIssues": [
     {
-      "id": "gh-video-tdr-failure--0x00000116--mvu47y43",
-      "code": "VIDEO_TDR_FAILURE (0x00000116)",
-      "title": "디스플레이 드라이버 응답 중단 및 복구 실패 오류 (VIDEO_TDR_FAILURE 0x00000116)",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x800706ba-mvuh9k8w",
+      "code": "0x800706BA",
+      "title": "Windows 오디오 서비스 응답 없음 및 RPC 서버를 사용할 수 없음 오류 (0x800706BA)",
+      "category": "오디오/사운드"
     },
     {
-      "id": "gh-video-scheduler-internal-error--0x00000119--mvu47y43",
-      "code": "VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119)",
-      "title": "비디오 스케줄러 내부 시스템 오류 및 블루스크린 (VIDEO_SCHEDULER_INTERNAL_ERROR 0x00000119)",
-      "category": "디스플레이/그래픽"
+      "id": "gh-code-10--status-device-power-failure--mvuh9k8w",
+      "code": "Code 10 (STATUS_DEVICE_POWER_FAILURE)",
+      "title": "Intel Smart Sound Technology(Intel SST) 오디오 드라이버 시작 불가 오류 (Code 10)",
+      "category": "오디오/사운드"
     }
   ]
 }

@@ -2532,5 +2532,99 @@
     "updatedAt": "2026-10-29T22:28:57.075Z",
     "verifiedAt": "2026-10-29T22:28:57.075Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800706ba-mvuh9k8w",
+    "category": "오디오/사운드",
+    "code": "0x800706BA",
+    "title": "Windows 오디오 서비스 응답 없음 및 RPC 서버를 사용할 수 없음 오류 (0x800706BA)",
+    "title_en": "Windows Audio Service Unresponsive and RPC Server Unavailable Error (0x800706BA)",
+    "symptoms": "Windows 10/11 누적 업데이트 진행 후 작업 표시줄의 음량 아이콘에 빨간색 'X' 표시가 나타나며 사운드가 재생되지 않습니다. Windows Audio 서비스(Audiosrv) 또는 AudioEndpointBuilder 서비스가 예기치 않게 중지되고, 서비스를 수동 시작하려고 할 때 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 오류 메시지가 발생합니다.",
+    "symptoms_en": "After installing Windows 10/11 cumulative updates, a red 'X' appears on the taskbar volume icon and no sound is generated. The Windows Audio service (Audiosrv) or AudioEndpointBuilder service stops unexpectedly, throwing error 0x800706BA (The RPC server is unavailable) when attempting to start them manually.",
+    "script": "Get-Service -Name Audiosrv, AudioEndpointBuilder, RpcSs | Set-Service -StartupType Automatic; Restart-Service -Name RpcSs -Force -ErrorAction SilentlyContinue; Restart-Service -Name AudioEndpointBuilder -Force -ErrorAction SilentlyContinue; Restart-Service -Name Audiosrv -Force; Write-Output 'Windows Audio services successfully re-configured and restarted.'",
+    "manualSteps": [
+      "Win + R 키를 누르고 'services.msc'를 입력하여 서비스 관리자를 엽니다.",
+      "'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', 'Windows Audio' 서비스의 상태가 '실행 중'인지 확인합니다.",
+      "각 서비스의 속성 창에서 시작 유형을 '자동'으로 변경하고, 중지 상태인 경우 '시작' 버튼을 누릅니다.",
+      "설정 변경 후 PC를 다시 시작하여 오디오 출력이 정상화되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'services.msc', and press Enter to open Services.",
+      "Locate 'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', and 'Windows Audio' services.",
+      "Open properties for each service, set Startup type to 'Automatic', and click 'Start' if stopped.",
+      "Restart your PC after applying changes and verify if audio output is restored."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/fix-sound-or-audio-problems-in-windows-73023700-e62d-4e10-b1d0-262c0744def1",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-audio-service-fails-to-start"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows Audio Service",
+      "0x800706BA",
+      "RPC Server Unavailable sound",
+      "오디오 서비스 응답 없음",
+      "사운드 빨간색 X 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T04:34:07.424Z",
+    "updatedAt": "2026-10-30T04:34:07.424Z",
+    "verifiedAt": "2026-10-30T04:34:07.424Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-10--status-device-power-failure--mvuh9k8w",
+    "category": "오디오/사운드",
+    "code": "Code 10 (STATUS_DEVICE_POWER_FAILURE)",
+    "title": "Intel Smart Sound Technology(Intel SST) 오디오 드라이버 시작 불가 오류 (Code 10)",
+    "title_en": "Intel Smart Sound Technology (Intel SST) Audio Driver Cannot Start (Code 10)",
+    "symptoms": "Windows 11 23H2/24H2 또는 Windows 10 최신 업데이트 적용 후 스피커 및 마이크 장치를 인식하지 못합니다. 장치 관리자의 'Intel Smart Sound Technology (Intel SST) Audio Controller' 또는 'Intel SST OED' 항목에 노란색 느낌표 경고와 함께 '이 장치를 시작할 수 없습니다 (Code 10)' 오류가 표시됩니다.",
+    "symptoms_en": "Audio output and microphone input fail after installing recent Windows 11 23H2/24H2 or Windows 10 updates. Device Manager displays a yellow exclamation triangle next to 'Intel Smart Sound Technology (Intel SST) Audio Controller' or 'Intel SST OED' with the error 'This device cannot start (Code 10)'.",
+    "script": "Get-PnpDevice | Where-Object { $_.FriendlyName -like '*Intel*Smart Sound*' -or $_.FriendlyName -like '*High Definition Audio*' } | Select-Object FriendlyName, InstanceId, Status, Class; Get-PnpDevice -Class 'Media' | Disable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue; Get-PnpDevice -Class 'Media' | Enable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue; Write-Output 'Audio PnP devices rescanned and toggled.'",
+    "manualSteps": [
+      "시작 버튼을 우클릭하고 '장치 관리자'를 실행합니다.",
+      "'시스템 장치' 및 '사운드, 비디오 및 게임 컨트롤러' 항목에서 'Intel(R) Smart Sound Technology' 드라이버를 찾습니다.",
+      "드라이버 우클릭 후 '드라이버 업데이트' -> '내 컴퓨터에서 드라이버 찾아보기' -> '컴퓨터의 사용 가능한 드라이버 목록에서 직접 선택'을 클릭합니다.",
+      "목록에서 표준 'High Definition Audio Controller' 드라이버를 선택하고 설치를 완료합니다.",
+      "설치 완료 후 시스템을 재부팅하여 오디오 드라이버 충돌이 해결되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Right-click the Start menu and select 'Device Manager'.",
+      "Expand 'System devices' and 'Sound, video and game controllers' to locate 'Intel(R) Smart Sound Technology'.",
+      "Right-click the device and select 'Update driver' -> 'Browse my computer for drivers' -> 'Let me pick from a list of available drivers on my computer'.",
+      "Select standard 'High Definition Audio Controller' from the list and finish installation.",
+      "Reboot the system and check if the audio driver conflict is resolved."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-73023700-e62d-4e10-b1d0-262c0744def1",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/troubleshooting-audio-driver-installation"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Intel SST Audio Controller",
+      "Code 10 Sound Error",
+      "Intel Smart Sound Technology 오류",
+      "오디오 드라이버 코드 10",
+      "소리 안남 드라이버 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T04:34:07.424Z",
+    "updatedAt": "2026-10-30T04:34:07.424Z",
+    "verifiedAt": "2026-10-30T04:34:07.424Z",
+    "verificationStatus": "verified"
   }
 ]
