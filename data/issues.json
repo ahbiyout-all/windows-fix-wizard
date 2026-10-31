@@ -2714,5 +2714,101 @@
     "updatedAt": "2026-10-30T12:12:53.040Z",
     "verifiedAt": "2026-10-30T12:12:53.040Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007042c-mvvw3ejs",
+    "category": "보안/백신",
+    "code": "0x8007042c",
+    "title": "Windows Defender 보안 센터 및 방화벽 서비스 시작 실패 오류 (0x8007042c) 해결 방법",
+    "title_en": "Fix Windows Defender Security Center and Firewall Service Startup Failure (0x8007042c)",
+    "symptoms": "Windows Defender 실시간 보호 또는 Windows 방화벽을 활성화하려 할 때 '종속성 서비스나 그룹이 시작될 수 없습니다(0x8007042c)' 오류 메시지가 발생하며 실행되지 않습니다. 최신 Windows 10/11 업데이트 이후 관련 보안 서비스(mpssvc, WinDefend)의 종속성 손상이나 타사 백신 프로그램 잔재로 인해 발생합니다.",
+    "symptoms_en": "When attempting to enable Windows Defender Real-time Protection or Windows Firewall, error 0x8007042c occurs stating that the dependency service or group failed to start. This happens after recent Windows 10/11 updates due to corrupted security service dependencies or leftover third-party antivirus files.",
+    "script": "Set-Service -Name BFE -StartupType Automatic; Start-Service -Name BFE -ErrorAction SilentlyContinue; Set-Service -Name mpssvc -StartupType Automatic; Start-Service -Name mpssvc -ErrorAction SilentlyContinue; Set-Service -Name WinDefend -StartupType Automatic; Start-Service -Name WinDefend -ErrorAction SilentlyContinue; Get-Service BFE, mpssvc, WinDefend",
+    "manualSteps": [
+      "키보드의 Windows 키 + R을 누르고 'services.msc'를 입력하여 서비스 관리자를 엽니다.",
+      "'Base Filtering Engine (BFE)' 서비스를 찾아 마우스 오른쪽 버튼을 클릭하고 [속성]에서 시작 유형을 '자동'으로 변경한 후 [시작]을 클릭합니다.",
+      "'Windows Defender Firewall (mpssvc)' 및 'Windows Defender Antivirus Service (WinDefend)' 서비스도 동일하게 '자동'으로 설정하고 시작합니다.",
+      "기존에 설치되어 있던 타사 백신(AhnLab, Norton, McAfee 등)의 전용 삭제 툴을 다운로드하여 잔여 파일을 완전히 삭제합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'sfc /scannow'를 실행하여 손상된 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type 'services.msc', and press Enter to open Services.",
+      "Locate 'Base Filtering Engine (BFE)', right-click and select 'Properties', set Startup type to 'Automatic', and click 'Start'.",
+      "Set 'Windows Defender Firewall (mpssvc)' and 'Windows Defender Antivirus Service (WinDefend)' to 'Automatic' and start them as well.",
+      "Download and run official removal tools for any previously installed third-party antivirus programs to eliminate leftover files.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to repair corrupted system files."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/error-0x8007042c-when-you-try-to-start-windows-firewall-d2f623a3-832c-cf2c-3837-1249e0c52d00",
+      "https://learn.microsoft.com/en-us/defender-xdr/microsoft-defender-antivirus-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007042c",
+      "Windows Defender 서비스 시작 실패",
+      "방화벽 오류 0x8007042c",
+      "Windows Firewall Error 0x8007042c",
+      "Security Center startup error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T04:17:00.520Z",
+    "updatedAt": "2026-10-31T04:17:00.520Z",
+    "verifiedAt": "2026-10-31T04:17:00.520Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80508002-mvvw3ejs",
+    "category": "보안/백신",
+    "code": "0x80508002",
+    "title": "Windows Defender 악성코드 검사 및 위협 치료 실패 오류 (0x80508002) 해결 방법",
+    "title_en": "Fix Windows Defender Threat Remediation and Scan Error (0x80508002)",
+    "symptoms": "Windows Defender에서 검사 도중 악성코드를 탐지했으나 제거/격리 처리 과정에서 오류 코드 0x80508002가 표시되며 치료에 실패합니다. 최신 보안 인텔리전스 시그니처 파일의 손상이나 격리소(Quarantine) 폴더 권한 문제로 인해 발생합니다.",
+    "symptoms_en": "Windows Defender identifies a security threat during scanning but fails during the remediation or removal phase with error code 0x80508002. This is caused by corrupted security intelligence definitions or permission issues in the quarantine folder after recent updates.",
+    "script": "Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-RemoveDefinitions -All\" -Wait -WindowStyle Hidden; Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-SignatureUpdate\" -Wait -WindowStyle Hidden",
+    "manualSteps": [
+      "시작 메뉴에서 'Windows 보안'을 검색하여 실행한 뒤 [바이러스 및 위협 방지]로 이동합니다.",
+      "[바이러스 및 위협 방지 업데이트] 섹션에서 '업데이트 확인'을 클릭하여 최신 보안 인텔리전스를 수동으로 다운로드합니다.",
+      "명령 프롬프트를 관리자 권한으로 열고 '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -RemoveDefinitions -All'을 입력하여 인텔리전스 캐시를 초기화합니다.",
+      "이후 '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate' 명령어로 엔진을 업데이트합니다.",
+      "Windows 보안의 [검사 옵션]에서 'Windows Defender 오프라인 검사'를 선택하여 재부팅 후 안전 모드 환경에서 악성코드를 제거합니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'Windows Security' in the Start Menu and open it, then go to 'Virus & threat protection'.",
+      "Under 'Virus & threat protection updates', click 'Check for updates' to manually download the latest definitions.",
+      "Open Command Prompt as Administrator and run '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -RemoveDefinitions -All' to clear definition cache.",
+      "Run '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate' to reload updated engine definitions.",
+      "Go to 'Scan options' in Windows Security, select 'Microsoft Defender Offline scan', and restart to remove threats in a isolated environment."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-xdr/troubleshoot-microsoft-defender-antivirus",
+      "https://support.microsoft.com/en-us/windows/help-protect-my-device-with-windows-security-22021022-356d-5e81-04e2-411a044199c0"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80508002",
+      "Windows Defender 악성코드 치료 실패",
+      "Defender error 0x80508002",
+      "Defender remediation error",
+      "바이러스 치료 실패 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T04:17:00.520Z",
+    "updatedAt": "2026-10-31T04:17:00.520Z",
+    "verifiedAt": "2026-10-31T04:17:00.520Z",
+    "verificationStatus": "verified"
   }
 ]

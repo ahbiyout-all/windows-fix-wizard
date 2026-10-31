@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-30T12:12:53.040Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "정품인증",
+  "lastCollectedAt": "2026-10-31T04:17:00.520Z",
+  "modelUsed": "gemini-3.5-flash",
+  "targetCategory": "보안/백신",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 62,
+  "totalIssuesCount": 64,
   "newIssues": [
     {
-      "id": "gh-0x803f7001-mvuxnj5c",
-      "code": "0x803f7001",
-      "title": "Windows 정품 인증을 수행할 수 없음: 라이선스 확인 실패",
-      "category": "정품인증"
+      "id": "gh-0x8007042c-mvvw3ejs",
+      "code": "0x8007042c",
+      "title": "Windows Defender 보안 센터 및 방화벽 서비스 시작 실패 오류 (0x8007042c) 해결 방법",
+      "category": "보안/백신"
     },
     {
-      "id": "gh-0x8007232b-mvuxnj5c",
-      "code": "0x8007232B",
-      "title": "DNS 이름이 존재하지 않음: KMS 정품 인증 서버 연결 오류",
-      "category": "정품인증"
+      "id": "gh-0x80508002-mvvw3ejs",
+      "code": "0x80508002",
+      "title": "Windows Defender 악성코드 검사 및 위협 치료 실패 오류 (0x80508002) 해결 방법",
+      "category": "보안/백신"
     }
   ]
 }
