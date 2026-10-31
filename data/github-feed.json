@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-31T04:17:00.520Z",
+  "lastCollectedAt": "2026-10-31T11:45:47.440Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "보안/백신",
+  "targetCategory": "스토어/앱",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 64,
+  "totalIssuesCount": 66,
   "newIssues": [
     {
-      "id": "gh-0x8007042c-mvvw3ejs",
-      "code": "0x8007042c",
-      "title": "Windows Defender 보안 센터 및 방화벽 서비스 시작 실패 오류 (0x8007042c) 해결 방법",
-      "category": "보안/백신"
+      "id": "gh-0x80073d05-mvwc4jhs",
+      "code": "0x80073D05",
+      "title": "Microsoft Store 앱 설치 및 업데이트 중 오류 0x80073D05 (앱 데이터 삭제 실패) 해결 방법",
+      "category": "스토어/앱"
     },
     {
-      "id": "gh-0x80508002-mvvw3ejs",
-      "code": "0x80508002",
-      "title": "Windows Defender 악성코드 검사 및 위협 치료 실패 오류 (0x80508002) 해결 방법",
-      "category": "보안/백신"
+      "id": "gh-0x80073cf6-mvwc4jht",
+      "code": "0x80073CF6",
+      "title": "Microsoft Store 앱 등록 및 배포 실패 오류 0x80073CF6 해결 방법",
+      "category": "스토어/앱"
     }
   ]
 }

@@ -2810,5 +2810,97 @@
     "updatedAt": "2026-10-31T04:17:00.520Z",
     "verifiedAt": "2026-10-31T04:17:00.520Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d05-mvwc4jhs",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Microsoft Store 앱 설치 및 업데이트 중 오류 0x80073D05 (앱 데이터 삭제 실패) 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Update & Installation Error 0x80073D05 (Failed to Delete Application Data)",
+    "symptoms": "Windows 10/11 환경에서 Microsoft Store 또는 Xbox 앱을 통해 앱을 업데이트하거나 재설치할 때 0x80073D05(ERROR_DELETING_EXISTING_APPLICATION_DATA_STORE_FAILED) 오류 메시지와 함께 작업이 중단됩니다. 이는 앱 데이터 캐시 폴더가 손상되었거나 기존 패키지 저장소 파일 삭제 권한이 차단되었을 때 발생합니다.",
+    "symptoms_en": "Occurs when updating or reinstalling UWP apps (e.g., Xbox app, Gaming Services, Photos app) via Microsoft Store in Windows 10/11, displaying error 0x80073D05 (ERROR_DELETING_EXISTING_APPLICATION_DATA_STORE_FAILED). This is caused by corrupted application data cache directories or permission conflicts preventing Windows from removing old app data stores.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "실행 창(Win + R)을 열고 'wsreset.exe'를 입력한 후 실행하여 Microsoft Store 캐시를 초기화합니다.",
+      "설정 > 앱 > 설치된 앱에서 오류가 발생하는 앱(예: Microsoft Store)의 '고급 옵션'으로 이동한 뒤 '복구' 및 '초기화'를 실행합니다.",
+      "파일 탐색기에서 '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe\\LocalCache' 경로로 이동하여 내부 모든 파일과 폴더를 삭제합니다.",
+      "관리자 권한으로 PowerShell을 실행하고 제공된 재등록 스크립트를 실행한 후 시스템을 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open the Run dialog (Win + R), type 'wsreset.exe', and press Enter to reset the Microsoft Store cache.",
+      "Go to Settings > Apps > Installed apps, select 'Advanced options' for the affected app (e.g., Microsoft Store), and click 'Repair' followed by 'Reset'.",
+      "Navigate to '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe\\LocalCache' in File Explorer and delete all contents inside.",
+      "Open PowerShell as Administrator, execute the provided re-registration script, and restart your system."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3c14-be72-37d6dae777a2",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/app-installation-issues"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "Microsoft Store 오류 0x80073D05",
+      "앱 설치 실패",
+      "ERROR_DELETING_EXISTING_APPLICATION_DATA_STORE_FAILED",
+      "스토어 앱 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T11:45:47.440Z",
+    "updatedAt": "2026-10-31T11:45:47.440Z",
+    "verifiedAt": "2026-10-31T11:45:47.440Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf6-mvwc4jht",
+    "category": "스토어/앱",
+    "code": "0x80073CF6",
+    "title": "Microsoft Store 앱 등록 및 배포 실패 오류 0x80073CF6 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Registration and Deployment Error 0x80073CF6",
+    "symptoms": "Windows 10/11에서 Microsoft Store 앱 설치 또는 업데이트 과정 중 '패키지를 등록할 수 없습니다 (0x80073CF6)' 오류가 발생합니다. AppX 배포 서비스(AppXSvc) 캐시 손상, 중복 앱 패키지 레지스트리 키 충돌, 또는 사용자 프로필 패키지 매니페스트 등록 오류로 인해 발생합니다.",
+    "symptoms_en": "Occurs during UWP/MSIX package installation or update in Windows 10/11, throwing error 0x80073CF6 (ERROR_INSTALL_REGISTRATION_FAILURE). This failure is triggered by corrupted AppX Deployment Service (AppXSvc) caches, conflicting package registry keys, or broken manifest registration within user profiles.",
+    "script": "Get-Service -Name AppXSvc | Restart-Service -Force; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\" -ErrorAction SilentlyContinue}",
+    "manualSteps": [
+      "Windows 서비스(services.msc)를 열고 'AppX Deployment Service (AppXSvc)' 서비스를 찾아 다시 시작합니다.",
+      "설정 > 시스템 > 문제 해결 > 기타 문제 해결사 메뉴에서 'Windows 스토어 앱' 문제 해결사를 실행합니다.",
+      "관리자 권한 PowerShell에서 다음 명령을 실행하여 임시 배포 캐시를 삭제합니다: Remove-Item -Path \"$env:LOCALAPPDATA\\Packages\\*\\AC\\Temp\\*\" -Recurse -Force -ErrorAction SilentlyContinue",
+      "관리자 권한 PowerShell을 사용하여 UWP 앱 매니페스트를 전체 재등록한 후 PC를 다시 시작합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows Services (services.msc), locate 'AppX Deployment Service (AppXSvc)', and restart the service.",
+      "Go to Settings > System > Troubleshoot > Other troubleshooters and run the 'Windows Store Apps' troubleshooter.",
+      "Open PowerShell as Administrator and run: Remove-Item -Path \"$env:LOCALAPPDATA\\Packages\\*\\AC\\Temp\\*\" -Recurse -Force -ErrorAction SilentlyContinue to clear temporary deployment cache.",
+      "Re-register all default UWP package manifests using Administrator PowerShell and restart your PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/win32/appxpkg/troubleshooting-appx-package-installation",
+      "https://support.microsoft.com/en-us/windows/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3c14-be72-37d6dae777a2"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF6",
+      "ERROR_INSTALL_REGISTRATION_FAILURE",
+      "Microsoft Store 패키지 등록 실패",
+      "AppXSvc 오류",
+      "UWP App Registration Failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T11:45:47.440Z",
+    "updatedAt": "2026-10-31T11:45:47.440Z",
+    "verifiedAt": "2026-10-31T11:45:47.440Z",
+    "verificationStatus": "verified"
   }
 ]
