@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-31T11:45:47.440Z",
+  "lastCollectedAt": "2026-10-31T16:52:59.331Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "스토어/앱",
+  "targetCategory": "네트워크",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 66,
+  "totalIssuesCount": 68,
   "newIssues": [
     {
-      "id": "gh-0x80073d05-mvwc4jhs",
-      "code": "0x80073D05",
-      "title": "Microsoft Store 앱 설치 및 업데이트 중 오류 0x80073D05 (앱 데이터 삭제 실패) 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0x80072ee2-mvwn3lmr",
+      "code": "0x80072EE2",
+      "title": "Windows 10/11 네트워크 연결 시간 초과 오류 (0x80072EE2) 해결 방법",
+      "category": "네트워크"
     },
     {
-      "id": "gh-0x80073cf6-mvwc4jht",
-      "code": "0x80073CF6",
-      "title": "Microsoft Store 앱 등록 및 배포 실패 오류 0x80073CF6 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-error-809-mvwn3lmr",
+      "code": "Error 809",
+      "title": "Windows 10/11 L2TP/IPsec VPN 연결 실패 오류 809 해결 방법",
+      "category": "네트워크"
     }
   ]
 }

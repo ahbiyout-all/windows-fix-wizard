@@ -2902,5 +2902,99 @@
     "updatedAt": "2026-10-31T11:45:47.440Z",
     "verifiedAt": "2026-10-31T11:45:47.440Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee2-mvwn3lmr",
+    "category": "네트워크",
+    "code": "0x80072EE2",
+    "title": "Windows 10/11 네트워크 연결 시간 초과 오류 (0x80072EE2) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Network Connection Timeout Error (0x80072EE2)",
+    "symptoms": "네트워크 서버 또는 Windows 업데이트 서버와 통신 중 응답 시간이 초과되어 발생합니다. 방화벽 설정, 프록시 미구성, MTU 크기 불일치 또는 잘못된 DNS 캐시로 인해 클라이언트가 적절한 시간 내에 패킷을 주고받지 못할 때 주로 표출됩니다.",
+    "symptoms_en": "Occurs when a request to a network or update server times out. It typically happens when client packets are delayed or blocked due to restrictive firewall rules, proxy misconfigurations, incorrect MTU size, or corrupted DNS cache.",
+    "script": "Clear-DnsClientCache\nReset-NetAdapterAdvancedProperty -Name \"*\" -DisplayName \"Large Send Offload*\" -ErrorAction SilentlyContinue\nnetsh int ip reset\nnetsh winsock reset\nWrite-Output \"Network stack and DNS cache reset completed. Please restart your PC.\"",
+    "manualSteps": [
+      "명령 프롬프트(관리자 권한)를 실행하여 ipconfig /flushdns 명령어로 DNS 캐시를 초기화합니다.",
+      "Windows 보안 또는 타사 방화벽 소프트웨어에서 HTTP/HTTPS 통신용 포트(80, 443) 차단 여부를 확인합니다.",
+      "네트워크 연결 속성에서 IPv4 프로토콜의 DNS 서버 주소를 Google Public DNS(8.8.8.8 및 8.8.4.4) 또는 Cloudflare DNS(1.1.1.1)로 변경합니다.",
+      "설정 > 네트워크 및 인터넷 > 프록시 메뉴에서 '자동으로 설정 감지'를 활성화하고 수동 프록시 서버 사용을 해제합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and execute 'ipconfig /flushdns' to clear the DNS resolver cache.",
+      "Check Windows Security or third-party firewall software to ensure HTTP/HTTPS traffic (ports 80 and 443) is not blocked.",
+      "Change the IPv4 DNS server settings in Network Adapter properties to Google Public DNS (8.8.8.8 / 8.8.4.4) or Cloudflare DNS (1.1.1.1).",
+      "Navigate to Settings > Network & internet > Proxy, turn on 'Automatically detect settings', and disable manual proxy server usage."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-windows-update-errors",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-10b4104d-6169-2ea0-d5e9-74e41b1840e7"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE2",
+      "네트워크 연결 시간 초과",
+      "Windows 네트워크 오류",
+      "Network Timeout Error",
+      "DNS Flush",
+      "Winsock Reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T16:52:59.331Z",
+    "updatedAt": "2026-10-31T16:52:59.331Z",
+    "verifiedAt": "2026-10-31T16:52:59.331Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-error-809-mvwn3lmr",
+    "category": "네트워크",
+    "code": "Error 809",
+    "title": "Windows 10/11 L2TP/IPsec VPN 연결 실패 오류 809 해결 방법",
+    "title_en": "How to Fix L2TP/IPsec VPN Connection Failed Error 809 in Windows 10/11",
+    "symptoms": "클라이언트 및/또는 서버가 NAT(네트워크 주소 변환) 장치 뒤에 위치해 있을 때 L2TP/IPsec VPN 연결 시 발생합니다. IPsec SA(보안 연결) 협상이 NAT-T 지원 레지스트리 설정 누락 또는 방화벽 차단으로 인해 차단되어 연결 시도가 실패합니다.",
+    "symptoms_en": "Occurs during L2TP/IPsec VPN connections when the client and/or server is located behind a NAT (Network Address Translation) device. The connection attempt fails because IPsec Security Association (SA) negotiations are blocked due to missing NAT-T registry key configurations or firewall blocks.",
+    "script": "$regPath = \"HKLM:\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent\"\nif (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }\nSet-ItemProperty -Path $regPath -Name \"AssumeUDPEncapsulationContextOnSendRule\" -Value 2 -Type DWord\nSet-Service -Name \"PolicyAgent\" -StartupType Automatic\nRestart-Service -Name \"PolicyAgent\" -Force\nWrite-Output \"NAT-T registry value set to 2. Restart recommended.\"",
+    "manualSteps": [
+      "레지스트리 편집기(regedit)를 실행하고 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent 경로로 이동합니다.",
+      "DWORD(32비트) 값을 새 항목으로 생성한 후 이름을 AssumeUDPEncapsulationContextOnSendRule로 지정하고 값을 2로 변경합니다.",
+      "서비스 관리자(services.msc)에서 'IPsec Policy Agent' 및 'IKE and AuthIP IPsec Keying Modules' 서비스의 시작 유형을 '자동'으로 변경하고 재시작합니다.",
+      "공유기 및 방화벽 설정에서 UDP 포트 500, 4500, 1701이 허용되어 있는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Registry Editor (regedit) and navigate to HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent.",
+      "Create a new DWORD (32-bit) Value named AssumeUDPEncapsulationContextOnSendRule and set its Value data to 2.",
+      "Open Services (services.msc), locate 'IPsec Policy Agent' and 'IKE and AuthIP IPsec Keying Modules', set their Startup type to 'Automatic', and restart the services.",
+      "Verify that UDP ports 500, 4500, and 1701 are forwarded and allowed through your router and firewall settings."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/configure-l2tp-ipsec-server-behind-nat-t",
+      "https://support.microsoft.com/en-us/windows/connect-to-a-vpn-in-windows-3d29aeb1-f4b5-4213-0b20-20e3023214b9"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Error 809",
+      "L2TP VPN 오류",
+      "AssumeUDPEncapsulationContextOnSendRule",
+      "VPN NAT-T",
+      "IPsec Policy Agent",
+      "Windows VPN Connection Failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T16:52:59.331Z",
+    "updatedAt": "2026-10-31T16:52:59.331Z",
+    "verifiedAt": "2026-10-31T16:52:59.331Z",
+    "verificationStatus": "verified"
   }
 ]
