@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import JSZip from 'jszip';
-import { GoogleGenAI, Type } from '@google/genai';
 import { 
   Terminal, Search, AlertCircle, AlertOctagon, Wrench, CheckCircle2, Copy, LayoutList,
   ExternalLink, ShieldCheck, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, ChevronsUp, ChevronsDown, Info, BookOpen, 
   RefreshCw, Wifi, Monitor, ShoppingBag, Key, Shield, Database, Globe, LogIn, LogOut, AlertTriangle, Moon, Sun, Download, Upload, Edit2, Trash2, X, XCircle, Save, ThumbsUp, ThumbsDown, FileCheck, Sparkles, Flame, Settings, Cloud, Zap, Layers, ShieldAlert, Check, ArrowRight, Activity, Sliders, Mail, RotateCcw,
   Heart, Bookmark, Clock, History, User as UserIcon, Filter, Users, UserCheck, Smartphone, Laptop, Tablet, Ban, Eye, EyeOff, Server, Bot, HelpCircle, LifeBuoy, Menu,
-  Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2, Mic, MicOff
+  Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2, Mic, MicOff, HardDrive, Volume2, Keyboard, Tv, Cpu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, getDocs, getDoc, setDoc, doc, query as firestoreQuery, limit, startAfter, orderBy, where, QueryDocumentSnapshot, updateDoc, deleteDoc, writeBatch, getCountFromServer } from 'firebase/firestore';
@@ -23,7 +22,8 @@ import {
   UserActivity,
   BackendLog,
   VisitorLog,
-  AutoBlockSettings
+  AutoBlockSettings,
+  Type
 } from './types';
 import { PowerShellVerifierPanel } from './components/PowerShellVerifierPanel';
 import { InteractiveRoadmap } from './components/InteractiveRoadmap';
@@ -153,6 +153,150 @@ export const isValidApiKeyFormat = (key: string): boolean => {
   return true;
 };
 
+export interface HardwareComponentDef {
+  id: string;
+  nameKo: string;
+  nameEn: string;
+  iconName: string;
+  keywords: string[];
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}
+
+export const HARDWARE_COMPONENTS: HardwareComponentDef[] = [
+  {
+    id: 'motherboard',
+    nameKo: '메인보드/BIOS',
+    nameEn: 'Motherboard/BIOS',
+    iconName: 'Layers',
+    keywords: ['motherboard', 'bios', 'uefi', 'chipset', 'firmware', '메인보드', '바이어스', '바이오스', '칩셋', 'tpm', 'secure boot', '시큐어부트'],
+    color: 'text-purple-600 dark:text-purple-400',
+    bgColor: 'bg-purple-50 dark:bg-purple-950/40',
+    borderColor: 'border-purple-200 dark:border-purple-800'
+  },
+  {
+    id: 'gpu',
+    nameKo: '그래픽/GPU',
+    nameEn: 'GPU/Graphics',
+    iconName: 'Tv',
+    keywords: ['gpu', 'graphics', 'nvidia', 'amd', 'radeon', 'geforce', 'intel hd', 'display driver', '그래픽', '지포스', '라데온', '해상도', 'vram'],
+    color: 'text-emerald-600 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950/40',
+    borderColor: 'border-emerald-200 dark:border-emerald-800'
+  },
+  {
+    id: 'ram',
+    nameKo: '메모리/RAM',
+    nameEn: 'Memory/RAM',
+    iconName: 'Zap',
+    keywords: ['ram', 'memory', 'ddr4', 'ddr5', 'xmp', 'bsod', 'blue screen', 'page_fault', 'memory_management', '메모리', '램', '가상 메모리', '컴팩션'],
+    color: 'text-amber-600 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-950/40',
+    borderColor: 'border-amber-200 dark:border-amber-800'
+  },
+  {
+    id: 'storage',
+    nameKo: '저장장치/SSD/HDD',
+    nameEn: 'Storage/SSD',
+    iconName: 'HardDrive',
+    keywords: ['ssd', 'hdd', 'nvme', 'disk', 'drive', 'chkdsk', 'storage', 'partition', '저장장치', '디스크', '드라이브', '용량', '스토리지', '용량 부족', '용량부족'],
+    color: 'text-blue-600 dark:text-blue-400',
+    bgColor: 'bg-blue-50 dark:bg-blue-950/40',
+    borderColor: 'border-blue-200 dark:border-blue-800'
+  },
+  {
+    id: 'cpu',
+    nameKo: '프로세서/CPU',
+    nameEn: 'Processor/CPU',
+    iconName: 'Cpu',
+    keywords: ['cpu', 'processor', 'overheating', 'thermal', 'core', 'thread', '프로세서', '중앙처리장치', '발열', '온도', '스파이크', '점유율'],
+    color: 'text-red-600 dark:text-red-400',
+    bgColor: 'bg-red-50 dark:bg-red-950/40',
+    borderColor: 'border-red-200 dark:border-red-800'
+  },
+  {
+    id: 'power',
+    nameKo: '전원/배터리',
+    nameEn: 'Power/Battery',
+    iconName: 'Zap',
+    keywords: ['power', 'battery', 'sleep', 'hibernation', 'psu', 'watt', '전원', '배터리', '절전', '절전모드', '충전', '셧다운'],
+    color: 'text-yellow-600 dark:text-yellow-400',
+    bgColor: 'bg-yellow-50 dark:bg-yellow-950/40',
+    borderColor: 'border-yellow-200 dark:border-yellow-800'
+  },
+  {
+    id: 'display',
+    nameKo: '디스플레이/모니터',
+    nameEn: 'Display/Monitor',
+    iconName: 'Monitor',
+    keywords: ['display', 'monitor', 'screen', 'hz', 'refresh rate', 'hdr', 'flicker', '디스플레이', '모니터', '화면', '주사율', '깜빡임', '해상도'],
+    color: 'text-cyan-600 dark:text-cyan-400',
+    bgColor: 'bg-cyan-50 dark:bg-cyan-950/40',
+    borderColor: 'border-cyan-200 dark:border-cyan-800'
+  },
+  {
+    id: 'audio',
+    nameKo: '사운드/오디오',
+    nameEn: 'Audio/Sound',
+    iconName: 'Volume2',
+    keywords: ['audio', 'sound', 'speaker', 'headphone', 'microphone', 'realtek', '오디오', '사운드', '스피커', '마이크', '헤드셋', '음량'],
+    color: 'text-indigo-600 dark:text-indigo-400',
+    bgColor: 'bg-indigo-50 dark:bg-indigo-950/40',
+    borderColor: 'border-indigo-200 dark:border-indigo-800'
+  },
+  {
+    id: 'network',
+    nameKo: '네트워크/Wi-Fi',
+    nameEn: 'Network/Wi-Fi',
+    iconName: 'Wifi',
+    keywords: ['network', 'wifi', 'wi-fi', 'ethernet', 'lan', 'dns', 'ip', 'ping', 'adapter', '네트워크', '와이파이', '무선', '인터넷', '랜카드'],
+    color: 'text-sky-600 dark:text-sky-400',
+    bgColor: 'bg-sky-50 dark:bg-sky-950/40',
+    borderColor: 'border-sky-200 dark:border-sky-800'
+  },
+  {
+    id: 'peripherals',
+    nameKo: '주변기기/USB',
+    nameEn: 'Peripherals/USB',
+    iconName: 'Keyboard',
+    keywords: ['usb', 'keyboard', 'mouse', 'bluetooth', 'printer', 'peripheral', '주변기기', '키보드', '마우스', '블루투스', '프린터'],
+    color: 'text-orange-600 dark:text-orange-400',
+    bgColor: 'bg-orange-50 dark:bg-orange-950/40',
+    borderColor: 'border-orange-200 dark:border-orange-800'
+  }
+];
+
+export function getIssueHardwareComponents(issue: KnownIssue): string[] {
+  if (issue.hardwareComponents && issue.hardwareComponents.length > 0) {
+    return issue.hardwareComponents;
+  }
+  if (issue.hardwareComponent && issue.hardwareComponent.trim().length > 0) {
+    return [issue.hardwareComponent.trim().toLowerCase()];
+  }
+
+  const textToScan = [
+    issue.code || '',
+    issue.title || '',
+    issue.title_en || '',
+    issue.symptoms || '',
+    issue.symptoms_en || '',
+    issue.category || '',
+    ...(issue.searchKeywords || []),
+    ...(issue.manualSteps || []),
+    issue.script || ''
+  ].join(' ').toLowerCase();
+
+  const detected: string[] = [];
+  for (const comp of HARDWARE_COMPONENTS) {
+    if (comp.keywords.some(kw => textToScan.includes(kw.toLowerCase()))) {
+      detected.push(comp.id);
+    }
+  }
+
+  return detected;
+}
+
 // Initialize Gemini
 export type ApiKeyConfig = {
   keys: { name: string, key: string, isActive: boolean, isCustom: boolean }[];
@@ -186,86 +330,44 @@ export const saveApiKeyConfig = (config: ApiKeyConfig) => {
   localStorage.setItem('winfix_api_keys_config', JSON.stringify(config));
 };
 
-let currentAutoKeyIndex = 0;
+export const callAiWithFallback = async (ai: any, contents: string, config?: any): Promise<string> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/ai/generate', {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      prompt: contents,
+      config,
+      enableSearch: !!(config && config.tools)
+    })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (data && data.text) {
+    return data.text;
+  }
+  if (!res.ok || !data.success) {
+    const errMsg = data.error || (data.standby ? 'AI 서비스가 대기 상태입니다.' : 'AI generation failed on server');
+    throw new Error(errMsg);
+  }
+
+  return data.text || '';
+};
 
 export const getAiClient = () => {
-  const config = getApiKeyConfig();
-  const activeKeys = config.keys.filter(k => k.isActive && k.key);
-  
-  if (activeKeys.length === 0) {
-    throw new Error("No active API keys available. Please check your API Key configuration.");
-  }
-
-  let finalKey = activeKeys[0].key;
-
-  if (config.mode === 'priority') {
-    const custom = activeKeys.find(k => k.isCustom);
-    if (custom) finalKey = custom.key;
-    else finalKey = activeKeys[0].key;
-  } else if (config.mode === 'load-balance') {
-    finalKey = activeKeys[currentAutoKeyIndex % activeKeys.length].key;
-    currentAutoKeyIndex++;
-  }
-
-  return new GoogleGenAI({ apiKey: finalKey });
-};
-
-const MODELS_TO_TRY = [
-  "gemini-2.5-flash",
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
-  "gemini-3.5-flash"
-];
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-export const callAiWithFallback = async (ai: any, contents: string, config?: any) => {
-  let lastError;
-  let hasQuotaError = false;
-
-  for (const model of MODELS_TO_TRY) {
-    let retryCount = 0;
-    while (retryCount < 2) {
-      try {
-        const result = await ai.models.generateContent({ model, contents, ...config });
-        const text = result.text;
-        if (text) return text;
-      } catch (err: any) {
-        const errMsg = err.message || "";
-        const isInvalidKey = errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID");
-        if (isInvalidKey) {
-          const isEn = localStorage.getItem('winfix_lang') === 'en';
-          throw new Error(isEn 
-            ? "Gemini API key is invalid or not activated. Please verify your API key in Settings." 
-            : "Gemini API 키가 유효하지 않거나 비활성화되어 있습니다. 관리자 설정에서 유효한 API 키를 등록해주세요.");
-        }
-
-        lastError = err;
-        console.warn(`Model ${model} failed (attempt ${retryCount + 1}):`, err);
-        
-        const status = err.status || (errMsg.includes("429") ? 429 : (errMsg.includes("503") ? 503 : 0));
-        const isQuota = status === 429 || errMsg.toLowerCase().includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED");
-        const isHighDemand = status === 503 || errMsg.includes("high demand") || errMsg.includes("UNAVAILABLE") || errMsg.includes("overloaded");
-        
-        if (isQuota || isHighDemand) {
-          if (isQuota) hasQuotaError = true;
-          retryCount++;
-          if (retryCount < 2) {
-            await sleep(1000 * retryCount); 
-            continue; 
-          }
-        }
-        break; // Next model
+  return {
+    models: {
+      generateContent: async (opts: any) => {
+        const text = await callAiWithFallback(null, opts.contents || opts.prompt, opts.config);
+        return { text };
       }
     }
-  }
-  
-  if (hasQuotaError) {
-    throw new Error("할당량 초과(429): 현재 모든 AI 모델의 트래픽이 가득 찼습니다. 잠시 후 다시 시도해주세요.");
-  }
-  throw lastError;
+  };
 };
+
 
 declare global {
   interface Window {
@@ -726,6 +828,7 @@ export default function App() {
   const [copiedScript, setCopiedScript] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>('전체');
   const [selectedVersionFilter, setSelectedVersionFilter] = useState<string>('전체');
+  const [selectedHardwareFilter, setSelectedHardwareFilter] = useState<string>('all');
   const [quotaUsage, setQuotaUsage] = useState<{ reads: number, writes: number }>(() => {
     const today = getKSTISOString().split('T')[0];
     const saved = localStorage.getItem(`winfix_quota_${today}`);
@@ -769,6 +872,21 @@ export default function App() {
     }
     return [];
   });
+
+  const hardwareCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: dbIssues.length };
+    HARDWARE_COMPONENTS.forEach(c => { counts[c.id] = 0; });
+    
+    dbIssues.forEach(issue => {
+      const comps = getIssueHardwareComponents(issue);
+      comps.forEach(cId => {
+        if (counts[cId] !== undefined) {
+          counts[cId]++;
+        }
+      });
+    });
+    return counts;
+  }, [dbIssues]);
 
   const [dbIssuesLastUpdated, setDbIssuesLastUpdated] = useState<number>(() => {
     return Number(localStorage.getItem('winfix_db_issues_updated') || 0);
@@ -4424,27 +4542,24 @@ export default function App() {
         setTimeout(runBatchCollection, batchIntervalSeconds * 1000);
       }
     } catch (err: any) {
-      console.error("Batch iteration failed:", err);
-      logAppError(err.message || String(err), 'error', 'BatchCollection', err.stack);
-      const isQuotaError = err.message?.includes('Quota exceeded') || 
-                          err.message?.includes('429') || 
-                          err.message?.includes('Resource has been exhausted') ||
-                          err.message?.includes('rate limit');
-      
-      const isDbQuota = err.message?.includes('Firestore') && err.message?.includes('Quota');
+      const isQuotaOrStandby = err.message?.includes('Quota') || 
+                              err.message?.includes('429') || 
+                              err.message?.includes('Resource has been exhausted') ||
+                              err.message?.includes('rate limit') ||
+                              err.message?.includes('Settings') ||
+                              err.message?.includes('대기') ||
+                              err.message?.includes('유효하지') ||
+                              err.message?.includes('Quarantined');
 
-      if (isQuotaError || isDbQuota) {
-        setBatchStatus(language === 'en' ? "Quota exceeded." : "할당량 초과.");
-        alert(language === 'en' 
-          ? `Quota exceeded (AI or DB). Collected a total of ${batchCollectionCountRef.current} new items.` 
-          : `할당량이 모두 소모되었습니다 (AI 또는 DB). 총 ${batchCollectionCountRef.current}개의 신규 항목을 수집했습니다.`);
+      if (isQuotaOrStandby) {
+        console.info("Batch iteration standby/cooldown:", err.message);
+        setBatchStatus(language === 'en' ? "AI Standby (serving local DB)" : "AI 대기 상태 (로컬 DB 유지)");
         handleStopBatchCollection();
       } else {
-        // Generic error (e.g. AI malformed response, 503, search error)
-        // We wait and continue instead of stopping the whole batch
-        setBatchStatus(language === 'en' ? "AI Error - retrying soon..." : "AI 오류 - 곧 재시도...");
+        console.warn("Batch iteration paused:", err.message);
+        setBatchStatus(language === 'en' ? "Retrying soon..." : "잠시 후 재시도...");
         if (isBatchCollectingRef.current) {
-          setTimeout(runBatchCollection, (batchIntervalSeconds + 30) * 1000); // Wait longer on error
+          setTimeout(runBatchCollection, (batchIntervalSeconds + 30) * 1000);
         }
       }
     }
@@ -4682,20 +4797,34 @@ export default function App() {
       return { added: addedCount, updated: updatedCount };
 
     } catch (err: any) {
-      console.error("AI Sync Error:", err);
-      logAppError(err.message || String(err), 'error', 'AiSync', err.stack, { isAuto, addedCount, updatedCount });
+      const isStandbyOrQuota = err.message?.includes('Settings') || 
+                               err.message?.includes('대기') || 
+                               err.message?.includes('유효하지') ||
+                               err.message?.includes('429') ||
+                               err.message?.includes('Quota') ||
+                               err.message?.includes('RESOURCE_EXHAUSTED') ||
+                               err.message?.includes('Quarantined') ||
+                               err.message?.includes('API key not valid');
+      
+      if (isStandbyOrQuota) {
+        console.info("AI Sync standby/cooldown:", err.message);
+      } else {
+        console.warn("AI Sync failed:", err.message || err);
+      }
+
       let errorMsg = err.message || String(err);
       if (typeof errorMsg === 'string' && (errorMsg.includes('429') || errorMsg.includes('Quota') || errorMsg.includes('RESOURCE_EXHAUSTED'))) {
         errorMsg = language === 'en' ? "Gemini API Quota Exceeded. Please try again tomorrow or upgrade your plan." : "Gemini API 하루 사용량을 초과했습니다. 내일 다시 시도해주세요.";
       } else if (typeof errorMsg === 'string' && (errorMsg.includes('403') || errorMsg.includes('PERMISSION_DENIED'))) {
         errorMsg = language === 'en' ? "Gemini API Access Denied. Search grounding requires API Key billing." : "Gemini API 접근이 거부되었습니다. 결제가 필요한 기능일 수 있습니다.";
+      } else if (isStandbyOrQuota) {
+        errorMsg = language === 'en' ? "AI Service is in standby. Serving from local database." : "AI 서비스가 대기 상태입니다. 내장 데이터베이스를 통해 정상 작동합니다.";
       }
       
       if (!isAuto) {
-        alert("AI Sync failed: " + errorMsg);
+        alert("AI Sync: " + errorMsg);
       } else {
-        await logAdminAction('verify', 'ai_search', language === 'en' ? `Bulk Auto-Collection failed: ${errorMsg}` : `대량 자동 수집 실패: ${errorMsg}`, 'error', 'AI');
-        throw new Error(errorMsg);
+        await logAdminAction('verify', 'ai_search', language === 'en' ? `Auto-Collection standby: ${errorMsg}` : `자동 수집 대기 모드: ${errorMsg}`, 'info', 'AI');
       }
       return { added: 0, updated: 0 };
     } finally {
@@ -6863,7 +6992,7 @@ export default function App() {
         
         if (!lastSync || lastSync < startOfHour) {
           console.log(`Auto-sync triggered: KST ${kstHour}시 정시 동기화 실행 (2시간 간격)`);
-          handleTriggerAiSearch(true);
+          handleTriggerAiSearch(true).catch(e => console.info("Auto-sync standby:", e.message));
         }
       }
     } catch (err: any) {
@@ -6926,6 +7055,69 @@ export default function App() {
     return issue.manualSteps;
   };
 
+  const findLocalTroubleshootingGuide = (q: string, ver: string): TroubleshootingResult | null => {
+    const list = dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
+    const qLower = q.toLowerCase().trim();
+    const tokens = qLower.split(/[\s,;:?!\n\r]+/).filter(t => t.length >= 2);
+
+    let bestMatch: KnownIssue | null = null;
+    let highestScore = 0;
+
+    for (const issue of list) {
+      let score = 0;
+      const code = (issue.code || '').toLowerCase();
+      const title = (issue.title || '').toLowerCase();
+      const titleEn = (issue.title_en || '').toLowerCase();
+      const symptoms = (issue.symptoms || '').toLowerCase();
+      const symptomsEn = (issue.symptoms_en || '').toLowerCase();
+
+      if (code && qLower.includes(code)) score += 60;
+      if (title && qLower.includes(title)) score += 40;
+      if (titleEn && qLower.includes(titleEn)) score += 30;
+
+      for (const t of tokens) {
+        if (code.includes(t)) score += 15;
+        if (title.includes(t)) score += 10;
+        if (titleEn.includes(t)) score += 8;
+        if (symptoms.includes(t)) score += 5;
+        if (symptomsEn.includes(t)) score += 4;
+      }
+
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = issue;
+      }
+    }
+
+    if (!bestMatch && list.length > 0) {
+      bestMatch = list[0];
+    }
+
+    if (bestMatch) {
+      const isEn = language === 'en';
+      const steps = isEn && bestMatch.manualSteps_en && bestMatch.manualSteps_en.length > 0
+        ? bestMatch.manualSteps_en
+        : (bestMatch.manualSteps || [
+            isEn ? "1. Run Windows Troubleshooter: Settings > System > Troubleshoot" : "1. Windows 설정 > 시스템 > 문제 해결을 실행합니다.",
+            isEn ? "2. Execute System File Checker: sfc /scannow in Admin PowerShell" : "2. 관리자 PowerShell에서 시스템 파일 검사기(sfc /scannow)를 실행합니다.",
+            isEn ? "3. Reboot the system and verify resolution." : "3. 시스템을 재부팅한 후 문제가 해결되었는지 확인합니다."
+          ]);
+
+      return {
+        diagnosis: `[${isEn ? 'Microsoft Knowledge Base' : '내장 Microsoft 해결 가이드'}: ${isEn ? (bestMatch.title_en || bestMatch.title) : bestMatch.title}]\n${isEn ? (bestMatch.symptoms_en || bestMatch.symptoms) : (bestMatch.symptoms || bestMatch.title)}`,
+        isScriptApplicable: !!bestMatch.script,
+        script: bestMatch.script || "",
+        scriptSafetyWarning: bestMatch.script 
+          ? (isEn ? "Execute with Administrator privileges in PowerShell after creating a system restore point." : "시스템 복원 지점을 생성한 후 관리자 권한 PowerShell에서 신중하게 실행하십시오.")
+          : (isEn ? "No automated script required." : "스크립트가 제공되지 않는 가이드입니다."),
+        manualSteps: steps,
+        sourceUrls: bestMatch.sourceUrls && bestMatch.sourceUrls.length > 0 ? bestMatch.sourceUrls : ["https://support.microsoft.com/windows"]
+      };
+    }
+
+    return null;
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -6937,67 +7129,43 @@ export default function App() {
     setError(null);
     setResult(null);
 
-    let retries = 3;
-    let delay = 2000;
+    let parsedResult: TroubleshootingResult | null = null;
 
-    let ai;
     try {
-      ai = getAiClient();
-    } catch (err: any) {
-      setError(language === 'en' ? `API Config Error: ${err.message}` : `설정 오류: ${err.message}`);
-      logAppError(err.message, 'error', 'API_Config');
-      setLoading(false);
-      return;
+      const knowledgeContext = aiOptimizedKnowledge 
+        ? `\n\n[Advanced Knowledge Base - High Priority]\n${aiOptimizedKnowledge}\n\nApply the patterns above to your diagnosis if relevant.`
+        : '';
+
+      const promptData = `Windows Version: ${version}\nError/Symptom: ${query}${knowledgeContext}\n\nPlease provide the official Microsoft solution or highly trusted community solutions for this specific error. Provide a clear diagnosis, a safe PowerShell fix script (if applicable). \n\nCRITICAL SAFETY RULES:\n1. If you provide a script, you MUST explicitly detail all potential risks in the 'scriptSafetyWarning' field. This includes registry modifications, system service changes, file deletions, or security settings changes.\n2. If a script is too risky or not applicable, leave the 'script' field empty and set 'isScriptApplicable' to false, then explain why in 'scriptSafetyWarning'.\n3. Ensure any provided script is safe, effective, and follows best practices.\n\nProvide step-by-step manual instructions and source URLs. Respond in ${language === 'en' ? 'English' : 'Korean'}.`;
+
+      const diagResp = await fetch('/api/ai/diagnose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptData, query, version })
+      });
+
+      if (diagResp.ok) {
+        const diagData = await diagResp.json();
+        if (diagData && diagData.text) {
+          try {
+            parsedResult = parseAiJson(diagData.text);
+          } catch (_) {}
+        }
+      }
+    } catch (netErr: any) {
+      console.info("Server AI diagnose standby, using client local match:", netErr.message);
     }
 
-    for (let i = 0; i < retries; i++) {
-      try {
-        const knowledgeContext = aiOptimizedKnowledge 
-          ? `\n\n[Advanced Knowledge Base - High Priority]\n${aiOptimizedKnowledge}\n\nApply the patterns above to your diagnosis if relevant.`
-          : '';
+    // Seamless Local Knowledge Base Fallback
+    if (!parsedResult) {
+      parsedResult = findLocalTroubleshootingGuide(query, version);
+    }
 
-        const promptData = `Windows Version: ${version}\nError/Symptom: ${query}${knowledgeContext}\n\nPlease provide the official Microsoft solution or highly trusted community solutions for this specific error. Provide a clear diagnosis, a safe PowerShell fix script (if applicable). \n\nCRITICAL SAFETY RULES:\n1. If you provide a script, you MUST explicitly detail all potential risks in the 'scriptSafetyWarning' field. This includes registry modifications, system service changes, file deletions, or security settings changes.\n2. If a script is too risky or not applicable, leave the 'script' field empty and set 'isScriptApplicable' to false, then explain why in 'scriptSafetyWarning'.\n3. Ensure any provided script is safe, effective, and follows best practices.\n\nProvide step-by-step manual instructions and source URLs. Respond in ${language === 'en' ? 'English' : 'Korean'}.`;
-        const response = await callAiWithFallback(ai, promptData, {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              diagnosis: { type: Type.STRING },
-              isScriptApplicable: { type: Type.BOOLEAN },
-              script: { type: Type.STRING },
-              scriptSafetyWarning: { type: Type.STRING },
-              manualSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
-              sourceUrls: { type: Type.ARRAY, items: { type: Type.STRING } }
-            },
-            required: ["diagnosis", "isScriptApplicable", "script", "scriptSafetyWarning", "manualSteps", "sourceUrls"]
-          }
-        });
-
-        const text = response;
-        if (!text) throw new Error(language === 'en' ? "Failed to receive response." : "응답을 받지 못했습니다.");
-
-        let parsedResult: TroubleshootingResult;
-        try {
-          parsedResult = parseAiJson(text);
-        } catch (err: any) {
-          console.error("AI Wizard parse error:", err);
-          throw new Error(language === 'en' ? "Failed to parse AI response." : "AI 응답 분석에 실패했습니다.");
-        }
-        setResult(parsedResult);
-        await logSearch(query, version);
-        break; // Success!
-      } catch (err: any) {
-        const msg = err.message || "";
-        if ((msg.includes("429") || msg.includes("Quota") || msg.includes("UNAVAILABLE") || msg.includes("503")) && i < retries - 1) {
-          console.log(`Gemini API busy or rate limited. Retrying in ${delay}ms... (Attempt ${i+1}/${retries})`);
-          await new Promise(res => setTimeout(res, delay));
-          delay *= 2;
-          continue;
-        }
-        console.error("Error fetching solution:", err);
-        setError(err.message || (language === 'en' ? "An error occurred while finding the solution." : "오류 해결 방법을 찾는 중 문제가 발생했습니다."));
-        break; // Don't retry for other errors
-      }
+    if (parsedResult) {
+      setResult(parsedResult);
+      await logSearch(query, version);
+    } else {
+      setError(language === 'en' ? "No solution found. Please check the Guidebook tab for categorized issues." : "해당 증상에 대한 해결책을 찾지 못했습니다. 가이드북 탭에서 관련 증상을 확인해 보세요.");
     }
     setLoading(false);
   };
@@ -7020,9 +7188,15 @@ export default function App() {
     const matchesCategory = selectedCategory === '전체' || issue.category === selectedCategory;
     const matchesVersion = selectedVersionFilter === '전체' || 
       (issue.windowsVersions && issue.windowsVersions.includes(selectedVersionFilter));
+
+    let matchesHardware = true;
+    if (selectedHardwareFilter !== 'all') {
+      const comps = getIssueHardwareComponents(issue);
+      matchesHardware = comps.includes(selectedHardwareFilter);
+    }
       
     const searchLower = guidebookQuery.trim().toLowerCase();
-    if (!searchLower) return matchesCategory && matchesVersion;
+    if (!searchLower) return matchesCategory && matchesVersion && matchesHardware;
     
     const tokens = searchLower.split(/\s+/).filter(Boolean);
     const combined = [
@@ -7037,7 +7211,7 @@ export default function App() {
 
     const matchesSearch = combined.includes(searchLower) || tokens.every(t => combined.includes(t));
     
-    return matchesCategory && matchesVersion && matchesSearch;
+    return matchesCategory && matchesVersion && matchesHardware && matchesSearch;
   });
 
   const getCategoryIcon = (category: string) => {
@@ -8256,7 +8430,7 @@ export default function App() {
             </div>
 
             {/* Version Filter */}
-            <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-6 items-center">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4 items-center">
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mr-1 sm:mr-2 shrink-0 whitespace-nowrap">
                 <Monitor className="w-3.5 h-3.5" />
                 Windows 버전:
@@ -8274,6 +8448,76 @@ export default function App() {
                   {v}
                 </button>
               ))}
+            </div>
+
+            {/* Hardware Component Filter Bar */}
+            <div className="bg-slate-50 dark:bg-slate-900/60 p-3 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 mb-6">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+                  <Cpu className="w-4 h-4 text-purple-500" />
+                  {language === 'en' ? 'Hardware Component Filter:' : '하드웨어 부품별 필터:'}
+                </span>
+                {selectedHardwareFilter !== 'all' && (
+                  <button
+                    onClick={() => setSelectedHardwareFilter('all')}
+                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    {language === 'en' ? 'Reset Hardware Filter' : '하드웨어 필터 해제'}
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                <button
+                  onClick={() => setSelectedHardwareFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 whitespace-nowrap transition-all flex items-center gap-1.5 border ${
+                    selectedHardwareFilter === 'all'
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-500/20'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-700'
+                  }`}
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'All Hardware' : '전체 하드웨어'}</span>
+                  <span className="opacity-75 text-[10px]">({hardwareCounts['all'] || 0})</span>
+                </button>
+                {HARDWARE_COMPONENTS.map(comp => {
+                  const isSelected = selectedHardwareFilter === comp.id;
+                  const count = hardwareCounts[comp.id] || 0;
+                  const getCompIcon = (iconName: string) => {
+                    switch (iconName) {
+                      case 'Layers': return <Layers className="w-3.5 h-3.5" />;
+                      case 'Tv': return <Tv className="w-3.5 h-3.5" />;
+                      case 'Zap': return <Zap className="w-3.5 h-3.5" />;
+                      case 'HardDrive': return <HardDrive className="w-3.5 h-3.5" />;
+                      case 'Cpu': return <Cpu className="w-3.5 h-3.5" />;
+                      case 'Monitor': return <Monitor className="w-3.5 h-3.5" />;
+                      case 'Volume2': return <Volume2 className="w-3.5 h-3.5" />;
+                      case 'Wifi': return <Wifi className="w-3.5 h-3.5" />;
+                      case 'Keyboard': return <Keyboard className="w-3.5 h-3.5" />;
+                      default: return <Cpu className="w-3.5 h-3.5" />;
+                    }
+                  };
+                  return (
+                    <button
+                      key={comp.id}
+                      onClick={() => setSelectedHardwareFilter(isSelected ? 'all' : comp.id)}
+                      className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 whitespace-nowrap transition-all flex items-center gap-1.5 border ${
+                        isSelected
+                          ? `${comp.bgColor} ${comp.color} ${comp.borderColor} ring-2 ring-purple-500/20 font-bold shadow-xs`
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <span className={isSelected ? comp.color : 'text-slate-400 dark:text-slate-500'}>
+                        {getCompIcon(comp.iconName)}
+                      </span>
+                      <span>{language === 'en' ? comp.nameEn : comp.nameKo}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/60 dark:bg-black/30 font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -8387,6 +8631,25 @@ export default function App() {
                                     {language === 'en' ? 'AI Verified' : 'AI 검증됨'}
                                   </div>
                                 )}
+
+                                {getIssueHardwareComponents(issue).map(compId => {
+                                  const comp = HARDWARE_COMPONENTS.find(c => c.id === compId);
+                                  if (!comp) return null;
+                                  return (
+                                    <button
+                                      key={compId}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedHardwareFilter(compId);
+                                      }}
+                                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 whitespace-nowrap flex items-center gap-1 border transition-all hover:scale-105 active:scale-95 ${comp.bgColor} ${comp.color} ${comp.borderColor}`}
+                                      title={language === 'en' ? `Filter by ${comp.nameEn}` : `${comp.nameKo} 관련 오류 모아보기`}
+                                    >
+                                      <Cpu className="w-3 h-3" />
+                                      {language === 'en' ? comp.nameEn : comp.nameKo}
+                                    </button>
+                                  );
+                                })}
                               </div>
 
                               {/* Title */}

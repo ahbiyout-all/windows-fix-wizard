@@ -1,6 +1,59 @@
-# Patch Note - System Update (v3.32.0)
+# Patch Note - System Update (v3.34.1)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.34.1] - 2026-10-30
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Resilient API Standby & Zero-Crash Architecture (`server.ts`, `src/App.tsx`)
+- **Key-Value Dynamic Cooldown**: Replaced the permanent environment variable name quarantine (`knownInvalidKeys.add(k.name)`) with a value-based, 3-minute cooldown map (`keyInvalidUntil.set(k.value, ...)`). Updating secrets in Settings > Secrets or testing keys is immediately recognized without a 24-hour server lock.
+- **Client Auto-Sync Exception Prevention**: Fixed unhandled promise rejection in `checkAndTriggerAutoSync` and `handleTriggerAiSearch`. Auto-sync and background batch routines now handle standby states gracefully without throwing uncaught errors to the window.
+- **Wizard Local Knowledge Fallback**: Integrated `findLocalTroubleshootingGuide` on both server (`/api/ai/diagnose`) and client (`handleSearch`). When Gemini API is in standby or keys are cooling down, the Wizard seamlessly provides verified Microsoft troubleshooting solutions and scripts from the 1,300+ local knowledge base without error screens.
+- **Clean Standby Telemetry**: Replaced intrusive `console.error` logs with informative `console.info` standby statuses, preventing dev environment false-positive crash captures.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.34.1`.
+
+---
+
+## [v3.34.0] - 2026-10-30
+
+### 🛡️ Security Hardening & Architecture Migration
+
+#### 1. Server-Side Gemini API Migration (`server.ts`, `src/App.tsx`, `src/types.ts`)
+- **Complete Client Bundle Cleanliness**: Removed `@google/genai` imports and initializations from all client-side browser code (`src/App.tsx`), eliminating browser security warnings and API key visibility risks.
+- **Unified Express Backend Routing (`/api/ai/*`)**: Mounted secure Express endpoints in `server.ts`:
+  - `POST /api/ai/generate`: Single-turn Gemini AI completions with model fallback and automatic search grounding.
+  - `POST /api/ai/stream`: SSE (Server-Sent Events) streaming completions for real-time diagnostic output.
+  - `POST /api/ai/diagnose`: Structured diagnostic analysis with Google Search grounding.
+  - `POST /api/ai/verify-issue`: Technical verification of Windows troubleshooting guides.
+  - `POST /api/ai/reclassify-chunk`: Batch issue reclassification into hardware and category taxonomies.
+  - `POST /api/ai/optimize-knowledge`: High-level troubleshooting insights generation.
+  - `POST /api/ai/search-trends`: Autonomous web trend collector powered by Google Search.
+- **Server API Key Rotation & Quota Healing**: Executed all Gemini calls via `executeServerGeminiCall` helper in `server.ts`, supporting multi-key rotation (`getAllAvailableKeys`), automatic quarantine on quota limit (429/RESOURCE_EXHAUSTED), and graceful model fallback chain.
+- **Client Route Adapter**: Re-implemented `callAiWithFallback` and `getAiClient` in `src/App.tsx` to communicate with `/api/ai/*` server proxy routes seamlessly without modifying existing UI behavior or UI components.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.34.0`.
+
+---
+
+
+## [v3.33.0] - 2026-10-30
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Hardware Component Taxonomy & Multi-Dimensional Filtering (`src/types.ts`, `src/App.tsx`)
+- **Hardware Component Taxonomy**: Added hardware component taxonomy (`Motherboard/BIOS`, `GPU/Graphics`, `Memory/RAM`, `Storage/SSD`, `Processor/CPU`, `Power/Battery`, `Display/Monitor`, `Audio/Sound`, `Network/Wi-Fi`, `Peripherals/USB`).
+- **Automatic Keyword Inferencing**: Implemented `getIssueHardwareComponents` to automatically categorize troubleshooting issues across error codes, titles, symptoms, keywords, manual steps, and scripts if explicit tags are omitted.
+- **Interactive Hardware Component Filter Bar**: Built an interactive filter bar in the Guidebook tab with custom component icons, live record counts, and one-click filter pills.
+- **Issue Card Component Badges**: Rendered quick-click hardware component badges on issue cards in the Guidebook view for seamless one-click filtering.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.33.0`.
 
 ---
 

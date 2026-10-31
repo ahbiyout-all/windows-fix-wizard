@@ -1,5 +1,14 @@
 
-import { Type } from '@google/genai';
+export enum Type {
+  TYPE_UNSPECIFIED = "TYPE_UNSPECIFIED",
+  STRING = "STRING",
+  NUMBER = "NUMBER",
+  INTEGER = "INTEGER",
+  BOOLEAN = "BOOLEAN",
+  ARRAY = "ARRAY",
+  OBJECT = "OBJECT",
+  NULL = "NULL",
+}
 
 /**
  * Common Operation Types for Firestore Error Handling
@@ -47,6 +56,8 @@ export interface TroubleshootingResult {
 export interface KnownIssue {
   id: string;
   category: string;
+  hardwareComponent?: string;
+  hardwareComponents?: string[];
   code: string;
   title: string;
   title_en?: string;

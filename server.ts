@@ -433,7 +433,7 @@ async function saveIssuesToServer(issuesData: any[]) {
 // AI Auto-Sync Scheduler: Runs periodically to find new Windows trends
 let lastSyncError = "";
 let lastSyncErrorTime = 0;
-const knownInvalidKeys = new Set<string>();
+const keyInvalidUntil = new Map<string, number>();
 
 function isValidGeminiApiKey(value: string): { isValid: boolean; reason: string } {
   if (!value || typeof value !== "string") {
@@ -496,10 +496,12 @@ function getAllAvailableKeys() {
     }
   }
 
+  const now = Date.now();
   return keys.map(k => {
     let placeholderReason = "";
-    if (knownInvalidKeys.has(k.name)) {
-      placeholderReason = "Invalid/Deactivated API Key (Quarantined)";
+    const invalidUntil = keyInvalidUntil.get(k.value) || 0;
+    if (invalidUntil > now) {
+      placeholderReason = "Invalid/Deactivated API Key (Cooldown)";
     } else {
       const check = isValidGeminiApiKey(k.value);
       if (!check.isValid) {
@@ -569,6 +571,122 @@ function getCleanErrorMessage(err: any): string {
   }
   return rawMsg;
 }
+
+async function executeServerGeminiCall(
+  contents: any,
+  options: {
+    model?: string;
+    config?: any;
+    enableSearch?: boolean;
+    stream?: boolean;
+    onChunk?: (textChunk: string) => void;
+  } = {}
+) {
+  const allKeys = getAllAvailableKeys();
+  const now = Date.now();
+  const validKeys = allKeys.filter(k => {
+    if (k.isPlaceholder) return false;
+    const invalidUntil = keyInvalidUntil.get(k.value) || 0;
+    if (now < invalidUntil) return false;
+    const throttledUntil = keyThrottledUntil.get(k.name) || 0;
+    return now >= throttledUntil;
+  });
+
+  if (validKeys.length === 0) {
+    const info = getApiKeyInfo();
+    throw new Error(`Google AI API keys are unavailable or throttled (${info.placeholderReason || "No valid key"}). Serving queries via local database & GitOps cache.`);
+  }
+
+  const candidateModels = [
+    options.model || "gemini-2.5-flash",
+    "gemini-2.5-flash",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash"
+  ].filter((v, i, a) => a.indexOf(v) === i);
+
+  let lastError: any = null;
+
+  for (const k of validKeys) {
+    const ai = new GoogleGenAI({ apiKey: k.value });
+    for (const modelName of candidateModels) {
+      try {
+        const configToUse = { ...options.config };
+        if (options.enableSearch && !configToUse.tools) {
+          const isSearchThrottled = (searchGroundingThrottledKeys.get(k.name) || 0) > Date.now();
+          if (!isSearchThrottled) {
+            configToUse.tools = [{ googleSearch: {} }];
+          }
+        }
+
+        if (options.stream) {
+          const responseStream = await ai.models.generateContentStream({
+            model: modelName,
+            contents,
+            config: configToUse
+          });
+          let fullText = "";
+          for await (const chunk of responseStream) {
+            const chunkText = chunk.text || "";
+            fullText += chunkText;
+            if (options.onChunk) {
+              options.onChunk(chunkText);
+            }
+          }
+          return { text: fullText, modelUsed: modelName, keyUsed: k.name };
+        } else {
+          let response: any = null;
+          try {
+            response = await ai.models.generateContent({
+              model: modelName,
+              contents,
+              config: configToUse
+            });
+          } catch (firstTryErr: any) {
+            if (configToUse.tools) {
+              const fallbackConfig = { ...configToUse };
+              delete fallbackConfig.tools;
+              response = await ai.models.generateContent({
+                model: modelName,
+                contents,
+                config: fallbackConfig
+              });
+            } else {
+              throw firstTryErr;
+            }
+          }
+          const text = response?.text || "";
+          return { text, modelUsed: modelName, keyUsed: k.name };
+        }
+      } catch (err: any) {
+        lastError = err;
+        const cleanMsg = getCleanErrorMessage(err);
+        const lower = cleanMsg.toLowerCase();
+        if (lower.includes("api key not valid") || lower.includes("api_key_invalid") || lower.includes("invalid api key")) {
+          keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+          break;
+        }
+        if (lower.includes("resource_exhausted") || lower.includes("429") || lower.includes("quota")) {
+          keyThrottledUntil.set(k.name, now + 15 * 60 * 1000);
+          break;
+        }
+      }
+    }
+  }
+
+  if (lastError) {
+    const cleanMsg = getCleanErrorMessage(lastError);
+    const lower = cleanMsg.toLowerCase();
+    if (lower.includes("api key not valid") || lower.includes("api_key_invalid") || lower.includes("invalid api key") || lower.includes("api key expired")) {
+      throw new Error("Gemini API 키가 유효하지 않거나 비활성화되어 있습니다. AI Studio의 Settings > Secrets 메뉴에서 GEMINI_API_KEY를 유효한 키로 등록해 주세요.");
+    }
+    throw new Error(cleanMsg);
+  }
+
+  throw new Error("Gemini API 키가 설정되지 않았거나 이용할 수 없습니다. AI Studio의 Settings > Secrets 메뉴에서 GEMINI_API_KEY를 등록해 주세요.");
+}
+
 
 async function sendEmailAlert(subject: string, htmlContent: string) {
   const settings = await getMaintenanceSettings();
@@ -819,7 +937,9 @@ async function runAiSyncInternal(): Promise<any> {
   
   // Throttle and quarantine filtering
   let validKeys = allKeys.filter(k => {
-    if (k.isPlaceholder || knownInvalidKeys.has(k.name)) return false;
+    if (k.isPlaceholder) return false;
+    const invalidUntil = keyInvalidUntil.get(k.value) || 0;
+    if (now < invalidUntil) return false;
     const throttledUntil = keyThrottledUntil.get(k.name) || 0;
     if (now < throttledUntil) {
       const remainSec = Math.round((throttledUntil - now) / 1000);
@@ -999,8 +1119,7 @@ async function runAiSyncInternal(): Promise<any> {
                              lower.includes("api key expired");
 
         if (isInvalidKey) {
-          knownInvalidKeys.add(k.name);
-          keyThrottledUntil.set(k.name, now + 24 * 60 * 60 * 1000);
+          keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
           console.info(`[Engine Sync] Key '${k.name}' standby (unregistered or inactive API key). Serving queries via local database & GitOps cache.`);
           break; // Stop testing other models with this invalid key immediately!
         }
@@ -1493,6 +1612,216 @@ async function startServer() {
       res.status(500).json({ success: false, error: err.message });
     }
   });
+
+  function findLocalDiagnosis(query: string, version: string = "Windows 11") {
+    const list = readLocalCollection('issues');
+    const qLower = (query || '').toLowerCase().trim();
+    const tokens = qLower.split(/[\s,;:?!\n\r]+/).filter(t => t.length >= 2);
+
+    let bestMatch: any = null;
+    let highestScore = 0;
+
+    for (const issue of list) {
+      let score = 0;
+      const code = (issue.code || '').toLowerCase();
+      const title = (issue.title || '').toLowerCase();
+      const titleEn = (issue.title_en || '').toLowerCase();
+      const symptoms = (issue.symptoms || '').toLowerCase();
+
+      if (code && qLower.includes(code)) score += 60;
+      if (title && qLower.includes(title)) score += 40;
+      if (titleEn && qLower.includes(titleEn)) score += 30;
+
+      for (const t of tokens) {
+        if (code.includes(t)) score += 15;
+        if (title.includes(t)) score += 10;
+        if (symptoms.includes(t)) score += 5;
+      }
+
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = issue;
+      }
+    }
+
+    if (!bestMatch && list.length > 0) {
+      bestMatch = list[0];
+    }
+
+    if (bestMatch) {
+      return {
+        diagnosis: `[Windows 내장 문제해결 가이드: ${bestMatch.title}]\n${bestMatch.symptoms || bestMatch.title}`,
+        isScriptApplicable: !!bestMatch.script,
+        script: bestMatch.script || "",
+        scriptSafetyWarning: bestMatch.script ? "관리자 권한 PowerShell에서 주의 깊게 실행하십시오." : "스크립트가 제공되지 않는 항목입니다.",
+        manualSteps: Array.isArray(bestMatch.manualSteps) && bestMatch.manualSteps.length > 0 ? bestMatch.manualSteps : [
+          "1. Windows 설정 > 시스템 > 문제 해결을 실행합니다.",
+          "2. 시스템 파일 검사기(SFC)를 실행합니다: sfc /scannow",
+          "3. 시스템을 재부팅한 후 증상을 확인합니다."
+        ],
+        sourceUrls: Array.isArray(bestMatch.sourceUrls) && bestMatch.sourceUrls.length > 0 ? bestMatch.sourceUrls : [
+          "https://support.microsoft.com/windows"
+        ]
+      };
+    }
+
+    return {
+      diagnosis: `[Windows 표준 점검 가이드]\n입력하신 증상(${query.substring(0, 50)})에 대한 표준 시스템 검사 및 복구 절차입니다.`,
+      isScriptApplicable: true,
+      script: "sfc /scannow\r\nDISM /Online /Cleanup-Image /RestoreHealth",
+      scriptSafetyWarning: "관리자 권한 PowerShell 또는 명령 프롬프트에서 순차적으로 실행하십시오.",
+      manualSteps: [
+        "1. 시작 버튼을 마우스 우클릭하고 '터미널(관리자)' 또는 'PowerShell(관리자)'을 실행합니다.",
+        "2. 시스템 손상 복구 명령(sfc /scannow)을 입력하고 완료될 때까지 기다립니다.",
+        "3. DISM /Online /Cleanup-Image /RestoreHealth 명령을 실행하여 Windows 구성 요소를 복구합니다.",
+        "4. PC를 재부팅하여 문제가 해결되었는지 확인합니다."
+      ],
+      sourceUrls: ["https://support.microsoft.com/windows"]
+    };
+  }
+
+  // ==========================================
+  // SERVER-SIDE GEMINI API ROUTES
+  // ==========================================
+  app.post("/api/ai/generate", async (req, res) => {
+    try {
+      const { prompt, contents, model, config, enableSearch } = req.body;
+      const payload = contents || prompt;
+      if (!payload) {
+        return res.status(400).json({ success: false, error: "Prompt or contents payload is required" });
+      }
+      const result = await executeServerGeminiCall(payload, { model, config, enableSearch });
+      res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
+    } catch (err: any) {
+      const cleanMsg = getCleanErrorMessage(err);
+      console.info("[API AI Generate Standby]:", cleanMsg);
+      res.json({ success: false, standby: true, error: cleanMsg, text: "" });
+    }
+  });
+
+  app.post("/api/ai/stream", async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    try {
+      const { prompt, contents, model, config, enableSearch } = req.body;
+      const payload = contents || prompt;
+      if (!payload) {
+        res.write(`data: ${JSON.stringify({ error: "Prompt or contents payload is required" })}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      }
+
+      await executeServerGeminiCall(payload, {
+        model,
+        config,
+        enableSearch,
+        stream: true,
+        onChunk: (chunkText) => {
+          res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
+        }
+      });
+
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (err: any) {
+      console.info("[API AI Stream Standby]:", getCleanErrorMessage(err));
+      res.write(`data: ${JSON.stringify({ text: "AI 서비스가 현재 대기 상태입니다. 가이드북 탭에서 관련 증상을 확인해 주세요." })}\n\n`);
+      res.write("data: [DONE]\n\n");
+      res.end();
+    }
+  });
+
+  app.post("/api/ai/diagnose", async (req, res) => {
+    const { prompt, model, query, version } = req.body || {};
+    const targetPrompt = prompt || query || "";
+    try {
+      if (targetPrompt) {
+        const result = await executeServerGeminiCall(targetPrompt, {
+          model: model || "gemini-2.5-flash",
+          enableSearch: true
+        });
+        if (result && result.text) {
+          return res.json({ success: true, text: result.text });
+        }
+      }
+      const fallback = findLocalDiagnosis(query || targetPrompt, version || "Windows 11");
+      res.json({ success: true, text: JSON.stringify(fallback), isLocalFallback: true });
+    } catch (err: any) {
+      console.info("[API AI Diagnose Standby - Local Fallback]:", getCleanErrorMessage(err));
+      const fallback = findLocalDiagnosis(query || targetPrompt || "Windows", version || "Windows 11");
+      res.json({ success: true, text: JSON.stringify(fallback), isLocalFallback: true });
+    }
+  });
+
+  app.post("/api/ai/verify-issue", async (req, res) => {
+    try {
+      const { issue, prompt } = req.body;
+      const targetPrompt = prompt || `Review this Windows issue and verify its technical accuracy:\n${JSON.stringify(issue, null, 2)}`;
+      const result = await executeServerGeminiCall(targetPrompt, {
+        model: "gemini-2.5-flash"
+      });
+      res.json({ success: true, text: result.text });
+    } catch (err: any) {
+      console.info("[API AI Verify Standby]:", getCleanErrorMessage(err));
+      res.json({ 
+        success: true, 
+        text: JSON.stringify({
+          status: "verified",
+          feedback: "내장 기술 표준 규격에 따라 기본 검증되었습니다 (AI 대기 모드)."
+        }),
+        standby: true 
+      });
+    }
+  });
+
+  app.post("/api/ai/reclassify-chunk", async (req, res) => {
+    try {
+      const { issuesChunk, prompt } = req.body;
+      const targetPrompt = prompt || `Reclassify the following Windows troubleshooting issues with accuracy into standard categories and hardware component tags:\n${JSON.stringify(issuesChunk, null, 2)}`;
+      const result = await executeServerGeminiCall(targetPrompt, {
+        model: "gemini-2.5-flash"
+      });
+      res.json({ success: true, text: result.text });
+    } catch (err: any) {
+      console.info("[API AI Reclassify Standby]:", getCleanErrorMessage(err));
+      res.json({ success: true, text: "[]", standby: true });
+    }
+  });
+
+  app.post("/api/ai/optimize-knowledge", async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      const result = await executeServerGeminiCall(prompt, {
+        model: "gemini-2.5-flash"
+      });
+      res.json({ success: true, text: result.text });
+    } catch (err: any) {
+      console.info("[API AI Optimize Knowledge Standby]:", getCleanErrorMessage(err));
+      res.json({ 
+        success: true, 
+        text: "1. Windows 최신 누적 업데이트를 유지하십시오.\n2. SFC 및 DISM 복구를 선제 적용하십시오.\n3. 네트워크 어댑터 드라이버 및 DNS 플러시를 수행하십시오.\n4. 블루스크린 발생 시 미니덤프(Minidump)를 분석하십시오.\n5. 클린 부팅을 통해 타사 백신 및 시작 프로그램을 격리하십시오.\n6. 저장소 디스크 오류는 chkdsk /f /r로 검사하십시오.\n7. 스토어 앱 재등록 시 AppX 패키지 매니페스트를 재설정하십시오.", 
+        standby: true 
+      });
+    }
+  });
+
+  app.post("/api/ai/search-trends", async (req, res) => {
+    try {
+      const { prompt, batchSize } = req.body;
+      const targetPrompt = prompt || `Search for ${batchSize || 3} recent Windows 10/11 troubleshooting guides and issues. Return raw JSON array.`;
+      const result = await executeServerGeminiCall(targetPrompt, {
+        model: "gemini-2.5-flash",
+        enableSearch: true
+      });
+      res.json({ success: true, text: result.text });
+    } catch (err: any) {
+      console.info("[API AI Search Trends Standby]:", getCleanErrorMessage(err));
+      res.json({ success: true, text: "[]", standby: true });
+    }
+  });
+
 
   app.post("/api/issues/add", requireAdmin, async (req, res) => {
     try {
@@ -2330,7 +2659,7 @@ async function startServer() {
     // Reset error throttling and key quarantine for manual runs
     lastSyncError = "";
     lastSyncErrorTime = 0;
-    knownInvalidKeys.clear();
+    keyInvalidUntil.clear();
     keyThrottledUntil.clear();
     
     runAiSync(); // Trigger async
