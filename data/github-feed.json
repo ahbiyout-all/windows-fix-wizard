@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-31T16:52:59.331Z",
+  "lastCollectedAt": "2026-10-31T21:02:45.254Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "네트워크",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 68,
+  "totalIssuesCount": 70,
   "newIssues": [
     {
-      "id": "gh-0x80072ee2-mvwn3lmr",
-      "code": "0x80072EE2",
-      "title": "Windows 10/11 네트워크 연결 시간 초과 오류 (0x80072EE2) 해결 방법",
-      "category": "네트워크"
+      "id": "gh-0xc004f213-mvww0sue",
+      "code": "0xC004F213",
+      "title": "Windows 10/11 정품 인증 오류 0xC004F213 (제품 키 미보유) 해결 방법",
+      "category": "정품인증"
     },
     {
-      "id": "gh-error-809-mvwn3lmr",
-      "code": "Error 809",
-      "title": "Windows 10/11 L2TP/IPsec VPN 연결 실패 오류 809 해결 방법",
-      "category": "네트워크"
+      "id": "gh-0xc004c008-mvww0sue",
+      "code": "0xC004C008",
+      "title": "Windows 10/11 정품 인증 오류 0xC004C008 (제품 키 사용 제한 초과) 해결 방법",
+      "category": "정품인증"
     }
   ]
 }

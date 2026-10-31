@@ -2996,5 +2996,99 @@
     "updatedAt": "2026-10-31T16:52:59.331Z",
     "verifiedAt": "2026-10-31T16:52:59.331Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f213-mvww0sue",
+    "category": "정품인증",
+    "code": "0xC004F213",
+    "title": "Windows 10/11 정품 인증 오류 0xC004F213 (제품 키 미보유) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004F213 (No Product Key Found)",
+    "symptoms": "메인보드 등 주요 하드웨어 교체 또는 Windows 클린 설치 후 정품 인증 설정 페이지에 '디바이스에서 제품 키를 찾지 못했습니다'라는 메시지와 함께 0xC004F213 오류가 발생합니다. BIOS/UEFI 내장 OEM 키를 찾지 못하거나 디지털 라이선스가 Microsoft 계정과 연동되어 있지 않을 때 주로 나타납니다.",
+    "symptoms_en": "After a hardware change (such as a motherboard replacement) or a clean Windows installation, the Activation settings page displays error 0xC004F213 along with 'Windows reported that no product key was found on your device'. This occurs when the OS cannot locate an embedded OEM license key or when the digital license is not linked to your Microsoft account.",
+    "script": "Write-Host \"[Windows Licensing Diagnostic]\" -ForegroundColor Cyan\nGet-CimInstance -ClassName SoftwareLicensingProduct | Where-Object { $_.PartialProductKey } | Select-Object Name, LicenseStatus, PartialProductKey | Format-Table -AutoSize\n$oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey\nif ($oemKey) {\n    Write-Host \"Detected OEM Firmware Key: $oemKey\" -ForegroundColor Green\n} else {\n    Write-Host \"No embedded OEM Firmware Key found in UEFI/BIOS.\" -ForegroundColor Yellow\n}",
+    "manualSteps": [
+      "시작 > 설정 > 시스템 > 정품 인증으로 이동하여 '문제 해결(Troubleshoot)' 버튼을 클릭합니다.",
+      "최근 메인보드나 시스템 부품을 교체한 경우 문제 해결사 화면에서 '최근에 이 디바이스의 하드웨어를 변경했습니다' 링크를 선택합니다.",
+      "Microsoft 계정으로 로그인한 후 연결된 디바이스 목록에서 현재 사용 중인 PC를 선택하고 '지금 사용 중인 디바이스입니다'를 체크한 뒤 [정품 인증]을 진행합니다.",
+      "UEFI BIOS에 OEM 키가 있는 경우 관리자 권한 명령 프롬프트에서 `wmic path softwarelicensingservice get OA3xOriginalProductKey` 명령으로 키를 확인하고 `slmgr.vbs /ipk <확인된 키>`로 직접 등록합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Start > Settings > System > Activation and click the 'Troubleshoot' button.",
+      "If you recently replaced hardware like your motherboard, click the link 'I changed hardware on this device recently' in the troubleshooter window.",
+      "Sign in with your Microsoft account, select your current PC from the linked device list, check 'This is the device I'm using right now', and click [Activate].",
+      "If an OEM key is stored in your BIOS firmware, open Command Prompt as administrator, run `wmic path softwarelicensingservice get OA3xOriginalProductKey`, and apply it via `slmgr.vbs /ipk <ProductKey>`."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09096754-015a-4674-0c19-ea6284272f2e",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F213",
+      "Windows 정품인증",
+      "제품키를 찾을 수 없음",
+      "No product key found",
+      "메인보드 교체 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T21:02:45.254Z",
+    "updatedAt": "2026-10-31T21:02:45.254Z",
+    "verifiedAt": "2026-10-31T21:02:45.254Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c008-mvww0sue",
+    "category": "정품인증",
+    "code": "0xC004C008",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C008 (제품 키 사용 제한 초과) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004C008 (Product Key Exceeded Limit)",
+    "symptoms": "Windows 제품 키를 지정된 허용 기기 수 이상으로 다른 PC에 입력했거나 라이선스 이전 횟수를 초과했을 때 정품 인증 서버에서 온라인 승인이 거부되며 0xC004C008 오류가 표시됩니다. 온라인 자동 인증 대신 전화 인증(slui 4) 절차를 통해 라이선스를 재인증해야 합니다.",
+    "symptoms_en": "Error 0xC004C008 occurs when a product key has been used on more PCs than permitted by Microsoft Software License Terms, or transfer limits have been reached. Online activation fails, requiring telephone activation or releasing the key from the previous installation.",
+    "script": "Write-Host \"[Windows License & Activation Check]\" -ForegroundColor Cyan\ncscript //nologo C:\\Windows\\System32\\slmgr.vbs /dli\nWrite-Host \"To unregister key from previous machine if accessible, run: slmgr.vbs /upk\" -ForegroundColor Yellow",
+    "manualSteps": [
+      "`Windows + R` 키를 눌러 실행 창을 열고 `slui.exe 4`를 입력한 후 Enter를 누릅니다.",
+      "전화 정품 인증 마법사가 나타나면 국가/지역(대한민국)을 선택하고 화면에 안내된 수신자 부담 전화번호로 전화를 겁니다.",
+      "자동 응답 시스템(ARS) 안내에 따라 화면에 표시된 9개 그룹의 설치 ID(Installation ID)를 입력합니다.",
+      "ARS에서 발급해 주는 확인 ID(Confirmation ID)를 화면의 입력란에 입력한 후 [Windows 정품 인증]을 완료합니다.",
+      "이전 PC를 여전히 사용할 수 있다면 관리자 명령 프롬프트에서 `slmgr.vbs /upk` 명령어로 제품 키 등록을 해제하여 사용 횟수를 정리합니다."
+    ],
+    "manualSteps_en": [
+      "Press `Windows + R`, type `slui.exe 4`, and press Enter to launch the phone activation wizard.",
+      "Select your country or region and call the toll-free phone number shown on the screen.",
+      "Follow the automated phone system instructions to provide your 9-group Installation ID.",
+      "Enter the Confirmation ID provided by the automated system into the wizard fields and click [Activate Windows].",
+      "If the previous PC is still operational, open Command Prompt as administrator and run `slmgr.vbs /upk` to uninstall the product key."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09096754-015a-4674-0c19-ea6284272f2e",
+      "https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/slmgrvbs-options"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C008",
+      "slui 4",
+      "Windows 전화 정품인증",
+      "제품 키 사용 제한 초과",
+      "Product key limit exceeded"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T21:02:45.254Z",
+    "updatedAt": "2026-10-31T21:02:45.254Z",
+    "verifiedAt": "2026-10-31T21:02:45.254Z",
+    "verificationStatus": "verified"
   }
 ]
