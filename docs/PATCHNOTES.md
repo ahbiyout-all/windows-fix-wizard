@@ -11,6 +11,7 @@ This document is synchronized with `/docs/PATCH_NOTE.md`.
 - **Commit Filter Optimization**: Removed `[skip ci]` tag from autonomous AI collector commit messages to enable CI/CD workflow evaluation.
 - **Admin Tab GitHub Pages Auto-Deploy Control Center**: Added `autoDeployPages` toggle switch in `/api/github/config`, direct database push with auto-deploy endpoint (`POST /api/github/push-to-repo`), and 1-click remote Pages dispatch endpoint (`POST /api/github/deploy-pages`).
 - **Real-Time Deployment Status & Site Link**: Displays live status badges and direct URL (`https://${owner}.github.io/${repo}/`) in the Admin Tab.
+- **PAT Error Auto-Scroll Guidance**: Direct 1-click PAT issuance link pre-filling `repo,workflow` scopes and automatic focus/scroll to `#github-settings-card` when 401 or missing PAT alerts are triggered.
 
 ---
 

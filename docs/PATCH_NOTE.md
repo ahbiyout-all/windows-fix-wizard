@@ -23,6 +23,7 @@ This patch document outlines the latest features, enhancements, and system secur
 
 ### 📈 UI/UX & Performance Optimizations
 - **Expanded Action Toolbar in Admin Tab**: Added visual cards for "Push DB to GitHub & Auto-Deploy", "Deploy Pages Now", and "Auto-Deploy Toggle".
+- **PAT Error Alert Resolution Guidance**: Added automated `onConfirm` callback in `customAlert` that smooth-scrolls and focuses the `#github-pat-input` field with the direct "새 토큰 발급" link when a 401 Bad Credentials or missing PAT error occurs.
 - **System Versioning Synchronization**: Synchronized system version across `package.json`, `src/App.tsx`, `/docs/PATCH_NOTE.md`, and `/docs/PATCHNOTES.md` to `v3.53.0`.
 
 ---

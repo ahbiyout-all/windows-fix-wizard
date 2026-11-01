@@ -1124,8 +1124,8 @@ export default function App() {
     onConfirm?: () => void;
   }>({ isOpen: false, type: 'alert', message: '' });
 
-  const customAlert = (message: string) => {
-    setUiDialog({ isOpen: true, type: 'alert', message });
+  const customAlert = (message: string, onConfirm?: () => void) => {
+    setUiDialog({ isOpen: true, type: 'alert', message, onConfirm });
   };
 
   const customConfirm = (message: string, onConfirm: () => void) => {
@@ -1576,10 +1576,30 @@ export default function App() {
     }
   };
 
+  const scrollToGithubSettings = () => {
+    setTimeout(() => {
+      const el = document.getElementById('github-settings-card');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const inputEl = document.getElementById('github-pat-input');
+        if (inputEl) inputEl.focus();
+      }
+    }, 200);
+  };
+
   const handleDispatchGithubWorkflow = async (topic = 'all') => {
     if (!isAdmin) return;
     if (!githubRepo.trim()) {
       customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
+      return;
+    }
+    if (!hasServerGithubToken && !githubToken.trim()) {
+      customAlert(language === 'en'
+        ? "GitHub PAT Token is required for remote workflow dispatch. Please enter a PAT with 'repo' and 'workflow' permissions below."
+        : "GitHub Actions 원격 수집 실행을 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
+        scrollToGithubSettings
+      );
+      scrollToGithubSettings();
       return;
     }
     setIsDispatchingWorkflow(true);
@@ -1607,7 +1627,14 @@ export default function App() {
         throw new Error(data.error || "Dispatch failed");
       }
     } catch (err: any) {
-      customAlert(language === 'en' ? `Workflow dispatch failed: ${err.message}` : `워크플로 원격 실행 실패: ${err.message}`);
+      const is401 = err.message?.includes('401') || err.message?.includes('PAT') || err.message?.includes('인증');
+      customAlert(
+        language === 'en' ? `Workflow dispatch failed: ${err.message}` : `워크플로 원격 실행 실패: ${err.message}`,
+        is401 ? scrollToGithubSettings : undefined
+      );
+      if (is401) {
+        scrollToGithubSettings();
+      }
     } finally {
       setIsDispatchingWorkflow(false);
     }
@@ -1617,6 +1644,15 @@ export default function App() {
     if (!isAdmin) return;
     if (!githubRepo.trim()) {
       customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
+      return;
+    }
+    if (!hasServerGithubToken && !githubToken.trim()) {
+      customAlert(language === 'en'
+        ? "GitHub PAT Token is required for GitHub Pages deployment. Please enter a PAT with 'repo' and 'workflow' permissions below."
+        : "GitHub Pages 원격 배포를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
+        scrollToGithubSettings
+      );
+      scrollToGithubSettings();
       return;
     }
     setIsDeployingPages(true);
@@ -1641,7 +1677,14 @@ export default function App() {
         throw new Error(data.error || "Pages deployment failed");
       }
     } catch (err: any) {
-      customAlert(language === 'en' ? `Pages deployment failed: ${err.message}` : `GitHub Pages 배포 실행 실패: ${err.message}`);
+      const is401 = err.message?.includes('401') || err.message?.includes('PAT') || err.message?.includes('인증');
+      customAlert(
+        language === 'en' ? `Pages deployment failed: ${err.message}` : `GitHub Pages 배포 실행 실패: ${err.message}`,
+        is401 ? scrollToGithubSettings : undefined
+      );
+      if (is401) {
+        scrollToGithubSettings();
+      }
     } finally {
       setIsDeployingPages(false);
     }
@@ -1651,6 +1694,15 @@ export default function App() {
     if (!isAdmin) return;
     if (!githubRepo.trim()) {
       customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
+      return;
+    }
+    if (!hasServerGithubToken && !githubToken.trim()) {
+      customAlert(language === 'en'
+        ? "GitHub PAT Token is required for pushing database changes. Please enter a PAT with 'repo' and 'workflow' permissions below."
+        : "GitHub 저장소 데이터 커밋 및 푸시를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
+        scrollToGithubSettings
+      );
+      scrollToGithubSettings();
       return;
     }
     setIsPushingGithub(true);
@@ -1676,7 +1728,14 @@ export default function App() {
         throw new Error(data.error || "Push failed");
       }
     } catch (err: any) {
-      customAlert(language === 'en' ? `GitHub push failed: ${err.message}` : `GitHub 데이터 푸시 실패: ${err.message}`);
+      const is401 = err.message?.includes('401') || err.message?.includes('PAT') || err.message?.includes('인증');
+      customAlert(
+        language === 'en' ? `GitHub push failed: ${err.message}` : `GitHub 데이터 푸시 실패: ${err.message}`,
+        is401 ? scrollToGithubSettings : undefined
+      );
+      if (is401) {
+        scrollToGithubSettings();
+      }
     } finally {
       setIsPushingGithub(false);
     }
@@ -10531,7 +10590,7 @@ export default function App() {
                 </div>
 
                 {/* GitHub Repository & Token Configuration */}
-                <div className="bg-slate-50 dark:bg-slate-800/40 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
+                <div id="github-settings-card" className="bg-slate-50 dark:bg-slate-800/40 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                       <Settings className="w-3.5 h-3.5 text-slate-500" />
@@ -10605,6 +10664,7 @@ export default function App() {
                             </a>
                           </div>
                           <input
+                            id="github-pat-input"
                             type="password"
                             value={githubToken}
                             onChange={(e) => setGithubToken(e.target.value)}
@@ -15123,9 +15183,10 @@ export default function App() {
                   )}
                   <button
                     onClick={() => {
+                      const cb = uiDialog.onConfirm;
                       setUiDialog({ ...uiDialog, isOpen: false });
-                      if (uiDialog.type === 'confirm' && uiDialog.onConfirm) {
-                        uiDialog.onConfirm();
+                      if (cb) {
+                        cb();
                       }
                     }}
                     className={`px-5 py-2.5 text-sm font-bold text-white rounded-xl transition-colors shadow-md ${uiDialog.type === 'confirm' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'}`}
