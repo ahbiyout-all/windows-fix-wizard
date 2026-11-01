@@ -3282,5 +3282,99 @@
     "updatedAt": "2026-11-01T12:44:50.488Z",
     "verifiedAt": "2026-11-01T12:44:50.488Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-43-mvycy9iz",
+    "category": "디스플레이/그래픽",
+    "code": "Code 43",
+    "title": "Windows 10/11 그래픽 드라이버 충돌 및 장치 작동 중단 오류 (코드 43)",
+    "title_en": "Windows 10/11 Graphics Driver Conflict and Device Stop Error (Code 43)",
+    "symptoms": "Windows 10/11 누적 업데이트 또는 드라이버 자동 업데이트 이후 장치 관리자의 디스플레이 어댑터에서 'Windows가 장치에서 문제를 보고했기 때문에 이 장치를 중지했습니다. (코드 43)' 오류가 발생하며 외장 GPU 가속, 다중 모니터 출력 및 고해상도 설정이 무력화되는 현상입니다.",
+    "symptoms_en": "After recent Windows 10/11 cumulative updates or GPU driver auto-updates, Device Manager shows 'Windows has stopped this device because it has reported problems. (Code 43)' under Display Adapters, causing external GPU acceleration, multi-monitor display, and high-resolution options to fail.",
+    "script": "Get-PnpDevice -Class Display | Where-Object { $_.Status -ne 'OK' } | Select-Object Name, InstanceId, Status, ErrorCode",
+    "manualSteps": [
+      "장치 관리자를 실행하고 '디스플레이 어댑터'에서 오류가 발생한 그래픽 카드를 우클릭한 후 '장치 사용 안 함'을 선택한 뒤 다시 '장치 사용'으로 전환합니다.",
+      "DDU(Display Driver Uninstaller) 프로그램 또는 전용 삭제 툴을 사용하여 기존 디스플레이 드라이버를 안전 모드에서 완전히 제거합니다.",
+      "GPU 제조사(NVIDIA, AMD, Intel) 공식 웹사이트에서 사용 중인 OS 버전에 맞는 최신 WHQL 인증 드라이버를 다운로드하여 새로 설치합니다.",
+      "로컬 그룹 정책 편집기(gpedit.msc) 또는 설정에서 특정 디스플레이 드라이버가 Windows 업데이트에 의해 자동 덮어쓰기되지 않도록 방지 옵션을 구성합니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager, right-click the problematic graphics adapter under 'Display adapters', select 'Disable device', and then select 'Enable device' again.",
+      "Completely remove existing graphics drivers in Safe Mode using Display Driver Uninstaller (DDU) or official cleanup utilities.",
+      "Download and clean-install the latest WHQL-certified driver matching your OS version directly from the GPU manufacturer (NVIDIA, AMD, Intel).",
+      "Configure Local Group Policy (gpedit.msc) or Settings to prevent Windows Update from automatically overwriting custom graphics drivers."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/fix-graphics-device-problems-with-error-code-43-4718100b-0361-4601-576f-3c6c97ee2e92",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-prob-failed-post-start"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "코드 43",
+      "Code 43",
+      "디스플레이 드라이버 오류",
+      "그래픽 카드 중지",
+      "Graphics Device Stopped",
+      "GPU Driver Code 43"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T21:44:26.554Z",
+    "updatedAt": "2026-11-01T21:44:26.554Z",
+    "verifiedAt": "2026-11-01T21:44:26.554Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x0000003b-mvycy9iz",
+    "category": "디스플레이/그래픽",
+    "code": "0x0000003B",
+    "title": "DirectX 그래픽 커널 오류로 인한 SYSTEM_SERVICE_EXCEPTION 블루스크린 (0x0000003B)",
+    "title_en": "SYSTEM_SERVICE_EXCEPTION (0x0000003B) BSOD Caused by DirectX Graphics Kernel (dxgkrnl.sys)",
+    "symptoms": "Windows 11/10 최신 환경에서 하드웨어 가속 앱 실행, HDR 모드 전환, 또는 게임 중 DirectX 커널 드라이버(dxgkrnl.sys)와 그래픽 드라이버 모듈 간 충돌로 인해 SYSTEM_SERVICE_EXCEPTION (0x0000003B) 블루스크린이 발생하고 시스템이 멈추거나 재부팅되는 현상입니다.",
+    "symptoms_en": "In recent Windows 11/10 environments, when launching hardware-accelerated apps, toggling HDR, or playing games, driver call conflicts between the DirectX kernel (dxgkrnl.sys) and graphics drivers trigger a SYSTEM_SERVICE_EXCEPTION (0x0000003B) BSOD crash and system reboot.",
+    "script": "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WER-SystemErrorReporting'} -MaxEvents 10 | Where-Object { $_.Message -match '0x0000003b' } | Select-Object TimeCreated, Message",
+    "manualSteps": [
+      "설정 > 시스템 > 디스플레이 > 그래픽 설정으로 이동하여 '하드웨어 가속 GPU 일정 관리(HAGS)' 항목을 끔(Off)으로 설정한 후 PC를 재부팅합니다.",
+      "관리자 권한 프롬프트에서 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth' 명령을 실행하여 손상된 dxgkrnl.sys 등 그래픽 시스템 파일을 복구합니다.",
+      "DirectX 최종 사용자 런타임 및 최신 Windows 누적 업데이트를 설치하여 그래픽 하위 시스템 코드를 최신 상태로 유지합니다.",
+      "NVIDIA 제어판 또는 AMD Software에서 전력 관리 모드를 '최고 성능 선호'로 변경하고, 디스플레이 주사율 및 G-Sync/FreeSync 설정을 다시 맞춥니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Display > Graphics settings, turn off 'Hardware-accelerated GPU scheduling (HAGS)', and restart the PC.",
+      "Run 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' in an elevated command prompt to repair corrupted system files such as dxgkrnl.sys.",
+      "Install the DirectX End-User Runtimes and the latest Windows cumulative updates to keep the graphics subsystem updated.",
+      "In NVIDIA Control Panel or AMD Software, set Power Management Mode to 'Prefer maximum performance' and reconfigure refresh rate and G-Sync/FreeSync settings."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-5c622672-00b6-3922-11a8-23372072fb08",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x3b--system-service-exception"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x0000003B",
+      "SYSTEM_SERVICE_EXCEPTION",
+      "dxgkrnl.sys 블루스크린",
+      "DirectX 커널 오류",
+      "HAGS 블루스크린",
+      "Graphics BSOD 0x3B"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T21:44:26.554Z",
+    "updatedAt": "2026-11-01T21:44:26.554Z",
+    "verifiedAt": "2026-11-01T21:44:26.554Z",
+    "verificationStatus": "verified"
   }
 ]

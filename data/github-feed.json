@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-01T12:44:50.488Z",
+  "lastCollectedAt": "2026-11-01T21:44:26.554Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "네트워크",
+  "targetCategory": "디스플레이/그래픽",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 74,
+  "totalIssuesCount": 76,
   "newIssues": [
     {
-      "id": "gh-0x800704cf-mvxtobzs",
-      "code": "0x800704cf",
-      "title": "Windows 10/11 네트워크 연결 오류 0x800704cf (네트워크 위치에 도달할 수 없음) 해결 방법",
-      "category": "네트워크"
+      "id": "gh-code-43-mvycy9iz",
+      "code": "Code 43",
+      "title": "Windows 10/11 그래픽 드라이버 충돌 및 장치 작동 중단 오류 (코드 43)",
+      "category": "디스플레이/그래픽"
     },
     {
-      "id": "gh-0x80072ee7-mvxtobzs",
-      "code": "0x80072EE7",
-      "title": "Windows 10/11 DNS 이름 확인 실패 및 네트워크 업데이트 오류 0x80072EE7 해결 방법",
-      "category": "네트워크"
+      "id": "gh-0x0000003b-mvycy9iz",
+      "code": "0x0000003B",
+      "title": "DirectX 그래픽 커널 오류로 인한 SYSTEM_SERVICE_EXCEPTION 블루스크린 (0x0000003B)",
+      "category": "디스플레이/그래픽"
     }
   ]
 }
