@@ -1,6 +1,22 @@
-# Patch Note - System Update (v3.53.0)
+# Patch Note - System Update (v3.54.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.54.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Full Dual-Runtime Client Direct GitHub REST API Support
+- **Static GitHub Pages SPA Client Engine**: Enabled direct browser-to-GitHub REST API communication (`api.github.com`) when running on static hosting environments like `https://ahbiyout-all.github.io/windows-fix-wizard/`.
+- **Client-Side Direct GitOps Data Commit (`handlePushToGithub`)**: Encodes active browser dataset (`data/issues.json`) into Base64 and commits directly to GitHub via `PUT /repos/{owner}/{repo}/contents/data/issues.json` with user's PAT, then auto-dispatches `deploy-pages.yml`.
+- **Client-Side Direct Workflow Triggering (`handleDispatchGithubWorkflow` & `handleDeployPages`)**: Dispatches `windows-fix-collector.yml` and `deploy-pages.yml` directly from the user's browser using GitHub REST API.
+- **Client-Side Direct Dataset Synchronization (`handlePullFromGithub`)**: Fetches raw `data/issues.json` directly from GitHub CDN or Contents API, updating IndexedDB (`winfix_merged_issues`) and client UI instantly.
+- **LocalStorage GitHub Configuration Cache (`winfix_github_config`)**: Client remembers repository name, branch, and PAT token locally in browser storage when operating in static GitHub Pages mode.
+
+#### 2. Engine Action Fallback Routing
+- **Autonomous Engine Static Mode Fallback (`runEngineNow`)**: When invoked on static GitHub Pages host (where Node `/api/engine/run-now` is unavailable), automatically falls back to triggering the 24/7 GitHub Actions autonomous collector workflow (`windows-fix-collector.yml`) via client-side REST dispatch.
 
 ---
 

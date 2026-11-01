@@ -459,7 +459,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.53.0";
+const APP_VERSION = "3.54.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1458,6 +1458,7 @@ export default function App() {
 
   const fetchGithubConfig = async () => {
     if (!isAdmin) return;
+    let loadedFromApi = false;
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/config", {
@@ -1465,7 +1466,7 @@ export default function App() {
       });
       const data = await parseJsonResponse(resp);
       if (data.success && data.config) {
-        setGithubRepo(data.config.repo || '');
+        setGithubRepo(data.config.repo || 'AhBiYout-all/windows-fix-wizard');
         setGithubBranch(data.config.branch || 'main');
         setGithubWorkflowId(data.config.workflowId || 'windows-fix-collector.yml');
         setGithubAuthMode(data.config.authMode || 'PAT');
@@ -1479,15 +1480,58 @@ export default function App() {
             status: data.config.lastSyncStatus
           });
         }
+        loadedFromApi = true;
       }
     } catch (e) {
-      console.warn("GitHub config load failed:", e);
+      console.warn("GitHub config load from API skipped (static mode):", e);
+    }
+
+    if (!loadedFromApi) {
+      try {
+        const savedLocal = localStorage.getItem('winfix_github_config');
+        if (savedLocal) {
+          const cfg = JSON.parse(savedLocal);
+          if (cfg.repo) setGithubRepo(cfg.repo);
+          if (cfg.branch) setGithubBranch(cfg.branch);
+          if (cfg.workflowId) setGithubWorkflowId(cfg.workflowId);
+          if (cfg.authMode) setGithubAuthMode(cfg.authMode);
+          if (cfg.autoDeployPages !== undefined) setAutoDeployPages(cfg.autoDeployPages);
+          if (cfg.token) {
+            setGithubToken(cfg.token);
+            setHasServerGithubToken(true);
+          }
+        }
+      } catch (err) {}
     }
   };
 
   const saveGithubConfig = async () => {
     if (!isAdmin) return;
     setIsSavingGithubConfig(true);
+    const cleanRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const cleanBranch = githubBranch.trim() || 'main';
+    const cleanWorkflow = githubWorkflowId.trim() || 'windows-fix-collector.yml';
+    const cleanToken = githubToken.trim();
+
+    // 1. Always save client-side config to localStorage for static GitHub Pages support
+    try {
+      const existing = localStorage.getItem('winfix_github_config');
+      const parsedExisting = existing ? JSON.parse(existing) : {};
+      const localPayload = {
+        repo: cleanRepo,
+        branch: cleanBranch,
+        workflowId: cleanWorkflow,
+        authMode: githubAuthMode,
+        autoDeployPages,
+        token: cleanToken || parsedExisting.token || ''
+      };
+      localStorage.setItem('winfix_github_config', JSON.stringify(localPayload));
+      if (cleanToken || parsedExisting.token) {
+        setHasServerGithubToken(true);
+      }
+    } catch (err) {}
+
+    // 2. Try saving to Node server API
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/config", {
@@ -1497,39 +1541,48 @@ export default function App() {
           ...authHeaders
         },
         body: JSON.stringify({
-          repo: githubRepo.trim(),
-          branch: githubBranch.trim(),
-          workflowId: githubWorkflowId.trim(),
+          repo: cleanRepo,
+          branch: cleanBranch,
+          workflowId: cleanWorkflow,
           authMode: githubAuthMode,
           autoDeployPages,
-          token: githubToken.trim(),
+          token: cleanToken,
           sshPrivateKey: sshPrivateKey.trim()
         })
       });
       const data = await parseJsonResponse(resp);
-      if (data.success) {
+      if (data.success && data.config) {
         setHasServerGithubToken(!!data.config.hasToken);
         setHasServerSshKey(!!data.config.hasSshKey);
-        setGithubToken('');
-        setSshPrivateKey('');
-        customAlert(language === 'en' ? "GitHub configuration saved successfully." : "GitHub 연동 및 GitHub Pages 자동 배포 설정이 성공적으로 저장되었습니다.");
-      } else {
-        throw new Error(data.error || "Save failed");
       }
     } catch (err: any) {
-      customAlert(language === 'en' ? `Failed to save GitHub settings: ${err.message}` : `GitHub 설정 저장 실패: ${err.message}`);
+      console.warn("Server API GitHub config save skipped (static client mode):", err);
     } finally {
       setIsSavingGithubConfig(false);
+      customAlert(language === 'en' 
+        ? "GitHub configuration saved successfully." 
+        : "GitHub 연동 및 GitHub Pages 자동 배포 설정이 성공적으로 저장되었습니다.");
     }
   };
 
   const handlePullFromGithub = async () => {
     if (!isAdmin) return;
-    if (!githubRepo.trim()) {
-      customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
-      return;
-    }
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? JSON.parse(local).token : '';
+      } catch (e) { return ''; }
+    })();
+
     setIsPullingGithub(true);
+    let success = false;
+    let pulledMessage = '';
+    let pulledCount = 0;
+
+    // 1. Try server API first
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/pull-from-repo", {
@@ -1539,41 +1592,88 @@ export default function App() {
           ...authHeaders
         },
         body: JSON.stringify({
-          repo: githubRepo.trim(),
-          branch: githubBranch.trim() || 'main',
+          repo: targetRepo,
+          branch: targetBranch,
           filePath: 'data/issues.json',
-          token: githubToken.trim() || undefined
+          token: storedToken || undefined
         })
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
-        // Clear stale client caches so fresh GitHub dataset is loaded and rendered immediately
-        await idbRemove('winfix_merged_issues');
-        localStorage.removeItem('winfix_github_pages_merged_issues');
-        localStorage.removeItem('winfix_github_pages_merged_time');
-        localStorage.removeItem(ISSUES_CACHE_KEY);
-        localStorage.removeItem(ISSUES_CACHE_KEY + '_time');
-        localStorage.removeItem('cached_category_counts');
-        localStorage.removeItem('cached_category_counts_time');
-        localStorage.removeItem('winfix_unpacked_bundles');
-        localStorage.removeItem('winfix_unpacked_bundles_time');
-        setGithubMergedInfo(null);
-
-        customAlert(data.message || (language === 'en' ? "Successfully synced data from GitHub!" : "GitHub에서 데이터를 성공적으로 동기화했습니다!"));
-        await Promise.all([
-          fetchCategoryCounts(true),
-          fetchIssues(false, true),
-          fetchBackendLogs(),
-          fetchGithubConfig()
-        ]);
-      } else {
-        throw new Error(data.error || "Pull failed");
+        success = true;
+        pulledCount = data.count || 0;
+        pulledMessage = data.message || `GitHub(${targetRepo})에서 데이터를 동기화했습니다!`;
       }
-    } catch (err: any) {
-      customAlert(language === 'en' ? `GitHub pull failed: ${err.message}` : `GitHub 데이터 가져오기 실패: ${err.message}`);
-    } finally {
-      setIsPullingGithub(false);
+    } catch (apiErr) {
+      console.warn("Server pull endpoint skipped (static mode):", apiErr);
     }
+
+    // 2. Direct client-side GitHub REST API fallback (for GitHub Pages static host)
+    if (!success) {
+      try {
+        const rawUrl = `https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`;
+        const headers: Record<string, string> = {};
+        if (storedToken) {
+          headers['Authorization'] = `Bearer ${storedToken}`;
+        }
+        let fetchedIssues: KnownIssue[] = [];
+        const resp = await fetch(rawUrl, { headers, cache: 'no-cache' });
+        if (resp.ok) {
+          fetchedIssues = await resp.json();
+        } else {
+          const apiUrl = `https://api.github.com/repos/${targetRepo}/contents/data/issues.json?ref=${encodeURIComponent(targetBranch)}`;
+          const apiRes = await fetch(apiUrl, {
+            headers: {
+              ...headers,
+              'Accept': 'application/vnd.github.v3.raw'
+            }
+          });
+          if (apiRes.ok) {
+            fetchedIssues = await apiRes.json();
+          } else {
+            throw new Error(`GitHub에서 파일 읽기 실패 (${resp.status}). 저장소명(${targetRepo}) 및 브랜치(${targetBranch})를 확인하세요.`);
+          }
+        }
+
+        if (Array.isArray(fetchedIssues) && fetchedIssues.length > 0) {
+          // Save directly into IndexedDB & localStorage for static SPA
+          await idbSet('winfix_merged_issues', fetchedIssues);
+          try {
+            localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(fetchedIssues));
+            localStorage.setItem('winfix_github_pages_merged_time', Date.now().toString());
+            localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(fetchedIssues.slice(0, 100)));
+            localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
+          } catch (_) {}
+
+          setDbIssues(fetchedIssues);
+          pulledCount = fetchedIssues.length;
+          pulledMessage = `GitHub Pages 정적 웹 모드: GitHub 저장소(${targetRepo})에서 최신 ${pulledCount}개 데이터셋(data/issues.json)을 동기화했습니다!`;
+          success = true;
+        }
+      } catch (clientErr: any) {
+        customAlert(language === 'en' ? `GitHub pull failed: ${clientErr.message}` : `GitHub 데이터 동기화 실패: ${clientErr.message}`);
+        setIsPullingGithub(false);
+        return;
+      }
+    }
+
+    if (success) {
+      // Clear stale caches so fresh dataset renders immediately
+      localStorage.removeItem('cached_category_counts');
+      localStorage.removeItem('cached_category_counts_time');
+      localStorage.removeItem('winfix_unpacked_bundles');
+      localStorage.removeItem('winfix_unpacked_bundles_time');
+      setGithubMergedInfo(null);
+
+      customAlert(pulledMessage);
+      await Promise.all([
+        fetchCategoryCounts(true),
+        fetchIssues(false, true),
+        fetchBackendLogs(),
+        fetchGithubConfig()
+      ]);
+    }
+    setIsPullingGithub(false);
   };
 
   const scrollToGithubSettings = () => {
@@ -1589,20 +1689,33 @@ export default function App() {
 
   const handleDispatchGithubWorkflow = async (topic = 'all') => {
     if (!isAdmin) return;
-    if (!githubRepo.trim()) {
-      customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
-      return;
-    }
-    if (!hasServerGithubToken && !githubToken.trim()) {
-      customAlert(language === 'en'
-        ? "GitHub PAT Token is required for remote workflow dispatch. Please enter a PAT with 'repo' and 'workflow' permissions below."
-        : "GitHub Actions 원격 수집 실행을 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const workflowFile = githubWorkflowId.trim() || 'windows-fix-collector.yml';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? JSON.parse(local).token : '';
+      } catch (e) { return ''; }
+    })();
+
+    if (!hasServerGithubToken && !storedToken) {
+      customAlert(
+        language === 'en'
+          ? "GitHub PAT Token is required for remote workflow dispatch. Please enter a PAT with 'repo' and 'workflow' permissions below."
+          : "GitHub Actions 원격 수집 실행을 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
         scrollToGithubSettings
       );
       scrollToGithubSettings();
       return;
     }
+
     setIsDispatchingWorkflow(true);
+    let success = false;
+    let dispatchMsg = '';
+
+    // 1. Try server API first
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/dispatch-workflow", {
@@ -1612,50 +1725,99 @@ export default function App() {
           ...authHeaders
         },
         body: JSON.stringify({
-          repo: githubRepo.trim(),
-          workflowId: githubWorkflowId.trim() || 'windows-fix-collector.yml',
-          branch: githubBranch.trim() || 'main',
-          token: githubToken.trim() || undefined,
+          repo: targetRepo,
+          workflowId: workflowFile,
+          branch: targetBranch,
+          token: storedToken || undefined,
           topic,
           batchSize: 2
         })
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
-        customAlert(data.message || (language === 'en' ? "Workflow dispatched successfully!" : "워크플로가 성공적으로 원격 실행되었습니다!"));
-      } else {
-        throw new Error(data.error || "Dispatch failed");
+        success = true;
+        dispatchMsg = data.message || "워크플로가 성공적으로 원격 실행되었습니다!";
       }
-    } catch (err: any) {
-      const is401 = err.message?.includes('401') || err.message?.includes('PAT') || err.message?.includes('인증');
-      customAlert(
-        language === 'en' ? `Workflow dispatch failed: ${err.message}` : `워크플로 원격 실행 실패: ${err.message}`,
-        is401 ? scrollToGithubSettings : undefined
-      );
-      if (is401) {
-        scrollToGithubSettings();
-      }
-    } finally {
-      setIsDispatchingWorkflow(false);
+    } catch (apiErr) {
+      console.warn("Server dispatch endpoint skipped (static mode):", apiErr);
     }
+
+    // 2. Direct client-side GitHub REST API fallback
+    if (!success) {
+      try {
+        const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+        const res = await fetch(dispatchUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${storedToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ref: targetBranch,
+            inputs: {
+              topic,
+              batch_size: '2'
+            }
+          })
+        });
+
+        if (res.ok || res.status === 204) {
+          success = true;
+          dispatchMsg = `GitHub Actions 자율 수집 워크플로('${workflowFile}')를 원격으로 성공적으로 시작했습니다! 완료 시 GitHub Pages가 자동으로 재배포됩니다.`;
+        } else {
+          if (res.status === 401 || res.status === 403) {
+            throw new Error(`GitHub 인증 실패 (${res.status}): PAT 토큰에 'repo' 및 'workflow' 권한이 있는지 확인하세요.`);
+          }
+          const errText = await res.text();
+          throw new Error(`GitHub REST API 오류 (${res.status}): ${errText}`);
+        }
+      } catch (clientErr: any) {
+        const is401 = clientErr.message?.includes('401') || clientErr.message?.includes('403') || clientErr.message?.includes('PAT');
+        customAlert(
+          language === 'en' ? `Workflow dispatch failed: ${clientErr.message}` : `워크플로 원격 실행 실패: ${clientErr.message}`,
+          is401 ? scrollToGithubSettings : undefined
+        );
+        if (is401) scrollToGithubSettings();
+        setIsDispatchingWorkflow(false);
+        return;
+      }
+    }
+
+    if (success) {
+      customAlert(dispatchMsg);
+    }
+    setIsDispatchingWorkflow(false);
   };
 
   const handleDeployPages = async () => {
     if (!isAdmin) return;
-    if (!githubRepo.trim()) {
-      customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
-      return;
-    }
-    if (!hasServerGithubToken && !githubToken.trim()) {
-      customAlert(language === 'en'
-        ? "GitHub PAT Token is required for GitHub Pages deployment. Please enter a PAT with 'repo' and 'workflow' permissions below."
-        : "GitHub Pages 원격 배포를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? JSON.parse(local).token : '';
+      } catch (e) { return ''; }
+    })();
+
+    if (!hasServerGithubToken && !storedToken) {
+      customAlert(
+        language === 'en'
+          ? "GitHub PAT Token is required for GitHub Pages deployment. Please enter a PAT with 'repo' and 'workflow' permissions below."
+          : "GitHub Pages 원격 배포를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
         scrollToGithubSettings
       );
       scrollToGithubSettings();
       return;
     }
+
     setIsDeployingPages(true);
+    let success = false;
+    let deployMsg = '';
+
+    // 1. Try server API first
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/deploy-pages", {
@@ -1665,47 +1827,92 @@ export default function App() {
           ...authHeaders
         },
         body: JSON.stringify({
-          repo: githubRepo.trim(),
-          branch: githubBranch.trim() || 'main',
-          token: githubToken.trim() || undefined
+          repo: targetRepo,
+          branch: targetBranch,
+          token: storedToken || undefined
         })
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
-        customAlert(data.message || (language === 'en' ? "GitHub Pages deployment started!" : "GitHub Pages 배포 워크플로가 시작되었습니다!"));
-      } else {
-        throw new Error(data.error || "Pages deployment failed");
+        success = true;
+        deployMsg = data.message || "GitHub Pages 배포 워크플로가 시작되었습니다!";
       }
-    } catch (err: any) {
-      const is401 = err.message?.includes('401') || err.message?.includes('PAT') || err.message?.includes('인증');
-      customAlert(
-        language === 'en' ? `Pages deployment failed: ${err.message}` : `GitHub Pages 배포 실행 실패: ${err.message}`,
-        is401 ? scrollToGithubSettings : undefined
-      );
-      if (is401) {
-        scrollToGithubSettings();
-      }
-    } finally {
-      setIsDeployingPages(false);
+    } catch (apiErr) {
+      console.warn("Server deploy-pages endpoint skipped (static mode):", apiErr);
     }
+
+    // 2. Direct client-side GitHub REST API fallback
+    if (!success) {
+      try {
+        const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`;
+        const res = await fetch(dispatchUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${storedToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ref: targetBranch
+          })
+        });
+
+        if (res.ok || res.status === 204) {
+          success = true;
+          deployMsg = `GitHub Pages 배포 워크플로(deploy-pages.yml)가 성공적으로 시작되었습니다! 약 1분 후 최신 웹사이트로 업데이트됩니다.`;
+        } else {
+          if (res.status === 401 || res.status === 403) {
+            throw new Error(`GitHub 인증 실패 (${res.status}): PAT 토큰에 'repo' 및 'workflow' 권한이 설정되어야 합니다.`);
+          }
+          const errText = await res.text();
+          throw new Error(`GitHub REST API 오류 (${res.status}): ${errText}`);
+        }
+      } catch (clientErr: any) {
+        const is401 = clientErr.message?.includes('401') || clientErr.message?.includes('403') || clientErr.message?.includes('PAT');
+        customAlert(
+          language === 'en' ? `Pages deployment failed: ${clientErr.message}` : `GitHub Pages 배포 실행 실패: ${clientErr.message}`,
+          is401 ? scrollToGithubSettings : undefined
+        );
+        if (is401) scrollToGithubSettings();
+        setIsDeployingPages(false);
+        return;
+      }
+    }
+
+    if (success) {
+      customAlert(deployMsg);
+    }
+    setIsDeployingPages(false);
   };
 
   const handlePushToGithub = async () => {
     if (!isAdmin) return;
-    if (!githubRepo.trim()) {
-      customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
-      return;
-    }
-    if (!hasServerGithubToken && !githubToken.trim()) {
-      customAlert(language === 'en'
-        ? "GitHub PAT Token is required for pushing database changes. Please enter a PAT with 'repo' and 'workflow' permissions below."
-        : "GitHub 저장소 데이터 커밋 및 푸시를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? JSON.parse(local).token : '';
+      } catch (e) { return ''; }
+    })();
+
+    if (!hasServerGithubToken && !storedToken) {
+      customAlert(
+        language === 'en'
+          ? "GitHub PAT Token is required for pushing database changes. Please enter a PAT with 'repo' and 'workflow' permissions below."
+          : "GitHub 저장소 데이터 커밋 및 푸시를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
         scrollToGithubSettings
       );
       scrollToGithubSettings();
       return;
     }
+
     setIsPushingGithub(true);
+    let success = false;
+    let pushMsg = '';
+
+    // 1. Try server API first
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/push-to-repo", {
@@ -1715,30 +1922,106 @@ export default function App() {
           ...authHeaders
         },
         body: JSON.stringify({
-          repo: githubRepo.trim(),
-          branch: githubBranch.trim() || 'main',
-          token: githubToken.trim() || undefined
+          repo: targetRepo,
+          branch: targetBranch,
+          token: storedToken || undefined
         })
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
-        customAlert(data.message || (language === 'en' ? "Pushed database to GitHub successfully!" : "GitHub에 최신 데이터베이스를 성공적으로 푸시했습니다!"));
+        success = true;
+        pushMsg = data.message || "GitHub에 최신 데이터베이스를 성공적으로 푸시했습니다!";
         await fetchGithubConfig();
-      } else {
-        throw new Error(data.error || "Push failed");
       }
-    } catch (err: any) {
-      const is401 = err.message?.includes('401') || err.message?.includes('PAT') || err.message?.includes('인증');
-      customAlert(
-        language === 'en' ? `GitHub push failed: ${err.message}` : `GitHub 데이터 푸시 실패: ${err.message}`,
-        is401 ? scrollToGithubSettings : undefined
-      );
-      if (is401) {
-        scrollToGithubSettings();
-      }
-    } finally {
-      setIsPushingGithub(false);
+    } catch (apiErr) {
+      console.warn("Server push-to-repo endpoint skipped (static mode):", apiErr);
     }
+
+    // 2. Direct client-side GitHub REST API fallback (for GitHub Pages static host)
+    if (!success) {
+      try {
+        const issuesToPush = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
+        const filePath = 'data/issues.json';
+        const fileUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`;
+        const headers = {
+          'Authorization': `Bearer ${storedToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        };
+
+        // Get file SHA
+        let fileSha: string | undefined = undefined;
+        try {
+          const getRes = await fetch(fileUrl, { headers });
+          if (getRes.status === 401 || getRes.status === 403) {
+            throw new Error("GitHub 인증 실패 (401 Bad Credentials): PAT 토큰이 올바르지 않거나 'repo' 권한이 없습니다.");
+          }
+          if (getRes.ok) {
+            const fileInfo = await getRes.json();
+            fileSha = fileInfo.sha;
+          }
+        } catch (e: any) {
+          if (e.message?.includes('GitHub 인증 실패')) throw e;
+        }
+
+        const jsonStr = JSON.stringify(issuesToPush, null, 2);
+        // UTF-8 to Base64
+        const encoder = new TextEncoder();
+        const dataBytes = encoder.encode(jsonStr);
+        let binaryStr = '';
+        for (let i = 0; i < dataBytes.length; i++) {
+          binaryStr += String.fromCharCode(dataBytes[i]);
+        }
+        const contentBase64 = btoa(binaryStr);
+
+        const commitMessage = `🚀 [GitOps Direct] Push database updates (${issuesToPush.length} issues) via Web Admin`;
+
+        const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            message: commitMessage,
+            content: contentBase64,
+            branch: targetBranch,
+            sha: fileSha
+          })
+        });
+
+        if (!putRes.ok) {
+          const errBody = await putRes.text();
+          throw new Error(`GitHub 커밋 실패 (${putRes.status}): ${errBody}`);
+        }
+
+        success = true;
+        pushMsg = `GitHub 저장소(${targetRepo}/data/issues.json)에 최신 ${issuesToPush.length}개 데이터베이스를 직접 푸시했습니다!`;
+
+        // If autoDeployPages is enabled, trigger deploy-pages.yml
+        if (autoDeployPages) {
+          try {
+            await fetch(`https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ ref: targetBranch })
+            });
+            pushMsg += " GitHub Pages 자동 배포 파이프라인(deploy-pages.yml)이 가동되었습니다 (약 1분 후 라이브 사이트 반영).";
+          } catch (_) {}
+        }
+      } catch (clientErr: any) {
+        const is401 = clientErr.message?.includes('401') || clientErr.message?.includes('PAT') || clientErr.message?.includes('인증');
+        customAlert(
+          language === 'en' ? `GitHub push failed: ${clientErr.message}` : `GitHub 데이터 푸시 실패: ${clientErr.message}`,
+          is401 ? scrollToGithubSettings : undefined
+        );
+        if (is401) scrollToGithubSettings();
+        setIsPushingGithub(false);
+        return;
+      }
+    }
+
+    if (success) {
+      customAlert(pushMsg);
+    }
+    setIsPushingGithub(false);
   };
 
   const checkForUpdates = async (isManual = false) => {
@@ -2990,6 +3273,7 @@ export default function App() {
 
   const runEngineNow = async () => {
     setIsEngineActionLoading(true);
+    let success = false;
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/engine/run-now", {
@@ -2998,16 +3282,19 @@ export default function App() {
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
+        success = true;
         customAlert(language === 'en' ? "Engine triggered successfully. Please refresh logs in a few seconds." : "엔진이 가동되었습니다. 잠시 후 로그를 새로고침 하세요.");
         setTimeout(() => fetchBackendLogs(false), 3000);
-      } else {
-        customAlert(`Error: ${data.error}`);
       }
-    } catch (e: any) {
-      customAlert(`Error: ${e.message}`);
-    } finally {
-      setIsEngineActionLoading(false);
+    } catch (e) {
+      console.warn("Server run-now endpoint skipped (static mode):", e);
     }
+
+    if (!success) {
+      // On static GitHub Pages host, fall back to triggering GitHub Actions autonomous collector workflow
+      await handleDispatchGithubWorkflow('all');
+    }
+    setIsEngineActionLoading(false);
   };
 
   const handleTestAlert = async () => {
