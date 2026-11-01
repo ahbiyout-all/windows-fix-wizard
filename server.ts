@@ -644,6 +644,12 @@ async function executeServerGeminiCall(
               config: configToUse
             });
           } catch (firstTryErr: any) {
+            const firstMsg = getCleanErrorMessage(firstTryErr).toLowerCase();
+            if (firstMsg.includes("api key not valid") || firstMsg.includes("api_key_invalid") || firstMsg.includes("invalid api key") || firstMsg.includes("api key expired")) {
+              keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+              lastError = firstTryErr;
+              break; // Skip all other candidate models for this invalid key immediately
+            }
             if (configToUse.tools) {
               const fallbackConfig = { ...configToUse };
               delete fallbackConfig.tools;
@@ -663,9 +669,9 @@ async function executeServerGeminiCall(
         lastError = err;
         const cleanMsg = getCleanErrorMessage(err);
         const lower = cleanMsg.toLowerCase();
-        if (lower.includes("api key not valid") || lower.includes("api_key_invalid") || lower.includes("invalid api key")) {
+        if (lower.includes("api key not valid") || lower.includes("api_key_invalid") || lower.includes("invalid api key") || lower.includes("api key expired")) {
           keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
-          break;
+          break; // Stop testing other models with this invalid key
         }
         if (lower.includes("resource_exhausted") || lower.includes("429") || lower.includes("quota")) {
           keyThrottledUntil.set(k.name, now + 15 * 60 * 1000);

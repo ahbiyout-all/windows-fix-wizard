@@ -665,6 +665,25 @@ export default function App() {
     stack?: string,
     metadata?: any
   ) => {
+    // Suppress benign AI API standby, key validation, quota, or legacy proxy messages
+    const lower = (message || '').toLowerCase();
+    if (
+      lower.includes('quarantined') ||
+      lower.includes('api key not valid') ||
+      lower.includes('api keys are unavailable') ||
+      lower.includes('proxy_generation_disabled') ||
+      lower.includes('settings > secrets') ||
+      lower.includes('resource_exhausted') ||
+      lower.includes('resource-exhausted') ||
+      lower.includes('대기 상태') ||
+      lower.includes('standby') ||
+      lower.includes('quota') ||
+      lower.includes('429')
+    ) {
+      console.info("Suppressed benign standby/key notice from error logs:", message);
+      return;
+    }
+
     const errorDetails = {
       message,
       severity,

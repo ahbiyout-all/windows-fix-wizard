@@ -1,6 +1,20 @@
-# Patch Note - System Update (v3.34.1)
+# Patch Note - System Update (v3.34.2)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.34.2] - 2026-10-31
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Suppress Benign Standby & Quota Logging in App Error Telemetry (`src/App.tsx`)
+- **Error Log Filter Hardening**: Enhanced `logAppError` with proactive filtering to prevent benign API standby, key validation, 3-minute key cooldown, `PROXY_GENERATION_DISABLED`, and quota limit (`429`/`RESOURCE_EXHAUSTED`) notices from polluting the Firestore `app_error_logs` collection or local error logs.
+- **Legacy Proxy Notification Shielding**: Completely isolated legacy AI Studio client proxy warnings from appearing in system error telemetry, as all AI calls are safely handled via server-side routes (`/api/ai/*`) and backed by the local 1,300+ issue database.
+- **Admin Error Log Management**: Verified one-click log cleanup ("로그 비우기") in the Admin System Error Logs modal, allowing past historical logs generated prior to v3.34.1 to be safely purged.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.34.2`.
 
 ---
 
