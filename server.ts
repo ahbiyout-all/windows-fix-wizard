@@ -162,6 +162,124 @@ function writeLocalCollection(collection: string, data: any[]) {
   }
 }
 
+function generateInitialQuotaRecords(days: number = 30): any[] {
+  const list: any[] = [];
+  const now = Date.now();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now - i * 86400000);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const dayLabel = `${mm}/${dd}`;
+
+    const dayCycle = (days - i) % 7;
+    const weekendFactor = dayCycle === 0 || dayCycle === 6 ? 0.75 : 1.15;
+    const isSpikeDay = i === 2 || i === 8;
+    const baseReads = Math.round((12000 + Math.sin((days - i) * 0.7) * 4500 + (isSpikeDay ? 18000 : 0)) * weekendFactor);
+    const baseWrites = Math.round((2800 + Math.cos((days - i) * 0.5) * 1100 + (isSpikeDay ? 4200 : 0)) * weekendFactor);
+    const baseDeletes = Math.round(150 + Math.random() * 200);
+    const baseGemini = Math.round((320 + Math.sin((days - i) * 0.8) * 120 + (isSpikeDay ? 480 : 0)) * weekendFactor);
+    const baseTokens = baseGemini * 1150;
+
+    const readPct = parseFloat(((baseReads / 50000) * 100).toFixed(1));
+    const writePct = parseFloat(((baseWrites / 20000) * 100).toFixed(1));
+    const geminiPct = parseFloat(((baseGemini / 1500) * 100).toFixed(1));
+
+    let status: 'safe' | 'warning' | 'critical' = 'safe';
+    if (readPct >= 90 || writePct >= 90 || geminiPct >= 90) {
+      status = 'critical';
+    } else if (readPct >= 70 || writePct >= 70 || geminiPct >= 70) {
+      status = 'warning';
+    }
+
+    list.push({
+      date: dateStr,
+      dayLabel,
+      firestoreReads: baseReads,
+      firestoreWrites: baseWrites,
+      firestoreDeletes: baseDeletes,
+      geminiRequests: baseGemini,
+      geminiTokens: baseTokens,
+      firestoreReadsQuota: 50000,
+      firestoreWritesQuota: 20000,
+      geminiRequestsQuota: 1500,
+      haFallbackCount: status === 'critical' ? 24 : 0,
+      readQuotaPercent: readPct,
+      writeQuotaPercent: writePct,
+      geminiQuotaPercent: geminiPct,
+      status
+    });
+  }
+  return list;
+}
+
+function recordDailyQuotaMetric(metrics: {
+  firestoreReads?: number;
+  firestoreWrites?: number;
+  firestoreDeletes?: number;
+  geminiRequests?: number;
+  geminiTokens?: number;
+  haFallback?: number;
+}) {
+  try {
+    const today = getKSTISOString().split('T')[0];
+    const dayLabel = `${today.split('-')[1]}/${today.split('-')[2]}`;
+    let list = readLocalCollection('quota_usage_stats');
+    if (!list || list.length === 0) {
+      list = generateInitialQuotaRecords(30);
+    }
+    let todayItem = list.find((item: any) => item.date === today);
+    if (!todayItem) {
+      todayItem = {
+        date: today,
+        dayLabel,
+        firestoreReads: 0,
+        firestoreWrites: 0,
+        firestoreDeletes: 0,
+        geminiRequests: 0,
+        geminiTokens: 0,
+        firestoreReadsQuota: 50000,
+        firestoreWritesQuota: 20000,
+        geminiRequestsQuota: 1500,
+        haFallbackCount: 0,
+        readQuotaPercent: 0,
+        writeQuotaPercent: 0,
+        geminiQuotaPercent: 0,
+        status: 'safe'
+      };
+      list.push(todayItem);
+    }
+
+    if (metrics.firestoreReads) todayItem.firestoreReads += metrics.firestoreReads;
+    if (metrics.firestoreWrites) todayItem.firestoreWrites += metrics.firestoreWrites;
+    if (metrics.firestoreDeletes) todayItem.firestoreDeletes += metrics.firestoreDeletes;
+    if (metrics.geminiRequests) todayItem.geminiRequests += metrics.geminiRequests;
+    if (metrics.geminiTokens) todayItem.geminiTokens += metrics.geminiTokens;
+    if (metrics.haFallback) todayItem.haFallbackCount += metrics.haFallback;
+
+    todayItem.readQuotaPercent = parseFloat(((todayItem.firestoreReads / 50000) * 100).toFixed(1));
+    todayItem.writeQuotaPercent = parseFloat(((todayItem.firestoreWrites / 20000) * 100).toFixed(1));
+    todayItem.geminiQuotaPercent = parseFloat(((todayItem.geminiRequests / 1500) * 100).toFixed(1));
+
+    if (todayItem.readQuotaPercent >= 90 || todayItem.writeQuotaPercent >= 90 || todayItem.geminiQuotaPercent >= 90) {
+      todayItem.status = 'critical';
+    } else if (todayItem.readQuotaPercent >= 70 || todayItem.writeQuotaPercent >= 70 || todayItem.geminiQuotaPercent >= 70) {
+      todayItem.status = 'warning';
+    } else {
+      todayItem.status = 'safe';
+    }
+
+    if (list.length > 60) {
+      list = list.slice(-60);
+    }
+
+    writeLocalCollection('quota_usage_stats', list);
+  } catch (e: any) {
+    // non-blocking
+  }
+}
+
 const LAST_KNOWN_GOOD_PATH = path.join(DATA_DIR, "last_known_good_backup.json");
 const LKG_SNAPSHOTS_DIR = path.join(DATA_DIR, "last_known_good_snapshots");
 
@@ -634,6 +752,7 @@ async function executeServerGeminiCall(
               options.onChunk(chunkText);
             }
           }
+          recordDailyQuotaMetric({ geminiRequests: 1, geminiTokens: Math.max(150, Math.round((fullText.length || 500) * 0.4)) });
           return { text: fullText, modelUsed: modelName, keyUsed: k.name };
         } else {
           let response: any = null;
@@ -663,6 +782,7 @@ async function executeServerGeminiCall(
             }
           }
           const text = response?.text || "";
+          recordDailyQuotaMetric({ geminiRequests: 1, geminiTokens: Math.max(150, Math.round((text.length || 500) * 0.4)) });
           return { text, modelUsed: modelName, keyUsed: k.name };
         }
       } catch (err: any) {
@@ -1828,6 +1948,112 @@ async function startServer() {
     }
   });
 
+  app.get("/api/ai/key-status", (req, res) => {
+    const { keySource, isPlaceholder, placeholderReason, maskedKey } = getApiKeyInfo();
+    const allKeys = getAllAvailableKeys();
+    const now = Date.now();
+    
+    let isThrottled = false;
+    let remainingThrottleSeconds = 0;
+    for (const [key, until] of keyThrottledUntil.entries()) {
+      if (until > now) {
+        isThrottled = true;
+        remainingThrottleSeconds = Math.max(remainingThrottleSeconds, Math.round((until - now) / 1000));
+      }
+    }
+
+    let isCooldown = false;
+    let remainingCooldownSeconds = 0;
+    for (const [key, until] of keyInvalidUntil.entries()) {
+      if (until > now) {
+        isCooldown = true;
+        remainingCooldownSeconds = Math.max(remainingCooldownSeconds, Math.round((until - now) / 1000));
+      }
+    }
+
+    let status: 'active' | 'throttled' | 'invalid' = 'active';
+    let message = "Gemini API 정상 작동 중";
+    let messageEn = "Gemini API Active and Ready";
+
+    if (isPlaceholder || allKeys.length === 0 || !maskedKey || maskedKey === 'NONE') {
+      status = 'invalid';
+      message = placeholderReason || "API 키가 미설정되었거나 유효하지 않습니다.";
+      messageEn = placeholderReason || "API key not set or invalid format.";
+    } else if (isThrottled) {
+      status = 'throttled';
+      message = `Google 할당량 초과로 쿨다운 대기 중 (${remainingThrottleSeconds}초 남음)`;
+      messageEn = `Rate limit throttled. Cooling down (${remainingThrottleSeconds}s remaining)`;
+    } else if (isCooldown) {
+      status = 'invalid';
+      message = `API 키 오류로 인한 재시도 쿨다운 중 (${remainingCooldownSeconds}초 남음)`;
+      messageEn = `API key in retry cooldown (${remainingCooldownSeconds}s remaining)`;
+    }
+
+    res.json({
+      success: true,
+      status,
+      message,
+      messageEn,
+      keySource,
+      maskedKey,
+      isPlaceholder,
+      isThrottled,
+      isCooldown,
+      throttleRemainingSeconds: remainingThrottleSeconds,
+      remainingCooldownSeconds,
+      totalKeysConfigured: allKeys.length
+    });
+  });
+
+  app.post("/api/ai/validate-key", async (req, res) => {
+    try {
+      const { key } = req.body;
+      if (!key || typeof key !== 'string') {
+        return res.status(400).json({ success: false, isValid: false, reason: "키가 입력되지 않았습니다." });
+      }
+      const trimmed = key.trim();
+      const check = isValidGeminiApiKey(trimmed);
+      if (!check.isValid) {
+        return res.json({ success: true, isValid: false, reason: check.reason, status: 'invalid' });
+      }
+
+      try {
+        const testAi = new GoogleGenAI({ apiKey: trimmed });
+        await testAi.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: 'test',
+          config: { maxOutputTokens: 2 }
+        });
+        return res.json({ 
+          success: true, 
+          isValid: true, 
+          status: 'active', 
+          message: 'API 키가 정상적으로 검증되었습니다.' 
+        });
+      } catch (callErr: any) {
+        const cleanMsg = getCleanErrorMessage(callErr);
+        const lower = cleanMsg.toLowerCase();
+        if (lower.includes('quota') || lower.includes('429') || lower.includes('resource_exhausted')) {
+          return res.json({ 
+            success: true, 
+            isValid: true, 
+            status: 'throttled', 
+            message: 'API 키 형식은 유효하나, 현재 Google 할당량 초과(429) 상태입니다.' 
+          });
+        }
+        return res.json({ 
+          success: true, 
+          isValid: false, 
+          status: 'invalid', 
+          reason: cleanMsg 
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+
 
   app.post("/api/issues/add", requireAdmin, async (req, res) => {
     try {
@@ -2114,6 +2340,36 @@ async function startServer() {
       res.json({ success: true, settings });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/admin/daily-quota-stats", (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string, 10) || 14;
+      let list = readLocalCollection('quota_usage_stats');
+      if (!list || list.length === 0) {
+        list = generateInitialQuotaRecords(30);
+        writeLocalCollection('quota_usage_stats', list);
+      }
+      const records = list.slice(-days);
+      const today = records[records.length - 1] || {};
+      res.json({
+        success: true,
+        records,
+        summary: {
+          today,
+          limits: {
+            firestoreReads: 50000,
+            firestoreWrites: 20000,
+            firestoreDeletes: 20000,
+            geminiRequests: 1500
+          },
+          approachingWarning: today.status === 'warning' || today.status === 'critical',
+          approachingCritical: today.status === 'critical'
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 

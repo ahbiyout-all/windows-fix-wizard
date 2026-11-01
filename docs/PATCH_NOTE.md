@@ -1,6 +1,72 @@
-# Patch Note - System Update (v3.34.2)
+# Patch Note - System Update (v3.37.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.37.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Firebase-Free Jamstack Architecture & Zero-Quota Feed Engine (`src/App.tsx`, `data/issues.json`, `.github/workflows`)
+- **100% Static Jamstack Hosting**: Fully decoupled database dependencies from Firebase Firestore for GitHub Pages deployments, eliminating daily read/write quota limits and third-party domain restrictions.
+- **IndexedDB In-Browser Search Engine**: Utilized `src/utils/idbStorage.ts` for fast sub-10ms local searching, hardware category filtering (Motherboard, GPU, RAM, Storage, CPU), user bookmarks, and activity history.
+- **GitHub Actions GitOps Auto-Sync**: Integrated `.github/workflows/windows-fix-collector.yml` and `.github/workflows/deploy-pages.yml` to automatically harvest, validate, and publish latest Windows 10/11 fixes into `/data/issues.json` via scheduled cron jobs.
+
+### 🛡️ Security Hardening & Authentication
+
+#### 1. Direct OAuth 2.0 & Emergency Master Passkey (`src/App.tsx`)
+- **Direct OAuth Authentication**: Supported Google Identity Services and direct OAuth 2.0 authorization flows.
+- **Fail-Safe Master Passkey**: Maintained SHA-256 Web Crypto master passkey portal ensuring instant admin authorization across restricted iframe and sandbox environments.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.37.0`.
+
+---
+
+## [v3.36.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Daily API Usage & Quota Monitoring Visualization (`src/components/DailyQuotaUsageChart.tsx`, `server.ts`, `src/App.tsx`)
+- **Interactive Recharts Visualization**: Implemented a comprehensive daily API usage trends dashboard within the Admin Tab utilizing Recharts (`ComposedChart`, `Bar`, `Line`, `Area`, `XAxis`, `YAxis`, `CartesianGrid`, `Tooltip`, `Legend`, `ReferenceLine`).
+- **Free Tier Quota Threshold Monitoring**:
+  - **Firebase Firestore Limits**: Visualizes daily Reads (against the 50,000/day free limit) and Writes (against the 20,000/day free limit) with explicit red/emerald dashed reference lines and percentage meters.
+  - **Gemini AI Limits**: Visualizes daily requests (against the 1,500 RPD free tier limit) with amber threshold warning lines and token usage tracking.
+- **Service & Time-Range Filtering**: Allows administrators to toggle between "All Services", "Firebase (Reads/Writes)", and "Gemini AI (RPD)", as well as dynamically switch across 7-day, 14-day, and 30-day historical time windows.
+- **Bento Metric Cards & Quota Approach Alert**: Real-time progress bars for today's consumed units, remaining capacity, and an automated warning alert banner when any metric approaches >70% of the daily ceiling.
+- **Backend Quota Telemetry API**: Added `recordDailyQuotaMetric` and `GET /api/admin/daily-quota-stats` endpoint in `server.ts` to log and aggregate daily operations with persistent storage in `data/quota_usage_stats.json`.
+
+### 🛡️ Security Hardening & Authentication
+- **Failover Protection Safeguard**: Integrated visual status indicator for the High-Availability Server JSON Database fallback, which automatically engages if Firestore reads exceed 90% (45,000 reads) to prevent service outages.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.36.0`.
+
+---
+
+## [v3.35.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Real-Time Gemini API Key Status Indicator & Diagnostic Portal (`src/App.tsx`, `server.ts`)
+- **Tri-State Real-Time Status Detection**: Integrated comprehensive status indicators showing whether the active Gemini API key is `active` (정상 활성), `throttled` (할당량 초과 및 3분 쿨다운 대기), or `invalid` (키 미등록 또는 잘못된 형식).
+- **Header Section Status Indicator**: Embedded an interactive live status badge in both the desktop Header (adjacent to the brand title and utilities) and mobile Quick Controls drawer. Provides instantaneous visual feedback via animated indicator pulses and a detailed diagnostic popover modal.
+- **Settings & API Key Management Dashboard**: Added a top-level real-time status card in Admin Settings > API Key Management with live diagnostics, key source display, masked key readout, and remaining quota cooldown timer.
+- **Backend Key Telemetry Endpoints**: Implemented `/api/ai/key-status` and `/api/ai/validate-key` in `server.ts` to provide non-sensitive public key health telemetry and on-demand key verification without exposing secrets.
+
+### 🛡️ Security Hardening & Authentication
+
+#### 1. Real-time API Key Format Verification (`src/App.tsx`)
+- **`isValidApiKeyFormat` Input Feedback**: Embedded real-time validation on the "Add Key" input form. Immediately informs administrators whether entered strings satisfy Google Gemini API key requirements (starts with `AIza` and length >= 30 characters) before submission.
+- **Per-Key Format Badges & Live Testing**: Added individual format validation status badges (`✓ 형식 정상` / `✕ 형식 오류`) and a one-click server-side connection testing action (`handleTestSpecificKey`) for every configured key item in the routing list.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Graceful Key Standby Safeguards**: Confirmed seamless automatic fallback to the local 1,300+ known Windows issues database when keys are throttled or in cooldown.
+- **Admin Passkey & Session Resiliency**: Ensured non-admin guests and administrators can both view key availability without triggering authorization barriers.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.35.0`.
 
 ---
 

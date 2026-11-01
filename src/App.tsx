@@ -28,6 +28,7 @@ import {
 import { PowerShellVerifierPanel } from './components/PowerShellVerifierPanel';
 import { InteractiveRoadmap } from './components/InteractiveRoadmap';
 import { DashboardWidget } from './components/DashboardWidget';
+import { DailyQuotaUsageChart } from './components/DailyQuotaUsageChart';
 import { SystemInfoWidget } from './components/SystemInfoWidget';
 import { GitHubPagesDeployDoc } from './components/GitHubPagesDeployDoc';
 import { parseJsonResponse, parseAiJson } from './utils/safeFetch';
@@ -59,11 +60,11 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   const errInfo: FirestoreErrorInfo = {
     error: errMsg,
     authInfo: {
-      userId: auth.currentUser?.uid || undefined,
-      email: auth.currentUser?.email || undefined,
-      emailVerified: auth.currentUser?.emailVerified || undefined,
-      isAnonymous: auth.currentUser?.isAnonymous || undefined,
-      tenantId: auth.currentUser?.tenantId || undefined,
+      userId: auth?.currentUser?.uid || undefined,
+      email: auth?.currentUser?.email || undefined,
+      emailVerified: auth?.currentUser?.emailVerified || undefined,
+      isAnonymous: auth?.currentUser?.isAnonymous || undefined,
+      tenantId: auth?.currentUser?.tenantId || undefined,
     },
     operationType,
     path
@@ -303,6 +304,21 @@ export type ApiKeyConfig = {
   mode: 'load-balance' | 'priority' | 'single';
 };
 
+export interface ApiKeyStatusInfo {
+  status: 'active' | 'throttled' | 'invalid';
+  message: string;
+  messageEn: string;
+  keySource: string;
+  maskedKey: string;
+  isPlaceholder: boolean;
+  isThrottled: boolean;
+  isCooldown?: boolean;
+  throttleRemainingSeconds?: number;
+  remainingCooldownSeconds?: number;
+  totalKeysConfigured?: number;
+  lastChecked?: string;
+}
+
 export const getApiKeyConfig = (): ApiKeyConfig => {
   let config: ApiKeyConfig = { keys: [], mode: 'priority' };
   try {
@@ -440,7 +456,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.32.0";
+const APP_VERSION = "3.37.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1157,19 +1173,83 @@ export default function App() {
 
   const [apiKeyConfig, setApiKeyConfigState] = useState<ApiKeyConfig>(getApiKeyConfig());
   const [newKeyInput, setNewKeyInput] = useState('');
-  
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatusInfo | null>(null);
+  const [isCheckingKeyStatus, setIsCheckingKeyStatus] = useState(false);
+  const [showKeyStatusModal, setShowKeyStatusModal] = useState(false);
+  const [testingKeyIndex, setTestingKeyIndex] = useState<number | null>(null);
+  const [keyTestResults, setKeyTestResults] = useState<Record<number, { isValid: boolean; status?: string; message?: string }>>({});
+
+  const fetchApiKeyStatus = useCallback(async () => {
+    setIsCheckingKeyStatus(true);
+    try {
+      const res = await fetch('/api/ai/key-status');
+      const data = await res.json();
+      if (data && data.success) {
+        let finalStatus: 'active' | 'throttled' | 'invalid' = data.status || 'invalid';
+        let message = data.message || '';
+        let messageEn = data.messageEn || '';
+
+        // Cross-check with client active keys using isValidApiKeyFormat
+        const activeCustomKeys = apiKeyConfig.keys.filter(k => k.isActive);
+        if (activeCustomKeys.length > 0) {
+          const hasValidCustomKey = activeCustomKeys.some(k => isValidApiKeyFormat(k.key));
+          if (!hasValidCustomKey) {
+            finalStatus = 'invalid';
+            message = '등록된 커스텀 API 키 형식이 올바르지 않습니다 (AIza로 시작하고 30자 이상 필요).';
+            messageEn = 'Configured custom API key format is invalid (must start with AIza and be at least 30 chars).';
+          }
+        }
+
+        setApiKeyStatus({
+          status: finalStatus,
+          message,
+          messageEn,
+          keySource: data.keySource || 'N/A',
+          maskedKey: data.maskedKey || 'NONE',
+          isPlaceholder: !!data.isPlaceholder,
+          isThrottled: !!data.isThrottled,
+          isCooldown: !!data.isCooldown,
+          throttleRemainingSeconds: data.throttleRemainingSeconds || 0,
+          remainingCooldownSeconds: data.remainingCooldownSeconds || 0,
+          totalKeysConfigured: data.totalKeysConfigured || 0,
+          lastChecked: new Date().toLocaleTimeString()
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to check Gemini API key status:", err);
+    } finally {
+      setIsCheckingKeyStatus(false);
+    }
+  }, [apiKeyConfig]);
+
+  useEffect(() => {
+    fetchApiKeyStatus();
+    const interval = setInterval(fetchApiKeyStatus, 30000);
+    return () => clearInterval(interval);
+  }, [fetchApiKeyStatus]);
+
   const handleAddKey = () => {
-    if (!newKeyInput.trim()) return;
+    const cleanKey = newKeyInput.trim();
+    if (!cleanKey) return;
+    if (!isValidApiKeyFormat(cleanKey)) {
+      customAlert(
+        language === 'en'
+          ? "Invalid API key format! A valid Google Gemini API key must start with 'AIza' and be at least 30 characters long."
+          : "유효하지 않은 API 키 형식입니다! Google Gemini API 키는 'AIza'로 시작하며 최소 30자 이상이어야 합니다."
+      );
+      return;
+    }
     const newConfig = { ...apiKeyConfig };
     newConfig.keys.push({
       name: `Custom Key ${newConfig.keys.length + 1}`,
-      key: newKeyInput.trim(),
+      key: cleanKey,
       isActive: true,
       isCustom: true
     });
     saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
     setNewKeyInput('');
+    setTimeout(fetchApiKeyStatus, 300);
   };
 
   const handleToggleKey = (index: number) => {
@@ -1177,6 +1257,7 @@ export default function App() {
     newConfig.keys[index].isActive = !newConfig.keys[index].isActive;
     saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
+    setTimeout(fetchApiKeyStatus, 300);
   };
 
   const handleRemoveKey = (index: number) => {
@@ -1184,12 +1265,45 @@ export default function App() {
     newConfig.keys.splice(index, 1);
     saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
+    setTimeout(fetchApiKeyStatus, 300);
   };
 
   const handleModeChange = (mode: 'load-balance' | 'priority' | 'single') => {
     const newConfig = { ...apiKeyConfig, mode };
     saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
+  };
+
+  const handleTestSpecificKey = async (index: number, keyVal: string) => {
+    setTestingKeyIndex(index);
+    try {
+      const res = await fetch('/api/ai/validate-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: keyVal })
+      });
+      const data = await res.json();
+      setKeyTestResults(prev => ({
+        ...prev,
+        [index]: {
+          isValid: !!data.isValid,
+          status: data.status,
+          message: data.message || data.reason || (data.isValid ? '정상 작동' : '검증 실패')
+        }
+      }));
+      fetchApiKeyStatus();
+    } catch (e: any) {
+      setKeyTestResults(prev => ({
+        ...prev,
+        [index]: {
+          isValid: false,
+          status: 'invalid',
+          message: e.message || '검증 실패'
+        }
+      }));
+    } finally {
+      setTestingKeyIndex(null);
+    }
   };
 
   // Save staging toggle
@@ -7265,6 +7379,50 @@ export default function App() {
               <span>Gemini & MS Docs</span>
             </div>
 
+            {/* Gemini API Key Status Indicator */}
+            <button
+              type="button"
+              onClick={() => setShowKeyStatusModal(true)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer shadow-2xs hover:scale-102 active:scale-98 ${
+                apiKeyStatus?.status === 'active'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
+                  : apiKeyStatus?.status === 'throttled'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60 hover:bg-amber-100'
+                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60 hover:bg-rose-100'
+              }`}
+              title={
+                apiKeyStatus?.status === 'active'
+                  ? (language === 'en' ? 'Gemini API: Active (Click to inspect status)' : 'Gemini API: 정상 작동 (클릭하여 상태 확인)')
+                  : apiKeyStatus?.status === 'throttled'
+                    ? (language === 'en' ? 'Gemini API: Throttled / Quota Cooldown (Click to inspect)' : 'Gemini API: 할당량 초과 / 쿨다운 (클릭하여 상태 확인)')
+                    : (language === 'en' ? 'Gemini API: Invalid / Key Required (Click to configure)' : 'Gemini API: 키 미설정 또는 오류 (클릭하여 설정하기)')
+              }
+            >
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  apiKeyStatus?.status === 'active'
+                    ? 'bg-emerald-400'
+                    : apiKeyStatus?.status === 'throttled'
+                      ? 'bg-amber-400'
+                      : 'bg-rose-400'
+                }`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                  apiKeyStatus?.status === 'active'
+                    ? 'bg-emerald-500'
+                    : apiKeyStatus?.status === 'throttled'
+                      ? 'bg-amber-500'
+                      : 'bg-rose-500'
+                }`}></span>
+              </span>
+              <span className="font-bold">
+                {apiKeyStatus?.status === 'active'
+                  ? (language === 'en' ? 'API: Active' : 'API: 정상')
+                  : apiKeyStatus?.status === 'throttled'
+                    ? (language === 'en' ? 'API: Throttled' : 'API: 쿨다운')
+                    : (language === 'en' ? 'API: Invalid' : 'API: 키 점검')}
+              </span>
+            </button>
+
             <button
               onClick={() => setLanguage(lang => lang === 'ko' ? 'en' : 'ko')}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-slate-700"
@@ -7371,6 +7529,29 @@ export default function App() {
 
           {/* Mobile Quick Controls (visible only on mobile) */}
           <div className="flex md:hidden items-center gap-1.5 shrink-0">
+            {/* Mobile API Status Indicator */}
+            <button
+              type="button"
+              onClick={() => setShowKeyStatusModal(true)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                apiKeyStatus?.status === 'active'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : apiKeyStatus?.status === 'throttled'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+              }`}
+              title="Gemini API Key Status"
+            >
+              <span className={`inline-block w-2 h-2 rounded-full ${
+                apiKeyStatus?.status === 'active'
+                  ? 'bg-emerald-500'
+                  : apiKeyStatus?.status === 'throttled'
+                    ? 'bg-amber-500 animate-pulse'
+                    : 'bg-rose-500'
+              }`} />
+              <span>AI</span>
+            </button>
+
             <button
               onClick={() => setLanguage(lang => lang === 'ko' ? 'en' : 'ko')}
               className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
@@ -9373,6 +9554,9 @@ export default function App() {
               </div>
             </div>
 
+            {/* Daily API Quota & Usage Monitor (Firebase & Gemini) */}
+            <DailyQuotaUsageChart language={language} />
+
             <DashboardWidget engineStatus={engineStatus} language={language} />
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 sm:p-8">
@@ -10876,31 +11060,129 @@ export default function App() {
 
               {/* API Key Management */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="bg-indigo-100 dark:bg-indigo-900/40 p-2 rounded-lg">
-                    <Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <div className="flex items-center justify-between gap-3 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-indigo-100 dark:bg-indigo-900/40 p-2 rounded-lg">
+                      <Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+                        {language === 'en' ? 'Gemini API Key & Status Management' : 'Gemini API 키 상태 진단 및 관리'}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {language === 'en' ? 'Live key health, format verification, and load balancing' : 'API 키 실시간 상태 모니터링, 형식 유효성 검증 및 다중화'}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-                    {language === 'en' ? 'API Key Management' : 'API 키 관리 (로드밸런싱 및 백업)'}
-                  </h3>
+
+                  <button
+                    type="button"
+                    onClick={fetchApiKeyStatus}
+                    disabled={isCheckingKeyStatus}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    title="API 키 상태 즉시 새로고침"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isCheckingKeyStatus ? 'animate-spin text-indigo-500' : ''}`} />
+                    <span>{isCheckingKeyStatus ? (language === 'en' ? 'Checking...' : '검사 중...') : (language === 'en' ? 'Check Now' : '상태 새로고침')}</span>
+                  </button>
+                </div>
+
+                {/* Real-time Status Banner */}
+                <div className={`p-4 rounded-xl border mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  apiKeyStatus?.status === 'active'
+                    ? 'bg-emerald-500/10 border-emerald-500/30'
+                    : apiKeyStatus?.status === 'throttled'
+                      ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-rose-500/10 border-rose-500/30'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-lg shrink-0 ${
+                      apiKeyStatus?.status === 'active'
+                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                        : apiKeyStatus?.status === 'throttled'
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                          : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                    }`}>
+                      {apiKeyStatus?.status === 'active' ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : apiKeyStatus?.status === 'throttled' ? (
+                        <AlertTriangle className="w-5 h-5 animate-pulse" />
+                      ) : (
+                        <AlertOctagon className="w-5 h-5" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          apiKeyStatus?.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                            : apiKeyStatus?.status === 'throttled'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200'
+                        }`}>
+                          {apiKeyStatus?.status === 'active' ? (language === 'en' ? 'Active / Healthy' : '정상 활성 (Active)') : 
+                           apiKeyStatus?.status === 'throttled' ? (language === 'en' ? 'Throttled / Cooldown' : '할당량 초과 쿨다운 (Throttled)') : 
+                           (language === 'en' ? 'Invalid / Key Required' : '키 오류 또는 미설정 (Invalid)')}
+                        </span>
+                        {apiKeyStatus?.lastChecked && (
+                          <span className="text-[10px] text-slate-400">
+                            {apiKeyStatus.lastChecked}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 mt-1 font-medium">
+                        {language === 'en' ? (apiKeyStatus?.messageEn || apiKeyStatus?.message) : apiKeyStatus?.message}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 font-mono">
+                        <span>소스: {apiKeyStatus?.keySource || 'N/A'}</span>
+                        <span>현재 키: {apiKeyStatus?.maskedKey || '미등록'}</span>
+                        {apiKeyStatus?.throttleRemainingSeconds ? (
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">쿨다운 잔여: {apiKeyStatus.throttleRemainingSeconds}초</span>
+                        ) : null}
+                        <span className="text-emerald-600 dark:text-emerald-400">HA 로컬 지식베이스: 가동중 (1,300+ 이슈)</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="grid grid-cols-1 gap-6 mb-6">
+                {/* Add New Key Form */}
+                <div className="grid grid-cols-1 gap-2 mb-6">
                   <div className="flex gap-2">
                     <input
                       type="password"
                       value={newKeyInput}
                       onChange={(e) => setNewKeyInput(e.target.value)}
-                      placeholder={language === 'en' ? 'Add new Gemini API Key...' : '추가할 Gemini API 키 입력...'}
-                      className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder={language === 'en' ? 'Add new Gemini API Key (starts with AIza...)' : '추가할 Gemini API 키 입력 (AIza로 시작)...'}
+                      className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                     />
                     <button
                       onClick={handleAddKey}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap cursor-pointer shadow-xs active:scale-95"
                     >
                       {language === 'en' ? 'Add Key' : '키 추가'}
                     </button>
                   </div>
+
+                  {/* Real-time input format validation feedback */}
+                  {newKeyInput.trim().length > 0 && (
+                    <div className={`mt-1 p-2.5 rounded-lg text-xs flex items-center gap-2 border ${
+                      isValidApiKeyFormat(newKeyInput)
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                    }`}>
+                      {isValidApiKeyFormat(newKeyInput) ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span>{language === 'en' ? `Valid Gemini API key format (AIza... confirmed, ${newKeyInput.trim().length} chars)` : `✓ 올바른 Gemini API 키 형식입니다 (AIza 확인됨, ${newKeyInput.trim().length}자)`}</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                          <span>{language === 'en' ? 'Invalid key format: Gemini API key must start with "AIza" and be at least 30 characters.' : '⚠️ 잘못된 키 형식: Gemini API 키는 "AIza"로 시작하며 30자 이상이어야 합니다.'}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden mb-6">
@@ -10920,40 +11202,79 @@ export default function App() {
                     </div>
                   </div>
                   <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                    {apiKeyConfig.keys.map((k, index) => (
-                      <li key={index} className="px-4 py-3 flex items-center justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm text-slate-900 dark:text-slate-100">{k.name}</span>
-                            {!k.isCustom && <span className="px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] text-slate-600 dark:text-slate-400">Environment</span>}
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">
-                            {k.key.substring(0, 6)}...{k.key.substring(k.key.length - 4)}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <label className="flex items-center cursor-pointer">
-                            <div className="relative">
-                              <input type="checkbox" className="sr-only" checked={k.isActive} onChange={() => handleToggleKey(index)} />
-                              <div className={`block w-10 h-6 rounded-full transition-colors ${k.isActive ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
-                              <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${k.isActive ? 'transform translate-x-4' : ''}`}></div>
+                    {apiKeyConfig.keys.map((k, index) => {
+                      const isFormatValid = isValidApiKeyFormat(k.key);
+                      const testResult = keyTestResults[index];
+                      return (
+                        <li key={index} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm text-slate-900 dark:text-slate-100">{k.name}</span>
+                              {!k.isCustom && <span className="px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] text-slate-600 dark:text-slate-400">Environment</span>}
+                              
+                              {/* Format Validity Badge */}
+                              {isFormatValid ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-0.5">
+                                  <Check className="w-2.5 h-2.5" />
+                                  {language === 'en' ? 'Valid Format' : '형식 정상'}
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-0.5">
+                                  <X className="w-2.5 h-2.5" />
+                                  {language === 'en' ? 'Invalid Format' : '형식 오류'}
+                                </span>
+                              )}
                             </div>
-                            <span className="ml-2 text-xs text-slate-600 dark:text-slate-400">
-                              {k.isActive ? (language === 'en' ? 'Active' : '활성') : (language === 'en' ? 'Inactive' : '비활성')}
-                            </span>
-                          </label>
-                          {k.isCustom && (
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">
+                              <span>{k.key.substring(0, 6)}...{k.key.substring(k.key.length - 4)}</span>
+                              {testResult && (
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                                  testResult.status === 'active'
+                                    ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                    : testResult.status === 'throttled'
+                                      ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                                      : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                                }`}>
+                                  {testResult.message}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 self-end sm:self-auto">
                             <button
-                              onClick={() => handleRemoveKey(index)}
-                              className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 p-1"
-                              title="Delete Key"
+                              type="button"
+                              onClick={() => handleTestSpecificKey(index, k.key)}
+                              disabled={testingKeyIndex === index}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                              title="이 API 키를 서버에서 직접 검증"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Activity className={`w-3 h-3 ${testingKeyIndex === index ? 'animate-spin text-indigo-500' : ''}`} />
+                              <span>{testingKeyIndex === index ? (language === 'en' ? 'Testing...' : '검사...') : (language === 'en' ? 'Test' : '테스트')}</span>
                             </button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
+
+                            <label className="flex items-center cursor-pointer">
+                              <div className="relative">
+                                <input type="checkbox" className="sr-only" checked={k.isActive} onChange={() => handleToggleKey(index)} />
+                                <div className={`block w-10 h-6 rounded-full transition-colors ${k.isActive ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
+                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${k.isActive ? 'transform translate-x-4' : ''}`}></div>
+                              </div>
+                              <span className="ml-2 text-xs text-slate-600 dark:text-slate-400">
+                                {k.isActive ? (language === 'en' ? 'Active' : '활성') : (language === 'en' ? 'Inactive' : '비활성')}
+                              </span>
+                            </label>
+                            {k.isCustom && (
+                              <button
+                                onClick={() => handleRemoveKey(index)}
+                                className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 p-1"
+                                title="Delete Key"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                     {apiKeyConfig.keys.length === 0 && (
                       <li className="px-4 py-6 text-center text-sm text-slate-500">
                         {language === 'en' ? 'No API keys configured.' : '설정된 API 키가 없습니다.'}
@@ -12943,6 +13264,176 @@ export default function App() {
                     </button>
                   </div>
                 )}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Gemini API Key Status Modal */}
+        <AnimatePresence>
+          {showKeyStatusModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col"
+              >
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                      <Key className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                        {language === 'en' ? 'Gemini API Status & Health' : 'Gemini API 키 상태 및 진단'}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {language === 'en' ? 'Real-time connectivity & key format verification' : '실시간 API 연결 상태 및 키 유효성 검증'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowKeyStatusModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-5 space-y-4">
+                  {/* Status Banner */}
+                  <div className={`p-4 rounded-xl border flex items-start gap-3.5 ${
+                    apiKeyStatus?.status === 'active'
+                      ? 'bg-emerald-500/10 border-emerald-500/30'
+                      : apiKeyStatus?.status === 'throttled'
+                        ? 'bg-amber-500/10 border-amber-500/30'
+                        : 'bg-rose-500/10 border-rose-500/30'
+                  }`}>
+                    <div className={`p-2 rounded-lg shrink-0 ${
+                      apiKeyStatus?.status === 'active'
+                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                        : apiKeyStatus?.status === 'throttled'
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                          : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                    }`}>
+                      {apiKeyStatus?.status === 'active' ? (
+                        <CheckCircle2 className="w-6 h-6" />
+                      ) : apiKeyStatus?.status === 'throttled' ? (
+                        <AlertTriangle className="w-6 h-6 animate-pulse" />
+                      ) : (
+                        <AlertOctagon className="w-6 h-6" />
+                      )}
+                    </div>
+                    <div>
+                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                        apiKeyStatus?.status === 'active'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                          : apiKeyStatus?.status === 'throttled'
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+                            : 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200'
+                      }`}>
+                        {apiKeyStatus?.status === 'active' ? (language === 'en' ? 'Active / 정상' : '정상 활성 (Active)') : 
+                         apiKeyStatus?.status === 'throttled' ? (language === 'en' ? 'Throttled / 쿨다운' : '할당량 초과 쿨다운 (Throttled)') : 
+                         (language === 'en' ? 'Invalid / 키 오류' : '키 오류 또는 미설정 (Invalid)')}
+                      </span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-1.5 leading-snug">
+                        {language === 'en' ? (apiKeyStatus?.messageEn || apiKeyStatus?.message) : apiKeyStatus?.message}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Diagnostic Details Grid */}
+                  <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2.5 text-xs">
+                    <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">{language === 'en' ? 'Active Key Source' : '현재 사용 키 소스'}</span>
+                      <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{apiKeyStatus?.keySource || 'N/A'}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">{language === 'en' ? 'Masked API Key' : '마스킹된 키'}</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{apiKeyStatus?.maskedKey || '미등록'}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">{language === 'en' ? 'Key Format Validation' : '키 형식 검증 (isValidApiKeyFormat)'}</span>
+                      <span className={`font-semibold flex items-center gap-1 ${
+                        apiKeyStatus?.status === 'invalid'
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                      }`}>
+                        {apiKeyStatus?.status === 'invalid' ? (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            {language === 'en' ? 'Invalid (Requires AIza... >=30 chars)' : '형식 오류 (AIza... 30자 이상 필요)'}
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            {language === 'en' ? 'Format Verified (AIza...)' : '형식 검증 완료 (AIza...)'}
+                          </>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">{language === 'en' ? 'Local DB HA Fallback' : '고가용성 로컬 DB 대체'}</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {language === 'en' ? 'Active (1,300+ Issues Ready)' : '항상 대기중 (1,300+ 해결 가이드)'}
+                      </span>
+                    </div>
+
+                    {apiKeyStatus?.throttleRemainingSeconds ? (
+                      <div className="flex justify-between items-center py-1">
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">{language === 'en' ? 'Cooldown Remaining' : '할당량 쿨다운 잔여'}</span>
+                        <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{apiKeyStatus.throttleRemainingSeconds}초</span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Guidance Note */}
+                  <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 rounded-xl text-xs text-blue-800 dark:text-blue-300">
+                    <p className="leading-relaxed">
+                      💡 {language === 'en'
+                        ? 'Google AI keys can be managed in Settings > API Key Management, or permanently registered in AI Studio Settings > Secrets (GEMINI_API_KEY).'
+                        : 'Gemini API 키는 [설정 > API 키 관리]에서 직접 등록하거나, AI Studio의 [Settings > Secrets] 메뉴에서 GEMINI_API_KEY로 등록하실 수 있습니다.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="px-5 py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between gap-3">
+                  <button
+                    onClick={fetchApiKeyStatus}
+                    disabled={isCheckingKeyStatus}
+                    className="px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isCheckingKeyStatus ? 'animate-spin text-indigo-500' : ''}`} />
+                    <span>{isCheckingKeyStatus ? (language === 'en' ? 'Testing...' : '진단 중...') : (language === 'en' ? 'Refresh Status' : '상태 새로고침')}</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setShowKeyStatusModal(false);
+                        setActiveTab('admin');
+                      }}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                      <span>{language === 'en' ? 'Key Settings' : '키 설정으로 이동'}</span>
+                    </button>
+                    <button
+                      onClick={() => setShowKeyStatusModal(false)}
+                      className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      {language === 'en' ? 'Close' : '닫기'}
+                    </button>
+                  </div>
+                </div>
               </motion.div>
             </div>
           )}
