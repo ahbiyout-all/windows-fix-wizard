@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-10-31T21:02:45.254Z",
+  "lastCollectedAt": "2026-11-01T04:37:03.004Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "정품인증",
+  "targetCategory": "시스템/블루스크린",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 70,
+  "totalIssuesCount": 72,
   "newIssues": [
     {
-      "id": "gh-0xc004f213-mvww0sue",
-      "code": "0xC004F213",
-      "title": "Windows 10/11 정품 인증 오류 0xC004F213 (제품 키 미보유) 해결 방법",
-      "category": "정품인증"
+      "id": "gh-0x00000139-mvxc9125",
+      "code": "0x00000139",
+      "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결 방법",
+      "category": "시스템/블루스크린"
     },
     {
-      "id": "gh-0xc004c008-mvww0sue",
-      "code": "0xC004C008",
-      "title": "Windows 10/11 정품 인증 오류 0xC004C008 (제품 키 사용 제한 초과) 해결 방법",
-      "category": "정품인증"
+      "id": "gh-0x000000e6-mvxc9125",
+      "code": "0x000000E6",
+      "title": "Windows 10/11 DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) 블루스크린 오류 해결 방법",
+      "category": "시스템/블루스크린"
     }
   ]
 }

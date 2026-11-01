@@ -3090,5 +3090,99 @@
     "updatedAt": "2026-10-31T21:02:45.254Z",
     "verifiedAt": "2026-10-31T21:02:45.254Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000139-mvxc9125",
+    "category": "시스템/블루스크린",
+    "code": "0x00000139",
+    "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix KERNEL_SECURITY_CHECK_FAILURE (0x00000139) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows 10/11 최신 업데이트 후 커널 데이터 구조 손상 또는 구형 드라이버 충돌로 인해 시스템이 갑자기 중단되고 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린이 발생합니다.",
+    "symptoms_en": "The system unexpectedly crashes with a KERNEL_SECURITY_CHECK_FAILURE (0x00000139) stop code following Windows 10/11 updates, usually caused by driver memory corruption or damaged system integrity.",
+    "script": "Write-Host \"Checking and Repairing System File Integrity...\" -ForegroundColor Cyan\r\nsfc /scannow\r\ndism /online /cleanup-image /restorehealth",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행한 뒤 'sfc /scannow' 명령어를 입력하여 무결성 검사를 진행합니다.",
+      "DISM 도구('dism /online /cleanup-image /restorehealth')를 실행하여 Windows 커널 이미지 데이터베이스를 복구합니다.",
+      "장치 관리자에서 그래픽, 네트워크 및 주요 시스템 드라이버를 최신 버전으로 업데이트하거나 최근 설치한 드라이버를 롤백합니다.",
+      "Windows 메모리 진단 도구('mdsched.exe')를 실행하여 물리적 RAM 모듈 이상 여부를 테스트합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to verify and fix system file integrity.",
+      "Execute DISM command ('dism /online /cleanup-image /restorehealth') to repair the Windows component store image.",
+      "Update graphic, network, and chipset drivers via Device Manager, or roll back recently updated drivers.",
+      "Run the Windows Memory Diagnostic tool ('mdsched.exe') to test physical RAM for hardware memory faults."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139-kernel-security-check-failure",
+      "https://support.microsoft.com/windows/troubleshoot-blue-screen-errors-5c62b728-795f-40d9-b570-5b86bd811d38"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x00000139",
+      "KERNEL_SECURITY_CHECK_FAILURE",
+      "블루스크린 해결",
+      "Windows 11 BSOD",
+      "커널 보안 검사 실패",
+      "Blue Screen Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T04:37:03.004Z",
+    "updatedAt": "2026-11-01T04:37:03.004Z",
+    "verifiedAt": "2026-11-01T04:37:03.004Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x000000e6-mvxc9125",
+    "category": "시스템/블루스크린",
+    "code": "0x000000E6",
+    "title": "Windows 10/11 DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows Kernel DMA Protection(직접 메모리 액세스 보호) 활성화 상태에서 PCIe, NVMe SSD 또는 썬더볼트 드라이버의 결함으로 인해 시스템이 재부팅되며 DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) 블루스크린이 발생합니다.",
+    "symptoms_en": "The system encounters a DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) BSOD when Kernel DMA Protection blocks illegal direct memory access operations caused by outdated PCIe, NVMe, or Thunderbolt drivers.",
+    "script": "Write-Host \"Resetting Driver Verifier settings...\" -ForegroundColor Cyan\r\nverifier /reset\r\nGet-PnpDevice -Class \"System\" | Where-Object {$_.Status -ne \"OK\"}",
+    "manualSteps": [
+      "안전 모드로 부팅한 후 명령 프롬프트에서 'verifier /reset'을 실행하여 드라이버 검증 도구 설정을 리셋합니다.",
+      "메인보드 제조업체 웹사이트를 방문하여 최신 BIOS/UEFI 업데이트 및 Chipset, Thunderbolt 드라이버를 설치합니다.",
+      "장치 관리자에서 NVMe SSD 컨트롤러 및 PCIe 버스 드라이버를 최신 버전으로 업데이트합니다.",
+      "오류가 지속될 경우 BIOS 설정 진입 후 'Kernel DMA Protection' 또는 'Virtualization Technology (VT-d)' 옵션을 점검 및 재설정합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode, open Command Prompt, and run 'verifier /reset' to disable Driver Verifier flags.",
+      "Visit your motherboard manufacturer's website to update to the latest BIOS/UEFI firmware and chipset/Thunderbolt drivers.",
+      "Update NVMe SSD controller drivers and PCIe bridge drivers in Device Manager.",
+      "If the issue persists, enter BIOS setup to review and reconfigure 'Kernel DMA Protection' or 'VT-d' virtualization settings."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xe6--driver-verifier-dma-violation",
+      "https://support.microsoft.com/windows/troubleshoot-blue-screen-errors-5c62b728-795f-40d9-b570-5b86bd811d38"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x000000E6",
+      "DRIVER_VERIFIER_DMA_VIOLATION",
+      "Kernel DMA Protection",
+      "블루스크린 0xE6",
+      "NVMe 블루스크린",
+      "DMA Violation Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T04:37:03.004Z",
+    "updatedAt": "2026-11-01T04:37:03.004Z",
+    "verifiedAt": "2026-11-01T04:37:03.004Z",
+    "verificationStatus": "verified"
   }
 ]
