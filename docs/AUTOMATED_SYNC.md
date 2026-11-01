@@ -47,8 +47,15 @@ cron.schedule('0 */2 * * *', async () => { ... });
 ## 6. High-Availability Server JSON Fallback Integration
 When the server performs background collection or counts retrieval, and the Firestore quota has been exceeded or connection issues occur, the system automatically redirects and serves requests using the **High-Availability Server JSON File DB** (`/data/` directory). This ensures 100% uptime for end-users and background collectors even when Firebase hits its free tier limits.
 
-## 7. Monitoring
-You can check the status of the last automated sync in the Firestore database:
-- **Collection**: `system_config`
-- **Document**: `status`
-- **Fields**: `lastSyncAt`, `lastCronResult`
+## 7. GitHub Actions GitOps Autonomous Harvesting (Recommended)
+In addition to the server webhook, the application is synchronized with `.github/workflows/windows-fix-collector.yml`, which runs every 6 hours on GitHub's free runners:
+- Uses Google Search Grounding to harvest new Windows fixes.
+- Automatically pushes updates directly into `data/issues.json` (GitOps).
+- Supports both **Personal Access Token (PAT)** and **SSH Private Key** credentials for repository operations.
+- Triggers webhook sync if `APP_WEBHOOK_URL` and `CRON_SECRET` are configured in GitHub Repository Secrets.
+
+## 8. Monitoring
+You can check the status of the last automated sync in the Admin Dashboard:
+- Real-time GitHub Actions status badges for `windows-fix-collector.yml`.
+- Interactive Recharts usage chart displaying daily GitOps sync counts.
+- Backend sync audit logs in the Admin Monitoring Hub.

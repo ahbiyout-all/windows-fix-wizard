@@ -7,6 +7,7 @@ import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { KNOWN_ISSUES } from "./src/data/knownIssues";
 import nodemailer from "nodemailer";
 import JSZip from "jszip";
@@ -174,39 +175,37 @@ function generateInitialQuotaRecords(days: number = 30): any[] {
     const dayLabel = `${mm}/${dd}`;
 
     const dayCycle = (days - i) % 7;
-    const weekendFactor = dayCycle === 0 || dayCycle === 6 ? 0.75 : 1.15;
+    const weekendFactor = dayCycle === 0 || dayCycle === 6 ? 0.8 : 1.2;
     const isSpikeDay = i === 2 || i === 8;
-    const baseReads = Math.round((12000 + Math.sin((days - i) * 0.7) * 4500 + (isSpikeDay ? 18000 : 0)) * weekendFactor);
-    const baseWrites = Math.round((2800 + Math.cos((days - i) * 0.5) * 1100 + (isSpikeDay ? 4200 : 0)) * weekendFactor);
-    const baseDeletes = Math.round(150 + Math.random() * 200);
-    const baseGemini = Math.round((320 + Math.sin((days - i) * 0.8) * 120 + (isSpikeDay ? 480 : 0)) * weekendFactor);
+    const baseJamstack = Math.round((18000 + Math.sin((days - i) * 0.7) * 5500 + (isSpikeDay ? 22000 : 0)) * weekendFactor);
+    const baseIdb = Math.round((42000 + Math.cos((days - i) * 0.5) * 12000 + (isSpikeDay ? 35000 : 0)) * weekendFactor);
+    const baseGitops = 4;
+    const baseGemini = Math.round((280 + Math.sin((days - i) * 0.8) * 140 + (isSpikeDay ? 420 : 0)) * weekendFactor);
     const baseTokens = baseGemini * 1150;
 
-    const readPct = parseFloat(((baseReads / 50000) * 100).toFixed(1));
-    const writePct = parseFloat(((baseWrites / 20000) * 100).toFixed(1));
     const geminiPct = parseFloat(((baseGemini / 1500) * 100).toFixed(1));
 
     let status: 'safe' | 'warning' | 'critical' = 'safe';
-    if (readPct >= 90 || writePct >= 90 || geminiPct >= 90) {
+    if (geminiPct >= 90) {
       status = 'critical';
-    } else if (readPct >= 70 || writePct >= 70 || geminiPct >= 70) {
+    } else if (geminiPct >= 70) {
       status = 'warning';
     }
 
     list.push({
       date: dateStr,
       dayLabel,
-      firestoreReads: baseReads,
-      firestoreWrites: baseWrites,
-      firestoreDeletes: baseDeletes,
+      jamstackReads: baseJamstack,
+      indexedDbQueries: baseIdb,
+      gitopsSyncs: baseGitops,
+      firestoreReads: baseJamstack,
+      firestoreWrites: baseIdb,
+      firestoreDeletes: 0,
       geminiRequests: baseGemini,
       geminiTokens: baseTokens,
-      firestoreReadsQuota: 50000,
-      firestoreWritesQuota: 20000,
       geminiRequestsQuota: 1500,
-      haFallbackCount: status === 'critical' ? 24 : 0,
-      readQuotaPercent: readPct,
-      writeQuotaPercent: writePct,
+      readQuotaPercent: 0,
+      writeQuotaPercent: 0,
       geminiQuotaPercent: geminiPct,
       status
     });
@@ -215,6 +214,8 @@ function generateInitialQuotaRecords(days: number = 30): any[] {
 }
 
 function recordDailyQuotaMetric(metrics: {
+  jamstackReads?: number;
+  indexedDbQueries?: number;
   firestoreReads?: number;
   firestoreWrites?: number;
   firestoreDeletes?: number;
@@ -234,15 +235,15 @@ function recordDailyQuotaMetric(metrics: {
       todayItem = {
         date: today,
         dayLabel,
-        firestoreReads: 0,
-        firestoreWrites: 0,
+        jamstackReads: 19420,
+        indexedDbQueries: 48500,
+        gitopsSyncs: 4,
+        firestoreReads: 19420,
+        firestoreWrites: 48500,
         firestoreDeletes: 0,
         geminiRequests: 0,
         geminiTokens: 0,
-        firestoreReadsQuota: 50000,
-        firestoreWritesQuota: 20000,
         geminiRequestsQuota: 1500,
-        haFallbackCount: 0,
         readQuotaPercent: 0,
         writeQuotaPercent: 0,
         geminiQuotaPercent: 0,
@@ -251,20 +252,19 @@ function recordDailyQuotaMetric(metrics: {
       list.push(todayItem);
     }
 
-    if (metrics.firestoreReads) todayItem.firestoreReads += metrics.firestoreReads;
-    if (metrics.firestoreWrites) todayItem.firestoreWrites += metrics.firestoreWrites;
-    if (metrics.firestoreDeletes) todayItem.firestoreDeletes += metrics.firestoreDeletes;
-    if (metrics.geminiRequests) todayItem.geminiRequests += metrics.geminiRequests;
-    if (metrics.geminiTokens) todayItem.geminiTokens += metrics.geminiTokens;
-    if (metrics.haFallback) todayItem.haFallbackCount += metrics.haFallback;
+    if (metrics.jamstackReads) todayItem.jamstackReads = (todayItem.jamstackReads || 0) + metrics.jamstackReads;
+    if (metrics.indexedDbQueries) todayItem.indexedDbQueries = (todayItem.indexedDbQueries || 0) + metrics.indexedDbQueries;
+    if (metrics.firestoreReads) todayItem.firestoreReads = (todayItem.firestoreReads || 0) + metrics.firestoreReads;
+    if (metrics.firestoreWrites) todayItem.firestoreWrites = (todayItem.firestoreWrites || 0) + metrics.firestoreWrites;
+    if (metrics.firestoreDeletes) todayItem.firestoreDeletes = (todayItem.firestoreDeletes || 0) + metrics.firestoreDeletes;
+    if (metrics.geminiRequests) todayItem.geminiRequests = (todayItem.geminiRequests || 0) + metrics.geminiRequests;
+    if (metrics.geminiTokens) todayItem.geminiTokens = (todayItem.geminiTokens || 0) + metrics.geminiTokens;
 
-    todayItem.readQuotaPercent = parseFloat(((todayItem.firestoreReads / 50000) * 100).toFixed(1));
-    todayItem.writeQuotaPercent = parseFloat(((todayItem.firestoreWrites / 20000) * 100).toFixed(1));
-    todayItem.geminiQuotaPercent = parseFloat(((todayItem.geminiRequests / 1500) * 100).toFixed(1));
+    todayItem.geminiQuotaPercent = parseFloat((((todayItem.geminiRequests || 0) / 1500) * 100).toFixed(1));
 
-    if (todayItem.readQuotaPercent >= 90 || todayItem.writeQuotaPercent >= 90 || todayItem.geminiQuotaPercent >= 90) {
+    if (todayItem.geminiQuotaPercent >= 90) {
       todayItem.status = 'critical';
-    } else if (todayItem.readQuotaPercent >= 70 || todayItem.writeQuotaPercent >= 70 || todayItem.geminiQuotaPercent >= 70) {
+    } else if (todayItem.geminiQuotaPercent >= 70) {
       todayItem.status = 'warning';
     } else {
       todayItem.status = 'safe';
@@ -327,7 +327,7 @@ function purgeOldLastKnownGoodSnapshotsSync(maxRetention?: number): { purgedCoun
   }
 }
 
-function createLastKnownGoodBackupSync(): { success: boolean; createdAt: string; totalRecords: number; collections: Record<string, number>; purgedCount: number } {
+function createLastKnownGoodBackupSync(customReason?: string): { success: boolean; createdAt: string; totalRecords: number; collections: Record<string, number>; purgedCount: number; checksum?: string } {
   try {
     if (!fs.existsSync(LKG_SNAPSHOTS_DIR)) {
       fs.mkdirSync(LKG_SNAPSHOTS_DIR, { recursive: true });
@@ -346,12 +346,17 @@ function createLastKnownGoodBackupSync(): { success: boolean; createdAt: string;
     }
 
     const createdAt = getKSTISOString();
+    const rawDataStr = JSON.stringify(snapshotData);
+    const checksum = crypto.createHash('sha256').update(rawDataStr).digest('hex');
+
     const payload = {
       metadata: {
         createdAt,
         totalRecords,
         collectionsCount,
-        reason: "Automatic last-known-good snapshot triggered prior to data import/restore operation."
+        checksum,
+        algorithm: 'SHA-256',
+        reason: customReason || "Automatic last-known-good snapshot triggered prior to data import/restore operation."
       },
       data: snapshotData
     };
@@ -372,7 +377,8 @@ function createLastKnownGoodBackupSync(): { success: boolean; createdAt: string;
       createdAt,
       totalRecords,
       collections: collectionsCount,
-      purgedCount: purgeInfo.purgedCount
+      purgedCount: purgeInfo.purgedCount,
+      checksum
     };
   } catch (err: any) {
     console.error("Failed to create last-known-good backup:", err);
@@ -2592,6 +2598,42 @@ async function startServer() {
     }
   });
 
+  app.get("/api/admin/last-known-good/snapshots", requireAdmin, (req, res) => {
+    try {
+      if (!fs.existsSync(LKG_SNAPSHOTS_DIR)) {
+        return res.json({ success: true, snapshots: [], retentionCount: getLkgRetentionCount() });
+      }
+
+      const files = fs.readdirSync(LKG_SNAPSHOTS_DIR)
+        .filter(f => f.startsWith('snapshot_') && f.endsWith('.json'));
+
+      const snapshots = files.map(file => {
+        try {
+          const fullPath = path.join(LKG_SNAPSHOTS_DIR, file);
+          const stat = fs.statSync(fullPath);
+          const content = fs.readFileSync(fullPath, 'utf8');
+          const parsed = JSON.parse(content);
+          return {
+            filename: file,
+            createdAt: parsed.metadata?.createdAt || new Date(stat.mtimeMs).toISOString(),
+            totalRecords: parsed.metadata?.totalRecords || 0,
+            collections: parsed.metadata?.collectionsCount || {},
+            sizeBytes: stat.size,
+            checksum: parsed.metadata?.checksum || null,
+            reason: parsed.metadata?.reason || "Pre-import backup snapshot"
+          };
+        } catch (_) {
+          return null;
+        }
+      }).filter(Boolean)
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      res.json({ success: true, snapshots, retentionCount: getLkgRetentionCount() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Failed to list snapshots" });
+    }
+  });
+
   app.get("/api/admin/last-known-good/download", requireAdmin, (req, res) => {
     try {
       if (!fs.existsSync(LAST_KNOWN_GOOD_PATH)) {
@@ -2604,6 +2646,77 @@ async function startServer() {
       res.send(raw);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || "Failed to download last-known-good snapshot" });
+    }
+  });
+
+  app.get("/api/admin/last-known-good/download-snapshot/:filename", requireAdmin, (req, res) => {
+    try {
+      const safeFilename = path.basename(req.params.filename);
+      const targetPath = path.join(LKG_SNAPSHOTS_DIR, safeFilename);
+      if (!fs.existsSync(targetPath)) {
+        return res.status(404).json({ success: false, error: "Snapshot file not found." });
+      }
+      const raw = fs.readFileSync(targetPath, 'utf8');
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename=${safeFilename}`);
+      res.send(raw);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Failed to download snapshot" });
+    }
+  });
+
+  app.post("/api/admin/last-known-good/restore-snapshot", requireAdmin, async (req, res) => {
+    try {
+      const { filename } = req.body;
+      if (!filename || typeof filename !== 'string') {
+        return res.status(400).json({ success: false, error: "Valid snapshot filename is required." });
+      }
+
+      const safeFilename = path.basename(filename);
+      if (!safeFilename.startsWith('snapshot_') || !safeFilename.endsWith('.json')) {
+        return res.status(400).json({ success: false, error: "Invalid snapshot filename format." });
+      }
+
+      const targetPath = path.join(LKG_SNAPSHOTS_DIR, safeFilename);
+      if (!fs.existsSync(targetPath)) {
+        return res.status(404).json({ success: false, error: `Snapshot file '${safeFilename}' does not exist.` });
+      }
+
+      // Automatically create a safety backup of current state before applying historical rollback!
+      const safetyBackup = createLastKnownGoodBackupSync(`Auto-safety snapshot before historical rollback to ${safeFilename}`);
+
+      const raw = fs.readFileSync(targetPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const snapshotData = parsed.data || {};
+      let restoredRecordsCount = 0;
+
+      for (const colName of Object.keys(snapshotData)) {
+        const docs = snapshotData[colName];
+        if (Array.isArray(docs)) {
+          writeLocalCollection(colName, docs);
+          restoredRecordsCount += docs.length;
+        }
+      }
+
+      // Sync issues back to Firestore bundles
+      await syncBundlesToFirestore();
+
+      await logSyncEvent({
+        type: 'info',
+        source: 'snapshotHistoricalRollback',
+        message: `스냅샷 파일 (${safeFilename}) 복원 완료 (총 ${restoredRecordsCount}개 항목 복구)`
+      });
+
+      res.json({
+        success: true,
+        restoredRecordsCount,
+        restoredFilename: safeFilename,
+        safetyBackup,
+        metadata: parsed.metadata || {}
+      });
+    } catch (err: any) {
+      console.error("Historical snapshot restore failed:", err);
+      res.status(500).json({ success: false, error: err.message || "Failed to restore snapshot" });
     }
   });
 
@@ -2644,7 +2757,112 @@ async function startServer() {
 
   app.post("/api/admin/restore", requireAdmin, async (req, res) => {
     try {
-      const { collection = 'issues', data, mode = 'merge', skipAutoBackup = false } = req.body;
+      const { collection = 'issues', data, collectionsData, strategy = 'merge', mode = strategy, skipAutoBackup = false } = req.body;
+      const effectiveStrategy = strategy || mode || 'merge';
+
+      // Automatically create Last-Known-Good backup snapshot before applying import/restore
+      let autoBackupInfo = null;
+      if (!skipAutoBackup) {
+        autoBackupInfo = createLastKnownGoodBackupSync(`Pre-restore snapshot (${effectiveStrategy})`);
+      }
+
+      // If multi-collection bundle passed
+      if (collectionsData && typeof collectionsData === 'object') {
+        let totalCount = 0;
+        const restoredSummary: Record<string, any> = {};
+
+        for (const [col, colItems] of Object.entries(collectionsData)) {
+          if (!Array.isArray(colItems)) continue;
+          const safeCol = col.replace(/[^a-zA-Z0-9_]/g, '');
+          if (!safeCol) continue;
+
+          if (safeCol === 'issues') {
+            const validation = validateKnownIssuesData(colItems);
+            const validRecords = validation.validRecords.length > 0 ? validation.validRecords : colItems;
+            let currentIssues = effectiveStrategy === 'overwrite' ? [] : readLocalCollection('issues');
+
+            if (effectiveStrategy === 'overwrite') {
+              writeLocalCollection('issues', validRecords);
+              await syncBundlesToFirestore();
+              restoredSummary[safeCol] = { added: validRecords.length, updated: 0, skipped: 0, strategy: 'overwrite' };
+              totalCount += validRecords.length;
+            } else if (effectiveStrategy === 'skip_existing') {
+              const existingIds = new Set(currentIssues.map((i: any) => i.id).filter(Boolean));
+              const existingKeys = new Set(currentIssues.map((i: any) => `${(i.code || '').toUpperCase().trim()}___${(i.title || '').toLowerCase().trim()}`));
+              const existingTitles = new Set(currentIssues.map((i: any) => (i.title || '').toLowerCase().trim()));
+              let added = 0;
+              let skipped = 0;
+              for (const item of validRecords) {
+                const codeKey = `${(item.code || '').toUpperCase().trim()}___${(item.title || '').toLowerCase().trim()}`;
+                const titleKey = (item.title || '').toLowerCase().trim();
+                if ((item.id && existingIds.has(item.id)) || (item.code && item.code !== 'N/A' && existingKeys.has(codeKey)) || existingTitles.has(titleKey)) {
+                  skipped++;
+                  continue;
+                }
+                const newId = item.id || `issue-${Date.now()}-${added}`;
+                currentIssues.push({
+                  ...item,
+                  id: newId,
+                  createdAt: item.createdAt || getKSTISOString(),
+                  updatedAt: item.updatedAt || getKSTISOString()
+                });
+                added++;
+                if (item.id) existingIds.add(item.id);
+                existingKeys.add(codeKey);
+                existingTitles.add(titleKey);
+              }
+              writeLocalCollection('issues', currentIssues);
+              await syncBundlesToFirestore();
+              restoredSummary[safeCol] = { added, updated: 0, skipped, strategy: 'skip_existing' };
+              totalCount += added;
+            } else {
+              // merge
+              const resMerge = await saveIssuesToServer(validRecords);
+              restoredSummary[safeCol] = { ...resMerge, strategy: 'merge' };
+              totalCount += (resMerge.added + resMerge.updated);
+            }
+          } else {
+            let currentList = effectiveStrategy === 'overwrite' ? [] : readLocalCollection(safeCol);
+            if (effectiveStrategy === 'overwrite') {
+              currentList = colItems;
+            } else if (effectiveStrategy === 'skip_existing') {
+              const existingKeys = new Set(currentList.map((item: any) => item.id || item.code || JSON.stringify(item)));
+              for (const newItem of colItems) {
+                const key = newItem.id || newItem.code || JSON.stringify(newItem);
+                if (!existingKeys.has(key)) {
+                  currentList.push({ ...newItem, updatedAt: getKSTISOString() });
+                  existingKeys.add(key);
+                }
+              }
+            } else {
+              // merge
+              const existingMap = new Map(currentList.map((item: any) => [item.id || item.code || JSON.stringify(item), item]));
+              for (const newItem of colItems) {
+                const key = newItem.id || newItem.code || JSON.stringify(newItem);
+                existingMap.set(key, { ...existingMap.get(key), ...newItem, updatedAt: getKSTISOString() });
+              }
+              currentList = Array.from(existingMap.values());
+            }
+            writeLocalCollection(safeCol, currentList);
+            restoredSummary[safeCol] = { total: currentList.length, strategy: effectiveStrategy };
+            totalCount += colItems.length;
+          }
+        }
+
+        await logSyncEvent({
+          type: 'info',
+          source: 'adminMultiRestore',
+          message: `다중 컬렉션 데이터 복원 완료 (총 ${totalCount}개 레코드 처리, 전략: ${effectiveStrategy})`
+        });
+
+        return res.json({
+          success: true,
+          strategy: effectiveStrategy,
+          summary: restoredSummary,
+          autoBackupInfo
+        });
+      }
+
       if (!Array.isArray(data)) {
         return res.status(400).json({ success: false, error: "Restore payload 'data' must be an array of records." });
       }
@@ -2654,13 +2872,7 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "Invalid collection name." });
       }
 
-      // Automatically create Last-Known-Good backup snapshot before applying import/restore
-      let autoBackupInfo = null;
-      if (!skipAutoBackup) {
-        autoBackupInfo = createLastKnownGoodBackupSync();
-      }
-
-      if (safeCollectionName === 'issues' && mode === 'merge') {
+      if (safeCollectionName === 'issues') {
         const validation = validateKnownIssuesData(data);
         if (!validation.isValid && req.body.strictValidation) {
           return res.status(400).json({
@@ -2676,6 +2888,80 @@ async function startServer() {
         }
 
         const validRecordsToSave = validation.validRecords.length > 0 ? validation.validRecords : data;
+
+        if (effectiveStrategy === 'overwrite') {
+          writeLocalCollection('issues', validRecordsToSave);
+          await syncBundlesToFirestore();
+          await logSyncEvent({
+            type: 'info',
+            source: 'adminRestoreOverwrite',
+            message: `이슈 DB 완전 덮어쓰기 완료 (총 ${validRecordsToSave.length}개 항목 대체)`
+          });
+          return res.json({
+            success: true,
+            collection: 'issues',
+            strategy: 'overwrite',
+            stats: { added: validRecordsToSave.length, updated: 0, skipped: 0 },
+            autoBackupInfo,
+            validation: {
+              totalRecords: validation.totalRecords,
+              validCount: validation.validCount,
+              invalidCount: validation.invalidCount
+            }
+          });
+        }
+
+        if (effectiveStrategy === 'skip_existing') {
+          const localIssues = readLocalCollection('issues');
+          const existingIds = new Set(localIssues.map((i: any) => i.id).filter(Boolean));
+          const existingKeys = new Set(localIssues.map((i: any) => `${(i.code || '').toUpperCase().trim()}___${(i.title || '').toLowerCase().trim()}`));
+          const existingTitles = new Set(localIssues.map((i: any) => (i.title || '').toLowerCase().trim()));
+          let added = 0;
+          let skipped = 0;
+
+          for (const item of validRecordsToSave) {
+            const codeKey = `${(item.code || '').toUpperCase().trim()}___${(item.title || '').toLowerCase().trim()}`;
+            const titleKey = (item.title || '').toLowerCase().trim();
+            if ((item.id && existingIds.has(item.id)) || (item.code && item.code !== 'N/A' && existingKeys.has(codeKey)) || existingTitles.has(titleKey)) {
+              skipped++;
+              continue;
+            }
+            const newId = item.id || `issue-${Date.now()}-${added}`;
+            localIssues.push({
+              ...item,
+              id: newId,
+              createdAt: item.createdAt || getKSTISOString(),
+              updatedAt: item.updatedAt || getKSTISOString()
+            });
+            added++;
+            if (item.id) existingIds.add(item.id);
+            existingKeys.add(codeKey);
+            existingTitles.add(titleKey);
+          }
+
+          writeLocalCollection('issues', localIssues);
+          await syncBundlesToFirestore();
+          await logSyncEvent({
+            type: 'info',
+            source: 'adminRestoreSkipExisting',
+            message: `이슈 DB 신규 항목만 추가 완료 (신규: ${added}개, 중복건너뜀: ${skipped}개)`
+          });
+
+          return res.json({
+            success: true,
+            collection: 'issues',
+            strategy: 'skip_existing',
+            stats: { added, updated: 0, skipped },
+            autoBackupInfo,
+            validation: {
+              totalRecords: validation.totalRecords,
+              validCount: validation.validCount,
+              invalidCount: validation.invalidCount
+            }
+          });
+        }
+
+        // Default 'merge'
         const result = await saveIssuesToServer(validRecordsToSave);
         await logSyncEvent({
           type: 'info',
@@ -2685,7 +2971,7 @@ async function startServer() {
         return res.json({
           success: true,
           collection: 'issues',
-          mode: 'merge',
+          strategy: 'merge',
           stats: result,
           autoBackupInfo,
           validation: {
@@ -2697,14 +2983,23 @@ async function startServer() {
         });
       }
 
-      let currentList = mode === 'merge' ? readLocalCollection(safeCollectionName) : [];
-      if (mode === 'merge') {
+      let currentList = effectiveStrategy === 'overwrite' ? [] : readLocalCollection(safeCollectionName);
+      if (effectiveStrategy === 'merge') {
         const existingMap = new Map(currentList.map((item: any) => [item.id || item.code || JSON.stringify(item), item]));
         for (const newItem of data) {
           const key = newItem.id || newItem.code || JSON.stringify(newItem);
           existingMap.set(key, { ...existingMap.get(key), ...newItem, updatedAt: getKSTISOString() });
         }
         currentList = Array.from(existingMap.values());
+      } else if (effectiveStrategy === 'skip_existing') {
+        const existingKeys = new Set(currentList.map((item: any) => item.id || item.code || JSON.stringify(item)));
+        for (const newItem of data) {
+          const key = newItem.id || newItem.code || JSON.stringify(newItem);
+          if (!existingKeys.has(key)) {
+            currentList.push({ ...newItem, updatedAt: getKSTISOString() });
+            existingKeys.add(key);
+          }
+        }
       } else {
         currentList = data;
       }
@@ -2713,13 +3008,13 @@ async function startServer() {
       await logSyncEvent({
         type: 'info',
         source: 'adminRestore',
-        message: `온라인 백업 자료로 로컬 ${safeCollectionName} DB 복구/업데이트 완료 (총 ${currentList.length}개 항목)`
+        message: `온라인 백업 자료로 로컬 ${safeCollectionName} DB 복구/업데이트 완료 (전략: ${effectiveStrategy}, 총 ${currentList.length}개 항목)`
       });
 
       res.json({
         success: true,
         collection: safeCollectionName,
-        mode,
+        strategy: effectiveStrategy,
         count: currentList.length,
         autoBackupInfo
       });
@@ -3234,6 +3529,8 @@ async function startServer() {
         repo: "AhBiYout-all/windows-fix-wizard",
         branch: "main",
         workflowId: "windows-fix-collector.yml",
+        authMode: "PAT",
+        sshPrivateKey: "",
         hasToken: !!process.env.GITHUB_TOKEN,
         lastSyncAt: null,
         lastSyncStatus: null
@@ -3243,8 +3540,11 @@ async function startServer() {
         config: {
           ...config,
           repo: config.repo || "AhBiYout-all/windows-fix-wizard",
+          authMode: config.authMode || "PAT",
           hasToken: !!(config.token || process.env.GITHUB_TOKEN),
           token: config.token ? "••••••••" : "",
+          hasSshKey: !!(config.sshPrivateKey),
+          sshPrivateKey: config.sshPrivateKey ? "•••••••• (SSH Private Key)" : "",
           hasServerToken: !!process.env.GITHUB_TOKEN
         }
       });
@@ -3256,14 +3556,16 @@ async function startServer() {
   // 5. Save GitHub integration configuration
   app.post("/api/github/config", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch, workflowId, token } = req.body;
+      const { repo, branch, workflowId, token, authMode, sshPrivateKey } = req.body;
       const current = readLocalCollection('github_config')[0] || {};
       const updated = {
         ...current,
         repo: repo !== undefined ? String(repo).trim() : current.repo || "AhBiYout-all/windows-fix-wizard",
         branch: branch !== undefined ? String(branch).trim() : current.branch || "main",
         workflowId: workflowId !== undefined ? String(workflowId).trim() : current.workflowId || "windows-fix-collector.yml",
+        authMode: authMode || current.authMode || "PAT",
         token: (token && !token.includes("••••")) ? String(token).trim() : current.token || "",
+        sshPrivateKey: (sshPrivateKey && !sshPrivateKey.includes("••••")) ? String(sshPrivateKey).trim() : current.sshPrivateKey || "",
         updatedAt: getKSTISOString()
       };
       writeLocalCollection('github_config', [updated]);
@@ -3272,7 +3574,9 @@ async function startServer() {
         config: { 
           ...updated, 
           hasToken: !!(updated.token || process.env.GITHUB_TOKEN),
-          token: updated.token ? "••••••••" : "" 
+          token: updated.token ? "••••••••" : "",
+          hasSshKey: !!(updated.sshPrivateKey),
+          sshPrivateKey: updated.sshPrivateKey ? "•••••••• (SSH Private Key)" : ""
         } 
       });
     } catch (err: any) {

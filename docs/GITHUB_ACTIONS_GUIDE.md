@@ -258,20 +258,30 @@ INPUT_TOPIC="네트워크" BATCH_SIZE=2 npm run collect:github
 
 ---
 
-## 🎛️ 7. 앱 관리자(Admin) UI 연동 및 원격 제어 매뉴얼
+## 🎛️ 7. 앱 관리자(Admin) UI 연동 및 원격 제어 매뉴얼 (v3.50.0 최신)
 
 Windows Fix Wizard 웹 애플리케이션의 **관리자 대시보드 (Admin Dashboard)** > **`GitHub Actions & GitOps 자율 데이터 수집 센터`**에서 모든 기능을 브라우저 클릭만으로 원격 제어할 수 있습니다:
 
-### 1) 원격 워크플로 가동 (Dispatch Workflow via API)
+### 1) 듀얼 인증 모드 지원 (PAT 및 SSH 기반 인증)
+- **Personal Access Token (PAT)**:
+  - GitHub 계정의 Fine-grained 토큰 또는 Classic PAT(`workflow`, `repo` 권한)을 입력하여 REST API 및 디스패치를 수행합니다.
+- **SSH Private Key (신규 추가)**:
+  - 보다 강력한 엔터프라이즈급 보안 요구사항을 위해 SSH 개인키(`id_ed25519` 또는 `id_rsa`)를 등록하여 인증할 수 있습니다.
+  - 서버 측에서 안전하게 마스킹(`•••••••• (SSH Private Key)`) 처리되며 유출 없이 안전하게 보관됩니다.
+
+### 2) 원격 워크플로 가동 (Dispatch Workflow via API)
 - GitHub 웹사이트에 로그인하지 않고도, 앱 화면에서 원하는 카테고리(`업데이트`, `블루스크린`, `네트워크` 등)를 선택하고 **`워크플로 가동`** 버튼을 누르면 GitHub REST API를 통해 클라우드 러너가 즉시 시작됩니다.
-- *요구사항*: 저장소 접근 권한이 있는 Personal Access Token(PAT, `workflow` 또는 `repo` 권한)이 앱에 입력되어 있어야 합니다.
+- *요구사항*: 저장소 접근 권한이 있는 Personal Access Token(PAT, `workflow` 또는 `repo` 권한) 또는 SSH 키가 등록되어 있어야 합니다.
 
-### 2) 지금 데이터 불러와 동기화 (Pull Data Now)
+### 3) 지금 데이터 불러와 동기화 (Pull Data Now)
 - GitHub Actions가 커밋해 둔 최신 `data/issues.json` 파일을 원클릭으로 가져옵니다.
-- 브라우저나 로컬 서버에서 실행 중인 경우, AI API 호출 비용을 단 1원도 쓰지 않고 GitHub 저장소의 정제된 데이터를 즉시 앱 데이터베이스에 병합합니다.
+- 브라우저나 로컬 서버에서 실행 중인 경우, AI API 호출 비용을 단 1원도 쓰지 않고 GitHub 저장소의 정제된 데이터를 즉시 앱 데이터베이스 및 IndexedDB 브라우저 캐시에 병합합니다.
 
-### 3) GitHub Pages 정적 웹사이트와의 연동
-- 본 앱이 GitHub Pages 정적 웹사이트(`https://AhBiYout-all.github.io/windows-fix-wizard/`)로 배포되어 있어도, 수집된 GitOps 데이터(`data/issues.json`)는 GitHub CDN을 통해 실시간으로 조회 가능합니다.
+### 4) 실시간 GitHub Actions 상태 배지 모니터링
+- 관리자 패널에서 **자율 수집 엔진 (`windows-fix-collector.yml`)** 및 **웹 배포 워크플로 (`deploy-pages.yml`)**의 최근 실행 상태(성공, 실패, 진행 중)를 실시간 배지로 바로 확인할 수 있습니다.
+
+### 5) GitHub Pages 정적 웹사이트와의 연동
+- 본 앱이 GitHub Pages 정적 웹사이트(`https://AhBiYout-all.github.io/windows-fix-wizard/`)로 배포되어 있어도, 수집된 GitOps 데이터(`data/issues.json`)는 GitHub CDN을 통해 전 세계 어디서든 실시간으로 조회 가능합니다.
 
 ---
 

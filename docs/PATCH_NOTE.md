@@ -1,6 +1,282 @@
-# Patch Note - System Update (v3.37.0)
+# Patch Note - System Update (v3.52.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.52.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Enterprise Granular Data Backup & Export Engine
+- **Selective Collection Packaging**: Administrators can now cherry-pick exact collections to back up (`issues` - 윈도우 문제 & 솔루션, `feedback` - 사용자 피드백 로그, `bookmarks` - 북마크/스크랩, `system_config` - 시스템 설정, `admin_logs` - 관리자 감사 로그).
+- **Dual Export Packaging Formats**:
+  - **`.ZIP` Archive (Recommended)**: Structured folder with separated JSON files, human-readable metadata, and a standalone `checksum.sha256` verification file generated via `JSZip`.
+  - **`.JSON` Unified Bundle**: Compact single-file export encapsulating selected datasets under a structured root payload.
+- **Tamper-Proof SHA-256 Checksum Generation**: Automated computation of SHA-256 hashes embedded into backup metadata and zip payloads to detect file corruption or unauthorized modifications.
+
+#### 2. Interactive Dry-Run Pre-Import Simulation Engine
+- **Zero-Write In-Memory Analysis**: Inspects uploaded `.zip` or `.json` backup packages in memory before any database write or commit operation.
+- **Real-Time Cryptographic Integrity Verification**: Verifies embedded or companion SHA-256 checksums, presenting real-time visual badges (`검증 완료: 일치함` vs `불일치/위변조 주의`).
+- **Comprehensive Discrepancy & Schema Preview**: Analyzes incoming records against the `KnownIssue` schema, categorizing items into new vs updated vs duplicate counts.
+- **Flexible Conflict Resolution Strategies**:
+  - `Smart Merge (권장)`: Retains existing data while inserting new entries and updating modified records.
+  - `Skip Existing (기존 보존)`: Retains all existing records and registers only completely new issue codes.
+  - `Clean Overwrite (완전 덮어쓰기)`: Clears target collections and restores the exact state from the backup package.
+- **Automated Pre-Restore Safety Snapshot Toggle**: Automatically creates an instant `Last-Known-Good` state snapshot immediately before applying any import, ensuring zero risk of irreversible data corruption.
+
+#### 3. Multi-Snapshot Archives & Rollback Explorer
+- **Unified 4-Tab Snapshot Management Hub**:
+  - **`직전 정상 백업 (LKG)`**: Real-time inspection of the active pre-import safety backup with instant 1-click rollback and `.json` file download.
+  - **`서버 보관소 (Server Archives)`**: Connects to `GET /api/admin/last-known-good/snapshots`, listing all retained server snapshots with creation timestamps, record counts, file sizes, SHA-256 hashes, 1-click restore (`/restore-snapshot`), and direct downloads (`/download-snapshot/:filename`).
+  - **`브라우저 로컬 (IndexedDB)`**: Persistent client-side snapshot repository operating via browser IndexedDB (`winfix_browser_snapshots`), supporting custom labeling, instant snapshots, 1-click rollback, JSON download, and deletion. Fully functional in offline and GitHub Pages static hosting environments.
+  - **`보존 정책 (Retention Policy)`**: Automatic pruning of snapshots exceeding the retention quota (default: 7 snapshots) with on-demand manual purge execution.
+
+### 🛡️ Security Hardening & Authentication
+- **Cryptographic Hash Verification**: Utilizes native browser Web Crypto API (`window.crypto.subtle.digest`) and Node.js `crypto` for anti-tamper payload verification.
+- **Pre-Restore Rollback Shield**: Guarantees that invoking a rollback or restore operation automatically captures a fresh pre-rollback safety snapshot before writing data.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Dual Runtime Support**: Full architectural compatibility across Node.js Express server backend (`server.ts`) and static GitHub Pages client-side mode (`IS_GITHUB_PAGES` with IndexedDB & JSZip).
+- **Multi-Collection Server Restore API**: Enhanced `POST /api/admin/restore` with support for `collectionsData` multi-table payload processing and conflict strategies (`merge`, `skip_existing`, `overwrite`).
+
+### 📈 UI/UX & Performance Optimizations
+- **Enterprise Backup Action Center in Admin Tab**: Modernized UI card with action grid for Granular Export, Pre-Import Dry-Run, Snapshot Explorer, and Quick Local Snapshot creation.
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.52.0`.
+
+---
+
+## [v3.51.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Standardized Google Blogger Patch Guide (`blogger_patch_guide.md`, `docs/blogger_patch_guide.md`)
+- **Unified 10-Tier Template Specification**: Established a comprehensive standard document defining the exact sequence for Blogger releases:
+  `1.Title ➔ 2.Body ➔ 3.Update Info ➔ 4.App Screenshot Placeholder ➔ 5.Download Link ➔ 6.Version Info ➔ 7.System Requirements ➔ 8.Official Channels ➔ 9.Patch Notes (from latest commits) ➔ 10.Recommended Tags`
+- **Dual Editing Modes**: Seamlessly provides formatted templates for both:
+  - **[작성 모드 (Rich Text / 서식 있는 텍스트)]**: Clean copy-pasteable visual markdown.
+  - **[HTML 편집 모드 (`<>`)]**: Responsive inline-styled HTML container with dark/light visual mockups, action buttons, and specification tables.
+- **Strict Tag Constraint Enforcement**: Standardized the recommended tags to exactly 20 bilingual tags within 129 characters (fully adhering to the < 200 character boundary).
+- **Curated Cumulative Feature History**: Mapped and curated previous release milestones from v3.0 through v3.51.0 focusing exclusively on functional enhancements.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.51.0`.
+
+---
+
+## [v3.50.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Multi-Channel Documentation Suite & Google Blogger Publishing System (`docs/`)
+- **Dual Blogger Publication Pipeline**: Created structured documentation for Google Blogger in both **[작성 모드 (서식 있는 텍스트)]** (`docs/BLOGGER_COMPOSE_MODE.md`) and **[HTML 편집 모드 (`<>`)]** (`docs/BLOGGER_HTML_MODE.md`).
+- **Standardized 10-Tier Structure**: Both documents adhere strictly to the standardized publishing sequence:
+  1. 제목 (Title)
+  2. 본문 (Body & Value Proposition)
+  3. 업데이트 (v3.50.0 Latest Highlights)
+  4. 앱 그림 (App Visual Mockups & UI Architecture)
+  5. 다운로드 (Download & Immediate Access Links)
+  6. 버전정보 (Version Specifications)
+  7. 시스템 요구 사항 (System Requirements)
+  8. 제작자 및 공식 채널 안내 (Author & Official Channels)
+  9. 전체 업데이트 (Full Cumulative Functional Enhancements across all versions)
+  10. 추천 태그 (Curated 20 tags under 200 characters, bilingual Korean/English)
+- **Cumulative Feature History Curation**: Curated all previous releases from v3.0.0 through v3.50.0, highlighting purely functional enhancements and architectural milestones.
+
+#### 2. Comprehensive GitHub & System Architecture Docs Sync (`README.md`, `docs/GITHUB_ACTIONS_GUIDE.md`, `docs/SYSTEM_OVERVIEW.md`)
+- **Production-Grade Root README**: Transformed root `README.md` into a full-featured open-source project portal with live badges, architecture diagrams, installation instructions, and GitOps workflows.
+- **GitOps SSH Authentication Documentation**: Synchronized `GITHUB_ACTIONS_GUIDE.md` to document SSH Private Key setup alongside PAT tokens.
+- **High-Availability Zero-Quota Engine Documentation**: Updated `SYSTEM_OVERVIEW.md` with IndexedDB in-browser caching, server-side Gemini AI endpoints, Recharts quota monitoring, and reading progress indicators.
+
+### 🛡️ Security Hardening & Authentication
+- **Sensitive Key Redaction**: Ensured all documentation templates mask credentials, secrets, and private keys.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.50.0`.
+
+---
+
+## [v3.49.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. SSH-Based Authentication Support for GitOps (`src/App.tsx`, `server.ts`)
+- **Dual Authentication Modes**: Integrated a new authentication mode selector in the GitOps configuration panel, allowing administrators to choose between Personal Access Tokens (PAT) and SSH Private Keys.
+- **Secure Key Management**: Implemented a secure storage and retrieval system for SSH private keys, featuring server-side masking and encryption-at-rest logic similar to the PAT system.
+- **Improved UI Flexibility**: Added dynamic input fields that switch between token passwords and multiline SSH key textareas, providing a streamlined configuration experience for different security requirements.
+- **Backend Schema Synchronization**: Updated the `github_config` schema in the local file database to natively support `authMode` and `sshPrivateKey` fields.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.49.0`.
+
+---
+
+## [v3.48.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Scroll-Based Reading Progress Bar (`src/components/ReadingProgressBar.tsx`, `src/App.tsx`)
+- **Visual Reading Tracking**: Implemented a smooth, animated progress bar at the top of long troubleshooting guides in both the AI Wizard and the Known Issues Guidebook.
+- **Context-Aware Scoping**: The progress bar is intelligently scoped to the specific article or diagnostic result being read, rather than the entire page, providing precise feedback on reading progress.
+- **Sticky UX**: Utilized `sticky` positioning and high `z-index` to ensure the progress indicator remains visible at the top of the content container while the user scrolls through complex multi-step solutions.
+- **Performance Optimized**: Built using `framer-motion`'s `useScroll` hook for high-performance scroll tracking with minimal main-thread overhead.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.48.0`.
+
+---
+
+## [v3.47.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Live GitHub Actions Workflow Status Badges (`src/components/GitHubWorkflowStatus.tsx`, `src/App.tsx`)
+- **Real-time Monitoring**: Built a dedicated component that fetches the latest execution status (Success, Failed, In-Progress) of GitHub Actions workflows directly from the GitHub API.
+- **GitOps Health Dashboard**: Integrated live status badges for both the **Windows Fix Collector Engine** and **GitHub Pages Deployment** workflows into the Admin Tab.
+- **Deep Linking**: Provided one-click links to view detailed execution logs on GitHub for rapid troubleshooting of auto-sync failures.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.47.0`.
+
+---
+
+## [v3.46.0] - 2026-11-01
+
+### 📈 UI/UX & Performance Optimizations
+
+#### 1. Engine Efficiency & Quota Savings Visualization (`src/components/DailyQuotaUsageChart.tsx`)
+- **New Ratio Pie Chart**: Added a secondary "Real-time Efficiency Ratio" visualization showing the balance between local IndexedDB cache hits (low-cost) and remote API/DB calls (quota-consuming).
+- **Cost Savings Analytics**: Integrated an automated cost savings calculator highlighting the ~97% reduction in cloud operation expenses achieved via the IndexedDB + Static Feed architecture.
+- **Monthly Savings Projection**: Displayed a projected monthly savings metric based on real-time query throughput.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.46.0`.
+
+---
+
+## [v3.45.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Dual-Layer API Quota Visualization (`src/components/DailyQuotaUsageChart.tsx`, `server.ts`)
+- **Combined Monitoring Suite**: Re-introduced Google Cloud Firestore Read/Write monitoring alongside Jamstack Feed traffic and Gemini AI request trends.
+- **Separate Metric Tracking**: Fixed a backend logic where Firestore metrics were being merged into Jamstack/IndexedDB metrics; they are now recorded and reported as independent data streams.
+- **Interactive Database Tab**: Added a dedicated "Database (Cloud/Local)" view to the Recharts dashboard, allowing admins to compare static feed usage against real-time cloud database operations.
+- **Dynamic Quota Thresholds**: Integrated 50k (Reads) / 20k (Writes) reference lines for Firestore and 1,500 (RPD) for Gemini to provide visual "approaching quota" alerts.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.45.0`.
+
+---
+
+## [v3.44.0] - 2026-11-01
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Global Firestore Reference & Quota UI Cleanup (`src/App.tsx`)
+- **Guidebook Tab Cleanup**: Removed the "Running on Local High-Availability Backup DB" and "Quota Engine Active" banners that mentioned Google Cloud Firestore limits.
+- **Admin Tab Cleanup**: Removed the "Emergency 1300 Data Recovery" banner and the "Reconnect Firestore" manual override button.
+- **System-wide Terminology Alignment**: Updated engine synchronization documentation to refer to "Local Database" instead of "Firestore".
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx` (`APP_VERSION`), and `/docs/PATCH_NOTE.md` to `v3.44.0`.
+
+---
+
+## [v3.43.0] - 2026-11-01
+
+### 📈 UI/UX & Performance Optimizations
+
+#### 1. Focused UI Element Removal (`src/App.tsx`)
+- **Info Banner Element Removal**: Removed the top system recovery precautions info banner in the AI diagnostic wizard tab per direct user focus selection.
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.43.0`.
+
+---
+
+## [v3.42.0] - 2026-11-01
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Legacy Firestore Database Reference Cleanup (`src/App.tsx`)
+- **System & Engine Monitoring Cleanup**: Completely purged legacy Google Cloud Firestore (`backend_logs`) database references inside the Admin console engine monitoring footer.
+- **Jamstack & Local Storage Realignment**: Updated log storage documentation text to emphasize Local File DB (`data/backend_logs.json`) and IndexedDB browser caching synced via the GitHub Actions GitOps engine.
+
+### 🛡️ Security Hardening & Authentication
+- **Fail-Safe Web Crypto Master Passkey**: Maintained SHA-256 Web Crypto master passkey authentication and local JWT tokens for instant, zero-latency admin authorization across all web hosts.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.42.0`.
+
+---
+
+## [v3.41.0] - 2026-11-01
+
+### 🔧 Bug Fixes & Stability Improvements
+
+#### 1. Daily Quota Usage Chart Null-Safety Hardening (`src/components/DailyQuotaUsageChart.tsx`, `server.ts`)
+- **Resolved TypeError in `toLocaleString`**: Fixed a runtime error where `todayRecord.jamstackReads` or `todayRecord.indexedDbQueries` could be `undefined` if server responses contained legacy quota record structures.
+- **Defensive Property Fallbacks**: Applied default numerical fallback operators `(todayRecord?.property ?? 0)` to ensure all values are safely normalized before formatting.
+- **Backend Schema Alignment**: Updated `generateInitialQuotaRecords` and `recordDailyQuotaMetric` in `server.ts` to return `jamstackReads` and `indexedDbQueries` fields natively.
+
+### 🛡️ Security Hardening & Authentication
+- **Fail-Safe Web Crypto Master Passkey**: Maintained SHA-256 Web Crypto master passkey authentication and local JWT tokens for instant, zero-latency admin authorization across all web hosts.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.41.0`.
+
+---
+
+## [v3.40.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Decoupled Recharts Quota Monitor from Legacy Firestore Limits (`src/components/DailyQuotaUsageChart.tsx`, `src/App.tsx`)
+- **Firestore 50k/20k Quota Removal**: Completely removed outdated Google Cloud Firestore 50k reads / 20k writes daily limit indicators and warning banners across Recharts charts and Admin overview dashboards.
+- **Static Jamstack & Gemini Metrics Alignment**: Re-architected the Recharts live monitoring suite to track:
+  - **Static Jamstack Feed Requests (`data/issues.json`)** (Unlimited / Sub-10ms CDN)
+  - **IndexedDB In-Browser Cache Queries** (Sub-10ms In-Memory Hardware Engine)
+  - **Gemini AI API Diagnostic Requests** (1,500 RPD Free Tier Ceiling)
+  - **GitHub Actions GitOps Auto-Sync Workflows** (6h Scheduled Cron)
+
+### 🛡️ Security Hardening & Authentication
+- **Fail-Safe Web Crypto Master Passkey**: Maintained SHA-256 Web Crypto master passkey authentication and local JWT tokens for instant, zero-latency admin authorization across all web hosts.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.40.0`.
+
+---
+
+## [v3.39.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. GitHub Pages One-Click Deployment & Verification Suite (`src/components/GitHubPagesDeployDoc.tsx`)
+- **One-Click Deployment Verification**: Built an interactive verification engine that tests `index.html` static entry point presence, Jamstack dataset (`data/issues.json`) accessibility, SPA 404 fallback route generation, and `.nojekyll` asset rules in a single click with real-time latency diagnostics.
+- **Dynamic Build Status Badges**: Added live rendered status badges for `deploy-pages.yml` and `windows-fix-collector.yml` workflows with custom repository targeting (`owner/repo`).
+- **README.md One-Click Markdown Exporter**: Provided one-click copy buttons for embedding production build status badges directly into project `README.md` files.
+
+### 🛡️ Security Hardening & Authentication
+- **Fail-Safe Web Crypto Master Passkey**: Maintained SHA-256 Web Crypto master passkey authentication and local JWT tokens for instant, zero-latency admin authorization across all web hosts.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.39.0`.
+
+---
+
+## [v3.38.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Complete Removal of Firebase Controls in Admin Console (`src/App.tsx`, `src/components/DailyQuotaUsageChart.tsx`)
+- **Admin UI Cleanup**: Removed legacy Cloud Firestore switching options, quota warning banners, and error 7 permission tooltips from the Admin console.
+- **Dedicated Jamstack Engine Card**: Replaced the DB Selector card with a streamlined **Static Jamstack Feed Engine (`/data/issues.json`)** & **GitHub Actions GitOps Collector Engine** control panel.
+- **System Overview & Health Status**: Updated system status indicators to monitor local JSON feed availability, GitHub Actions scheduled workflow status, and browser IndexedDB cache health with zero external database dependencies.
+
+### 🛡️ Security Hardening & Authentication
+- **Fail-Safe Web Crypto Master Passkey**: Maintained SHA-256 Web Crypto master passkey authentication and local JWT tokens for instant, zero-latency admin authorization across all web hosts.
+
+### 📈 UI/UX & Performance Optimizations
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx`, and `/docs/PATCH_NOTE.md` to `v3.38.0`.
 
 ---
 

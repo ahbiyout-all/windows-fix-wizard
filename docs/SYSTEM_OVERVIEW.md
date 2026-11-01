@@ -84,3 +84,33 @@ Comprehensive application security features enforced on the backend:
 - **IP-Based Rate Limiting**: In-memory rate limiting applied on sensitive routes (`/api/admin/smtp/verify` limited to 10 req/min; `/api/visitor/log` limited to 60 req/min).
 - **Admin Verification Middleware**: Strict Firebase Auth token authentication required (`requireAdmin`) for all administrative actions.
 
+---
+
+## 7. Zero-Quota Jamstack & IndexedDB In-Browser Engine (v3.50.0)
+
+To overcome cloud database free tier quotas (e.g., Firestore 50k reads/day) and deliver instantaneous response times:
+- **100% Static Jamstack Deployment**: Supports serverless hosting on GitHub Pages with complete dataset (`data/issues.json`) bundled directly.
+- **High-Capacity IndexedDB Cache**: Caches 1,300+ known Windows troubleshooting guides asynchronously in browser storage via `src/utils/idbStorage.ts`, bypassing the 5MB `localStorage` limit.
+- **Hardware Component Multi-Dimensional Taxonomy**: Fast in-memory filtering by Motherboard/BIOS, GPU, RAM, Storage, CPU, Power, Display, Audio, Network, and Peripherals.
+
+---
+
+## 8. Server-Side Gemini API Routing & Multi-Key Rotation
+
+- **Zero Client-Side Keys**: The browser client never handles API keys or imports `@google/genai` directly. All AI requests proxy through Express endpoints (`/api/ai/diagnose`, `/api/ai/generate`, `/api/ai/verify-issue`).
+- **Dynamic Quota Healing & Multi-Key Fallback**: Automatically rotates between configured Gemini API keys (`CUSTOM_API_KEY`, `GEMINI_API_KEY`) and engages a 3-minute cooldown on 429 quota exhaustion rather than throwing fatal crashes.
+
+---
+
+## 9. Live Recharts API Telemetry & GitOps Monitoring
+
+- **Dual-Layer Analytics**: Displays real-time charts in the Admin Dashboard tracking Jamstack Feed Requests, IndexedDB queries, Gemini API requests, and GitHub Actions sync executions.
+- **Live Workflow Status Badges**: Real-time GitHub API integration displaying the health of `.github/workflows/windows-fix-collector.yml` and `.github/workflows/deploy-pages.yml`.
+
+---
+
+## 10. Scroll-Based Reading Progress Bar & GitOps SSH Auth
+
+- **ReadingProgressBar**: Smooth scroll indicator built on Framer Motion's `useScroll` tracking reading progress through long multi-step troubleshooting articles.
+- **GitOps SSH Authentication**: Supports both Personal Access Tokens (PAT) and SSH Private Key credentials for repository synchronization.
+

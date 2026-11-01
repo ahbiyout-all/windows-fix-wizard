@@ -5,7 +5,8 @@ import {
   ExternalLink, ShieldCheck, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, ChevronsUp, ChevronsDown, Info, BookOpen, 
   RefreshCw, Wifi, Monitor, ShoppingBag, Key, Shield, Database, Globe, LogIn, LogOut, AlertTriangle, Moon, Sun, Download, Upload, Edit2, Trash2, X, XCircle, Save, ThumbsUp, ThumbsDown, FileCheck, Sparkles, Flame, Settings, Cloud, Zap, Layers, ShieldAlert, Check, ArrowRight, Activity, Sliders, Mail, RotateCcw,
   Heart, Bookmark, Clock, History, User as UserIcon, Filter, Users, UserCheck, Smartphone, Laptop, Tablet, Ban, Eye, EyeOff, Server, Bot, HelpCircle, LifeBuoy, Menu,
-  Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2, Mic, MicOff, HardDrive, Volume2, Keyboard, Tv, Cpu
+  Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2, Mic, MicOff, HardDrive, Volume2, Keyboard, Tv, Cpu,
+  Archive, FileText, CheckSquare, Square, Hash, Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, getDocs, getDoc, setDoc, doc, query as firestoreQuery, limit, startAfter, orderBy, where, QueryDocumentSnapshot, updateDoc, deleteDoc, writeBatch, getCountFromServer } from 'firebase/firestore';
@@ -31,6 +32,8 @@ import { DashboardWidget } from './components/DashboardWidget';
 import { DailyQuotaUsageChart } from './components/DailyQuotaUsageChart';
 import { SystemInfoWidget } from './components/SystemInfoWidget';
 import { GitHubPagesDeployDoc } from './components/GitHubPagesDeployDoc';
+import { GitHubWorkflowStatus } from './components/GitHubWorkflowStatus';
+import { ReadingProgressBar } from './components/ReadingProgressBar';
 import { parseJsonResponse, parseAiJson } from './utils/safeFetch';
 import { validateKnownIssuesData, ValidationResult } from './utils/validateKnownIssue';
 import { idbGet, idbSet, idbRemove } from './utils/idbStorage';
@@ -456,7 +459,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.37.0";
+const APP_VERSION = "3.52.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -599,7 +602,10 @@ export default function App() {
   const [githubBranch, setGithubBranch] = useState<string>('main');
   const [githubWorkflowId, setGithubWorkflowId] = useState<string>('windows-fix-collector.yml');
   const [githubToken, setGithubToken] = useState<string>('');
+  const [githubAuthMode, setGithubAuthMode] = useState<'PAT' | 'SSH'>('PAT');
+  const [sshPrivateKey, setSshPrivateKey] = useState<string>('');
   const [hasServerGithubToken, setHasServerGithubToken] = useState<boolean>(false);
+  const [hasServerSshKey, setHasServerSshKey] = useState<boolean>(false);
   const [githubLastSync, setGithubLastSync] = useState<{ at: string | null; count?: number; status?: string } | null>(null);
   const [isPullingGithub, setIsPullingGithub] = useState<boolean>(false);
   const [isDispatchingWorkflow, setIsDispatchingWorkflow] = useState<boolean>(false);
@@ -1050,6 +1056,8 @@ export default function App() {
   });
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logsBottomRef = useRef<HTMLDivElement>(null);
+  const wizardResultRef = useRef<HTMLDivElement>(null);
+  const expandedIssueRef = useRef<HTMLDivElement>(null);
 
   // Visitor Management States
   const [visitorId] = useState<string>(() => {
@@ -1445,7 +1453,9 @@ export default function App() {
         setGithubRepo(data.config.repo || '');
         setGithubBranch(data.config.branch || 'main');
         setGithubWorkflowId(data.config.workflowId || 'windows-fix-collector.yml');
+        setGithubAuthMode(data.config.authMode || 'PAT');
         setHasServerGithubToken(!!data.config.hasToken);
+        setHasServerSshKey(!!data.config.hasSshKey);
         if (data.config.lastSyncAt) {
           setGithubLastSync({
             at: data.config.lastSyncAt,
@@ -1474,13 +1484,17 @@ export default function App() {
           repo: githubRepo.trim(),
           branch: githubBranch.trim(),
           workflowId: githubWorkflowId.trim(),
-          token: githubToken.trim()
+          authMode: githubAuthMode,
+          token: githubToken.trim(),
+          sshPrivateKey: sshPrivateKey.trim()
         })
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
         setHasServerGithubToken(!!data.config.hasToken);
+        setHasServerSshKey(!!data.config.hasSshKey);
         setGithubToken('');
+        setSshPrivateKey('');
         customAlert(language === 'en' ? "GitHub configuration saved successfully." : "GitHub 연동 설정이 성공적으로 저장되었습니다.");
       } else {
         throw new Error(data.error || "Save failed");
@@ -5083,7 +5097,7 @@ export default function App() {
   const [isSystemBackingUp, setIsSystemBackingUp] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [backupResult, setBackupResult] = useState<string | null>(null);
-  const [lastKnownGoodInfo, setLastKnownGoodInfo] = useState<{ createdAt: string; totalRecords: number; collections?: Record<string, number>; retentionCount?: number; storedSnapshotsCount?: number } | null>(null);
+  const [lastKnownGoodInfo, setLastKnownGoodInfo] = useState<{ createdAt: string; totalRecords: number; collections?: Record<string, number>; retentionCount?: number; storedSnapshotsCount?: number; checksum?: string } | null>(null);
   const [showLkgDetailsModal, setShowLkgDetailsModal] = useState(false);
   const [validationReportModal, setValidationReportModal] = useState<ValidationResult | null>(null);
   const validateFileInputRef = useRef<HTMLInputElement>(null);
@@ -5092,8 +5106,75 @@ export default function App() {
   const [translationTotal, setTranslationTotal] = useState(0);
   const [translationResult, setTranslationResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dryRunFileInputRef = useRef<HTMLInputElement>(null);
   const githubZipMergeInputRef = useRef<HTMLInputElement>(null);
   const [isMergingGithubZip, setIsMergingGithubZip] = useState(false);
+
+  // Advanced Granular Export Modal States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportSelectedCollections, setExportSelectedCollections] = useState<string[]>(['issues', 'feedback', 'bookmarks', 'system_config']);
+  const [exportFormat, setExportFormat] = useState<'zip' | 'json'>('zip');
+  const [exportIncludeChecksum, setExportIncludeChecksum] = useState(true);
+
+  // Advanced Dry-Run Pre-Import Modal States
+  const [showDryRunModal, setShowDryRunModal] = useState(false);
+  const [dryRunReport, setDryRunReport] = useState<{
+    fileName: string;
+    fileSize: number;
+    checksum?: string;
+    computedChecksum: string;
+    isChecksumVerified: boolean;
+    collections: {
+      name: string;
+      labelKo: string;
+      count: number;
+      newCount?: number;
+      updateCount?: number;
+      duplicateCount?: number;
+      validCount?: number;
+      invalidCount?: number;
+    }[];
+    issuesValidation?: ValidationResult;
+    rawDatasets: Record<string, any[]>;
+  } | null>(null);
+  const [dryRunStrategy, setDryRunStrategy] = useState<'merge' | 'skip_existing' | 'overwrite'>('merge');
+  const [dryRunSelectedCollections, setDryRunSelectedCollections] = useState<Record<string, boolean>>({});
+  const [dryRunAutoBackup, setDryRunAutoBackup] = useState(true);
+
+  // Advanced Multi-Snapshot Explorer Modal States
+  const [showSnapshotExplorerModal, setShowSnapshotExplorerModal] = useState(false);
+  const [snapshotTab, setSnapshotTab] = useState<'active' | 'server' | 'browser' | 'policy'>('active');
+  const [serverSnapshotsList, setServerSnapshotsList] = useState<{
+    filename: string;
+    createdAt: string;
+    totalRecords: number;
+    collections: Record<string, number>;
+    sizeBytes: number;
+    checksum?: string | null;
+    reason: string;
+  }[]>([]);
+  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(false);
+  const [browserSnapshotsList, setBrowserSnapshotsList] = useState<{
+    id: string;
+    timestamp: string;
+    label: string;
+    count: number;
+    data: KnownIssue[];
+  }[]>([]);
+  const [newBrowserSnapshotLabel, setNewBrowserSnapshotLabel] = useState('');
+
+  const computeSha256 = async (content: string | ArrayBuffer): Promise<string> => {
+    try {
+      const buf = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+      const hashBuf = await window.crypto.subtle.digest('SHA-256', buf);
+      const hashArr = Array.from(new Uint8Array(hashBuf));
+      return hashArr.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      console.warn("SHA-256 computation fallback:", e);
+      return "";
+    }
+  };
+
   const [githubMergedInfo, setGithubMergedInfo] = useState<{
     total: number;
     added: number;
@@ -5118,6 +5199,130 @@ export default function App() {
     return null;
   });
 
+  const fetchServerSnapshots = useCallback(async () => {
+    if (IS_GITHUB_PAGES || !isAdmin) return;
+    setIsLoadingSnapshots(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/admin/last-known-good/snapshots', { headers: authHeaders });
+      const json = await parseJsonResponse(resp);
+      if (json.success && Array.isArray(json.snapshots)) {
+        setServerSnapshotsList(json.snapshots);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch server snapshots:", e);
+    } finally {
+      setIsLoadingSnapshots(false);
+    }
+  }, [isAdmin]);
+
+  const fetchBrowserSnapshots = useCallback(async () => {
+    try {
+      const stored = await idbGet<any[]>('winfix_browser_snapshots');
+      if (Array.isArray(stored)) {
+        setBrowserSnapshotsList(stored);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch browser snapshots:", e);
+    }
+  }, []);
+
+  const handleSaveBrowserSnapshot = async (customLabel?: string) => {
+    const activeIssues = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
+    const label = customLabel?.trim() || newBrowserSnapshotLabel.trim() || `스냅샷 #${browserSnapshotsList.length + 1}`;
+    const newSnapshot = {
+      id: `snap_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      label,
+      count: activeIssues.length,
+      data: activeIssues
+    };
+
+    const updated = [newSnapshot, ...browserSnapshotsList].slice(0, 15);
+    await idbSet('winfix_browser_snapshots', updated);
+    setBrowserSnapshotsList(updated);
+    setNewBrowserSnapshotLabel('');
+    customAlert(language === 'en' 
+      ? `Browser local snapshot '${label}' (${activeIssues.length} records) saved to IndexedDB!` 
+      : `브라우저 로컬 스냅샷 '${label}' (${activeIssues.length}개 항목)이 IndexedDB에 안전하게 보관되었습니다!`);
+  };
+
+  const handleRestoreBrowserSnapshot = (snapshot: any) => {
+    const msg = language === 'en'
+      ? `Restore database to local snapshot '${snapshot.label}' (${snapshot.count} records saved on ${new Date(snapshot.timestamp).toLocaleString()})?`
+      : `브라우저 로컬 스냅샷 '${snapshot.label}' (${snapshot.count}개 항목, ${new Date(snapshot.timestamp).toLocaleString()} 저장)으로 복원하시겠습니까?`;
+
+    customConfirm(msg, async () => {
+      setDbIssues(snapshot.data);
+      await idbSet('winfix_merged_issues', snapshot.data);
+      try {
+        localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(snapshot.data.slice(0, 100)));
+        localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
+      } catch (_) {}
+      fetchCategoryCounts(true);
+      setShowSnapshotExplorerModal(false);
+      customAlert(language === 'en' ? "Restored from browser local snapshot successfully!" : "로컬 스냅샷으로 성공적으로 복원되었습니다!");
+    });
+  };
+
+  const handleDeleteBrowserSnapshot = async (id: string) => {
+    const updated = browserSnapshotsList.filter(s => s.id !== id);
+    await idbSet('winfix_browser_snapshots', updated);
+    setBrowserSnapshotsList(updated);
+  };
+
+  const handleDownloadBrowserSnapshot = (snapshot: any) => {
+    const jsonStr = JSON.stringify(snapshot, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `browser_snapshot_${snapshot.label.replace(/\s+/g, '_')}_${snapshot.timestamp.split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreServerSnapshot = (filename: string) => {
+    const msg = language === 'en'
+      ? `Roll back database to server historical snapshot '${filename}'?\n\n(A new safety backup of your current state will be taken automatically before restoring.)`
+      : `서버 보관소의 스냅샷 '${filename}'으로 데이터베이스를 복원하시겠습니까?\n\n(복원 직전 현재 상태의 안전 스냅샷이 자동 생성됩니다.)`;
+
+    customConfirm(msg, async () => {
+      setIsImporting(true);
+      try {
+        const authHeaders = await getAuthHeaders();
+        const resp = await fetch('/api/admin/last-known-good/restore-snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ filename })
+        });
+        const json = await parseJsonResponse(resp);
+        if (json.success) {
+          customAlert(language === 'en'
+            ? `Successfully restored from snapshot (${json.restoredRecordsCount} records restored)!`
+            : `스냅샷 (${filename})으로부터 성공적으로 복원되었습니다! (총 ${json.restoredRecordsCount}개 레코드 복원)`);
+          fetchIssues(false);
+          fetchCategoryCounts();
+          fetchLastKnownGoodStatus();
+          fetchServerSnapshots();
+          setShowSnapshotExplorerModal(false);
+        } else {
+          customAlert(language === 'en' ? `Restore failed: ${json.error}` : `복원 실패: ${json.error}`);
+        }
+      } catch (e: any) {
+        customAlert(language === 'en' ? `Error: ${e.message}` : `오류 발생: ${e.message}`);
+      } finally {
+        setIsImporting(false);
+      }
+    });
+  };
+
+  const handleDownloadHistoricalSnapshot = (filename: string) => {
+    window.open(`/api/admin/last-known-good/download-snapshot/${encodeURIComponent(filename)}`, '_blank');
+  };
+
   const fetchLastKnownGoodStatus = useCallback(async () => {
     try {
       const authHeaders = await getAuthHeaders();
@@ -5131,7 +5336,8 @@ export default function App() {
           totalRecords: json.metadata.totalRecords,
           collections: json.metadata.collectionsCount,
           retentionCount: json.retentionCount || 7,
-          storedSnapshotsCount: json.storedSnapshotsCount || 1
+          storedSnapshotsCount: json.storedSnapshotsCount || 1,
+          checksum: json.metadata.checksum
         });
       } else {
         const clientSnap = localStorage.getItem('winfix_last_known_good_client');
@@ -5141,7 +5347,8 @@ export default function App() {
             createdAt: parsed.timestamp,
             totalRecords: parsed.issuesCount || parsed.issues?.length || 0,
             retentionCount: 7,
-            storedSnapshotsCount: 1
+            storedSnapshotsCount: 1,
+            checksum: parsed.checksum
           });
         }
       }
@@ -5154,7 +5361,8 @@ export default function App() {
             createdAt: parsed.timestamp,
             totalRecords: parsed.issuesCount || parsed.issues?.length || 0,
             retentionCount: 7,
-            storedSnapshotsCount: 1
+            storedSnapshotsCount: 1,
+            checksum: parsed.checksum
           });
         } catch (_) {}
       }
@@ -5164,8 +5372,10 @@ export default function App() {
   useEffect(() => {
     if (isAdmin) {
       fetchLastKnownGoodStatus();
+      fetchServerSnapshots();
+      fetchBrowserSnapshots();
     }
-  }, [isAdmin, fetchLastKnownGoodStatus]);
+  }, [isAdmin, fetchLastKnownGoodStatus, fetchServerSnapshots, fetchBrowserSnapshots]);
 
   const handleRestoreLastKnownGood = async () => {
     if (!isAdmin) return;
@@ -5431,97 +5641,115 @@ export default function App() {
     }
   };
 
-  const handleExportData = async () => {
+  const handleExportData = () => {
+    setShowExportModal(true);
+  };
+
+  const handleExecuteGranularExport = async () => {
     if (!isAdmin) return;
     setIsExporting(true);
     setBackupResult(null);
+
     try {
-      // Omitted high-volume logging collections ('search_logs', 'admin_logs') to prevent Firestore reading quota limit issues.
-      const collectionsToBackup = ['issues', 'feedback', 'system_config'];
-      const zip = new JSZip();
-      const timestamp = getKSTISOString().split('T')[0];
-      const folder = zip.folder(`winfix_backup_${timestamp}`);
+      const activeDbMode = (localStorage.getItem('winfix_db_mode') as string) || dbMode;
+      const exportData: Record<string, any[]> = {};
+      let totalRecords = 0;
 
-      for (const colName of collectionsToBackup) {
-        let data: any[] = [];
-        if (colName === 'issues' && ((localStorage.getItem('winfix_db_mode') as string) === 'server_file')) {
-          try {
-            const resp = await fetch('/api/issues');
-            const d = await parseJsonResponse(resp);
-            data = d.issues || [];
-          } catch (e) {
-            data = [];
+      for (const col of exportSelectedCollections) {
+        let colItems: any[] = [];
+        if (col === 'issues') {
+          if (activeDbMode === 'server_file' && !IS_GITHUB_PAGES) {
+            try {
+              const resp = await fetch('/api/issues');
+              const d = await parseJsonResponse(resp);
+              colItems = d.issues || [];
+            } catch (_) {
+              colItems = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
+            }
+          } else {
+            colItems = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
           }
+        } else if (col === 'bookmarks') {
+          try {
+            const raw = localStorage.getItem('winfix_bookmarks');
+            colItems = raw ? JSON.parse(raw) : [];
+          } catch (_) {
+            colItems = [];
+          }
+        } else if (col === 'system_config') {
+          colItems = [
+            { id: 'maintenance', ...maintenanceSettings },
+            { id: 'lkg_policy', retentionCount: lastKnownGoodInfo?.retentionCount || 7 }
+          ];
         } else {
-          const querySnapshot = await getDocs(firestoreQuery(collection(db, colName), limit(200)));
-          data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          try {
+            const snap = await getDocs(firestoreQuery(collection(db, col), limit(250)));
+            colItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          } catch (_) {
+            colItems = [];
+          }
         }
-        if (folder) {
-          folder.file(`${colName}.json`, JSON.stringify(data, null, 2));
-        }
+        exportData[col] = colItems;
+        totalRecords += colItems.length;
       }
 
-      // Also include a manifest/metadata file
-      if (folder) {
-        folder.file('metadata.json', JSON.stringify({
-          version: '2.0',
-          timestamp: getKSTISOString(),
-          collections: collectionsToBackup,
-          total_collections: collectionsToBackup.length
-        }, null, 2));
-      }
+      const timestamp = getKSTISOString().split('T')[0];
+      const timeDetail = getKSTISOString().replace(/[:.]/g, '-');
+      const rawDataString = JSON.stringify(exportData);
+      const checksum = exportIncludeChecksum ? await computeSha256(rawDataString) : undefined;
 
-      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } });
-      const fileName = `winfix_backup_${timestamp}.zip`;
-
-      const fallbackDownload = (blob: Blob) => {
-        const url = URL.createObjectURL(blob);
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", url);
-        downloadAnchorNode.setAttribute("download", fileName);
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-        URL.revokeObjectURL(url);
-        setBackupResult(language === 'en' ? "Backup completed successfully (ZIP)." : "백업이 성공적으로 완료되었습니다 (ZIP).");
+      const metadataObj = {
+        version: '3.52.0',
+        timestamp: getKSTISOString(),
+        collections: exportSelectedCollections,
+        totalRecords,
+        checksum,
+        algorithm: exportIncludeChecksum ? 'SHA-256' : undefined,
+        generator: 'Windows Fix Wizard Enterprise Engine'
       };
 
-      if ('showSaveFilePicker' in window && window.self === window.top) {
-        try {
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName: fileName,
-            types: [{
-              description: 'ZIP Files',
-              accept: { 'application/zip': ['.zip'] },
-            }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(zipBlob);
-          await writable.close();
-          setBackupResult(language === 'en' ? "Backup completed successfully (ZIP)." : "백업이 성공적으로 완료되었습니다 (ZIP).");
-        } catch (err: any) {
-          if (err.name === 'AbortError') {
-            setIsExporting(false);
-            setBackupResult(null);
-            return;
-          }
-          console.warn("showSaveFilePicker failed, falling back to traditional download:", err);
-          fallbackDownload(zipBlob);
+      if (exportFormat === 'zip') {
+        const zip = new JSZip();
+        const folder = zip.folder(`winfix_backup_${timestamp}`);
+        if (!folder) throw new Error("ZIP folder creation failed");
+
+        for (const [colName, items] of Object.entries(exportData)) {
+          folder.file(`${colName}.json`, JSON.stringify(items, null, 2));
         }
+        folder.file('metadata.json', JSON.stringify(metadataObj, null, 2));
+
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } });
+        const fileName = `winfix_backup_${timestamp}_${timeDetail.split('T')[1]?.substring(0, 8) || ''}.zip`;
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       } else {
-        fallbackDownload(zipBlob);
+        const fullPayload = { metadata: metadataObj, data: exportData };
+        const jsonBlob = new Blob([JSON.stringify(fullPayload, null, 2)], { type: 'application/json' });
+        const fileName = `winfix_backup_${timestamp}_${timeDetail.split('T')[1]?.substring(0, 8) || ''}.json`;
+        const url = URL.createObjectURL(jsonBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       }
-      
-      await logAdminAction('export', 'data_backup', '전체 데이터 압축 백업 완료', 'info', 'DATABASE');
-    } catch (error: any) {
-      const errMsg = error.message || '';
-      if (errMsg.includes("Quota") || errMsg.includes("quota")) {
-         console.warn("Export failed: Quota Exceeded");
-         setBackupResult(language === 'en' ? "Backup failed: Database Read Quota Exceeded. Please try again tomorrow." : "백업 실패: 일일 데이터베이스 읽기 할당량을 초과했습니다. 내일 다시 시도해 주세요.");
-      } else {
-         console.error("Export failed:", error);
-         setBackupResult(language === 'en' ? "Backup failed." : "백업에 실패했습니다.");
-      }
+
+      setShowExportModal(false);
+      setBackupResult(language === 'en' 
+        ? `Export completed successfully (${totalRecords} records across ${exportSelectedCollections.length} collections)!` 
+        : `정밀 백업 내보내기 완료! (총 ${totalRecords}개 레코드, ${exportSelectedCollections.length}개 컬렉션)`);
+      await logAdminAction('export', 'granular_backup', `정밀 백업 내보내기 (${exportFormat.toUpperCase()}, ${totalRecords}개 항목)`, 'success', 'DATABASE');
+    } catch (err: any) {
+      console.error("Export failed:", err);
+      customAlert(language === 'en' ? `Export failed: ${err.message}` : `백업 내보내기 실패: ${err.message}`);
     } finally {
       setIsExporting(false);
       setTimeout(() => setBackupResult(null), 5000);
@@ -6084,7 +6312,7 @@ export default function App() {
     }
   };
 
-  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePickFileForDryRun = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!isAdmin) return;
     const file = event.target.files?.[0];
     if (!file) return;
@@ -6093,287 +6321,271 @@ export default function App() {
     setBackupResult(null);
 
     try {
-      let backupData: any = {};
-      let totalRestored = 0;
+      let rawDatasets: Record<string, any[]> = {};
+      let embeddedChecksum: string | undefined = undefined;
+      const arrayBuffer = await file.arrayBuffer();
+      const computedChecksum = await computeSha256(arrayBuffer);
 
       if (file.name.endsWith('.zip')) {
         const zip = new JSZip();
-        const zipContent = await zip.loadAsync(file);
-        
+        const zipContent = await zip.loadAsync(arrayBuffer);
+
         for (const filename of Object.keys(zipContent.files)) {
-          if (filename.endsWith('.json') && !filename.includes('metadata.json')) {
+          if (filename.endsWith('.json')) {
             const content = await zipContent.files[filename].async('string');
-            const data = JSON.parse(content);
-            const parts = filename.split('/');
-            const colNameWithExt = parts[parts.length - 1];
-            const colName = colNameWithExt.replace('.json', '');
-            backupData[colName] = data;
+            if (filename.includes('metadata.json') || filename.includes('manifest.json')) {
+              try {
+                const meta = JSON.parse(content);
+                if (meta.checksum) embeddedChecksum = meta.checksum;
+              } catch (_) {}
+            } else {
+              try {
+                const data = JSON.parse(content);
+                const parts = filename.split('/');
+                const colNameWithExt = parts[parts.length - 1];
+                const colName = colNameWithExt.replace('.json', '');
+                if (Array.isArray(data)) {
+                  rawDatasets[colName] = data;
+                } else if (data && typeof data === 'object') {
+                  rawDatasets[colName] = Array.isArray(data.items) ? data.items : [data];
+                }
+              } catch (_) {}
+            }
           }
         }
       } else {
-        const content = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = (e) => reject(e);
-          reader.readAsText(file);
-        });
-        backupData = JSON.parse(content);
+        const textContent = new TextDecoder().decode(arrayBuffer);
+        const parsed = JSON.parse(textContent);
+        if (parsed.metadata && parsed.data) {
+          embeddedChecksum = parsed.metadata.checksum;
+          rawDatasets = parsed.data;
+        } else if (Array.isArray(parsed)) {
+          rawDatasets = { issues: parsed };
+        } else {
+          rawDatasets = parsed;
+        }
       }
 
-      if (Array.isArray(backupData)) {
-        backupData = { issues: backupData };
-      }
+      // Checksum verification
+      const isChecksumVerified = !!(embeddedChecksum && computedChecksum && embeddedChecksum.toLowerCase() === computedChecksum.toLowerCase());
 
-      // 1. Run Schema Validation before attempting to overwrite existing records!
-      let issuesArray = backupData['issues'] || backupData['KnownIssue'];
-      if (issuesArray && Array.isArray(issuesArray)) {
-        const validation = validateKnownIssuesData(issuesArray);
+      // Collection Summaries and Issues Diff calculation
+      const summaries: any[] = [];
+      const colLabels: Record<string, string> = {
+        issues: '윈도우 오류/솔루션 (KnownIssue)',
+        feedback: '사용자 피드백 (Feedback)',
+        bookmarks: '즐겨찾기/북마크 (Bookmarks)',
+        system_config: '시스템 환경설정 (SystemConfig)',
+        admin_logs: '관리자 감사 로그 (AdminLogs)',
+        search_logs: '사용자 검색 로그 (SearchLogs)'
+      };
 
-        if (validation.invalidCount > 0) {
-          const sampleErrors = validation.errors.slice(0, 8).map(err => `• ${err}`).join('\n');
-          const remainingCount = validation.errors.length > 8 ? validation.errors.length - 8 : 0;
-          const overflowText = remainingCount > 0 ? `\n...외 ${remainingCount}개 추가 불일치 항목` : '';
+      let issuesValidation: ValidationResult | undefined = undefined;
+      const activeIssues = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
 
-          const confirmMsg = language === 'en'
-            ? `[KnownIssue Schema Validation Discrepancy Report]\n\nFound ${validation.invalidCount} record(s) with schema discrepancies out of ${validation.totalRecords} total records.\n\nDiscrepancies found:\n${sampleErrors}${overflowText}\n\nDo you want to proceed by importing ONLY the ${validation.validCount} valid record(s) and skipping the invalid ones?`
-            : `[KnownIssue 스키마 규격 불일치 검증 보고서]\n\n가져올 전체 ${validation.totalRecords}개 항목 중 ${validation.invalidCount}개 항목이 규격 스키마와 일치하지 않습니다.\n\n발견된 주요 불일치 내역:\n${sampleErrors}${overflowText}\n\n유효한 ${validation.validCount}개 항목만 선택하여 복원하고 불일치 항목은 제외하시겠습니까?`;
+      // Existing maps for issues comparison
+      const existingIds = new Set(activeIssues.map(i => i.id).filter(Boolean));
+      const existingCodeTitles = new Set(activeIssues.map(i => `${(i.code || '').toUpperCase().trim()}___${(i.title || '').toLowerCase().trim()}`));
+      const existingTitles = new Set(activeIssues.map(i => (i.title || '').toLowerCase().trim()));
 
-          let shouldProceed = false;
-          await new Promise<void>((resolve) => {
-            customConfirm(confirmMsg, () => {
-              shouldProceed = true;
-              resolve();
-            });
-            // If user closes or cancels, resolve after timeout or click
-            setTimeout(() => {
-              if (!shouldProceed) resolve();
-            }, 10000);
-          });
+      for (const [colName, items] of Object.entries(rawDatasets)) {
+        if (!Array.isArray(items)) continue;
 
-          if (!shouldProceed) {
-            setBackupResult(language === 'en' ? "Import aborted due to schema validation discrepancies." : "스키마 불일치로 인해 불러오기가 취소되었습니다.");
-            await logAdminAction('import', 'schema_validation_abort', `스키마 검증 불일치로 복원 중단 (유효: ${validation.validCount}, 불일치: ${validation.invalidCount})`, 'warning', 'DATABASE');
-            setIsImporting(false);
-            event.target.value = '';
-            return;
+        if (colName === 'issues' || colName === 'KnownIssue') {
+          issuesValidation = validateKnownIssuesData(items);
+          let newCount = 0;
+          let updateCount = 0;
+          let duplicateCount = 0;
+
+          for (const item of items) {
+            const codeKey = `${(item.code || '').toUpperCase().trim()}___${(item.title || '').toLowerCase().trim()}`;
+            const titleKey = (item.title || '').toLowerCase().trim();
+            const isMatch = (item.id && existingIds.has(item.id)) || (item.code && item.code !== 'N/A' && existingCodeTitles.has(codeKey)) || existingTitles.has(titleKey);
+
+            if (!isMatch) {
+              newCount++;
+            } else {
+              const matchedExisting = activeIssues.find(ex => ex.id === item.id || (item.code && item.code !== 'N/A' && ex.code?.toUpperCase() === item.code?.toUpperCase() && ex.title?.toLowerCase() === item.title?.toLowerCase()) || ex.title?.toLowerCase() === item.title?.toLowerCase());
+              if (matchedExisting && matchedExisting.symptoms === item.symptoms && matchedExisting.script === item.script && JSON.stringify(matchedExisting.manualSteps) === JSON.stringify(item.manualSteps)) {
+                duplicateCount++;
+              } else {
+                updateCount++;
+              }
+            }
           }
 
-          backupData['issues'] = validation.validRecords;
-        }
-      }
-
-      // 1.5 Trigger automatic 'Last-Known-Good' backup snapshot right before writing imported data
-      let initialSnapshotCount = dbIssues ? dbIssues.length : 0;
-      const authHeaders = await getAuthHeaders();
-      try {
-        const lkgResp = await fetch('/api/admin/last-known-good/create', { method: 'POST', headers: authHeaders });
-        const lkgJson = await parseJsonResponse(lkgResp);
-        if (lkgJson.success && lkgJson.snapshot) {
-          initialSnapshotCount = lkgJson.snapshot.totalRecords || initialSnapshotCount;
-          setLastKnownGoodInfo({
-            createdAt: lkgJson.snapshot.createdAt,
-            totalRecords: lkgJson.snapshot.totalRecords,
-            collections: lkgJson.snapshot.collections
+          summaries.push({
+            name: colName,
+            labelKo: colLabels[colName] || colName,
+            count: items.length,
+            newCount,
+            updateCount,
+            duplicateCount,
+            validCount: issuesValidation.validCount,
+            invalidCount: issuesValidation.invalidCount
+          });
+        } else {
+          summaries.push({
+            name: colName,
+            labelKo: colLabels[colName] || colName,
+            count: items.length
           });
         }
-      } catch (lkgErr) {
-        console.warn("Server last-known-good backup trigger error:", lkgErr);
       }
 
-      if (dbIssues && dbIssues.length > 0) {
-        try {
-          localStorage.setItem('winfix_last_known_good_client', JSON.stringify({
-            timestamp: new Date().toISOString(),
-            issuesCount: dbIssues.length,
-            issues: dbIssues
-          }));
-        } catch (_) {}
+      if (summaries.length === 0) {
+        throw new Error(language === 'en' ? "No valid collections found in the selected file." : "선택한 파일에서 복원 가능한 컬렉션을 찾을 수 없습니다.");
       }
 
-      // 2. Perform Overwrite / Restore
-      const activeDbMode = (localStorage.getItem('winfix_db_mode') as 'firestore' | 'server_file') || dbMode;
+      const checkedMap: Record<string, boolean> = {};
+      summaries.forEach(s => { checkedMap[s.name] = true; });
+      setDryRunSelectedCollections(checkedMap);
 
+      setDryRunReport({
+        fileName: file.name,
+        fileSize: file.size,
+        checksum: embeddedChecksum,
+        computedChecksum,
+        isChecksumVerified,
+        collections: summaries,
+        issuesValidation,
+        rawDatasets
+      });
+
+      setShowDryRunModal(true);
+    } catch (err: any) {
+      console.error("Dry run parse failed:", err);
+      customAlert(language === 'en' ? `File analysis failed: ${err.message}` : `파일 분석에 실패했습니다: ${err.message}`);
+    } finally {
+      setIsImporting(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleImportData = handlePickFileForDryRun;
+
+  const handleExecuteDryRunRestore = async () => {
+    if (!dryRunReport) return;
+    setIsImporting(true);
+    setBackupResult(null);
+
+    try {
+      // 1. Filter datasets by selected collections
+      const selectedDatasets: Record<string, any[]> = {};
+      for (const [colName, isChecked] of Object.entries(dryRunSelectedCollections)) {
+        if (isChecked && Array.isArray(dryRunReport.rawDatasets[colName])) {
+          selectedDatasets[colName] = dryRunReport.rawDatasets[colName];
+        }
+      }
+
+      const activeIssues = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
+
+      // 2. Client-side execution for GitHub Pages (or fallback)
       if (IS_GITHUB_PAGES) {
-        // On GitHub Pages (static environment without Node backend), execute client-side dataset merge!
-        const existingIssues = await fetchExistingGithubIssues();
-        const existingCount = existingIssues.length;
-        const validIssues = backupData['issues'] || backupData['KnownIssue'] || backupData['items'] || (Array.isArray(backupData) ? backupData : []);
-        
-        const { finalMerged, addedCount, updatedCount, totalCount } = mergeIssuesDatasets(existingIssues, validIssues);
+        let totalCount = 0;
+        let addedCount = 0;
+        let updatedCount = 0;
 
-        await idbSet('winfix_merged_issues', finalMerged);
+        const incomingIssues = selectedDatasets['issues'] || selectedDatasets['KnownIssue'] || [];
+        if (incomingIssues.length > 0) {
+          const validation = validateKnownIssuesData(incomingIssues);
+          const validRecords = validation.validRecords.length > 0 ? validation.validRecords : incomingIssues;
 
-        try {
-          localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(finalMerged.slice(0, 300)));
-          localStorage.setItem('winfix_github_pages_merged_time', Date.now().toString());
-          localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(finalMerged.slice(0, 50)));
-          localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
-        } catch (quotaErr) {
-          console.warn("LocalStorage quota limit reached, relying on IndexedDB:", quotaErr);
+          let finalIssues: KnownIssue[] = [];
+
+          if (dryRunStrategy === 'overwrite') {
+            finalIssues = validRecords;
+            addedCount = validRecords.length;
+          } else if (dryRunStrategy === 'skip_existing') {
+            const existingIds = new Set(activeIssues.map(i => i.id).filter(Boolean));
+            const existingCodeTitles = new Set(activeIssues.map(i => `${(i.code || '').toUpperCase().trim()}___${(i.title || '').toLowerCase().trim()}`));
+            const existingTitles = new Set(activeIssues.map(i => (i.title || '').toLowerCase().trim()));
+
+            finalIssues = [...activeIssues];
+            for (const item of validRecords) {
+              const codeKey = `${(item.code || '').toUpperCase().trim()}___${(item.title || '').toLowerCase().trim()}`;
+              const titleKey = (item.title || '').toLowerCase().trim();
+              if ((item.id && existingIds.has(item.id)) || (item.code && item.code !== 'N/A' && existingCodeTitles.has(codeKey)) || existingTitles.has(titleKey)) {
+                continue;
+              }
+              const newId = item.id || `issue-${Date.now()}-${addedCount}`;
+              finalIssues.push({
+                ...item,
+                id: newId,
+                createdAt: item.createdAt || getKSTISOString(),
+                updatedAt: item.updatedAt || getKSTISOString()
+              });
+              addedCount++;
+            }
+          } else {
+            // Smart Merge
+            const res = mergeIssuesDatasets(activeIssues, validRecords);
+            finalIssues = res.finalMerged;
+            addedCount = res.addedCount;
+            updatedCount = res.updatedCount;
+          }
+
+          totalCount = finalIssues.length;
+
+          // Save to browser storages
+          await idbSet('winfix_merged_issues', finalIssues);
+          try {
+            localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(finalIssues.slice(0, 300)));
+            localStorage.setItem('winfix_github_pages_merged_time', Date.now().toString());
+            localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(finalIssues.slice(0, 100)));
+            localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
+          } catch (_) {}
+
+          setDbIssues(finalIssues);
+          fetchCategoryCounts(true);
+
+          // Auto-download merged issues.json
+          downloadMergedIssuesJsonFile(finalIssues);
         }
 
-        setDbIssues(finalMerged);
+        setShowDryRunModal(false);
+        setDryRunReport(null);
 
-        const counts: Record<string, number> = { '전체': totalCount };
-        officialNames.forEach(c => { counts[c] = 0; });
-        let uncategorized = 0;
-        finalMerged.forEach(issue => {
-          if (issue.category && officialNames.includes(issue.category)) {
-            counts[issue.category] = (counts[issue.category] || 0) + 1;
-          } else {
-            uncategorized++;
-          }
-        });
-        if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
-        setCategoryCounts(counts);
-        localStorage.setItem('cached_category_counts', JSON.stringify(counts));
-        localStorage.setItem('cached_category_counts_time', Date.now().toString());
+        customAlert(language === 'en'
+          ? `[Dry-Run Restore Applied!]\n\n• Strategy: ${dryRunStrategy}\n• Records Added: ${addedCount}\n• Records Updated: ${updatedCount}\n• Total Live Records: ${totalCount}\n\n✅ Live state updated and 'issues.json' downloaded for GitHub Pages commit.`
+          : `[사전 검증 복원 적용 완료!]\n\n• 복원 전략: ${dryRunStrategy === 'merge' ? '스마트 병합' : dryRunStrategy === 'skip_existing' ? '신규만 추가' : '완전 덮어쓰기'}\n• 신규 추가: ${addedCount}개\n• 기존 갱신: ${updatedCount}개\n• 최종 라이브 레코드: ${totalCount}개\n\n✅ 데이터가 즉시 적용되었으며 GitHub 배포용 'issues.json'이 자동 다운로드되었습니다.`);
 
-        const activeCategories = ['전체', ...officialNames];
-        if (uncategorized > 0) activeCategories.push('기타/미분류');
-        setCategories(activeCategories);
-        setDbStatus('connected');
-
-        setGithubMergedInfo({
-          total: totalCount,
-          added: addedCount,
-          updated: updatedCount,
-          timestamp: new Date().toLocaleString()
-        });
-
-        downloadMergedIssuesJsonFile(finalMerged);
-
-        totalRestored = addedCount + updatedCount;
-        setBackupResult(
-          language === 'en'
-            ? `GitHub Pages merge complete: ${totalCount} records (issues.json downloaded)`
-            : `깃허브 데이터 병합 완료: 총 ${totalCount}개 레코드 (issues.json 자동 다운로드됨)`
-        );
-        await logAdminAction('import', 'github_pages_import_merge', `GitHub Pages 데이터 병합 복원: 신규 ${addedCount}개, 갱신 ${updatedCount}개, 총 ${totalCount}개`, 'success', 'DATABASE');
-        setIsImporting(false);
-        event.target.value = '';
-        setTimeout(() => setBackupResult(null), 8000);
         return;
       }
 
-      if (activeDbMode === 'server_file') {
-        let serverRestoreSuccess = false;
-        try {
-          for (const originalColName of Object.keys(backupData)) {
-            let colName = originalColName;
-            if (colName === 'feedback_logs') colName = 'feedback';
-            const docs = backupData[originalColName];
-            if (Array.isArray(docs) && docs.length > 0) {
-              const resp = await fetch('/api/admin/restore', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({ collection: colName, data: docs, mode: 'merge' })
-              });
-              if (resp.ok) {
-                const json = await parseJsonResponse(resp);
-                if (json.success) {
-                  totalRestored += json.count || docs.length;
-                  serverRestoreSuccess = true;
-                }
-              }
-            }
-          }
-        } catch (serverErr) {
-          console.warn("Server restore API failed, falling back to client-side merge:", serverErr);
-        }
+      // 3. Server-side API execution
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/admin/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          collectionsData: selectedDatasets,
+          strategy: dryRunStrategy,
+          skipAutoBackup: !dryRunAutoBackup
+        })
+      });
 
-        if (!serverRestoreSuccess && (backupData['issues'] || backupData['KnownIssue'])) {
-          const existingIssues = await fetchExistingGithubIssues();
-          const validIssues = backupData['issues'] || backupData['KnownIssue'] || [];
-          const { finalMerged, addedCount, updatedCount, totalCount } = mergeIssuesDatasets(existingIssues, validIssues);
-          await idbSet('winfix_merged_issues', finalMerged);
-          try {
-            localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(finalMerged.slice(0, 300)));
-          } catch (_) {}
-          setDbIssues(finalMerged);
-          downloadMergedIssuesJsonFile(finalMerged);
-          totalRestored = addedCount + updatedCount;
-        }
+      const json = await parseJsonResponse(resp);
+      if (json.success) {
+        setShowDryRunModal(false);
+        setDryRunReport(null);
+        await Promise.all([
+          fetchIssues(false),
+          fetchCategoryCounts(),
+          fetchLastKnownGoodStatus(),
+          fetchServerSnapshots()
+        ]);
+        customAlert(language === 'en'
+          ? `[Restore Succeeded!]\n\nData restored using strategy '${dryRunStrategy}'. Auto-backup snapshot was safely created.`
+          : `[데이터 복원 성공!]\n\n'${dryRunStrategy === 'merge' ? '스마트 병합' : dryRunStrategy === 'skip_existing' ? '신규만 추가' : '완전 덮어쓰기'}' 전략으로 데이터 복원이 완료되었습니다. 안전 스냅샷이 생성되었습니다.`);
       } else {
-        try {
-          for (const originalColName of Object.keys(backupData)) {
-            let colName = originalColName;
-            if (colName === 'feedback_logs') colName = 'feedback';
-            
-            const docs = backupData[originalColName];
-            if (Array.isArray(docs)) {
-              for (let i = 0; i < docs.length; i += 500) {
-                const batch = writeBatch(db);
-                const chunk = docs.slice(i, i + 500);
-                chunk.forEach(docData => {
-                  const { id, ...data } = docData;
-                  if (id) {
-                    const docRef = doc(db, colName, id);
-                    batch.set(docRef, data, { merge: true });
-                    totalRestored++;
-                  }
-                });
-                await batch.commit();
-              }
-            }
-          }
-        } catch (firestoreErr: any) {
-          console.warn("Firestore import failed (likely quota limit), falling back to REST JSON server restore:", firestoreErr);
-          setDbMode('server_file');
-          localStorage.setItem('winfix_db_mode', 'server_file');
-          localStorage.setItem('winfix_db_mode_fallback', 'true');
-          setDbStatus('quota');
-
-          totalRestored = 0;
-          for (const originalColName of Object.keys(backupData)) {
-            let colName = originalColName;
-            if (colName === 'feedback_logs') colName = 'feedback';
-            const docs = backupData[originalColName];
-            if (Array.isArray(docs) && docs.length > 0) {
-              const resp = await fetch('/api/admin/restore', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({ collection: colName, data: docs, mode: 'merge' })
-              });
-              const json = await parseJsonResponse(resp);
-              if (json.success) {
-                totalRestored += json.count || docs.length;
-              }
-            }
-          }
-        }
+        throw new Error(json.error || "Server restore returned failure.");
       }
-
-      setBackupResult(
-        language === 'en'
-          ? `Restore completed. ${totalRestored} valid records imported. (Last-Known-Good snapshot saved automatically)`
-          : `복원 완료. ${totalRestored}개의 유효한 레코드를 가져왔습니다. (직전 정상 백업(Last-Known-Good)이 자동 생성되었습니다)`
-      );
-      await logAdminAction('import', 'data_restore', `데이터 복원 완료: ${totalRestored}개 레코드`, 'success', 'DATABASE');
-      fetchIssues(false);
-      fetchCategoryCounts();
-      fetchLastKnownGoodStatus();
-
-      // Post-import deviation status check
-      if (initialSnapshotCount > 0) {
-        const deviationRatio = Math.abs(totalRestored - initialSnapshotCount) / initialSnapshotCount;
-        if (totalRestored < initialSnapshotCount * 0.7 || deviationRatio > 0.5) {
-          const warnMsg = language === 'en'
-            ? `[Data Deviation Warning]\n\nThe imported dataset count (${totalRestored} records) deviates significantly from the pre-import snapshot (${initialSnapshotCount} records).\n\nIf the new import caused data loss or corruption, click "Restore Last-Known-Good State" in the backup panel to immediately roll back.`
-            : `[데이터 레코드 수 변경 감지 경고]\n\n가져온 데이터 레코드 수(${totalRestored}개)가 사전 백업 스냅샷(${initialSnapshotCount}개)과 상당한 차이를 보입니다.\n\n불러오기로 인해 데이터 오염이나 손상이 발생한 경우, 백업 패널의 "직전 정상 백업 상태로 롤백" 버튼을 클릭하여 즉시 복구할 수 있습니다.`;
-          
-          setTimeout(() => {
-            customAlert(warnMsg);
-          }, 300);
-        }
-      }
-    } catch (error: any) {
-      console.error("Import failed:", error);
-      setBackupResult(language === 'en' ? "Import failed." : "불러오기에 실패했습니다.");
+    } catch (err: any) {
+      console.error("Restore execution failed:", err);
+      customAlert(language === 'en' ? `Restore failed: ${err.message}` : `복원 실행 실패: ${err.message}`);
     } finally {
       setIsImporting(false);
-      setTimeout(() => setBackupResult(null), 5000);
-      event.target.value = '';
     }
   };
 
@@ -7931,19 +8143,6 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
           >
-            {/* Info Banner */}
-            <div className="mb-8 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl p-4 flex gap-3 text-blue-800 dark:text-blue-300 text-sm leading-relaxed">
-              <Info className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
-              <div>
-                <p className="font-medium mb-1">{language === 'en' ? 'AI-based System Recovery Guide & Precautions' : 'AI 기반 시스템 복구 안내 및 주의사항'}</p>
-                <p>
-                  {language === 'en' 
-                    ? 'This wizard suggests reference solutions and PowerShell scripts based on official Microsoft documentation and trusted community information. Provided scripts may cause unexpected results depending on your system environment, so please review the contents and execute them at your own risk.' 
-                    : '이 마법사는 Microsoft 공식 문서 및 신뢰할 수 있는 커뮤니티 정보를 바탕으로 참고용 해결 방법과 PowerShell 스크립트를 제안합니다. 제공된 스크립트는 시스템 환경에 따라 예상치 못한 결과를 초래할 수 있으므로, 반드시 내용을 확인한 후 본인의 책임 하에 실행하시기 바랍니다.'}
-                </p>
-              </div>
-            </div>
-
             {/* Search Section */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 mb-8">
               <form onSubmit={handleSearch} className="flex flex-col gap-4">
@@ -8105,10 +8304,12 @@ export default function App() {
               )}
               {result && (
                 <motion.div
+                  ref={wizardResultRef}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="space-y-6"
+                  className="space-y-6 relative"
                 >
+                  <ReadingProgressBar targetRef={wizardResultRef} />
                   {/* Diagnosis Card */}
                   <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
                     <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900 dark:text-slate-100">
@@ -8281,54 +8482,6 @@ export default function App() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
-            {dbMode === 'server_file' && (
-              <motion.div 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                 className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl flex items-start gap-4 mb-2 shadow-sm"
-              >
-                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-full shrink-0">
-                  <Database className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-emerald-800 dark:text-emerald-300 mb-1">
-                    {language === 'en' ? 'Running on Local High-Availability Backup DB' : '서버 로컬 고가용성 파일 데이터베이스 활성화'}
-                  </h4>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400/80 leading-relaxed">
-                    {language === 'en' 
-                      ? 'The cloud Firestore database exceeded its daily free-tier limits. We automatically switched to the offline high-availability server database so you can keep troubleshooting. All cloud data will automatically re-link once daily limits reset at PDT midnight (KST 5:00-6:00 PM).'
-                      : '구글 Cloud Firestore 데이터베이스의 일일 무료 트래픽 한도가 소모되어, 서비스 중단 방지를 위해 로컬 고가용성 파일 데이터베이스로 자동 전환되었습니다. 전체 대용량 클라우드 데이터는 태평양 표준시(PST) 기준 자정(한국시간 오후 5시-6시) 데이터베이스 한도가 리셋되면 자동으로 재연동됩니다.'}
-                  </p>
-                </div>
-              </motion.div>
-            )}
-
-            {dbStatus === 'quota' && (
-              <motion.div 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-2xl flex items-start gap-4 mb-6 shadow-sm"
-              >
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full text-blue-600 dark:text-blue-400">
-                  <Database className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-blue-900 dark:text-blue-100 text-sm">
-                      {language === 'en' ? 'High-Availability Server Cache Engine Active' : '고가용성 로컬/서버 캐시 모드 가동 중'}
-                    </h4>
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                      {language === 'en' ? 'Unlimited Search' : '무제한 고속 검색'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-blue-700 dark:text-blue-300/90 mt-1">
-                    {language === 'en' 
-                      ? "Cloud read quotas are safely protected. All issue searches and resolution guides are served instantly from memory and local server storage."
-                      : "클라우드 일일 할당량을 안전하게 보호하기 위해 고가용성 로컬/서버 엔진으로 자동 전환되었습니다. 모든 오류 코드 검색과 문제 해결 가이드북을 제한 없이 이용하실 수 있습니다."}
-                  </p>
-                </div>
-              </motion.div>
-            )}
 
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
               <div>
@@ -8937,7 +9090,11 @@ export default function App() {
                             exit={{ height: 0, opacity: 0 }}
                             className="border-t border-slate-100 dark:border-slate-800"
                           >
-                            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50/50 dark:bg-slate-900/50">
+                            <div 
+                              ref={expandedIssueRef}
+                              className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50/50 dark:bg-slate-900/50 relative"
+                            >
+                              <ReadingProgressBar targetRef={expandedIssueRef} />
                               <div>
                                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">{language === 'en' ? 'Symptoms & Causes' : '증상 및 원인'}</h4>
                                 <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">{highlightText(getLocalizedText(issue, 'symptoms'), guidebookQuery)}</p>
@@ -9450,106 +9607,91 @@ export default function App() {
                     </h2>
                     <p className="text-xs text-slate-500 max-w-xl">
                       {language === 'en'
-                        ? 'Switch between Google Cloud Firestore and native Server JSON File Storage.'
-                        : '구글 파이어스토어(클라우드)와 서버 내장형 고가용성 JSON 데이터베이스를 상호 스위칭합니다.'}
+                        ? 'Operating on high-availability static JSON file storage & GitHub Actions GitOps engine.'
+                        : '서버 내장 고가용성 파일 데이터베이스 및 GitHub Actions GitOps 엔진으로 작동 중입니다.'}
                     </p>
                   </div>
                 </div>
-                <span className={`px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1.5 self-start sm:self-auto ${
-                  dbMode === 'firestore' 
-                    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' 
-                    : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                }`}>
-                  <span className={`h-2 w-2 rounded-full ${dbMode === 'firestore' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'}`}></span>
-                  {dbMode === 'firestore' ? 'Firestore Mode' : 'Server File DB Mode'}
+                <span className="px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 self-start sm:self-auto">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Jamstack Static Engine Active
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                {/* Firestore Mode Config */}
-                <div 
-                  onClick={() => {
-                    setDbMode('firestore');
-                    localStorage.setItem('winfix_db_mode', 'firestore');
-                    fetchCategoryCounts(true);
-                  }}
-                  className={`p-5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-                    dbMode === 'firestore'
-                      ? 'bg-amber-500/5 border-amber-500 shadow-sm'
-                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850/40'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                        1. Google Cloud Firestore
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                        backendStatus === 'connected' 
-                          ? 'bg-green-500/10 text-green-500 border-green-500/20' 
-                          : backendStatus === 'permission_denied' 
-                            ? 'bg-red-500/10 text-red-500 border-red-500/20' 
-                            : 'bg-amber-500/10 text-amber-500 border-amber-500/25'
-                      }`}>
-                        {backendStatus === 'connected' ? '● Online' : backendStatus === 'permission_denied' ? '● Unauthorized' : '● Quota Limit/Error'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      {language === 'en'
-                        ? 'Standard client-side cloud engine. Uses firestore.js query snapshots directly inside the frame. Free tiers are prone to daily quota limits.'
-                        : '기본 클라우드 분산 데이터 세트. 프레임 내에서 Firestore 쿼리를 직접 실행합니다. 구글 무료 한도(일일 할당량) 초과 시 서비스가 조기 정지될 수 있습니다.'}
-                    </p>
-                  </div>
-                  <div className="mt-4 flex items-center justify-end">
-                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                      {dbMode === 'firestore' && '✓ Active Engine Selected'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Local Server File Mode Config */}
+                {/* Static Jamstack JSON Feed Engine */}
                 <div 
                   onClick={() => {
                     setDbMode('server_file');
                     localStorage.setItem('winfix_db_mode', 'server_file');
                     fetchCategoryCounts(true);
                   }}
-                  className={`p-5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-                    dbMode === 'server_file'
-                      ? 'bg-emerald-500/5 border-emerald-500 shadow-sm'
-                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850/40'
-                  }`}
+                  className="p-5 rounded-xl border transition-all cursor-pointer bg-emerald-500/5 border-emerald-500 shadow-sm flex flex-col justify-between"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                        2. High-Availability Server JSON File DB
+                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <HardDrive className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        1. Static Jamstack Feed Engine (`data/issues.json`)
                       </span>
-                      <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/20 px-2 py-0.5 rounded-full">
-                        ● Unlimited / Active
+                      <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold">
+                        ● Zero Quota Limit
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       {language === 'en'
-                        ? 'Uses the server-side Node disk JSON system. Extremely stable, completely bypasses Cloud API quotas, zero-lag rendering.'
-                        : '서버 하드드라이브에 완전히 안전하게 정적 동기화되는 로컬 파일-DB. 할당량 에러와 토큰 접근 장애가 전혀 발생하지 않는 무제한 독립 기동 모드입니다.'}
+                        ? 'Serves troubleshooting records directly from local disk or GitHub Pages CDN with sub-10ms latency and zero external quota limits.'
+                        : '로컬 디스크 및 GitHub Pages CDN에서 1,300개 이상의 트러블슈팅 가이드를 직접 전송합니다. 외부 DB 할당량 제한이 전혀 없는 고성능 정적 엔진입니다.'}
                     </p>
                   </div>
-                  <div className="mt-4 flex items-center justify-end">
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Feed: /data/issues.json
+                    </span>
                     <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      {dbMode === 'server_file' && '✓ Active Engine Selected'}
+                      ✓ Primary Active Engine
+                    </span>
+                  </div>
+                </div>
+
+                {/* GitHub Actions GitOps Collector Engine */}
+                <div 
+                  className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <Github className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        2. GitHub Actions Autonomous GitOps Sync
+                      </span>
+                      <span className="text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full font-bold">
+                        ● Scheduled Cron
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      {language === 'en'
+                        ? 'Automated GitHub Workflow collects trending Windows fixes via Gemini AI and commits updates back to repository.'
+                        : 'GitHub 워크플로우가 6시간 주기로 최신 Windows 오류 트렌드를 AI 수집하여 repository로 자동 커밋/배포합니다.'}
+                    </p>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Workflow: windows-fix-collector.yml
+                    </span>
+                    <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                      ● Active Workflow
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl p-4 flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-indigo-505 dark:text-indigo-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
-                  <strong>{language === 'en' ? 'Robust Fail-over Engine:' : '지능형 자동 고장 극복 대책 (Failover Support):'}</strong>{' '}
+              <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-4 flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                  <strong>{language === 'en' ? 'Firebase-Free Jamstack Architecture:' : '파이어베이스 비의존 독립형 Jamstack 아키텍처:'}</strong>{' '}
                   {language === 'en'
-                    ? 'The UI automatically activates server JSON mode if Firestore gets blocked (e.g. Quota Exceeded 429). Fully offline-proof!'
-                    : '가이드북 및 카테고리 로딩 중 파이어베이스 API 429 할당량 초과 에러나 권한 부족(Permission Denied) 에러 발생 즉시, 유저 끊김을 미연에 방지하고자 이 고장 방지용 서버 엔드포인트 수집 데이터셋 모드로 자율 강제 롤오버됩니다.'}
+                    ? 'All database queries, user bookmarks, and search history operate 100% serverless via IndexedDB in-browser caching and static JSON feeds.'
+                    : '모든 트러블슈팅 검색, 카테고리 분류, 북마크 및 검색 기록이 파이어베이스 외부 의존성 없이 브라우저 IndexedDB 및 정적 JSON 피드로 100% 무중단 구동됩니다.'}
                 </p>
               </div>
             </div>
@@ -9638,7 +9780,7 @@ export default function App() {
                 <div className="flex items-center gap-2 mb-4">
                   <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                   <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                    {language === 'en' ? 'Firebase Usage Data Shield' : '파이어베이스 데이터 보호 전략'}
+                    {language === 'en' ? 'Jamstack Zero-Quota Data Shield' : 'Jamstack 정적 데이터 보호 전략'}
                   </h3>
                 </div>
                 
@@ -9649,17 +9791,17 @@ export default function App() {
                       {language === 'en' ? 'Smart Search Cache' : '스마트 검색 캐시'}
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Search results are cached in memory for 5 mins to prevent redundant database requests.' : '동일한 검색어에 대해 5분간 메모리 캐시를 사용하여 DB 중복 호출을 차단합니다.'}
+                      {language === 'en' ? 'Search results are cached in memory for 5 mins to prevent redundant database requests.' : '동일한 검색어에 대해 5분간 메모리 캐시를 사용하여 중복 요청을 차단합니다.'}
                     </p>
                   </div>
                   
                   <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
                     <h4 className="text-sm font-bold text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'Server-Side Counts' : '서버 측 집계 (Aggregation)'}
+                      {language === 'en' ? 'IndexedDB Local Search' : 'IndexedDB 로컬 인메모리 엔진'}
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Uses low-cost server aggregation instead of full document reads for category statistics.' : '카테고리 개수 집계 시 문서 전체를 읽지 않고 서버 측 집계 API를 사용해 비용을 아낍니다.'}
+                      {language === 'en' ? 'Uses browser IndexedDB cache for sub-10ms instantaneous category filtering.' : '브라우저 IndexedDB 기반으로 1,300개 이상의 지침을 서브 10ms 초고속 필터링합니다.'}
                     </p>
                   </div>
 
@@ -9669,7 +9811,7 @@ export default function App() {
                       {language === 'en' ? 'Knowledge Persistence' : 'AI 지식 캐싱'}
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'AI patterns are saved centrally (6h TTL), saving heavy AI & DB read operations for all users.' : 'AI 분석 결과를 6시간 동안 전역 캐싱하여 모든 사용자의 AI 및 DB 읽기 할당량을 보존합니다.'}
+                      {language === 'en' ? 'AI patterns are saved centrally (6h TTL), saving heavy AI read operations for all users.' : 'AI 분석 결과를 6시간 동안 전역 캐싱하여 모든 사용자의 AI API 호출 할당량을 보존합니다.'}
                     </p>
                   </div>
 
@@ -9679,7 +9821,7 @@ export default function App() {
                       {language === 'en' ? 'Confirmed Fetching' : '확정적 데이터 수집'}
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Only fetches data on Enter key or Click, avoiding unnecessary reads during typing.' : '입력 중에는 통신하지 않고 Enter나 버튼 클릭 시에만 통신하여 비효율적인 읽기를 방지합니다.'}
+                      {language === 'en' ? 'Only fetches data on Enter key or Click, avoiding unnecessary reads during typing.' : '입력 중에는 통신하지 않고 Enter나 버튼 클릭 시에만 통신하여 비효율적인 조회를 방지합니다.'}
                     </p>
                   </div>
 
@@ -9689,17 +9831,17 @@ export default function App() {
                       {language === 'en' ? 'Local Persistence' : '로컬 영속성 로드'}
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Frequently accessed lists are synced to LocalStorage, serving instant data with zero DB cost.' : '자주 쓰이는 리스트를 로컬 저장소에 동기화하여 DB 비용 없이 즉시 데이터를 제공합니다.'}
+                      {language === 'en' ? 'Frequently accessed lists are synced to LocalStorage, serving instant data with zero DB cost.' : '자주 쓰이는 리스트를 로컬 저장소에 동기화하여 서버나 DB 비용 없이 즉시 데이터를 제공합니다.'}
                     </p>
                   </div>
 
                   <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <h4 className="text-sm font-bold text-rose-600 dark:text-rose-400 mb-1 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'Quota Guard' : '할당량 선제 대응'}
+                    <h4 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mb-1 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      {language === 'en' ? 'Jamstack Unlimited Guard' : 'Jamstack 무제한 구동'}
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Automatically falls back to local data when daily free tier limits are reached.' : '파이어베이스 무료 할당량 초과 시 자동으로 감지하여 서비스 중단 없이 로컬 데이터로 전환합니다.'}
+                      {language === 'en' ? 'Static data/issues.json feed operates 100% serverless with zero external DB quotas.' : 'Jamstack 정적 데이터 피드와 GitHub Pages CDN을 활용하여 외부 DB 할당량 제한 없이 100% 무중단 구동됩니다.'}
                     </p>
                   </div>
                 </div>
@@ -9710,7 +9852,7 @@ export default function App() {
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2 shrink-0">
                       <Info className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 shrink-0" />
-                      <span>{language === 'en' ? 'Today\'s Data Usage (Estimate)' : '오늘의 데이터 사용량 (추정치)'}</span>
+                      <span>{language === 'en' ? 'Today\'s Jamstack & API Usage (Estimate)' : '오늘의 Jamstack & API 사용량 (추정치)'}</span>
                     </h3>
                     <button 
                       onClick={handleStatusRefresh}
@@ -9728,19 +9870,19 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 sm:gap-4">
-                    {/* Read / Write Stat Indicators */}
+                    {/* Jamstack & Gemini Stat Indicators */}
                     <div className="flex items-center gap-3 bg-white dark:bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs">
                       <div className="text-left sm:text-right">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{language === 'en' ? 'Reads' : '읽기'}</p>
-                        <p className="text-xs sm:text-sm font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                          {quotaUsage.reads.toLocaleString()} <span className="text-[10px] font-normal text-slate-400">/ 50k</span>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{language === 'en' ? 'Jamstack Feed' : '정적 피드 (Jamstack)'}</p>
+                        <p className="text-xs sm:text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                          {quotaUsage.reads.toLocaleString()} <span className="text-[10px] font-normal text-emerald-500 font-sans">무제한 (CDN)</span>
                         </p>
                       </div>
                       <div className="w-[1px] h-6 bg-slate-200 dark:bg-slate-700" />
                       <div className="text-left sm:text-right">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{language === 'en' ? 'Writes' : '쓰기'}</p>
-                        <p className="text-xs sm:text-sm font-mono font-bold text-orange-600 dark:text-orange-400 whitespace-nowrap">
-                          {quotaUsage.writes.toLocaleString()} <span className="text-[10px] font-normal text-slate-400">/ 20k</span>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{language === 'en' ? 'Gemini AI' : 'Gemini AI 호출'}</p>
+                        <p className="text-xs sm:text-sm font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                          {quotaUsage.writes.toLocaleString()} <span className="text-[10px] font-normal text-slate-400">/ 1.5k</span>
                         </p>
                       </div>
                     </div>
@@ -9779,14 +9921,14 @@ export default function App() {
                       </a>
 
                       <a 
-                        href="https://console.firebase.google.com/"
+                        href={`${GITHUB_REPO_URL}/settings/pages`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-2.5 py-1.5 text-xs font-semibold text-orange-700 bg-orange-100 hover:bg-orange-200 dark:text-orange-300 dark:bg-orange-900/50 dark:hover:bg-orange-800/50 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap border border-orange-200/70 dark:border-orange-800/40 active:scale-95 shadow-2xs"
-                        title={language === 'en' ? "Advanced Settings (Firebase)" : "고급 설정 (Firebase 콘솔)"}
+                        className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-900/50 dark:hover:bg-emerald-800/50 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap border border-emerald-200/70 dark:border-emerald-800/40 active:scale-95 shadow-2xs"
+                        title={language === 'en' ? "Open GitHub Pages Deployment Settings" : "GitHub Pages 배포 설정 열기"}
                       >
-                        <Settings className="w-3.5 h-3.5 shrink-0" />
-                        <span>{language === 'en' ? 'Console' : '콘솔'}</span>
+                        <Globe className="w-3.5 h-3.5 shrink-0" />
+                        <span>{language === 'en' ? 'Pages Settings' : 'Pages 설정'}</span>
                       </a>
 
                       <button 
@@ -9841,8 +9983,8 @@ export default function App() {
                     <div className="ml-4 mt-1.5 space-y-1 text-xs">
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <span className="text-slate-400 font-mono">├─</span>
-                        <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'Firebase (Firestore) Data:' : '파이어베이스(Firebase / Firestore) 데이터:'}</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">{firebaseIssuesCount}{language === 'en' ? ' items' : '개'}</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'Jamstack Static Dataset:' : 'Jamstack 정적 데이터셋 (data/issues.json):'}</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
                       </div>
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <span className="text-slate-400 font-mono">└─</span>
@@ -9856,7 +9998,7 @@ export default function App() {
                     <span className="font-bold text-slate-900 dark:text-slate-100">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <span>• {language === 'en' ? 'Firebase (Firestore) Total Stored Data:' : '파이어베이스(Firebase / Firestore) 보관 데이터:'}</span>
+                    <span>• {language === 'en' ? 'Jamstack Static Total Stored Data:' : 'Jamstack 정적 DB 보관 총 데이터:'}</span>
                     <span className="font-bold text-slate-900 dark:text-slate-100">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
                   </li>
                   <li>• {language === 'en' ? 'Database connection (Browser):' : '데이터베이스 연결 (브라우저):'} {
@@ -9866,9 +10008,7 @@ export default function App() {
                         {language === 'en' ? 'Checking...' : '확인 중...'}
                       </span>
                     ) :
-                    dbStatus === 'connected' ? <span className="text-green-500 font-medium flex items-center gap-1.5 inline-flex"><CheckCircle2 className="w-3 h-3" /> {language === 'en' ? 'Normal (Firestore)' : '정상 (Firestore)'}</span> :
-                    dbStatus === 'quota' ? <span className="text-orange-500 font-medium flex items-center gap-1.5 inline-flex"><AlertTriangle className="w-3 h-3" /> {language === 'en' ? 'Quota Exceeded' : '할당량 초과 (내일 재개)'}</span> :
-                    <span className="text-red-500 font-medium flex items-center gap-1.5 inline-flex"><AlertTriangle className="w-3 h-3" /> {language === 'en' ? 'Connection Error' : '연결 오류'}</span>
+                    <span className="text-emerald-500 font-medium flex items-center gap-1.5 inline-flex"><CheckCircle2 className="w-3 h-3" /> {language === 'en' ? 'Normal (Static JSON / IndexedDB)' : '정상 (Static JSON / IndexedDB)'}</span>
                   }</li>
                   <li>• {language === 'en' ? 'Backend Autonomous Engine (Cron):' : '백엔드 자율 엔진 (Cron):'} {
                     backendStatus === 'checking' ? (
@@ -9877,36 +10017,13 @@ export default function App() {
                         {language === 'en' ? 'Monitoring...' : '모니터링 중...'}
                       </span>
                     ) :
-                    backendStatus === 'connected' ? (
-                      <span className="text-green-500 font-medium flex items-center gap-1.5 inline-flex">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                        </span>
-                        {language === 'en' ? 'Cloud Active' : '클라우드 활성 상태 (24/7)'}
+                    <span className="text-emerald-500 font-medium flex items-center gap-1.5 inline-flex">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                    ) :
-                    backendStatus === 'local_active' ? (
-                      <span className="text-emerald-500 font-medium flex items-center gap-1.5 inline-flex">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        {language === 'en' ? 'Active (Local Sandbox)' : '로컬 자율 수집 활성 상태 (24/7)'}
-                      </span>
-                    ) :
-                    backendStatus === 'permission_denied' ? (
-                      <span className="text-rose-500 font-medium flex items-center gap-1.5 inline-flex group relative cursor-help">
-                        <ShieldAlert className="w-3 h-3" /> 
-                        {language === 'en' ? 'Permission Denied' : '권한 제한됨 (설정 필요)'}
-                        <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none font-normal leading-relaxed">
-                          {language === 'en' 
-                            ? "Error 7: The server lacks permission to write to Firestore. You MUST add FIREBASE_SERVICE_ACCOUNT (JSON) to Secrets for background sync to work." 
-                            : "Error 7: 서버가 Firestore에 쓰기 권한이 없습니다. 자동 수집/백그라운드 동기화를 위해 Google Cloud Console에서 서비스 계정 키(JSON)를 생성하여 Secrets에 'FIREBASE_SERVICE_ACCOUNT'로 등록해야 합니다."}
-                        </div>
-                      </span>
-                    ) :
-                    <span className="text-slate-400 font-medium flex items-center gap-1.5 inline-flex"><XCircle className="w-3 h-3" /> {language === 'en' ? 'Not Configured' : '구성되지 않음'}</span>
+                      {language === 'en' ? 'GitOps & Local Engine Active (24/7)' : 'GitOps & 로컬 자율 수집 활성 상태 (24/7)'}
+                    </span>
                   }</li>
                   <li>• {language === 'en' ? 'Last auto-sync:' : '마지막 자동 수집:'} <span className="font-medium text-slate-900 dark:text-slate-100">{lastSyncAt ? lastSyncAt.toLocaleString() : (language === 'en' ? 'No record' : '기록 없음')}</span></li>
                   <li>• {language === 'en' ? 'Next scheduled sync:' : '다음 자동 수집 예정:'} <span className="font-medium text-slate-900 dark:text-slate-100">{lastSyncAt ? new Date(lastSyncAt.getTime() + 10 * 60 * 1000).toLocaleString() : (language === 'en' ? 'Immediately' : '10분 이내 예정')}</span></li>
@@ -10040,8 +10157,8 @@ export default function App() {
                         </p>
                         <p className="text-slate-500">
                           {language === 'en' 
-                            ? 'Logs are stored in Cloud Firestore (backend_logs). The engine runs every 30 minutes. If logs show placeholder errors, please set GEMINI_API_KEY in AI Studio Settings (Secrets).' 
-                            : '로그는 클라우드(backend_logs)에 기록됩니다. 엔진은 30분 주기로 가동됩니다. 로그에 Placeholder 오류가 보이면 AI Studio 설정(Secrets)에 API Key를 등록하세요.'}
+                            ? 'Logs are stored in Local File DB & IndexedDB (backend_logs). The GitHub Actions GitOps engine auto-syncs data. If logs show placeholder errors, please set GEMINI_API_KEY in AI Studio Settings (Secrets).' 
+                            : '로그는 로컬 파일 DB 및 IndexedDB(backend_logs)에 기록됩니다. GitHub Actions GitOps 자율 엔진이 수집 및 동기화합니다. 로그에 Placeholder 오류가 보이면 AI Studio 설정(Secrets)에 API Key를 등록하세요.'}
                         </p>
                       </div>
                     </div>
@@ -10100,6 +10217,24 @@ export default function App() {
                       <span>{language === 'en' ? 'Full Guidebook' : '구축 가이드 전문'}</span>
                     </button>
                   </div>
+                </div>
+
+                {/* GitHub Actions Live Status Badges */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <GitHubWorkflowStatus 
+                    owner={GITHUB_USERNAME}
+                    repo={GITHUB_REPO_NAME}
+                    workflowFile="windows-fix-collector.yml"
+                    language={language}
+                    title={language === 'en' ? 'GitOps Collector Engine' : '자율 수집 엔진 상태'}
+                  />
+                  <GitHubWorkflowStatus 
+                    owner={GITHUB_USERNAME}
+                    repo={GITHUB_REPO_NAME}
+                    workflowFile="deploy-pages.yml"
+                    language={language}
+                    title={language === 'en' ? 'GitHub Pages Deployment' : '웹 서비스 배포 상태'}
+                  />
                 </div>
 
                 {/* GitOps Architecture Diagram (Interactive Card) */}
@@ -10163,8 +10298,8 @@ export default function App() {
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         {language === 'en'
-                          ? 'Directly pulls data/issues.json from your GitHub repository into Firestore and Local File DB without invoking AI.'
-                          : 'GitHub 저장소의 data/issues.json 파일을 즉시 읽어와 Firestore와 서버 로컬 DB에 병합합니다 (AI API 소진 없음).'}
+                          ? 'Directly pulls data/issues.json from your GitHub repository into Local File DB and IndexedDB cache without invoking AI.'
+                          : 'GitHub 저장소의 data/issues.json 파일을 즉시 읽어와 서버 파일 DB 및 브라우저 IndexedDB에 병합합니다 (AI API 소진 없음).'}
                       </p>
                     </div>
 
@@ -10254,7 +10389,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                         {language === 'en' ? 'Repository (owner/repo)' : '저장소 (사용자명/저장소명)'}
@@ -10283,15 +10418,46 @@ export default function App() {
 
                     <div>
                       <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        {language === 'en' ? 'Personal Access Token (PAT)' : 'GitHub PAT 토큰 (선택)'}
+                        {language === 'en' ? 'Auth Mode' : '인증 방식'}
                       </label>
-                      <input
-                        type="password"
-                        value={githubToken}
-                        onChange={(e) => setGithubToken(e.target.value)}
-                        placeholder={hasServerGithubToken ? "•••••••• (저장됨)" : "ghp_..."}
-                        className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
-                      />
+                      <select
+                        value={githubAuthMode}
+                        onChange={(e) => setGithubAuthMode(e.target.value as 'PAT' | 'SSH')}
+                        className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="PAT">Personal Access Token (PAT)</option>
+                        <option value="SSH">SSH Private Key</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      {githubAuthMode === 'PAT' ? (
+                        <>
+                          <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            {language === 'en' ? 'GitHub PAT (Optional)' : 'GitHub PAT 토큰 (선택)'}
+                          </label>
+                          <input
+                            type="password"
+                            value={githubToken}
+                            onChange={(e) => setGithubToken(e.target.value)}
+                            placeholder={hasServerGithubToken ? "•••••••• (저장됨)" : "ghp_..."}
+                            className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            {language === 'en' ? 'SSH Private Key' : 'SSH 개인키'}
+                          </label>
+                          <textarea
+                            value={sshPrivateKey}
+                            onChange={(e) => setSshPrivateKey(e.target.value)}
+                            placeholder={hasServerSshKey ? "•••••••• (SSH Key 저장됨)" : "-----BEGIN OPENSSH PRIVATE KEY-----"}
+                            rows={1}
+                            className="w-full text-xs px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500 resize-none h-8"
+                          />
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -11763,75 +11929,60 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Backup & Restore Card */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col h-full">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-lg">
-                      <Database className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                {/* Advanced Data Backup & Restore Card */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col h-full ring-1 ring-emerald-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-emerald-100 dark:bg-emerald-900/40 p-2.5 rounded-xl shadow-xs">
+                        <Database className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{language === 'en' ? 'Data Backup & Restore Engine' : '데이터 백업 및 복원 고도화 엔진'}</h4>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                            v3.52
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {language === 'en' ? 'SHA-256 integrity, Dry-Run diff simulation, and multi-snapshot archives' : 'SHA-256 무결성 검증, 사전 드라이런 시뮬레이션, 다중 스냅샷 보관소'}
+                        </p>
+                      </div>
                     </div>
-                    <h4 className="font-bold text-slate-900 dark:text-slate-100">{language === 'en' ? 'Data Backup & Restore' : '데이터 백업 및 복원'}</h4>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 flex-grow">
-                    {language === 'en' ? 'Export all database records to a JSON file for backup, or import a previously exported file to restore data.' : '전체 데이터베이스 레코드를 JSON 파일로 내보내 백업하거나, 이전에 내보낸 파일을 불러와 데이터를 복원합니다.'}
-                  </p>
 
-                  {/* Emergency 1300 Data Recovery Banner */}
-                  <div className="bg-gradient-to-r from-red-500/10 via-amber-500/10 to-emerald-500/10 border border-amber-300 dark:border-amber-700/80 rounded-2xl p-4 text-xs flex flex-col gap-2.5 shadow-sm mb-4">
-                    <div className="flex items-center justify-between font-bold text-amber-900 dark:text-amber-200">
-                      <span className="flex items-center gap-1.5 text-sm">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                        {language === 'en' ? '🚨 1,300+ Records Emergency Data Recovery' : '🚨 1,300개 데이터 긴급 복구 & 찾기 센터'}
-                      </span>
-                      <span className="text-[10px] bg-amber-200 dark:bg-amber-900 px-2 py-0.5 rounded-full font-mono text-amber-900 dark:text-amber-100">
-                        현재 {categoryCounts['전체'] || dbIssues.length}개 표시 중
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
-                      {language === 'en'
-                        ? 'If your 1,300+ records vanished after a merge or page reload: 1) Switch to Firestore mode if data remains in cloud. 2) Re-upload the issues.json or backup ZIP file from your PC Downloads folder.'
-                        : '병합 후 1,300여개 데이터가 사라진 경우: 1) Firestore 데이터베이스 모드로 재연결하거나, 2) PC 다운로드 폴더에 자동 저장된 issues.json 또는 백업 ZIP 파일을 다시 불러오면 즉시 무손실 복구됩니다.'}
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {/* Primary Action Buttons */}
+                  <div className="space-y-2.5 flex-grow">
+                    {/* Row 1: Granular Export & Dry-Run Import */}
+                    <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => {
-                          setDbMode('firestore');
-                          localStorage.setItem('winfix_db_mode', 'firestore');
-                          localStorage.removeItem('winfix_db_mode_fallback');
-                          fetchCategoryCounts(true);
-                          fetchIssues(false, true);
-                          customAlert(language === 'en' ? "Reconnected to Firestore DB. Loading all records..." : "Firestore 원본 데이터베이스로 모드를 변경했습니다. 데이터 조회 중...");
-                        }}
-                        className="py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.98]"
+                        onClick={() => setShowExportModal(true)}
+                        disabled={isExporting || isImporting}
+                        className="py-2 px-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-xs active:scale-[0.98] text-xs cursor-pointer"
+                        title="원하는 컬렉션과 포맷(ZIP/JSON), 체크섬을 선택하여 내보냅니다"
                       >
-                        <Zap className="w-3.5 h-3.5" />
-                        {language === 'en' ? 'Reconnect Firestore (1300 Records)' : '⚡ Firestore 모드로 즉시 복구'}
+                        {isExporting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+                        <span>{language === 'en' ? 'Custom Export...' : '정밀 백업 내보내기'}</span>
                       </button>
+
                       <button
-                        onClick={() => githubZipMergeInputRef.current?.click()}
-                        className="py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.98]"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isExporting || isImporting || isMergingGithubZip}
+                        className="py-2 px-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 text-xs shadow-2xs hover:shadow-xs active:scale-[0.98] cursor-pointer"
+                        title="파일 선택 후 복원 전 차이점(Dry-Run)과 스키마를 사전 시뮬레이션합니다"
                       >
-                        <Upload className="w-3.5 h-3.5" />
-                        {language === 'en' ? 'Re-upload Downloaded File' : '📥 다운로드 폴더 백업 파일 복원'}
+                        {isImporting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        <span>{language === 'en' ? 'Import (Dry-Run)...' : '불러오기 (Dry-Run)'}</span>
                       </button>
                     </div>
-                  </div>
-                  <div className="space-y-3">
-                    <button
-                      onClick={handleExportData}
-                      disabled={isExporting || isImporting}
-                      className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md active:scale-[0.98] text-xs"
-                    >
-                      {isExporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                      {language === 'en' ? 'Export Data' : '데이터 내보내기'}
-                    </button>
-                    <button
-                      onClick={() => validateFileInputRef.current?.click()}
-                      disabled={isExporting || isImporting}
-                      className="w-full py-2.5 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 disabled:opacity-50 text-blue-700 dark:text-blue-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-blue-200/60 dark:border-blue-800/60 text-xs shadow-sm hover:shadow-md active:scale-[0.98]"
-                    >
-                      <FileCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      {language === 'en' ? 'Validate JSON Schema' : 'JSON 스키마 규격 사전 검증'}
-                    </button>
+
+                    {/* Hidden File Inputs */}
+                    <input
+                      type="file"
+                      accept=".json,.zip"
+                      ref={fileInputRef}
+                      onChange={handlePickFileForDryRun}
+                      className="hidden"
+                    />
                     <input
                       type="file"
                       accept=".json,.zip"
@@ -11839,32 +11990,6 @@ export default function App() {
                       onChange={handleValidateJsonFile}
                       className="hidden"
                     />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isExporting || isImporting || isMergingGithubZip}
-                      className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md active:scale-[0.98] text-xs"
-                    >
-                      {isImporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      {language === 'en' ? 'Import Data (Auto-Validate)' : '데이터 불러오기 (자동 검증)'}
-                    </button>
-                    <input
-                      type="file"
-                      accept=".json,.zip"
-                      ref={fileInputRef}
-                      onChange={handleImportData}
-                      className="hidden"
-                    />
-
-                    {/* GitHub Pages ZIP Data Merge Button */}
-                    <button
-                      onClick={() => githubZipMergeInputRef.current?.click()}
-                      disabled={isExporting || isImporting || isMergingGithubZip}
-                      className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-xs shadow-sm hover:shadow-md active:scale-[0.98]"
-                      title="업로드된 ZIP 백업 데이터를 깃허브 기존 데이터(data/issues.json)와 합칩니다"
-                    >
-                      {isMergingGithubZip ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
-                      {language === 'en' ? 'ZIP Data Merge (GitHub Pages)' : 'ZIP 데이터 병합 업로드 (GitHub Pages)'}
-                    </button>
                     <input
                       type="file"
                       accept=".zip,.json"
@@ -11872,6 +11997,63 @@ export default function App() {
                       onChange={handleGithubPagesZipMerge}
                       className="hidden"
                     />
+
+                    {/* Row 2: Instant Local Snapshot & Snapshot Archives Explorer */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleSaveBrowserSnapshot()}
+                        disabled={isExporting || isImporting}
+                        className="py-2 px-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 disabled:opacity-50 text-amber-800 dark:text-amber-200 font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 border border-amber-300/70 dark:border-amber-700/70 text-xs shadow-2xs hover:shadow-xs active:scale-[0.98] cursor-pointer"
+                        title="서버 통신 없이 브라우저 IndexedDB에 즉시 롤백용 로컬 스냅샷을 만듭니다 (오프라인/GitHub Pages 지원)"
+                      >
+                        <HardDrive className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>{language === 'en' ? 'Local Snapshot' : '브라우저 로컬 스냅샷'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowSnapshotExplorerModal(true);
+                          fetchServerSnapshots();
+                          fetchBrowserSnapshots();
+                        }}
+                        className="py-2 px-2.5 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 border border-purple-200/80 dark:border-purple-800/80 text-xs shadow-2xs hover:shadow-xs active:scale-[0.98] cursor-pointer"
+                        title="서버 및 로컬에 저장된 모든 스냅샷 목록을 확인하고 원하는 시점으로 복원합니다"
+                      >
+                        <Archive className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                        <span>{language === 'en' ? 'Snapshot Explorer' : '스냅샷 히스토리'}</span>
+                      </button>
+                    </div>
+
+                    {/* Secondary Actions: Schema Validator & GitHub Pages ZIP Merge */}
+                    <div className="pt-1 flex flex-col gap-1.5">
+                      <button
+                        onClick={() => validateFileInputRef.current?.click()}
+                        disabled={isExporting || isImporting}
+                        className="w-full py-2 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-200/60 dark:border-slate-700/60 text-[11px] cursor-pointer"
+                      >
+                        <FileCheck className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{language === 'en' ? 'Validate JSON Schema File' : 'JSON 스키마 규격 사전 검증'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => githubZipMergeInputRef.current?.click()}
+                        disabled={isExporting || isImporting || isMergingGithubZip}
+                        className="w-full py-2 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-200/60 dark:border-slate-700/60 text-[11px] cursor-pointer"
+                        title="GitHub Pages 환경에서 ZIP 백업을 data/issues.json 과 합칩니다"
+                      >
+                        {isMergingGithubZip ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-500" /> : <Layers className="w-3.5 h-3.5 text-indigo-500" />}
+                        <span>{language === 'en' ? 'ZIP Data Merge (GitHub Pages)' : 'ZIP 데이터 병합 업로드 (GitHub Pages)'}</span>
+                      </button>
+
+                      <button
+                        onClick={handleDownloadSystemBackupZip}
+                        disabled={isSystemBackingUp || isExporting || isImporting}
+                        className="w-full py-2 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-medium rounded-xl transition-all flex items-center justify-center gap-1.5 border border-emerald-200/60 dark:border-emerald-800/60 text-[11px] cursor-pointer"
+                      >
+                        {isSystemBackingUp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-emerald-600" />}
+                        <span>{language === 'en' ? 'Full System Recovery ZIP' : '시스템 전체 복원용 백업 ZIP 다운로드'}</span>
+                      </button>
+                    </div>
 
                     {/* GitHub Pages Active Merged Data Banner */}
                     {(githubMergedInfo || (typeof window !== 'undefined' && localStorage.getItem('winfix_github_pages_merged_issues'))) && (
@@ -11885,11 +12067,6 @@ export default function App() {
                             {githubMergedInfo?.total || categoryCounts['전체'] || dbIssues.length}개
                           </span>
                         </div>
-                        <p className="text-[10px] text-purple-700 dark:text-purple-300 leading-relaxed">
-                          {language === 'en'
-                            ? 'ZIP dataset has been merged with GitHub data and applied instantly. Download issues.json and commit it to data/issues.json on GitHub for permanent persistence.'
-                            : '업로드된 ZIP 데이터가 깃허브 기존 데이터와 자동 병합되어 즉시 반영 중입니다. 깃허브 저장소(data/issues.json)에 커밋하면 모든 사용자에게 영구 배포됩니다.'}
-                        </p>
                         <div className="flex gap-2 pt-0.5">
                           <button
                             onClick={handleDownloadCurrentMergedIssuesJson}
@@ -11910,48 +12087,48 @@ export default function App() {
                       </div>
                     )}
 
-                    <button
-                      onClick={handleDownloadSystemBackupZip}
-                      disabled={isSystemBackingUp || isExporting || isImporting}
-                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-xs shadow-sm hover:shadow-md active:scale-[0.98]"
-                    >
-                      {isSystemBackingUp ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                      {language === 'en' ? 'System Recovery Backup (ZIP)' : '시스템 복원용 백업 (ZIP)'}
-                    </button>
-                    
-                    {/* Last-Known-Good Automatic Rollback Button */}
-                    <button
-                      onClick={handleRestoreLastKnownGood}
-                      disabled={isExporting || isImporting}
-                      className="w-full py-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 disabled:opacity-50 text-amber-800 dark:text-amber-200 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-amber-300/70 dark:border-amber-700/70 text-xs shadow-sm hover:shadow-md active:scale-[0.98]"
-                    >
-                      <RotateCcw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      {language === 'en' ? 'Restore Last-Known-Good State' : '직전 정상 백업 상태로 롤백 (Last-Known-Good)'}
-                    </button>
-
+                    {/* Active Last-Known-Good Snapshot Status Widget */}
                     {lastKnownGoodInfo && (
-                      <div className="text-[11px] bg-amber-100/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-xl p-2.5 text-amber-900 dark:text-amber-200 flex flex-col gap-1.5">
+                      <div className="text-[11px] bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-xl p-2.5 text-amber-900 dark:text-amber-200 flex flex-col gap-1.5">
                         <div className="flex items-center justify-between font-bold">
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1.5">
                             <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                            {language === 'en' ? 'Last-Known-Good Snapshot' : '직전 자동 스냅샷 보관됨'}
+                            {language === 'en' ? 'Active LKG Snapshot' : '직전 자동 스냅샷'}
                           </span>
                           <span className="text-[10px] text-amber-700 dark:text-amber-300 font-mono">
                             {new Date(lastKnownGoodInfo.createdAt).toLocaleTimeString()}
                           </span>
                         </div>
-                        <div className="text-[10px] opacity-90">
-                          {language === 'en'
-                            ? `Contains ${lastKnownGoodInfo.totalRecords} verified records saved prior to import.`
-                            : `불러오기 직전 보관된 ${lastKnownGoodInfo.totalRecords}개 정상 레코드 (데이터 손상 시 롤백)`}
+                        <div className="text-[10px] text-slate-600 dark:text-slate-400 flex items-center justify-between">
+                          <span>{lastKnownGoodInfo.totalRecords}개 레코드 보관 중</span>
+                          {lastKnownGoodInfo.checksum && (
+                            <span className="font-mono text-[9px] bg-amber-100 dark:bg-amber-900/60 px-1 py-0.2 rounded text-amber-800 dark:text-amber-200 flex items-center gap-0.5">
+                              <Hash className="w-2.5 h-2.5" />
+                              {lastKnownGoodInfo.checksum.substring(0, 8)}...
+                            </span>
+                          )}
                         </div>
-                        <button
-                          onClick={() => setShowLkgDetailsModal(true)}
-                          className="text-[10px] font-bold text-amber-800 hover:text-amber-950 dark:text-amber-300 dark:hover:text-amber-100 underline decoration-amber-400/80 hover:decoration-amber-600 flex items-center gap-1 cursor-pointer transition-colors pt-0.5"
-                        >
-                          <Eye className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                          {language === 'en' ? 'View Snapshot Metadata Details' : '스냅샷 규격/컬렉션 메타데이터 상세보기'}
-                        </button>
+                        <div className="flex items-center justify-between pt-1 border-t border-amber-200/60 dark:border-amber-800/40">
+                          <button
+                            onClick={handleRestoreLastKnownGood}
+                            disabled={isImporting}
+                            className="text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:text-amber-950 dark:hover:text-amber-100 flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            {language === 'en' ? 'Quick Rollback' : '즉시 롤백 복원'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowSnapshotExplorerModal(true);
+                              fetchServerSnapshots();
+                              fetchBrowserSnapshots();
+                            }}
+                            className="text-[10px] font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Eye className="w-3 h-3" />
+                            {language === 'en' ? 'Explorer' : '보관소 보기'}
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -15016,28 +15193,215 @@ export default function App() {
         </div>
       )}
 
-      {/* Last-Known-Good Snapshot Metadata Read-Only Modal */}
-      {showLkgDetailsModal && lastKnownGoodInfo && (
+      {/* =========================================================================
+          Enterprise Granular Data Export Modal (v3.52.0)
+          ========================================================================= */}
+      {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-scale-up">
-            {/* Header */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/20">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-blue-50/50 dark:bg-blue-950/20">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
-                  <ShieldCheck className="w-6 h-6" />
+                <div className="p-2.5 rounded-2xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                  <Archive className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
-                    {language === 'en' ? 'Last-Known-Good Snapshot Metadata' : '직전 정상 백업(Last-Known-Good) 스냅샷 메타데이터'}
+                    {language === 'en' ? 'Enterprise Data Backup & Export' : '엔터프라이즈 데이터 백업 내보내기'}
                   </h3>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-                    {language === 'en' ? 'Read-only automatic pre-import state backup summary' : '불러오기 직전 자동 보관된 정상 상태 메타데이터 (읽기 전용)'}
+                  <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">
+                    {language === 'en' ? 'Granular collection selection & tamper-proof SHA-256 checksum' : '선택적 컬렉션 패키징 및 위변조 방지 SHA-256 체크섬 동봉'}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setShowLkgDetailsModal(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setShowExportModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1 text-sm">
+              {/* Collection Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
+                  {language === 'en' ? 'Select Target Collections to Export' : '내보낼 대상 컬렉션 선택'}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    { id: 'issues', labelKo: '윈도우 문제 & 솔루션', labelEn: 'Known Issues & Solutions', desc: '주요 문제 진단 및 수동 해결 가이드' },
+                    { id: 'feedback', labelKo: '사용자 피드백 & 만족도', labelEn: 'User Feedback & Solved Logs', desc: '사용자 해결 여부 및 평가' },
+                    { id: 'bookmarks', labelKo: '사용자 즐겨찾기 (북마크)', labelEn: 'User Bookmarks & Saves', desc: '북마크 및 저장된 문제 목록' },
+                    { id: 'system_config', labelKo: '시스템 & 유지보수 설정', labelEn: 'System & Engine Config', desc: '자율 엔진 및 알림 환경설정' },
+                    { id: 'admin_logs', labelKo: '관리자 감사 로그', labelEn: 'Admin Audit Logs', desc: '관리자 작업 이력 및 보안 로그' },
+                  ].map(col => {
+                    const isChecked = exportSelectedCollections.includes(col.id);
+                    return (
+                      <button
+                        type="button"
+                        key={col.id}
+                        onClick={() => {
+                          if (isChecked) {
+                            if (exportSelectedCollections.length === 1) {
+                              customAlert(language === 'en' ? 'At least one collection must be selected.' : '최소 하나 이상의 컬렉션을 선택해야 합니다.');
+                              return;
+                            }
+                            setExportSelectedCollections(prev => prev.filter(c => c !== col.id));
+                          } else {
+                            setExportSelectedCollections(prev => [...prev, col.id]);
+                          }
+                        }}
+                        className={`text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+                          isChecked
+                            ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-400 dark:border-blue-600 shadow-xs'
+                            : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="mt-0.5 text-blue-600 dark:text-blue-400">
+                          {isChecked ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 text-slate-400" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            {language === 'en' ? col.labelEn : col.labelKo}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {col.desc}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Archive Format Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
+                  {language === 'en' ? 'Export Format & Packaging' : '내보내기 포맷 및 패키징'}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat('zip')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      exportFormat === 'zip'
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Archive className="w-4 h-4 text-blue-500" />
+                      <span className="text-xs font-bold">.ZIP 아카이브 (권장)</span>
+                    </div>
+                    <p className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                      컬렉션별 분리 JSON + 메타데이터 + SHA-256 검증 파일
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat('json')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      exportFormat === 'json'
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <FileText className="w-4 h-4 text-emerald-500" />
+                      <span className="text-xs font-bold">단일 .JSON 파일</span>
+                    </div>
+                    <p className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                      선택된 모든 컬렉션을 단일 통합 JSON 문서로 압축 없이 저장
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Integrity & Tamper-Proof Checksum Toggle */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {language === 'en' ? 'Include SHA-256 Tamper-Proof Checksum' : 'SHA-256 무결성 검증 체크섬 동봉'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {language === 'en'
+                        ? 'Generates checksum.sha256 to ensure data cannot be tampered with or corrupted during transit.'
+                        : '데이터 위변조 및 전송 중 손상을 검증할 수 있는 SHA-256 해시 파일을 백업본에 동봉합니다.'}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={exportIncludeChecksum}
+                  onChange={(e) => setExportIncludeChecksum(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex justify-between items-center">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                선택된 컬렉션: <strong className="text-blue-600 dark:text-blue-400">{exportSelectedCollections.length}개</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  {language === 'en' ? 'Cancel' : '취소'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowExportModal(false);
+                    handleExecuteGranularExport();
+                  }}
+                  disabled={isExporting}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-[0.98] disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  {language === 'en' ? 'Execute Backup Download' : '백업 다운로드 실행'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          Interactive Dry-Run Pre-Import Simulation Modal (v3.52.0)
+          ========================================================================= */}
+      {showDryRunModal && dryRunReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-950/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
+                    {language === 'en' ? 'Pre-Import Dry-Run Simulation' : '사전 시뮬레이션 (Dry-Run) 및 검증 보고서'}
+                  </h3>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                    {language === 'en'
+                      ? 'In-memory analysis before applying any changes to the database'
+                      : '실제 데이터베이스에 적용하기 전 메모리 상태에서 변경 내역과 정합성을 사전 분석'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDryRunModal(false);
+                  setDryRunReport(null);
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -15045,139 +15409,576 @@ export default function App() {
 
             {/* Body */}
             <div className="p-6 overflow-y-auto space-y-5 flex-1 text-sm">
-              {/* Top Overview Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
-                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    {language === 'en' ? 'Snapshot Timestamp' : '백업 시각'}
-                  </span>
-                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-1 block">
-                    {new Date(lastKnownGoodInfo.createdAt).toLocaleString()}
-                  </span>
+              {/* File Info & SHA-256 Status Banner */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <FileText className="w-5 h-5 text-blue-500" />
+                  <div>
+                    <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block">
+                      {dryRunReport.fileName}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                      {(dryRunReport.fileSize / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
                 </div>
 
-                <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200/60 dark:border-amber-800/60">
-                  <span className="block text-[11px] font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                    <Database className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    {language === 'en' ? 'Total Records' : '총 레코드 수'}
-                  </span>
-                  <span className="text-lg font-extrabold text-amber-900 dark:text-amber-200 mt-0.5 block">
-                    {lastKnownGoodInfo.totalRecords}개
-                  </span>
-                </div>
-
-                <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3.5 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/60">
-                  <span className="block text-[11px] font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
-                    <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    {language === 'en' ? 'Rollback Status' : '복원 준비 상태'}
-                  </span>
-                  <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 mt-1 block">
-                    {language === 'en' ? 'Verified & Ready' : '보관 완료 (즉시 롤백 가능)'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Collections Breakdown Summary */}
-              <div>
-                <h4 className="font-bold text-slate-900 dark:text-slate-100 mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  <Layers className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                  {language === 'en' ? 'Collection Records Summary' : '컬렉션별 보관 항목 수 요약'}
-                </h4>
-                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-2 text-xs">
-                  {lastKnownGoodInfo.collections ? (
-                    Object.entries(lastKnownGoodInfo.collections).map(([colName, count]) => (
-                      <div key={colName} className="flex items-center justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 last:border-0">
-                        <div className="flex items-center gap-2 font-mono text-slate-700 dark:text-slate-300">
-                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                          <span className="font-semibold">{colName}</span>
-                          <span className="text-[10px] text-slate-400 font-sans">
-                            ({colName === 'issues' ? '윈도우 이슈/솔루션' : colName === 'feedback' ? '사용자 피드백' : colName === 'bookmarks' ? '즐겨찾기' : colName === 'admin_logs' ? '관리자 로그' : '시스템 설정'})
-                          </span>
-                        </div>
-                        <span className="font-extrabold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                          {count}개
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex items-center justify-between py-1.5 font-mono">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">issues</span>
-                      <span className="font-extrabold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                        {lastKnownGoodInfo.totalRecords}개
+                <div>
+                  {dryRunReport.checksum ? (
+                    dryRunReport.isChecksumVerified ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        SHA-256 무결성 검증 완료 (일치함)
                       </span>
-                    </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        SHA-256 체크섬 불일치 (위변조 주의)
+                      </span>
+                    )
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700">
+                      <Hash className="w-3.5 h-3.5" />
+                      해시: {dryRunReport.computedChecksum.substring(0, 10)}...
+                    </span>
                   )}
                 </div>
               </div>
 
-              {/* Automated Retention & Purge Policy Section */}
-              <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Trash2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      {language === 'en' ? 'Automated Purge & Retention Policy' : '자동 스냅샷 정리 및 보존 정책'}
-                    </h4>
-                  </div>
-                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                    {language === 'en' ? `Limit: ${lastKnownGoodInfo.retentionCount || 7} Snapshots` : `보존 한도: 최근 ${lastKnownGoodInfo.retentionCount || 7}개`}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                  {language === 'en'
-                    ? `Old pre-import snapshots exceeding the retention limit (${lastKnownGoodInfo.retentionCount || 7}) are automatically purged upon new imports to conserve storage.`
-                    : `불러오기 시 보존 한도(${lastKnownGoodInfo.retentionCount || 7}개)를 초과하는 오래된 스냅샷은 서버 디스크 용량을 최적화하기 위해 자동으로 영구 정리됩니다.`}
-                </p>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                    {language === 'en' ? `Stored Snapshots: ${lastKnownGoodInfo.storedSnapshotsCount || 1}` : `현재 보관 중인 히스토리 스냅샷: ${lastKnownGoodInfo.storedSnapshotsCount || 1}개`}
-                  </span>
-                  <button
-                    onClick={() => handlePurgeOldSnapshots(lastKnownGoodInfo.retentionCount || 7)}
-                    className="text-xs font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                    {language === 'en' ? 'Run Purge Policy Now' : '오래된 스냅샷 수동 정리 실행'}
-                  </button>
+              {/* Collections & Records Preview */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
+                  {language === 'en' ? 'Package Collections to Restore' : '패키지 내 복원 대상 컬렉션'}
+                </label>
+                <div className="space-y-2">
+                  {dryRunReport.collections.map((col) => {
+                    const isSelected = dryRunSelectedCollections[col.name] !== false;
+                    return (
+                      <div
+                        key={col.name}
+                        onClick={() => {
+                          setDryRunSelectedCollections(prev => ({
+                            ...prev,
+                            [col.name]: !isSelected
+                          }));
+                        }}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700'
+                            : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="text-blue-600 dark:text-blue-400">
+                            {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 text-slate-400" />}
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                              {col.labelKo} <span className="font-mono text-[11px] text-slate-400">({col.name})</span>
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                              <span>총 {col.count}개</span>
+                              {col.newCount !== undefined && col.updateCount !== undefined && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">신규 {col.newCount}개</span>
+                                  <span>•</span>
+                                  <span className="text-blue-600 dark:text-blue-400 font-semibold">기존 수정 {col.updateCount}개</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                          {col.count}건
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Information / Transparency Note */}
-              <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl p-4 text-amber-900 dark:text-amber-200 flex items-start gap-3">
-                <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs leading-relaxed">
-                  {language === 'en'
-                    ? 'This snapshot was automatically created immediately prior to the latest import/restore process. Triggering a restore will replace the current live database state with these exact saved records.'
-                    : '이 스냅샷은 가장 최근 데이터 불러오기/복원 작업 직전에 자동으로 생성되었습니다. 롤백을 실행하면 현재의 데이터베이스가 이 보관된 시점의 정상 데이터로 완벽히 원복됩니다.'}
-                </p>
+              {/* Schema Validation Discrepancy Note (if issues collection present) */}
+              {dryRunReport.issuesValidation && (
+                <div className={`p-4 rounded-2xl border ${
+                  dryRunReport.issuesValidation.isValid
+                    ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                    : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2 font-bold text-xs">
+                      {dryRunReport.issuesValidation.isValid ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      )}
+                      <span>스키마 검증 상태: {dryRunReport.issuesValidation.isValid ? '100% 정상 규격 준수' : `경고 ${dryRunReport.issuesValidation.warnings.length}건 감지`}</span>
+                    </div>
+                    <span className="text-[11px] font-mono">
+                      유효 항목: {dryRunReport.issuesValidation.validCount} / {dryRunReport.issuesValidation.totalRecords}
+                    </span>
+                  </div>
+                  {dryRunReport.issuesValidation.warnings.length > 0 && (
+                    <p className="text-[11px] leading-relaxed opacity-90 mt-1">
+                      일부 레코드에 권장 필드 누락이 있으나 복원은 안전하게 진행할 수 있습니다.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Conflict Resolution Strategy Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
+                  {language === 'en' ? 'Conflict Resolution Strategy' : '기존 데이터 충돌 해결 전략'}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {[
+                    { id: 'merge', title: '스마트 병합 (권장)', desc: '기존 항목 유지하며 신규 추가 및 갱신' },
+                    { id: 'skip_existing', title: '기존 항목 보존', desc: '동일 코드 항목은 건너뛰고 신규만 등록' },
+                    { id: 'overwrite', title: '완전 덮어쓰기', desc: '현재 데이터를 백업본으로 완전히 대체' },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setDryRunStrategy(s.id as any)}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        dryRunStrategy === s.id
+                          ? 'bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-xs'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1 text-xs">
+                        <span className={`w-2 h-2 rounded-full ${dryRunStrategy === s.id ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                        <span>{s.title}</span>
+                      </div>
+                      <p className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                        {s.desc}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Automated Pre-Restore Safety Snapshot Toggle */}
+              <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-200/80 dark:border-amber-800/60 flex items-center justify-between">
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
+                      {language === 'en' ? 'Create Safety Snapshot Before Import' : '복원 실행 전 안전 스냅샷(Last-Known-Good) 자동 생성'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                      복원 중 예상치 못한 문제 발생 시 언제든지 1-클릭으로 이전 시점으로 즉시 롤백할 수 있습니다.
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={dryRunAutoBackup}
+                  onChange={(e) => setDryRunAutoBackup(e.target.checked)}
+                  className="w-4 h-4 accent-amber-600 rounded cursor-pointer"
+                />
               </div>
             </div>
 
-            {/* Footer Actions */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setShowLkgDetailsModal(false);
-                    handleRestoreLastKnownGood();
-                  }}
-                  disabled={isImporting}
-                  className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  {language === 'en' ? 'Restore This Snapshot' : '이 스냅샷으로 롤백 복원 실행'}
-                </button>
-                <button
-                  onClick={handleDownloadLastKnownGoodJson}
-                  className="px-4 py-2.5 bg-amber-100 dark:bg-amber-950/60 hover:bg-amber-200 dark:hover:bg-amber-900/80 text-amber-900 dark:text-amber-200 font-bold text-xs rounded-xl transition-all border border-amber-300/60 dark:border-amber-700/60 flex items-center gap-2 cursor-pointer active:scale-[0.98]"
-                >
-                  <Download className="w-4 h-4 text-amber-700 dark:text-amber-300" />
-                  {language === 'en' ? 'Download Snapshot (JSON)' : '스냅샷 파일 다운로드 (JSON)'}
-                </button>
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDryRunModal(false);
+                  setDryRunReport(null);
+                }}
+                className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                {language === 'en' ? 'Cancel' : '취소'}
+              </button>
+              <button
+                onClick={() => handleExecuteDryRunRestore()}
+                disabled={isImporting}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-[0.98] disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {language === 'en' ? 'Execute Restore' : '복원 적용 실행'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          Multi-Snapshot Explorer & Rollback Modal (v3.52.0)
+          ========================================================================= */}
+      {(showSnapshotExplorerModal || showLkgDetailsModal) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
+                  <RotateCcw className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
+                    {language === 'en' ? 'Snapshot Archives & Rollback Explorer' : '스냅샷 아카이브 및 롤백 보관소'}
+                  </h3>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                    {language === 'en'
+                      ? 'Point-in-time recovery for server and browser local storage'
+                      : '서버 백업 히스토리 및 브라우저 IndexedDB 로컬 스냅샷 시점 복원'}
+                  </p>
+                </div>
               </div>
               <button
-                onClick={() => setShowLkgDetailsModal(false)}
+                onClick={() => {
+                  setShowSnapshotExplorerModal(false);
+                  setShowLkgDetailsModal(false);
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="px-6 pt-3 border-b border-slate-100 dark:border-slate-800 flex gap-2 overflow-x-auto bg-slate-50/40 dark:bg-slate-800/20 text-xs">
+              {[
+                { id: 'active', label: '직전 정상 백업 (LKG)', icon: ShieldCheck },
+                { id: 'server', label: `서버 보관소 (${serverSnapshotsList.length})`, icon: Database },
+                { id: 'browser', label: `브라우저 로컬 (${browserSnapshotsList.length})`, icon: Layers },
+                { id: 'policy', label: '보존 정책', icon: Trash2 },
+              ].map(t => {
+                const Icon = t.icon;
+                const isActive = snapshotTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSnapshotTab(t.id as any)}
+                    className={`pb-3 px-3 font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      isActive
+                        ? 'border-amber-600 text-amber-700 dark:text-amber-400'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1 text-sm">
+              {/* Tab 1: Active Last-Known-Good Snapshot */}
+              {snapshotTab === 'active' && (
+                <div className="space-y-4">
+                  {lastKnownGoodInfo ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
+                          <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            {language === 'en' ? 'Snapshot Timestamp' : '백업 시각'}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-1 block">
+                            {new Date(lastKnownGoodInfo.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200/60 dark:border-amber-800/60">
+                          <span className="block text-[11px] font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                            <Database className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                            {language === 'en' ? 'Total Records' : '총 레코드 수'}
+                          </span>
+                          <span className="text-lg font-extrabold text-amber-900 dark:text-amber-200 mt-0.5 block">
+                            {lastKnownGoodInfo.totalRecords}개
+                          </span>
+                        </div>
+
+                        <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3.5 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/60">
+                          <span className="block text-[11px] font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                            <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            {language === 'en' ? 'Rollback Status' : '복원 준비 상태'}
+                          </span>
+                          <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 mt-1 block">
+                            {language === 'en' ? 'Verified & Ready' : '보관 완료 (즉시 복원 가능)'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Checksum Hash if present */}
+                      {lastKnownGoodInfo.checksum && (
+                        <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs font-mono">
+                          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-sans">
+                            <Hash className="w-3.5 h-3.5 text-slate-400" />
+                            SHA-256 해시:
+                          </span>
+                          <span className="text-slate-800 dark:text-slate-200 font-bold truncate max-w-[280px]">
+                            {lastKnownGoodInfo.checksum}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Collections Breakdown Summary */}
+                      <div>
+                        <h4 className="font-bold text-slate-900 dark:text-slate-100 mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          <Layers className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                          {language === 'en' ? 'Collection Records Summary' : '컬렉션별 보관 항목 수 요약'}
+                        </h4>
+                        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-2 text-xs">
+                          {lastKnownGoodInfo.collections ? (
+                            Object.entries(lastKnownGoodInfo.collections).map(([colName, count]) => (
+                              <div key={colName} className="flex items-center justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 last:border-0">
+                                <div className="flex items-center gap-2 font-mono text-slate-700 dark:text-slate-300">
+                                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                  <span className="font-semibold">{colName}</span>
+                                </div>
+                                <span className="font-extrabold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                                  {count}개
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex items-center justify-between py-1.5 font-mono">
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">issues</span>
+                              <span className="font-extrabold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                                {lastKnownGoodInfo.totalRecords}개
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Direct Rollback & Download Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 pt-2">
+                        <button
+                          onClick={() => {
+                            setShowSnapshotExplorerModal(false);
+                            setShowLkgDetailsModal(false);
+                            handleRestoreLastKnownGood();
+                          }}
+                          disabled={isImporting}
+                          className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          {language === 'en' ? 'Restore This Snapshot' : '이 스냅샷으로 롤백 복원 실행'}
+                        </button>
+                        <button
+                          onClick={handleDownloadLastKnownGoodJson}
+                          className="px-4 py-2.5 bg-amber-100 dark:bg-amber-950/60 hover:bg-amber-200 dark:hover:bg-amber-900/80 text-amber-900 dark:text-amber-200 font-bold text-xs rounded-xl transition-all border border-amber-300/60 dark:border-amber-700/60 flex items-center gap-2 cursor-pointer active:scale-[0.98]"
+                        >
+                          <Download className="w-4 h-4 text-amber-700 dark:text-amber-300" />
+                          {language === 'en' ? 'Download Snapshot (JSON)' : '스냅샷 파일 다운로드 (JSON)'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-12 text-slate-400">
+                      <ShieldCheck className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                      <p className="text-xs">보관된 활성 직전 정상 백업이 없습니다.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 2: Server Snapshots History Archive */}
+              {snapshotTab === 'server' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      서버 디스크 보관소에 저장된 시점별 스냅샷 히스토리입니다.
+                    </p>
+                    <button
+                      onClick={fetchServerSnapshots}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1 font-semibold"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingSnapshots ? 'animate-spin' : ''}`} />
+                      새로고침
+                    </button>
+                  </div>
+
+                  {serverSnapshotsList.length === 0 ? (
+                    <div className="text-center py-10 text-slate-400 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                      <Archive className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-xs">서버에 보관된 히스토리 스냅샷이 없습니다.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                      {serverSnapshotsList.map((snap) => (
+                        <div
+                          key={snap.filename}
+                          className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-100">
+                                {snap.filename}
+                              </span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-sans">
+                                {snap.reason}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                              <span>{new Date(snap.createdAt).toLocaleString()}</span>
+                              <span>•</span>
+                              <span>{snap.totalRecords}개 레코드</span>
+                              <span>•</span>
+                              <span>{(snap.sizeBytes / 1024).toFixed(1)} KB</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleRestoreServerSnapshot(snap.filename)}
+                              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              복원
+                            </button>
+                            <button
+                              onClick={() => handleDownloadHistoricalSnapshot(snap.filename)}
+                              className="p-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer"
+                              title="다운로드"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 3: Browser Local Snapshots (IndexedDB) */}
+              {snapshotTab === 'browser' && (
+                <div className="space-y-4">
+                  {/* Create New Browser Snapshot */}
+                  <div className="p-3.5 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newBrowserSnapshotLabel}
+                      onChange={(e) => setNewBrowserSnapshotLabel(e.target.value)}
+                      placeholder={language === 'en' ? 'Snapshot label (e.g. Pre-Update Backup)' : '스냅샷 메모/라벨 (예: 11월 긴급 패치 전 백업)'}
+                      className="flex-1 bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 outline-none"
+                    />
+                    <button
+                      onClick={() => handleSaveBrowserSnapshot()}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                      로컬 저장
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    브라우저 내장 IndexedDB에 영구 보관되며 오프라인 및 GitHub Pages 환경에서도 완벽히 작동합니다.
+                  </p>
+
+                  {browserSnapshotsList.length === 0 ? (
+                    <div className="text-center py-10 text-slate-400 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                      <Layers className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-xs">저장된 브라우저 로컬 스냅샷이 없습니다.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                      {browserSnapshotsList.map((snap) => (
+                        <div
+                          key={snap.id}
+                          className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3"
+                        >
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block">
+                              {snap.label}
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                              <span>{new Date(snap.timestamp).toLocaleString()}</span>
+                              <span>•</span>
+                              <span className="text-blue-600 dark:text-blue-400 font-semibold">{snap.count}개 항목</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleRestoreBrowserSnapshot(snap)}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              복원
+                            </button>
+                            <button
+                              onClick={() => handleDownloadBrowserSnapshot(snap)}
+                              className="p-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer"
+                              title="다운로드"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBrowserSnapshot(snap.id)}
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all cursor-pointer"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 4: Retention & Storage Policy */}
+              {snapshotTab === 'policy' && (
+                <div className="space-y-4">
+                  <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                          {language === 'en' ? 'Automated Purge & Retention Policy' : '자동 스냅샷 정리 및 보존 정책'}
+                        </h4>
+                      </div>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                        {language === 'en' ? `Limit: ${lastKnownGoodInfo?.retentionCount || 7} Snapshots` : `보존 한도: 최근 ${lastKnownGoodInfo?.retentionCount || 7}개`}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {language === 'en'
+                        ? `Old pre-import snapshots exceeding the retention limit (${lastKnownGoodInfo?.retentionCount || 7}) are automatically purged upon new imports to conserve storage.`
+                        : `불러오기 시 보존 한도(${lastKnownGoodInfo?.retentionCount || 7}개)를 초과하는 오래된 스냅샷은 서버 디스크 용량을 최적화하기 위해 자동으로 영구 정리됩니다.`}
+                    </p>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        {language === 'en' ? `Stored Snapshots: ${lastKnownGoodInfo?.storedSnapshotsCount || serverSnapshotsList.length || 1}` : `현재 보관 중인 히스토리 스냅샷: ${lastKnownGoodInfo?.storedSnapshotsCount || serverSnapshotsList.length || 1}개`}
+                      </span>
+                      <button
+                        onClick={() => handlePurgeOldSnapshots(lastKnownGoodInfo?.retentionCount || 7)}
+                        className="text-xs font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        {language === 'en' ? 'Run Purge Policy Now' : '오래된 스냅샷 수동 정리 실행'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl p-4 text-amber-900 dark:text-amber-200 flex items-start gap-3">
+                    <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs leading-relaxed">
+                      모든 스냅샷은 생성 시점에 고유 SHA-256 체크섬을 기록하여 복원 전 위변조 여부를 엄격히 확인합니다.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowSnapshotExplorerModal(false);
+                  setShowLkgDetailsModal(false);
+                }}
                 className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl transition-all cursor-pointer"
               >
                 {language === 'en' ? 'Close' : '닫기'}
@@ -15486,7 +16287,7 @@ export default function App() {
                           4. 웹앱 실시간 웹훅 & CDN 배포
                         </div>
                         <p className="text-slate-500 dark:text-slate-400 text-xs">
-                          앱(/api/github/sync) 웹훅으로 전송되어 화면 및 Firestore에 즉각 반영되며 정적 웹에서도 즉시 조회됩니다.
+                          앱(/api/github/sync) 웹훅으로 전송되어 화면 및 로컬 데이터베이스에 즉각 반영되며 정적 웹에서도 즉시 조회됩니다.
                         </p>
                       </div>
                     </div>
