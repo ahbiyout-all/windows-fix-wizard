@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-01T04:37:03.004Z",
+  "lastCollectedAt": "2026-11-01T12:44:50.488Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "시스템/블루스크린",
+  "targetCategory": "네트워크",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 72,
+  "totalIssuesCount": 74,
   "newIssues": [
     {
-      "id": "gh-0x00000139-mvxc9125",
-      "code": "0x00000139",
-      "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x800704cf-mvxtobzs",
+      "code": "0x800704cf",
+      "title": "Windows 10/11 네트워크 연결 오류 0x800704cf (네트워크 위치에 도달할 수 없음) 해결 방법",
+      "category": "네트워크"
     },
     {
-      "id": "gh-0x000000e6-mvxc9125",
-      "code": "0x000000E6",
-      "title": "Windows 10/11 DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) 블루스크린 오류 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x80072ee7-mvxtobzs",
+      "code": "0x80072EE7",
+      "title": "Windows 10/11 DNS 이름 확인 실패 및 네트워크 업데이트 오류 0x80072EE7 해결 방법",
+      "category": "네트워크"
     }
   ]
 }

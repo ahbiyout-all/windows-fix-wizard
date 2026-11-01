@@ -3184,5 +3184,103 @@
     "updatedAt": "2026-11-01T04:37:03.004Z",
     "verifiedAt": "2026-11-01T04:37:03.004Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mvxtobzs",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "Windows 10/11 네트워크 연결 오류 0x800704cf (네트워크 위치에 도달할 수 없음) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Network Error 0x800704cf (The Network Location Cannot Be Reached)",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 적용 후 Microsoft 계정 로그인, 공유 드라이브 접근 또는 네트워크 리소스 연결 시 '오류 0x800704cf: 네트워크 위치에 도달할 수 없습니다' 메시지가 표시되며 통신이 중단되는 현상입니다. 어댑터 속성의 Microsoft 네트워크 용 클라이언트 비활성화, IP 스택 동기화 오류 또는 어댑터 바인딩 문제로 발생합니다.",
+    "symptoms_en": "After installing recent cumulative updates on Windows 10/11, signing in to Microsoft accounts, accessing network drives, or connecting to local network resources fails with error code 0x800704cf ('The network location cannot be reached'). This typically occurs due to disabled Microsoft Network client components, IP stack desynchronization, or adapter binding failures.",
+    "script": "# 네트워크 어댑터 바인딩 및 TCP/IP 스택 초기화\nWrite-Host '네트워크 스택 재설정 작업을 시작합니다...' -ForegroundColor Green\nnetsh winsock reset\nnetsh int ip reset\nipconfig /release\nipconfig /renew\nipconfig /flushdns\nWrite-Host '네트워크 초기화가 완료되었습니다. 시스템을 재부팅하세요.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "[Windows 키 + R]을 누르고 ncpa.cpl을 입력하여 네트워크 연결 창을 열어줍니다.",
+      "사용 중인 네트워크 어댑터(Wi-Fi 또는 이더넷)를 마우스 우클릭한 후 [속성]을 클릭합니다.",
+      "[Microsoft 네트워크용 클라이언트 (Client for Microsoft Networks)] 항목에 체크가 누락되어 있다면 체크 후 [확인]을 눌러 적용합니다.",
+      "장치 관리자(devmgmt.msc)를 실행하고 [네트워크 어댑터] 항목 아래의 어댑터를 마우스 우클릭하여 [디바이스 제거]를 진행한 뒤 PC를 재부팅하여 드라이버를 재로드합니다.",
+      "[설정] > [네트워크 및 인터넷] > [고급 네트워크 설정] > [네트워크 재설정]을 실행하여 전체 어댑터 구성을 기본값으로 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Press [Windows Key + R], type ncpa.cpl, and press Enter to open Network Connections.",
+      "Right-click your active network adapter (Wi-Fi or Ethernet) and select Properties.",
+      "Ensure 'Client for Microsoft Networks' is checked. If unchecked, check it and click OK.",
+      "Open Device Manager (devmgmt.msc), expand 'Network adapters', right-click your network device, select 'Uninstall device', and restart the PC to reinstall.",
+      "Go to Settings > Network & internet > Advanced network settings > Network reset, and click 'Reset now' to restore all default settings."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/windows/fix-network-connection-issues-in-windows-15642510-b536-4d92-086b-2e44a46b3ef6",
+      "https://learn.microsoft.com/troubleshoot/windows-client/networking/welcome-networking"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704cf",
+      "네트워크 위치에 도달할 수 없습니다",
+      "The network location cannot be reached",
+      "Windows 11 네트워크 오류",
+      "Winsock reset",
+      "TCP IP 스택 초기화"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T12:44:50.488Z",
+    "updatedAt": "2026-11-01T12:44:50.488Z",
+    "verifiedAt": "2026-11-01T12:44:50.488Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee7-mvxtobzs",
+    "category": "네트워크",
+    "code": "0x80072EE7",
+    "title": "Windows 10/11 DNS 이름 확인 실패 및 네트워크 업데이트 오류 0x80072EE7 해결 방법",
+    "title_en": "How to Fix Windows 10/11 DNS Resolution & Network Update Error 0x80072EE7",
+    "symptoms": "Windows 10/11 환경에서 인터넷 웹 페이지 접속, Windows 업데이트 진행 또는 Microsoft Store 이용 중 'ERROR_INTERNET_NAME_NOT_RESOLVED (0x80072EE7)' 오류가 발생하면서 서버 이름을 확인하지 못하는 현상입니다. DNS 캐시 오염, 손상된 HOSTS 파일, 또는 최근 업데이트 후 WinHTTP 프록시 설정 비정상 작동으로 인해 발생합니다.",
+    "symptoms_en": "When browsing the web, running Windows Update, or accessing the Microsoft Store on Windows 10/11, error 0x80072EE7 (ERROR_INTERNET_NAME_NOT_RESOLVED) prevents the system from resolving domain names. This issue is caused by corrupted DNS cache entries, damaged HOSTS file entries, or misconfigured WinHTTP proxy settings following recent updates.",
+    "script": "# DNS 캐시 플러시 및 네트워크 프록시 초기화\nWrite-Host 'DNS 캐시 클리어 및 프록시 초기화를 수행합니다...' -ForegroundColor Green\nClear-DnsClientCache\nipconfig /flushdns\nnetsh winhttp reset proxy\nGet-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object {\n    Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses\n}\nWrite-Host 'DNS 및 프록시 설정 초기화 완료.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "[Windows 키 + R]을 누르고 ncpa.cpl을 입력하여 네트워크 연결로 이동한 뒤 사용 중인 어댑터 [속성]을 열어줍니다.",
+      "[인터넷 프로토콜 버전 4(TCP/IPv4)]를 선택하고 [속성]을 클릭한 후, '다음 DNS 서버 주소 사용'을 선택해 기본 DNS를 8.8.8.8, 보조 DNS를 8.8.4.4로 지정합니다.",
+      "파일 탐색기를 열어 C:\\Windows\\System32\\drivers\\etc 경로의 hosts 파일을 관리자 권한 메모장으로 열어 비정상적인 리다이렉션 항목을 제거합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'netsh winhttp reset proxy'를 입력하여 WinHTTP 프록시 설정을 초기화합니다.",
+      "시스템을 다시 시작한 후 네트워크 접속 및 인터넷 연결 상태를 재검증합니다."
+    ],
+    "manualSteps_en": [
+      "Press [Windows Key + R], type ncpa.cpl, press Enter, and open Properties for your active network adapter.",
+      "Select 'Internet Protocol Version 4 (TCP/IPv4)', click Properties, choose 'Use the following DNS server addresses', and enter Preferred DNS: 8.8.8.8 and Alternate DNS: 8.8.4.4.",
+      "Open C:\\Windows\\System32\\drivers\\etc in File Explorer, open the 'hosts' file with Notepad as Administrator, and clean up invalid DNS entries.",
+      "Open Command Prompt as Administrator and run 'netsh winhttp reset proxy' to reset proxy configurations.",
+      "Restart your computer and verify network connectivity and system updates."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/windows/fix-network-connection-issues-in-windows-15642510-b536-4d92-086b-2e44a46b3ef6",
+      "https://learn.microsoft.com/troubleshoot/windows-client/networking/dns-client-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE7",
+      "ERROR_INTERNET_NAME_NOT_RESOLVED",
+      "DNS 서버 응답 없음",
+      "Hosts 파일 초기화",
+      "Windows 11 DNS 오류",
+      "WinHTTP reset proxy"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T12:44:50.488Z",
+    "updatedAt": "2026-11-01T12:44:50.488Z",
+    "verifiedAt": "2026-11-01T12:44:50.488Z",
+    "verificationStatus": "verified"
   }
 ]
