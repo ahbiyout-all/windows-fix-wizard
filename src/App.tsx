@@ -459,7 +459,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.52.0";
+const APP_VERSION = "3.53.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -510,6 +510,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   collect-and-sync:
@@ -545,6 +546,7 @@ jobs:
           npx tsx scripts/github-collector.ts
 
       - name: 🚀 Commit & Push updated issues dataset (GitOps)
+        id: git-push-step
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -552,16 +554,26 @@ jobs:
           if [ -n "$(git status --porcelain data/issues.json data/github-feed.json)" ]; then
             git add data/issues.json data/github-feed.json
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
-            git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP) [skip ci]"
+            git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
             
             for i in {1..3}; do
               git pull --rebase origin \${{ github.ref_name }} || true
               git push origin HEAD:\${{ github.ref_name }} && break || sleep 5
             done
             echo "✅ Successfully committed and pushed updated dataset to repository."
+            echo "dataset_changed=true" >> $GITHUB_OUTPUT
           else
             echo "ℹ️ No dataset changes to commit in this cycle."
+            echo "dataset_changed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: 🌐 Trigger GitHub Pages Deployment
+        if: steps.git-push-step.outputs.dataset_changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering deploy-pages.yml workflow for latest changes..."
+          gh workflow run deploy-pages.yml --ref \${{ github.ref_name }} || echo "Workflow dispatch skipped or not required"
 `;
 
 export default function App() {
@@ -604,11 +616,14 @@ export default function App() {
   const [githubToken, setGithubToken] = useState<string>('');
   const [githubAuthMode, setGithubAuthMode] = useState<'PAT' | 'SSH'>('PAT');
   const [sshPrivateKey, setSshPrivateKey] = useState<string>('');
+  const [autoDeployPages, setAutoDeployPages] = useState<boolean>(true);
   const [hasServerGithubToken, setHasServerGithubToken] = useState<boolean>(false);
   const [hasServerSshKey, setHasServerSshKey] = useState<boolean>(false);
   const [githubLastSync, setGithubLastSync] = useState<{ at: string | null; count?: number; status?: string } | null>(null);
   const [isPullingGithub, setIsPullingGithub] = useState<boolean>(false);
   const [isDispatchingWorkflow, setIsDispatchingWorkflow] = useState<boolean>(false);
+  const [isDeployingPages, setIsDeployingPages] = useState<boolean>(false);
+  const [isPushingGithub, setIsPushingGithub] = useState<boolean>(false);
   const [isSavingGithubConfig, setIsSavingGithubConfig] = useState<boolean>(false);
   const [showWorkflowScriptModal, setShowWorkflowScriptModal] = useState<boolean>(false);
   const [copiedWorkflow, setCopiedWorkflow] = useState<boolean>(false);
@@ -1454,6 +1469,7 @@ export default function App() {
         setGithubBranch(data.config.branch || 'main');
         setGithubWorkflowId(data.config.workflowId || 'windows-fix-collector.yml');
         setGithubAuthMode(data.config.authMode || 'PAT');
+        setAutoDeployPages(data.config.autoDeployPages !== false);
         setHasServerGithubToken(!!data.config.hasToken);
         setHasServerSshKey(!!data.config.hasSshKey);
         if (data.config.lastSyncAt) {
@@ -1485,6 +1501,7 @@ export default function App() {
           branch: githubBranch.trim(),
           workflowId: githubWorkflowId.trim(),
           authMode: githubAuthMode,
+          autoDeployPages,
           token: githubToken.trim(),
           sshPrivateKey: sshPrivateKey.trim()
         })
@@ -1495,7 +1512,7 @@ export default function App() {
         setHasServerSshKey(!!data.config.hasSshKey);
         setGithubToken('');
         setSshPrivateKey('');
-        customAlert(language === 'en' ? "GitHub configuration saved successfully." : "GitHub 연동 설정이 성공적으로 저장되었습니다.");
+        customAlert(language === 'en' ? "GitHub configuration saved successfully." : "GitHub 연동 및 GitHub Pages 자동 배포 설정이 성공적으로 저장되었습니다.");
       } else {
         throw new Error(data.error || "Save failed");
       }
@@ -1593,6 +1610,75 @@ export default function App() {
       customAlert(language === 'en' ? `Workflow dispatch failed: ${err.message}` : `워크플로 원격 실행 실패: ${err.message}`);
     } finally {
       setIsDispatchingWorkflow(false);
+    }
+  };
+
+  const handleDeployPages = async () => {
+    if (!isAdmin) return;
+    if (!githubRepo.trim()) {
+      customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
+      return;
+    }
+    setIsDeployingPages(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch("/api/github/deploy-pages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify({
+          repo: githubRepo.trim(),
+          branch: githubBranch.trim() || 'main',
+          token: githubToken.trim() || undefined
+        })
+      });
+      const data = await parseJsonResponse(resp);
+      if (data.success) {
+        customAlert(data.message || (language === 'en' ? "GitHub Pages deployment started!" : "GitHub Pages 배포 워크플로가 시작되었습니다!"));
+      } else {
+        throw new Error(data.error || "Pages deployment failed");
+      }
+    } catch (err: any) {
+      customAlert(language === 'en' ? `Pages deployment failed: ${err.message}` : `GitHub Pages 배포 실행 실패: ${err.message}`);
+    } finally {
+      setIsDeployingPages(false);
+    }
+  };
+
+  const handlePushToGithub = async () => {
+    if (!isAdmin) return;
+    if (!githubRepo.trim()) {
+      customAlert(language === 'en' ? "Please enter a GitHub repository (e.g. username/repo)." : "저장소 이름(예: 사용자명/저장소명)을 입력해 주세요.");
+      return;
+    }
+    setIsPushingGithub(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch("/api/github/push-to-repo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify({
+          repo: githubRepo.trim(),
+          branch: githubBranch.trim() || 'main',
+          token: githubToken.trim() || undefined
+        })
+      });
+      const data = await parseJsonResponse(resp);
+      if (data.success) {
+        customAlert(data.message || (language === 'en' ? "Pushed database to GitHub successfully!" : "GitHub에 최신 데이터베이스를 성공적으로 푸시했습니다!"));
+        await fetchGithubConfig();
+      } else {
+        throw new Error(data.error || "Push failed");
+      }
+    } catch (err: any) {
+      customAlert(language === 'en' ? `GitHub push failed: ${err.message}` : `GitHub 데이터 푸시 실패: ${err.message}`);
+    } finally {
+      setIsPushingGithub(false);
     }
   };
 
@@ -10328,7 +10414,7 @@ export default function App() {
                       <div className="flex items-center gap-2 mb-1">
                         <Play className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {language === 'en' ? 'Trigger GitHub Actions Remote Run' : 'GitHub Actions 원격 수집 실행 (Dispatch)'}
+                          {language === 'en' ? 'Trigger AI Fix Collector Run' : 'GitHub Actions 원격 수집 실행 (Dispatch)'}
                         </h3>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -10366,11 +10452,81 @@ export default function App() {
                         ) : (
                           <>
                             <Play className="w-4 h-4" />
-                            <span>{language === 'en' ? 'Run Workflow' : '워크플로 가동'}</span>
+                            <span>{language === 'en' ? 'Run Collector' : '수집 워크플로 가동'}</span>
                           </>
                         )}
                       </button>
                     </div>
+                  </div>
+
+                  {/* Action 3: Push Database to GitHub & Auto Deploy Pages */}
+                  <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Upload className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {language === 'en' ? 'Push DB to GitHub & Auto-Deploy' : '현재 데이터베이스 GitHub 푸시 & 자동 배포'}
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {language === 'en'
+                          ? 'Pushes current local issues dataset to GitHub data/issues.json and automatically triggers GitHub Pages build.'
+                          : '현재 앱의 로컬 이슈 데이터베이스를 GitHub 저장소의 data/issues.json에 직간접 푸시하고 Pages 배포를 연동합니다.'}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handlePushToGithub}
+                      disabled={isPushingGithub || !githubRepo}
+                      className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      {isPushingGithub ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>{language === 'en' ? 'Pushing & Deploying...' : 'GitHub 푸시 및 배포 연동 중...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Push DB & Auto-Deploy Pages' : 'GitHub 푸시 및 Pages 즉시 연동'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Action 4: Trigger Pages Deployment Directly */}
+                  <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Rocket className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {language === 'en' ? 'Deploy GitHub Pages Now' : '즉시 GitHub Pages 배포 실행 (deploy-pages.yml)'}
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {language === 'en'
+                          ? 'Triggers deploy-pages.yml via REST API to update your published static site URL in 1 minute.'
+                          : 'deploy-pages.yml 워크플로를 원격 실행하여 공개된 웹사이트 URL을 즉시 최신 상태로 빌드 및 배포합니다.'}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleDeployPages}
+                      disabled={isDeployingPages || !githubRepo}
+                      className="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      {isDeployingPages ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>{language === 'en' ? 'Triggering Pages Build...' : 'GitHub Pages 배포 워크플로 시작 중...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Rocket className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Deploy Pages Now' : '즉시 GitHub Pages 배포 시작'}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -10433,9 +10589,21 @@ export default function App() {
                     <div>
                       {githubAuthMode === 'PAT' ? (
                         <>
-                          <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            {language === 'en' ? 'GitHub PAT (Optional)' : 'GitHub PAT 토큰 (선택)'}
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                              {language === 'en' ? 'GitHub PAT (Required for Push)' : 'GitHub PAT 토큰 (푸시 필수)'}
+                            </label>
+                            <a
+                              href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=WindowsFixWizard"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                              title="클릭시 repo, workflow 권한이 자동 체크된 발급 페이지로 이동합니다"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>{language === 'en' ? 'Create Token' : '새 토큰 발급'}</span>
+                            </a>
+                          </div>
                           <input
                             type="password"
                             value={githubToken}
@@ -10459,6 +10627,29 @@ export default function App() {
                         </>
                       )}
                     </div>
+                  </div>
+
+                  {/* Auto-deploy Pages toggle switch */}
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {language === 'en' ? 'Auto-Deploy to GitHub Pages on Data Sync' : '데이터 동기화 및 수집 완료 시 GitHub Pages 자동 배포 연동'}
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        {language === 'en'
+                          ? 'Triggers deploy-pages.yml workflow whenever data is pushed or updated by AI collector.'
+                          : '자율 수집 엔진 및 관리자 데이터 푸시 시 GitHub Pages 웹사이트가 최신 상태로 자동 업데이트됩니다.'}
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                      <input
+                        type="checkbox"
+                        checked={autoDeployPages}
+                        onChange={(e) => setAutoDeployPages(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">

@@ -1,6 +1,29 @@
-# Patch Note - System Update (v3.52.0)
+# Patch Note - System Update (v3.53.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.53.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Automated GitHub Pages Pipeline Integration & Auto-Sync
+- **Workflow Chaining & Chained Triggers**: Added `workflow_run` event trigger to `.github/workflows/deploy-pages.yml` so that whenever the autonomous collector (`windows-fix-collector.yml`) completes dataset updates, GitHub Pages automatically builds and publishes the updated static site.
+- **Explicit Workflow Dispatch Chaining**: Updated `.github/workflows/windows-fix-collector.yml` to execute `gh workflow run deploy-pages.yml` immediately after pushing dataset changes, ensuring immediate website updates.
+- **Commit Filter Optimization**: Removed `[skip ci]` tag from autonomous GitOps commits to allow GitHub Actions runner pipeline evaluation while preventing build loops.
+
+#### 2. Admin Tab GitHub Pages Auto-Deploy Control Center
+- **Auto-Deploy Toggle Switch (`autoDeployPages`)**: Added server-persisted configuration switch in `/api/github/config` allowing administrators to enable or disable automatic GitHub Pages deployment upon data sync or collector runs.
+- **Direct GitHub Database Push & Auto-Deploy (`POST /api/github/push-to-repo`)**: Added API endpoint and UI action button to commit current local issues database directly to GitHub repository (`data/issues.json`) and automatically initiate GitHub Pages deployment.
+- **One-Click Remote Pages Dispatch (`POST /api/github/deploy-pages`)**: Added API endpoint and UI action button allowing admins to manually trigger `deploy-pages.yml` on demand via GitHub Actions REST API.
+
+### 🛡️ Security Hardening & Authentication
+- **PAT & SSH Authenticated GitOps**: Ensured GitHub Contents API and Workflow Dispatch calls strictly authenticate via PAT (`repo`/`workflow` scopes) or server `GITHUB_TOKEN`.
+
+### 📈 UI/UX & Performance Optimizations
+- **Expanded Action Toolbar in Admin Tab**: Added visual cards for "Push DB to GitHub & Auto-Deploy", "Deploy Pages Now", and "Auto-Deploy Toggle".
+- **System Versioning Synchronization**: Synchronized system version across `package.json`, `src/App.tsx`, `/docs/PATCH_NOTE.md`, and `/docs/PATCHNOTES.md` to `v3.53.0`.
 
 ---
 

@@ -28,9 +28,10 @@ on:
         required: false
         default: '2'
 
-# Ensure the workflow has write permissions to commit changes back
+# Ensure the workflow has write permissions to commit changes back and trigger Pages deployment
 permissions:
   contents: write
+  actions: write
 
 jobs:
   collect-and-sync:
@@ -66,6 +67,7 @@ jobs:
           npx tsx scripts/github-collector.ts
 
       - name: 🚀 Commit & Push updated issues dataset (GitOps)
+        id: git-push-step
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -74,7 +76,7 @@ jobs:
           if [ -n "$(git status --porcelain data/issues.json data/github-feed.json)" ]; then
             git add data/issues.json data/github-feed.json
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
-            git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP) [skip ci]"
+            git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
             
             # Retry push in case of concurrent commits
             for i in {1..3}; do
@@ -82,6 +84,16 @@ jobs:
               git push origin HEAD:${{ github.ref_name }} && break || sleep 5
             done
             echo "✅ Successfully committed and pushed updated dataset to repository."
+            echo "dataset_changed=true" >> $GITHUB_OUTPUT
           else
             echo "ℹ️ No dataset changes to commit in this cycle."
+            echo "dataset_changed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: 🌐 Trigger GitHub Pages Deployment
+        if: steps.git-push-step.outputs.dataset_changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering deploy-pages.yml workflow for latest changes..."
+          gh workflow run deploy-pages.yml --ref ${{ github.ref_name }} || echo "Workflow dispatch skipped or not required"

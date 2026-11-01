@@ -1,6 +1,16 @@
-# Patch Note - System Update (v3.52.0)
+# Patch Note - System Update (v3.53.0)
 
 This document is synchronized with `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.53.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+- **Automated GitHub Pages Deployment Pipeline**: Integrated `workflow_run` event trigger and explicit CLI dispatch (`gh workflow run deploy-pages.yml`) into `.github/workflows/deploy-pages.yml` and `windows-fix-collector.yml`, enabling automated GitHub Pages static site re-builds whenever dataset changes are collected or pushed.
+- **Commit Filter Optimization**: Removed `[skip ci]` tag from autonomous AI collector commit messages to enable CI/CD workflow evaluation.
+- **Admin Tab GitHub Pages Auto-Deploy Control Center**: Added `autoDeployPages` toggle switch in `/api/github/config`, direct database push with auto-deploy endpoint (`POST /api/github/push-to-repo`), and 1-click remote Pages dispatch endpoint (`POST /api/github/deploy-pages`).
+- **Real-Time Deployment Status & Site Link**: Displays live status badges and direct URL (`https://${owner}.github.io/${repo}/`) in the Admin Tab.
 
 ---
 

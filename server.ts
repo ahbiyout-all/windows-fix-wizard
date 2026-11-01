@@ -3502,6 +3502,9 @@ async function startServer() {
       });
 
       if (!ghRes.ok) {
+        if (ghRes.status === 401) {
+          throw new Error("GitHub 인증 실패 (401 Bad Credentials): Personal Access Token(PAT)이 설정되지 않았거나 만료되었습니다. 'GitHub 연동 저장소 및 토큰 설정'에서 새 PAT 토큰('repo', 'workflow' 권한)을 입력하고 '연동 설정 저장'을 해주세요.");
+        }
         const errBody = await ghRes.text();
         throw new Error(`GitHub API 오류 (${ghRes.status}): ${errBody || ghRes.statusText}`);
       }
@@ -3522,6 +3525,189 @@ async function startServer() {
     }
   });
 
+  // 3-1. Remote trigger for GitHub Pages deployment workflow (deploy-pages.yml)
+  app.post("/api/github/deploy-pages", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch = 'main', token } = req.body;
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+
+      if (!targetRepo || !targetRepo.includes('/')) {
+        return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
+      }
+      if (!authToken) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "GitHub Pages 배포를 원격 실행하려면 GitHub Personal Access Token(PAT - 'repo' 또는 'workflow' 권한)이 필요합니다." 
+        });
+      }
+
+      const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`;
+      console.log(`[GitHub Pages Dispatch] Triggering deploy-pages.yml on ${targetRepo} (ref: ${branch})...`);
+
+      const ghRes = await fetch(dispatchUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'WindowsFixWizard-App',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ref: branch
+        })
+      });
+
+      if (!ghRes.ok) {
+        if (ghRes.status === 401) {
+          throw new Error("GitHub 인증 실패 (401 Bad Credentials): Personal Access Token(PAT)이 설정되지 않았거나 만료되었습니다. 'GitHub 연동 저장소 및 토큰 설정'에서 새 PAT 토큰('repo', 'workflow' 권한)을 입력하고 '연동 설정 저장'을 해주세요.");
+        }
+        const errBody = await ghRes.text();
+        throw new Error(`GitHub API 오류 (${ghRes.status}): ${errBody || ghRes.statusText}`);
+      }
+
+      const [owner, repoName] = targetRepo.split('/');
+      const pagesUrl = `https://${owner.toLowerCase()}.github.io/${repoName.toLowerCase()}/`;
+
+      await logSyncEvent({
+        type: 'info',
+        source: 'github-deploy-pages',
+        message: `GitHub Pages 원격 배포 요청 성공 (저장소: ${targetRepo}, 브랜치: ${branch})`,
+        details: { targetRepo, branch, pagesUrl }
+      });
+
+      res.json({
+        success: true,
+        message: `GitHub Pages 배포 워크플로(deploy-pages.yml)가 성공적으로 시작되었습니다! 약 1~2분 후 사이트(${pagesUrl})에 자동 반영됩니다.`,
+        pagesUrl
+      });
+    } catch (err: any) {
+      console.error("[GitHub Pages Dispatch] Failed:", err);
+      res.status(500).json({ success: false, error: err.message || "GitHub Pages 원격 배포 실행 실패" });
+    }
+  });
+
+  // 3-2. Push local database directly to GitHub repository & optionally auto-deploy Pages
+  app.post("/api/github/push-to-repo", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch = 'main', token, commitMessage } = req.body;
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+      const shouldAutoDeploy = ghConfig.autoDeployPages !== false;
+
+      if (!targetRepo || !targetRepo.includes('/')) {
+        return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
+      }
+      if (!authToken) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "GitHub 저장소에 데이터를 직접 푸시하려면 GitHub Personal Access Token(PAT - 'repo' 권한)이 필요합니다. 아래 설정창에서 새 PAT를 입력하고 '연동 설정 저장'을 클릭하세요." 
+        });
+      }
+
+      const issues = readLocalCollection('issues');
+      const filePath = 'data/issues.json';
+      const fileUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
+      
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${authToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-App'
+      };
+
+      // 1. Get current file sha if it exists
+      let fileSha: string | undefined = undefined;
+      try {
+        const getRes = await fetch(fileUrl, { headers });
+        if (getRes.status === 401) {
+          throw new Error("GitHub 인증 실패 (401 Bad Credentials): Personal Access Token(PAT)이 설정되지 않았거나 만료되었습니다. 'GitHub 연동 저장소 및 토큰 설정'에서 새 PAT 토큰('repo', 'workflow' 권한)을 입력하고 '연동 설정 저장'을 해주세요.");
+        }
+        if (getRes.ok) {
+          const fileInfo: any = await getRes.json();
+          fileSha = fileInfo.sha;
+        }
+      } catch (e: any) {
+        if (e.message?.includes('GitHub 인증 실패')) throw e;
+        // file might not exist yet
+      }
+
+      // 2. Put file to GitHub via Contents API
+      const contentJson = JSON.stringify(issues, null, 2);
+      const contentBase64 = Buffer.from(contentJson, 'utf8').toString('base64');
+      const message = commitMessage || `🚀 [GitOps] Push database updates from Windows Fix Wizard (${issues.length} issues)`;
+
+      const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message,
+          content: contentBase64,
+          branch,
+          ...(fileSha ? { sha: fileSha } : {})
+        })
+      });
+
+      if (!putRes.ok) {
+        if (putRes.status === 401) {
+          throw new Error("GitHub 인증 실패 (401 Bad Credentials): Personal Access Token(PAT)이 설정되지 않았거나 만료되었습니다. 'GitHub 연동 저장소 및 토큰 설정'에서 새 PAT 토큰('repo', 'workflow' 권한)을 입력하고 '연동 설정 저장'을 해주세요.");
+        }
+        const errBody = await putRes.text();
+        throw new Error(`GitHub 커밋 푸시 실패 (${putRes.status}): ${errBody || putRes.statusText}`);
+      }
+
+      const putData: any = await putRes.json();
+      let pagesTriggerResult: string | null = null;
+
+      // 3. Trigger GitHub Pages deployment if autoDeployPages is enabled
+      if (shouldAutoDeploy) {
+        try {
+          const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`;
+          const deployRes = await fetch(dispatchUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'User-Agent': 'WindowsFixWizard-App',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ref: branch })
+          });
+          pagesTriggerResult = deployRes.ok ? "triggered" : "skipped";
+        } catch (e: any) {
+          pagesTriggerResult = `failed: ${e.message}`;
+        }
+      }
+
+      const [owner, repoName] = targetRepo.split('/');
+      const pagesUrl = `https://${owner.toLowerCase()}.github.io/${repoName.toLowerCase()}/`;
+
+      await logSyncEvent({
+        type: 'success',
+        source: 'github-push-to-repo',
+        message: `GitHub(${targetRepo})에 최신 ${issues.length}개 이슈 데이터 푸시 완료 (Pages 자동 배포: ${pagesTriggerResult || 'off'})`,
+        details: { targetRepo, count: issues.length, commit: putData?.commit?.sha, pagesTriggerResult }
+      });
+
+      res.json({
+        success: true,
+        message: `GitHub(${targetRepo})에 ${issues.length}개의 데이터베이스가 성공적으로 푸시되었습니다!${shouldAutoDeploy ? ' GitHub Pages 자동 배포가 시작되었습니다.' : ''}`,
+        count: issues.length,
+        commitSha: putData?.commit?.sha,
+        commitUrl: putData?.commit?.html_url,
+        pagesUrl,
+        pagesTriggerResult
+      });
+    } catch (err: any) {
+      console.error("[GitHub Push] Failed:", err);
+      res.status(500).json({ success: false, error: err.message || "GitHub 푸시 실패" });
+    }
+  });
+
   // 4. Get GitHub integration configuration
   app.get("/api/github/config", requireAdmin, async (req, res) => {
     try {
@@ -3530,6 +3716,7 @@ async function startServer() {
         branch: "main",
         workflowId: "windows-fix-collector.yml",
         authMode: "PAT",
+        autoDeployPages: true,
         sshPrivateKey: "",
         hasToken: !!process.env.GITHUB_TOKEN,
         lastSyncAt: null,
@@ -3541,6 +3728,7 @@ async function startServer() {
           ...config,
           repo: config.repo || "AhBiYout-all/windows-fix-wizard",
           authMode: config.authMode || "PAT",
+          autoDeployPages: config.autoDeployPages !== false,
           hasToken: !!(config.token || process.env.GITHUB_TOKEN),
           token: config.token ? "••••••••" : "",
           hasSshKey: !!(config.sshPrivateKey),
@@ -3556,7 +3744,7 @@ async function startServer() {
   // 5. Save GitHub integration configuration
   app.post("/api/github/config", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch, workflowId, token, authMode, sshPrivateKey } = req.body;
+      const { repo, branch, workflowId, token, authMode, sshPrivateKey, autoDeployPages } = req.body;
       const current = readLocalCollection('github_config')[0] || {};
       const updated = {
         ...current,
@@ -3564,6 +3752,7 @@ async function startServer() {
         branch: branch !== undefined ? String(branch).trim() : current.branch || "main",
         workflowId: workflowId !== undefined ? String(workflowId).trim() : current.workflowId || "windows-fix-collector.yml",
         authMode: authMode || current.authMode || "PAT",
+        autoDeployPages: autoDeployPages !== undefined ? Boolean(autoDeployPages) : (current.autoDeployPages !== false),
         token: (token && !token.includes("••••")) ? String(token).trim() : current.token || "",
         sshPrivateKey: (sshPrivateKey && !sshPrivateKey.includes("••••")) ? String(sshPrivateKey).trim() : current.sshPrivateKey || "",
         updatedAt: getKSTISOString()
@@ -3573,6 +3762,7 @@ async function startServer() {
         success: true, 
         config: { 
           ...updated, 
+          autoDeployPages: updated.autoDeployPages !== false,
           hasToken: !!(updated.token || process.env.GITHUB_TOKEN),
           token: updated.token ? "••••••••" : "",
           hasSshKey: !!(updated.sshPrivateKey),
