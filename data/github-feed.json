@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-02T04:39:17.743Z",
+  "lastCollectedAt": "2026-11-02T14:52:03.359Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "정품인증",
+  "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 78,
+  "totalIssuesCount": 80,
   "newIssues": [
     {
-      "id": "gh-0xc004c003-mvyrrrow",
-      "code": "0xC004C003",
-      "title": "Windows 10/11 정품 인증 오류 0xC004C003 (유효하지 않은 제품 키)",
-      "category": "정품인증"
+      "id": "gh-0x800f0922-mvzdns80",
+      "code": "0x800f0922",
+      "title": "Windows 10/11 누적 업데이트 설치 실패 및 롤백 오류 (0x800f0922)",
+      "category": "업데이트"
     },
     {
-      "id": "gh-0x803fa067-mvyrrrow",
-      "code": "0x803FA067",
-      "title": "Windows 10/11 에디션 업그레이드 및 정품 인증 오류 0x803FA067",
-      "category": "정품인증"
+      "id": "gh-0x800f081f-mvzdns80",
+      "code": "0x800f081f",
+      "title": "Windows 업데이트 구성 요소 저장소 손상 오류 (0x800f081f)",
+      "category": "업데이트"
     }
   ]
 }

@@ -3468,5 +3468,101 @@
     "updatedAt": "2026-11-02T04:39:17.743Z",
     "verifiedAt": "2026-11-02T04:39:17.743Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mvzdns80",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 10/11 누적 업데이트 설치 실패 및 롤백 오류 (0x800f0922)",
+    "title_en": "Windows 10/11 Cumulative Update Failure and Rollback Error (0x800f0922)",
+    "symptoms": "최신 Windows 10 및 11 누적 업데이트 진행 중 설치가 96%~99% 단계에서 중단되고 \"계획대로 진행되지 않았습니다\" 메시지와 함께 업데이트가 취소되며 롤백됩니다. 주로 시스템 예약 파티션(SRP) 공간 부족, VPN/네트워크 간섭, 또는 .NET Framework 관련 구성 요소 충돌로 인해 발생합니다.",
+    "symptoms_en": "During recent Windows 10 and 11 cumulative update installations, the process reaches 96%-99% and rolls back with the message \"Something didn't go as planned\". This error is typically caused by insufficient System Reserved Partition (SRP) space, active VPN/network interference, or conflicts with .NET Framework components.",
+    "script": "Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\nStop-Service -Name cryptsvc -Force -ErrorAction SilentlyContinue\nStop-Service -Name bits -Force -ErrorAction SilentlyContinue\nRename-Item -Path \"C:\\Windows\\SoftwareDistribution\" -NewName \"SoftwareDistribution.bak\" -Force -ErrorAction SilentlyContinue\nStart-Service -Name wuauserv\nStart-Service -Name cryptsvc\nStart-Service -Name bits\nWrite-Host \"Windows Update cache safely reset.\"",
+    "manualSteps": [
+      "설정 > 시스템 > 문제 해결 > 기타 문제 해결사에서 'Windows 업데이트' 문제 해결사를 실행합니다.",
+      "활성화된 VPN 연결 및 제3자 백신 프로그램의 실시간 감시를 임시 비활성화합니다.",
+      "제어판 > 프로그램 및 기능 > Windows 기능 켜기/끄기에서 .NET Framework 3.5 및 4.8 항목이 정상 활성화되어 있는지 확인합니다.",
+      "관리자 권한 PowerShell에서 `dism /online /cleanup-image /restorehealth` 명령을 실행하여 시스템 이미지를 복구합니다.",
+      "Microsoft Update 카탈로그 웹사이트에서 실패한 KB 패치를 직접 검색하여 수동 다운로드 후 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Run the Windows Update Troubleshooter via Settings > System > Troubleshoot > Other troubleshooters.",
+      "Temporarily disable active VPN connections and third-party antivirus real-time protection.",
+      "Ensure .NET Framework 3.5 and 4.8 feature options are properly enabled in 'Turn Windows features on or off'.",
+      "Open PowerShell as Administrator and run `dism /online /cleanup-image /restorehealth` to repair system images.",
+      "Search and download the standalone update package (KB number) directly from the Microsoft Update Catalog site."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/windows-update-error-0x800f0922-927978e8-6e86-4e5a-9351-40ff8d12ef24",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-update-errors-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0922",
+      "Windows update rollback",
+      "윈도우 업데이트 오류 0x800f0922",
+      "업데이트 실패 롤백",
+      "KB 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T14:52:03.359Z",
+    "updatedAt": "2026-11-02T14:52:03.359Z",
+    "verifiedAt": "2026-11-02T14:52:03.359Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f081f-mvzdns80",
+    "category": "업데이트",
+    "code": "0x800f081f",
+    "title": "Windows 업데이트 구성 요소 저장소 손상 오류 (0x800f081f)",
+    "title_en": "Windows Update Component Store Corruption Error (0x800f081f)",
+    "symptoms": "Windows 10/11 누적 패치 또는 기능 업데이트 설치 중 CBS_E_SOURCE_MISSING (0x800f081f) 오류가 발생하여 진행이 차단됩니다. WinSxS 시스템 구성 요소 저장소의 원본 파일이 손상되거나 누락되어 패치 패키지를 적용하지 못하는 현상입니다.",
+    "symptoms_en": "Windows 10/11 cumulative patch or feature update fails with error code 0x800f081f (CBS_E_SOURCE_MISSING). This happens when required source files in the WinSxS component store are corrupted or missing, preventing Windows Update from staging the update payload.",
+    "script": "Write-Host \"Checking Windows Component Store status...\"\nDISM /Online /Cleanup-Image /CheckHealth\nWrite-Host \"Running System File Checker...\"\nsfc /scannow",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(CMD) 또는 PowerShell을 실행합니다.",
+      "`sfc /scannow` 명령을 실행하여 손상된 시스템 파일을 검사하고 자동으로 복구합니다.",
+      "`DISM /Online /Cleanup-Image /ScanHealth` 명령으로 구성 요소 저장소의 손상 여부를 진단합니다.",
+      "`DISM /Online /Cleanup-Image /RestoreHealth` 명령을 실행하여 온라인 Windows Update 서버에서 손상된 패시지를 새로 받아와 복구합니다.",
+      "복구 완료 후 PC를 재부팅하고 Windows 업데이트를 다시 검색하여 설치를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt or PowerShell with Administrator privileges.",
+      "Run `sfc /scannow` to scan and automatically repair corrupted system files.",
+      "Execute `DISM /Online /Cleanup-Image /ScanHealth` to check the component store health status.",
+      "Execute `DISM /Online /Cleanup-Image /RestoreHealth` to repair component corruption using Windows Update sources.",
+      "Reboot the computer upon completion and attempt checking for updates again."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/fix-windows-update-errors",
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-79aa86cb-ca52-166a-92a3-966e85d4094e"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f081f",
+      "CBS_E_SOURCE_MISSING",
+      "Windows update source missing",
+      "윈도우 업데이트 0x800f081f",
+      "DISM RestoreHealth"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T14:52:03.359Z",
+    "updatedAt": "2026-11-02T14:52:03.359Z",
+    "verifiedAt": "2026-11-02T14:52:03.359Z",
+    "verificationStatus": "verified"
   }
 ]
