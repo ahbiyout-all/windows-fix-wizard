@@ -3376,5 +3376,97 @@
     "updatedAt": "2026-11-01T21:44:26.554Z",
     "verifiedAt": "2026-11-01T21:44:26.554Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mvyrrrow",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 (유효하지 않은 제품 키)",
+    "title_en": "Windows 10/11 Activation Error 0xC004C003 (Invalid Product Key)",
+    "symptoms": "Windows 10 및 Windows 11 최신 기능 업데이트 후 또는 메인보드 등 주요 하드웨어 교체 시 정품 인증 상태가 취소되며 0xC004C003 오류가 발생하는 현상입니다. Microsoft 정품 인증 서버에서 입력된 제품 키가 차단되었거나 유효하지 않은 라이선스로 판정될 때 나타납니다.",
+    "symptoms_en": "Occurs when Windows 10/11 activation fails after major feature updates or hardware replacements, displaying error code 0xC004C003 due to an invalid or blocked product key on Microsoft activation servers.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingProduct -Filter \"PartialProductKey IS NOT NULL\" | Select-Object Name, ApplicationId, LicenseStatus, PartialProductKey",
+    "manualSteps": [
+      "설정 > 시스템 > 정품 인증으로 이동하여 '문제 해결(Troubleshoot)' 옵션을 실행합니다.",
+      "메인보드 등 주요 하드웨어를 교체한 경우 문제 해결 도구에서 '최근에 이 장치의 하드웨어를 변경했습니다'를 선택하고 기존 Microsoft 계정으로 로그인합니다.",
+      "명령 프롬프트(관리자)를 열고 'cscript C:\\Windows\\System32\\slmgr.vbs /dlv' 명령을 실행하여 상세 라이선스 상태를 확인합니다.",
+      "올바른 정품 키를 재입력하기 위해 'cscript C:\\Windows\\System32\\slmgr.vbs /ipk <제품키>' 입력 후 'cscript C:\\Windows\\System32\\slmgr.vbs /ato'를 실행하여 온라인 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Activation and run the 'Troubleshoot' tool.",
+      "If you replaced major hardware, select 'I changed hardware on this device recently' in the troubleshooter and sign in with your Microsoft account.",
+      "Open Command Prompt as Administrator and run 'cscript C:\\Windows\\System32\\slmgr.vbs /dlv' to check detailed licensing status.",
+      "Re-register your valid key by running 'cscript C:\\Windows\\System32\\slmgr.vbs /ipk <ProductKey>' followed by 'cscript C:\\Windows\\System32\\slmgr.vbs /ato' to force activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09cd354a-60cf-4a29-b3ab-d881e15f550f",
+      "https://learn.microsoft.com/troubleshoot/windows-client/deployment/activation-error-0xc004c003"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품 인증 오류",
+      "제품 키 유효성 오류",
+      "Activation Error 0xC004C003",
+      "Windows 11 activation failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T04:39:17.743Z",
+    "updatedAt": "2026-11-02T04:39:17.743Z",
+    "verifiedAt": "2026-11-02T04:39:17.743Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803fa067-mvyrrrow",
+    "category": "정품인증",
+    "code": "0x803FA067",
+    "title": "Windows 10/11 에디션 업그레이드 및 정품 인증 오류 0x803FA067",
+    "title_en": "Windows 10/11 Edition Upgrade and Activation Error 0x803FA067",
+    "symptoms": "Windows 10/11 Home 에디션에서 Pro 에디션으로 업그레이드를 시도하거나 디지털 라이선스를 적용할 때, Microsoft 정품 인증 서버의 자격 증명 검증 실패로 인해 0x803FA067 오류 메시지가 출력되며 에디션 전환이 중단되는 현상입니다.",
+    "symptoms_en": "Occurs when attempting to upgrade Windows 10/11 Home to Pro edition using a product key or digital entitlement, failing with error code 0x803FA067 due to activation server validation issues.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingService | Select-Object OA3xOriginalProductKey, KeyManagementServiceMachine",
+    "manualSteps": [
+      "PC의 네트워크 연결(Wi-Fi 또는 이더넷 랜선)을 일시적으로 해제합니다.",
+      "'설정 > 시스템 > 정품 인증'으로 이동하여 '제품 키 변경'을 클릭하고 범용 업그레이드 키(VK7JG-NPHTM-C97JM-9MPGT-3V66T)를 입력하여 오프라인 에디션 업그레이드를 진행합니다.",
+      "시스템 재부팅 후 Pro 에디션으로 전환되면 인터넷 네트워크를 다시 연결합니다.",
+      "'설정 > 시스템 > 정품 인증'에서 보유 중인 정품 Windows Pro 제품 키를 입력하거나 명령 프롬프트(관리자)에서 'cscript C:\\Windows\\System32\\slmgr.vbs /ato'를 실행하여 디지털 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Temporarily disconnect your PC from the network (disable Wi-Fi or unplug the Ethernet cable).",
+      "Go to Settings > System > Activation, click 'Change product key', and enter the generic upgrade key (VK7JG-NPHTM-C97JM-9MPGT-3V66T) to perform an offline upgrade.",
+      "After the system restarts and upgrades to Pro edition, reconnect to the internet.",
+      "Navigate to Settings > System > Activation and enter your legitimate Windows Pro product key, or run 'cscript C:\\Windows\\System32\\slmgr.vbs /ato' in Administrator Command Prompt to complete activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09cd354a-60cf-4a29-b3ab-d881e15f550f",
+      "https://learn.microsoft.com/windows/deployment/upgrade/windows-10-edition-upgrade"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x803FA067",
+      "Home to Pro 업그레이드 오류",
+      "Windows 11 Pro 정품 인증",
+      "Activation Error 0x803FA067",
+      "Windows Pro Upgrade failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T04:39:17.743Z",
+    "updatedAt": "2026-11-02T04:39:17.743Z",
+    "verifiedAt": "2026-11-02T04:39:17.743Z",
+    "verificationStatus": "verified"
   }
 ]

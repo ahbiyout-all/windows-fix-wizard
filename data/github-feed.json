@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-01T21:44:26.554Z",
+  "lastCollectedAt": "2026-11-02T04:39:17.743Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "디스플레이/그래픽",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 76,
+  "totalIssuesCount": 78,
   "newIssues": [
     {
-      "id": "gh-code-43-mvycy9iz",
-      "code": "Code 43",
-      "title": "Windows 10/11 그래픽 드라이버 충돌 및 장치 작동 중단 오류 (코드 43)",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0xc004c003-mvyrrrow",
+      "code": "0xC004C003",
+      "title": "Windows 10/11 정품 인증 오류 0xC004C003 (유효하지 않은 제품 키)",
+      "category": "정품인증"
     },
     {
-      "id": "gh-0x0000003b-mvycy9iz",
-      "code": "0x0000003B",
-      "title": "DirectX 그래픽 커널 오류로 인한 SYSTEM_SERVICE_EXCEPTION 블루스크린 (0x0000003B)",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x803fa067-mvyrrrow",
+      "code": "0x803FA067",
+      "title": "Windows 10/11 에디션 업그레이드 및 정품 인증 오류 0x803FA067",
+      "category": "정품인증"
     }
   ]
 }
