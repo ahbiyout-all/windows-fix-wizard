@@ -1,20 +1,20 @@
 {
-  "lastCollectedAt": "2026-11-02T14:52:03.359Z",
+  "lastCollectedAt": "2026-11-03T00:35:02.676Z",
   "modelUsed": "gemini-3.5-flash",
   "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 80,
+  "totalIssuesCount": 82,
   "newIssues": [
     {
-      "id": "gh-0x800f0922-mvzdns80",
-      "code": "0x800f0922",
-      "title": "Windows 10/11 누적 업데이트 설치 실패 및 롤백 오류 (0x800f0922)",
+      "id": "gh-0x80070643-mvzyhifp",
+      "code": "0x80070643",
+      "title": "Windows 업데이트 중 복구 파티션 용량 부족으로 인한 0x80070643 설치 오류 (KB5034441)",
       "category": "업데이트"
     },
     {
-      "id": "gh-0x800f081f-mvzdns80",
-      "code": "0x800f081f",
-      "title": "Windows 업데이트 구성 요소 저장소 손상 오류 (0x800f081f)",
+      "id": "gh-0x800f0922-mvzyhifp",
+      "code": "0x800f0922",
+      "title": "Windows 10/11 누적 업데이트 진행 중 96%에서 멈추고 롤백되는 0x800f0922 오류",
       "category": "업데이트"
     }
   ]
