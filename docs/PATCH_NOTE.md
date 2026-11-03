@@ -1,6 +1,124 @@
-# Patch Note - System Update (v3.54.0)
+# Patch Note - System Update (v3.63.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.63.0] - 2026-11-03
+
+### 🚀 Major New Features & Integrations
+- **Admin Instant Dataset Sync & GitHub Pages Deployment Center (`Instant Sync`)**:
+  - Added a dedicated **Instant Sync Hero Control Card (⚡ 최신 data/issues.json 원격 수동 즉시 동기화 & 웹 배포)** to the Admin Dashboard (GitOps Management section).
+  - Enables administrators to trigger a manual, one-click dataset commit of `data/issues.json` to the target branch (`main`) and launch the live `deploy-pages.yml` GitHub Pages deployment pipeline simultaneously.
+- **Granular Multi-Step Execution & Visual Telemetry Progress Tracker**:
+  - Displays real-time step-by-step progress during the sync process:
+    1. 📦 **Dataset Serialization**: Encodes the current issue database to UTF-8 Base64 format with live dataset size (KB) & issue count telemetry.
+    2. 📤 **GitHub REST API Commit**: Commits updated `data/issues.json` to `AhBiYout-all/windows-fix-wizard` on target branch `main`.
+    3. 🚀 **GitHub Pages Dispatch**: Dispatches `deploy-pages.yml` via GitHub REST API (`POST /repos/{owner}/{repo}/actions/workflows/deploy-pages.yml/dispatches`).
+    4. 🌐 **Live Site Status Refresh**: Confirms workflow execution and displays quick access links to the published site (`https://ahbiyout-all.github.io/windows-fix-wizard/`).
+
+### 🛡️ Security Hardening & PAT Error Guidance
+- **Automated PAT Validation & Focus Prompting**:
+  - If a 401 Bad Credentials error or missing token condition is detected during Instant Sync, the app provides explicit error feedback and automatically scrolls to focus the Personal Access Token (PAT) input field.
+
+### 📈 UI/UX & System Versioning
+- **frontend-design Standards Compliance**: Built with zero-pill discipline, WCAG AA contrast, dark/light mode responsive themes, and high-visibility telemetry info pills.
+- **System Versioning Synchronization**: Updated system versioning to `v3.63.0` across `package.json`, `src/App.tsx` (`APP_VERSION`), `/docs/PATCH_NOTE.md`, and `/docs/PATCHNOTES.md`.
+
+---
+
+## [v3.62.0] - 2026-11-03
+
+### 🚀 Major New Features & Integrations
+- **GitHub Workflow Deployment & Health DashboardWidget (`DeploymentDashboardWidget.tsx`)**: Created a dedicated high-fidelity dashboard widget that visualizes recent deployment times, pipeline latency, and overall success rates using the existing `github-workflow-status` architecture.
+- **Dual Visual Analytics Integration**:
+  - Integrated into the **Admin GitOps & Deployment Center**, replacing basic status badges with comprehensive KPI cards, Recharts duration trendlines, pipeline outcome donut charts, and an interactive recent runs table.
+  - Integrated into the primary **Admin DashboardWidget (`DashboardWidget.tsx`)** with a seamless segmented view switcher between "AI Engine Intelligence" and "GitHub Deployments & Workflows".
+- **Real-Time Deployment Telemetry**:
+  - Computes real-time metrics including **Deployment Success Rate (%)**, **Average Deployment Duration** (e.g. `1m 32s`), **Fastest Deploy** (e.g. `48s`), and **Total Tracked Runs**.
+  - Dynamically queries GitHub Actions Runs API (`/repos/{owner}/{repo}/actions/runs`) with authenticated PAT support and defensive fallback telemetry to ensure 100% chart availability regardless of rate limits.
+
+### 📈 UI/UX & Performance Optimizations
+- **Multi-Workflow Filtering**: Added interactive segmented controls allowing administrators to filter telemetry by "All Workflows", "Pages Deployment (`deploy-pages.yml`)", and "Autonomous Collector (`windows-fix-collector.yml`)".
+- **Zero-Pill Typographic Hierarchy**: Applied strict `frontend-design` standards with WCAG-compliant contrast, unboxed typographic metadata, chronological run sequences, and direct one-click deep links to GitHub Actions run logs.
+- **System Versioning Synchronization**: Synchronized system versioning across `package.json`, `src/App.tsx` (`APP_VERSION`), `/docs/PATCH_NOTE.md`, and `/docs/PATCHNOTES.md` to `v3.62.0`.
+
+---
+
+## [v3.61.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+- **Unified Library Sync Engine (활동 및 북마크 통합 동기화)**: Upgraded the Library (나의 실험실) export/import system to a unified structure. The `.json` export now encapsulates both diagnostic activity history and user bookmarks/scraps into a single portable package.
+- **Enhanced Data Persistence Strategy**: Importing a library file now intelligently merges both search history and bookmarked troubleshooting guides, ensuring a consistent user experience across multiple domains (AI Studio Preview vs GitHub Pages).
+
+### 🛡️ Security Hardening & UI Term Sanitization
+- **Full Platform Neutrality (클라우드/패스키 중심 용어 정제)**: Performed a comprehensive sweep of the codebase to sanitize and replace legacy "Firebase" and "Firestore" terminology in user-facing UI labels, tooltips, and authentication guides.
+- **Unified Cloud Branding**: Standardized internal terminology to "Cloud Authorized Domains" and "High-Availability Jamstack Architecture" to provide a professional, platform-agnostic experience for end-users.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **GitHub Pages Environment Awareness**: Verified that the GitHub Pages URL (`https://ahbiyout-all.github.io/windows-fix-wizard/`) is correctly recognized by the static environment detector, ensuring optimal client-side Gemini AI routing.
+- **System Versioning Synchronization**: Updated system versioning to `v3.61.0` across `src/App.tsx`, `package.json`, and patch documentation.
+
+---
+
+## [v3.60.0] - 2026-11-01
+
+### 🔧 Bug Fixes & Stability Improvements
+- **GitHub Push Error Resilience (인증 실패 가이드 강화)**: Enhanced the error handling logic during GitHub database push. If a 401 Bad Credentials error occurs, the system now provides explicit instructions to check 'repo' and 'workflow' scopes and automatically focuses the PAT input field after scrolling to the settings panel.
+- **Improved Authentication Alerts**: Standardized authentication-related alert messages to be more user-friendly and actionable, including direct links to token generation pages.
+
+---
+
+## [v3.59.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+- **Static Host AI Resilience (GitHub Pages 지원 강화)**: Fixed an issue where Gemini AI features were disabled or showed "Key Check Required" on static hosting environments like GitHub Pages.
+- **Client-Side Gemini SDK Integration**: Integrated `@google/generative-ai` directly into the browser bundle to allow AI generation on static hosts using the user's custom API key, bypassing the need for a Node.js backend.
+- **Dynamic API Key Status Resolver**: Improved the API status badge logic to intelligently fallback to local `localStorage` keys when the backend API is unreachable or non-existent, ensuring "Active" status on GitHub Pages.
+- **Hybrid Key Validation**: The system now cross-references both server-side environment keys and client-side custom keys to determine the best available AI routing.
+
+---
+
+## [v3.58.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+- **History Export & Import Engine (활동 내역 내보내기 및 가져오기)**: Added professional data persistence capabilities to the Library (나의 실험실) tab. Users can now export their entire diagnostic and search history to a portable `.json` file and import it back to restore their session state across different browsers or devices.
+- **Enhanced History Toolbar**: Integrated a dedicated action toolbar in the "Recent Activity" section with high-fidelity icons for Export (Download), Import (Upload), and Bulk Delete.
+- **Smart Duplicate Prevention**: Implemented a robust merge algorithm during import that prevents exact duplicate activity records while maintaining chronological order and the 50-item high-performance history limit.
+
+---
+
+## [v3.57.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+- **AI Diagnosis Re-run Engine (나의 실험실 진단 다시 실행)**: Added interactive re-run capabilities to the Library (나의 실험실) tab. Users can now view their chronological diagnostic history and instantly re-trigger any previous session with the same Windows version and query context.
+- **Enhanced Activity Tracking UI**: Redesigned the "Recent Activity" section with color-coded status indicators (`Rose` for AI Diagnosis, `Indigo` for Guidebook Search) and added quick-action "Play" buttons for instant diagnostic repeats.
+- **Smart Activity Context Persistence**: Diagnostic history now natively persists `metadata.windowsVersion`, ensuring that re-running a diagnosis from 3 months ago still uses the correct OS environment context.
+
+---
+
+## [v3.56.0] - 2026-11-01
+
+### 🛡️ Security Hardening & UI Term Cleaning
+- **User-Facing Term Sanitization**: Cleaned up and sanitized all raw technical internal jargon and error labels mentioning "Firestore Quota" or "Firebase" from user-facing UI notifications, alerts, and settings panels.
+- **Unified High-Availability Terminology**: Standardized status labels to neutral, professional database terms (`Database Direct`, `High-Availability Storage`, `Jamstack Static JSON / IndexedDB Engine`).
+- **Database Architecture Verification & Confirmation**: Verified that the entire application operates independently with 100% service uptime through a dual-mode Jamstack, IndexedDB, and Server File DB fallback layer without hard blockages or external dependency hurdles.
+
+---
+
+## [v3.55.0] - 2026-11-01
+
+### 🚀 Major New Features & Integrations
+
+#### 1. Integrated System Log Files Management & Audit Center (통합 시스템 로그 파일 점검 및 관리 센터)
+- **6-Collection System Log Audit**: Added a real-time audit control panel in Admin Settings to inspect disk storage usage, total record counts, and latest activity timestamps across all 6 system log collections (`logs_admin`, `logs_search`, `logs_feedback`, `logs_error`, `logs_backend`, `logs_visitor`).
+- **Real-Time Log Summary Endpoint (`GET /api/logs/summary`)**: Dynamically computes file size in KB/MB, entry count, and activity date ranges for all server JSON log stores and Firestore collections.
+- **One-Click All-Logs ZIP Export (`GET /api/logs/export-all-zip` & Client JSZip Fallback)**: Packages all 6 log collections along with structured `metadata.json` and SHA-256 cryptographic verification checksums into a single downloadable `winfix_logs_bundle_YYYY-MM-DD.zip` archive.
+- **Retention-Based Auto-Pruning Engine (`POST /api/logs/auto-prune`)**: Automatically purges expired logs across all 6 collections based on the configured retention period (`maintenanceSettings.cleanupMonths`), maintaining optimal database performance and saving disk space.
+
+### 🛡️ Security Hardening & Performance
+- **Client SPA Static Mode Dual Fallback**: Supports local JSON log calculation and client-side JSZip packaging when operating on static SPA hosts like GitHub Pages.
+- **System Version Synchronization**: Updated system versioning to `v3.55.0` across `package.json`, `src/App.tsx`, `/docs/PATCH_NOTE.md`, and `/docs/PATCHNOTES.md`.
 
 ---
 

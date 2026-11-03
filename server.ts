@@ -2456,6 +2456,163 @@ async function startServer() {
     }
   });
 
+  app.get("/api/logs/summary", requireAdmin, (req, res) => {
+    try {
+      const logDefs = [
+        { type: 'admin', labelKo: '관리자 활동 로그', labelEn: 'Admin Activity Logs', icon: 'ShieldCheck', color: 'purple' },
+        { type: 'search', labelKo: '사용자 검색 로그', labelEn: 'User Search Logs', icon: 'Search', color: 'blue' },
+        { type: 'feedback', labelKo: '사용자 피드백 로그', labelEn: 'User Feedback Logs', icon: 'ThumbsUp', color: 'emerald' },
+        { type: 'error', labelKo: '앱 시스템 에러 로그', labelEn: 'App Error Logs', icon: 'AlertTriangle', color: 'rose' },
+        { type: 'backend', labelKo: '백엔드 엔진 로그', labelEn: 'Backend Engine Logs', icon: 'Database', color: 'indigo' },
+        { type: 'visitor', labelKo: '방문자 정보 & 보안 로그', labelEn: 'Visitor & Security Logs', icon: 'Users', color: 'cyan' }
+      ];
+
+      let totalSizeBytes = 0;
+      let totalCount = 0;
+
+      const summary = logDefs.map(def => {
+        const collectionName = `logs_${def.type}`;
+        const filePath = getJsonFilePath(collectionName);
+        let sizeBytes = 0;
+        if (fs.existsSync(filePath)) {
+          try {
+            sizeBytes = fs.statSync(filePath).size;
+          } catch (_) {}
+        }
+
+        const logs = readLocalCollection(collectionName);
+        const count = Array.isArray(logs) ? logs.length : 0;
+        const latestLogAt = count > 0 ? (logs[0].timestamp || logs[0].lastActiveAt || logs[0].created_at || null) : null;
+        const oldestLogAt = count > 0 ? (logs[count - 1].timestamp || logs[count - 1].lastActiveAt || logs[count - 1].created_at || null) : null;
+
+        totalSizeBytes += sizeBytes;
+        totalCount += count;
+
+        return {
+          ...def,
+          collectionName,
+          count,
+          sizeBytes,
+          sizeFormatted: sizeBytes > 1024 * 1024 
+            ? `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB` 
+            : `${(sizeBytes / 1024).toFixed(1)} KB`,
+          latestLogAt,
+          oldestLogAt
+        };
+      });
+
+      res.json({
+        success: true,
+        summary,
+        totalSizeBytes,
+        totalSizeFormatted: totalSizeBytes > 1024 * 1024 
+          ? `${(totalSizeBytes / (1024 * 1024)).toFixed(2)} MB` 
+          : `${(totalSizeBytes / 1024).toFixed(1)} KB`,
+        totalCount,
+        retentionMonths: getAutoBlockSettings() ? 1 : 1
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/logs/export-all-zip", requireAdmin, async (req, res) => {
+    try {
+      const zip = new JSZip();
+      const dateStr = getKSTISOString().split('T')[0];
+      const rootFolder = zip.folder(`winfix_logs_bundle_${dateStr}`);
+
+      if (!rootFolder) {
+        throw new Error("Failed to create ZIP folder structure");
+      }
+
+      const logTypes = ['admin', 'search', 'feedback', 'error', 'backend', 'visitor'];
+      const counts: Record<string, number> = {};
+      let grandTotal = 0;
+      const combinedData: Record<string, any[]> = {};
+
+      for (const t of logTypes) {
+        const logs = readLocalCollection(`logs_${t}`);
+        combinedData[t] = logs;
+        counts[t] = logs.length;
+        grandTotal += logs.length;
+        rootFolder.file(`${t}_logs.json`, JSON.stringify(logs, null, 2));
+      }
+
+      const rawCombined = JSON.stringify(combinedData);
+      const checksum = crypto.createHash('sha256').update(rawCombined).digest('hex');
+
+      const meta = {
+        exportedAt: getKSTISOString(),
+        grandTotalLogs: grandTotal,
+        counts,
+        checksum,
+        algorithm: 'SHA-256',
+        systemVersion: '3.55.0'
+      };
+
+      rootFolder.file('metadata.json', JSON.stringify(meta, null, 2));
+
+      const content = await zip.generateAsync({ type: 'nodebuffer' });
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="winfix_logs_bundle_${dateStr}.zip"`);
+      res.send(content);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/logs/auto-prune", requireAdmin, (req, res) => {
+    try {
+      const months = typeof req.body.months === 'number' ? req.body.months : 1;
+      if (months <= 0) {
+        return res.json({ success: true, message: "Pruning disabled (0 months specified). No logs purged.", totalPurged: 0, purgedCounts: {} });
+      }
+
+      const cutoffMs = Date.now() - (months * 30 * 86400 * 1000);
+      const logTypes = ['admin', 'search', 'feedback', 'error', 'backend', 'visitor'];
+      const purgedCounts: Record<string, number> = {};
+      let totalPurged = 0;
+
+      for (const t of logTypes) {
+        const colName = `logs_${t}`;
+        const logs = readLocalCollection(colName);
+        const filtered = logs.filter((item: any) => {
+          const ts = item.timestamp || item.lastActiveAt || item.created_at || item.firstVisitedAt;
+          if (!ts) return true;
+          const logMs = new Date(ts).getTime();
+          return !isNaN(logMs) && logMs >= cutoffMs;
+        });
+
+        const purged = logs.length - filtered.length;
+        purgedCounts[t] = purged;
+        totalPurged += purged;
+
+        if (purged > 0) {
+          writeLocalCollection(colName, filtered);
+        }
+      }
+
+      addLocalLog("logs_admin", {
+        action: 'auto_prune_logs',
+        target: 'system_logs',
+        details: `[로그 자동 정돈 완료] ${months}개월 초과 이전 로그 총 ${totalPurged}건 파기 정돈됨`,
+        severity: 'info',
+        timestamp: getKSTISOString(),
+        admin: 'SYSTEM_MAINTENANCE'
+      });
+
+      res.json({
+        success: true,
+        months,
+        totalPurged,
+        purgedCounts
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.get("/api/backend-health", async (req, res) => {
     try {
       let firestoreStatus = "connected";

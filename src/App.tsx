@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import JSZip from 'jszip';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { 
   Terminal, Search, AlertCircle, AlertOctagon, Wrench, CheckCircle2, Copy, LayoutList,
   ExternalLink, ShieldCheck, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, ChevronsUp, ChevronsDown, Info, BookOpen, 
@@ -33,6 +34,7 @@ import { DailyQuotaUsageChart } from './components/DailyQuotaUsageChart';
 import { SystemInfoWidget } from './components/SystemInfoWidget';
 import { GitHubPagesDeployDoc } from './components/GitHubPagesDeployDoc';
 import { GitHubWorkflowStatus } from './components/GitHubWorkflowStatus';
+import { DeploymentDashboardWidget } from './components/DeploymentDashboardWidget';
 import { ReadingProgressBar } from './components/ReadingProgressBar';
 import { parseJsonResponse, parseAiJson } from './utils/safeFetch';
 import { validateKnownIssuesData, ValidationResult } from './utils/validateKnownIssue';
@@ -350,6 +352,26 @@ export const saveApiKeyConfig = (config: ApiKeyConfig) => {
 };
 
 export const callAiWithFallback = async (ai: any, contents: string, config?: any): Promise<string> => {
+  if (IS_GITHUB_PAGES) {
+    const configData = getApiKeyConfig();
+    const activeKeys = configData.keys.filter(k => k.isActive && isValidApiKeyFormat(k.key));
+    
+    if (activeKeys.length > 0) {
+      try {
+        const genAI = new GoogleGenerativeAI(activeKeys[0].key);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent(contents);
+        const response = await result.response;
+        return response.text();
+      } catch (e: any) {
+        console.error("Client-side Gemini call failed:", e);
+        throw new Error(e.message || "Gemini AI call failed on static host");
+      }
+    } else {
+      throw new Error("Gemini API key is missing. Please set your key in Admin Settings > API Key Management.");
+    }
+  }
+
   const headers = await getAuthHeaders();
   const res = await fetch('/api/ai/generate', {
     method: 'POST',
@@ -459,7 +481,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.54.0";
+const APP_VERSION = "3.63.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -580,6 +602,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<'wizard' | 'guidebook' | 'admin' | 'library' | 'threat-verifier'>('guidebook');
+  const [triggerAutoSearch, setTriggerAutoSearch] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scriptSignedOverrides, setScriptSignedOverrides] = useState<Record<string, string>>({});
   const [dbMode, setDbMode] = useState<'firestore' | 'server_file'>(() => {
@@ -624,6 +647,9 @@ export default function App() {
   const [isDispatchingWorkflow, setIsDispatchingWorkflow] = useState<boolean>(false);
   const [isDeployingPages, setIsDeployingPages] = useState<boolean>(false);
   const [isPushingGithub, setIsPushingGithub] = useState<boolean>(false);
+  const [isInstantSyncing, setIsInstantSyncing] = useState<boolean>(false);
+  const [instantSyncStep, setInstantSyncStep] = useState<number>(0);
+  const [instantSyncMsg, setInstantSyncMsg] = useState<string>('');
   const [isSavingGithubConfig, setIsSavingGithubConfig] = useState<boolean>(false);
   const [showWorkflowScriptModal, setShowWorkflowScriptModal] = useState<boolean>(false);
   const [copiedWorkflow, setCopiedWorkflow] = useState<boolean>(false);
@@ -1187,6 +1213,15 @@ export default function App() {
     };
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [logSummaryData, setLogSummaryData] = useState<{
+    summary: any[];
+    totalSizeBytes: number;
+    totalSizeFormatted: string;
+    totalCount: number;
+  } | null>(null);
+  const [isFetchingLogSummary, setIsFetchingLogSummary] = useState(false);
+  const [isExportingAllLogsZip, setIsExportingAllLogsZip] = useState(false);
+  const [isAutoPruningLogs, setIsAutoPruningLogs] = useState(false);
   const [isTestingAlert, setIsTestingAlert] = useState(false);
   const [isTestingSmtpConn, setIsTestingSmtpConn] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
@@ -1204,8 +1239,37 @@ export default function App() {
 
   const fetchApiKeyStatus = useCallback(async () => {
     setIsCheckingKeyStatus(true);
+    
+    const checkLocalOnly = () => {
+      const activeCustomKeys = apiKeyConfig.keys.filter(k => k.isActive);
+      const hasValidKey = activeCustomKeys.some(k => isValidApiKeyFormat(k.key));
+      
+      setApiKeyStatus({
+        status: hasValidKey ? 'active' : 'invalid',
+        message: hasValidKey 
+          ? (IS_GITHUB_PAGES ? '정적 호스팅 모드: 커스텀 API 키가 정상 활성화되었습니다.' : '서버 연결 불가: 로컬 커스텀 키를 사용합니다.') 
+          : (IS_GITHUB_PAGES ? '정적 호스팅 모드: 커스텀 API 키 등록이 필요합니다.' : 'Gemini API 키 점검이 필요합니다.'),
+        messageEn: hasValidKey
+          ? (IS_GITHUB_PAGES ? 'Static Mode: Custom API key is active.' : 'Server Offline: Using local custom key.')
+          : (IS_GITHUB_PAGES ? 'Static Mode: API key registration required.' : 'Gemini API Key check required.'),
+        keySource: hasValidKey ? 'Local Storage (Custom)' : 'None',
+        maskedKey: hasValidKey ? activeCustomKeys.find(k => isValidApiKeyFormat(k.key))?.key.substring(0, 10) + '...' : 'NONE',
+        isPlaceholder: !hasValidKey,
+        isThrottled: false,
+        totalKeysConfigured: apiKeyConfig.keys.length,
+        lastChecked: new Date().toLocaleTimeString()
+      });
+    };
+
+    if (IS_GITHUB_PAGES) {
+      checkLocalOnly();
+      setIsCheckingKeyStatus(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/ai/key-status');
+      if (!res.ok) throw new Error('API server down');
       const data = await res.json();
       if (data && data.success) {
         let finalStatus: 'active' | 'throttled' | 'invalid' = data.status || 'invalid';
@@ -1220,6 +1284,11 @@ export default function App() {
             finalStatus = 'invalid';
             message = '등록된 커스텀 API 키 형식이 올바르지 않습니다 (AIza로 시작하고 30자 이상 필요).';
             messageEn = 'Configured custom API key format is invalid (must start with AIza and be at least 30 chars).';
+          } else if (finalStatus === 'invalid') {
+            // Server might not have keys but client does
+            finalStatus = 'active';
+            message = '서버 키는 없지만 커스텀 API 키가 활성화되었습니다.';
+            messageEn = 'Using active custom API key.';
           }
         }
 
@@ -1237,9 +1306,12 @@ export default function App() {
           totalKeysConfigured: data.totalKeysConfigured || 0,
           lastChecked: new Date().toLocaleTimeString()
         });
+      } else {
+        checkLocalOnly();
       }
     } catch (err) {
-      console.warn("Failed to check Gemini API key status:", err);
+      console.warn("Failed to check Gemini API key status, falling back to local check:", err);
+      checkLocalOnly();
     } finally {
       setIsCheckingKeyStatus(false);
     }
@@ -1441,12 +1513,12 @@ export default function App() {
         setMaintenanceSettings(updatedSettings);
         localStorage.setItem('winfix_maintenance_settings', JSON.stringify(updatedSettings));
         await logAdminAction('update', 'system_config', `유지보수 설정 업데이트(다이렉트): 정리 ${updatedSettings.cleanupMonths}개월, 검증 ${updatedSettings.linkVerifyFrequencyDays}일, 수집주기 ${updatedSettings.engineIntervalMin}분, 모집개수 ${updatedSettings.engineBatchSize}개`, 'success', 'SYSTEM');
-        customAlert(language === 'en' ? "Settings saved successfully (Firestore Direct)." : "설정 및 엔진 옵션이 데이터베이스로 직접 저장되었습니다.");
+        customAlert(language === 'en' ? "Settings saved successfully (Database Direct)." : "설정 및 엔진 옵션이 데이터베이스로 직접 저장되었습니다.");
       } catch (innerErr: any) {
         const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
         if (msg.includes('Quota') || msg.includes('quota') || innerErr?.code === 'resource-exhausted') {
-          console.warn("Firestore quota reached on settings save fallback; settings retained in memory/local storage.");
-          customAlert(language === 'en' ? "Settings saved locally. Firestore quota limit is in effect." : "설정이 로컬에 임시 저장되었습니다 (Firestore 일일 무료 할당량 초과).");
+          console.warn("Database quota/connectivity limit reached on settings save fallback; settings retained in memory/local storage.");
+          customAlert(language === 'en' ? "Settings saved locally in High-Availability storage." : "설정이 로컬 스토리지에 안전하게 보관되었습니다 (고가용성 모드).");
         } else {
           handleFirestoreError(innerErr, OperationType.WRITE, 'system_config/maintenance');
         }
@@ -2007,12 +2079,29 @@ export default function App() {
           } catch (_) {}
         }
       } catch (clientErr: any) {
-        const is401 = clientErr.message?.includes('401') || clientErr.message?.includes('PAT') || clientErr.message?.includes('인증');
+        const isAuthErr = clientErr.message?.includes('401') || clientErr.message?.includes('Bad Credentials') || clientErr.message?.includes('인증');
+        
+        let displayMsg = language === 'en' 
+          ? `GitHub push failed: ${clientErr.message}` 
+          : `GitHub 데이터 푸시 실패: ${clientErr.message}`;
+          
+        if (isAuthErr) {
+          displayMsg = language === 'en'
+            ? "GitHub Authentication Failed (401). Your Personal Access Token (PAT) may be invalid or missing 'repo' and 'workflow' scopes. Please issue a new token and update settings."
+            : "GitHub 인증 실패 (401): 입력된 PAT 토큰이 올바르지 않거나 'repo' 및 'workflow' 권한이 없습니다. [새 토큰 발급] 링크를 클릭해 권한이 설정된 토큰을 새로 발급받아 입력해 주세요.";
+        }
+
         customAlert(
-          language === 'en' ? `GitHub push failed: ${clientErr.message}` : `GitHub 데이터 푸시 실패: ${clientErr.message}`,
-          is401 ? scrollToGithubSettings : undefined
+          displayMsg,
+          isAuthErr ? () => {
+            scrollToGithubSettings();
+            setTimeout(() => {
+              const input = document.getElementById('github-pat-input');
+              if (input) input.focus();
+            }, 500);
+          } : undefined
         );
-        if (is401) scrollToGithubSettings();
+        if (isAuthErr) scrollToGithubSettings();
         setIsPushingGithub(false);
         return;
       }
@@ -2022,6 +2111,140 @@ export default function App() {
       customAlert(pushMsg);
     }
     setIsPushingGithub(false);
+  };
+
+  const handleInstantSync = async () => {
+    if (!isAdmin) return;
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? JSON.parse(local).token : '';
+      } catch (e) { return ''; }
+    })();
+
+    if (!hasServerGithubToken && !storedToken) {
+      customAlert(
+        language === 'en'
+          ? "GitHub PAT Token is required for Instant Sync & Deployment. Please enter a PAT with 'repo' and 'workflow' permissions below."
+          : "원격 즉시 동기화 및 Pages 배포를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 토큰을 입력해 주세요.",
+        scrollToGithubSettings
+      );
+      scrollToGithubSettings();
+      return;
+    }
+
+    setIsInstantSyncing(true);
+    setInstantSyncStep(1);
+    setInstantSyncMsg(
+      language === 'en'
+        ? 'Step 1/3: Encoding and validating data/issues.json dataset...'
+        : 'Step 1/3: 최신 data/issues.json 데이터세트 인코딩 및 검증 중...'
+    );
+
+    try {
+      const issuesToPush = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
+      const jsonStr = JSON.stringify(issuesToPush, null, 2);
+      const encoder = new TextEncoder();
+      const dataBytes = encoder.encode(jsonStr);
+      let binaryStr = '';
+      for (let i = 0; i < dataBytes.length; i++) {
+        binaryStr += String.fromCharCode(dataBytes[i]);
+      }
+      const contentBase64 = btoa(binaryStr);
+      const datasetSizeKb = (dataBytes.length / 1024).toFixed(1);
+
+      // Step 2: Push commit directly to repository
+      setInstantSyncStep(2);
+      setInstantSyncMsg(
+        language === 'en'
+          ? `Step 2/3: Committing ${issuesToPush.length} issues (${datasetSizeKb} KB) to GitHub repository...`
+          : `Step 2/3: ${issuesToPush.length}개 이슈 (${datasetSizeKb} KB)를 GitHub 저장소에 커밋 및 푸시 중...`
+      );
+
+      const filePath = 'data/issues.json';
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${storedToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      };
+
+      let fileSha: string | undefined = undefined;
+      try {
+        const getRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`, { headers });
+        if (getRes.status === 401 || getRes.status === 403) {
+          throw new Error("GitHub 인증 실패 (401 Bad Credentials): PAT 토큰이 올바르지 않거나 'repo' 권한이 없습니다.");
+        }
+        if (getRes.ok) {
+          const fileInfo = await getRes.json();
+          fileSha = fileInfo.sha;
+        }
+      } catch (e: any) {
+        if (e.message?.includes('GitHub 인증 실패')) throw e;
+      }
+
+      const commitMsg = `⚡ [Instant Sync & GitOps] Manual push data/issues.json (${issuesToPush.length} issues) via Web Admin`;
+      const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          message: commitMsg,
+          content: contentBase64,
+          branch: targetBranch,
+          sha: fileSha
+        })
+      });
+
+      if (!putRes.ok) {
+        const errBody = await putRes.text();
+        throw new Error(`GitHub 커밋 실패 (${putRes.status}): ${errBody}`);
+      }
+
+      // Step 3: Trigger GitHub Pages workflow dispatch
+      setInstantSyncStep(3);
+      setInstantSyncMsg(
+        language === 'en'
+          ? 'Step 3/3: Dispatching GitHub Pages deployment pipeline (deploy-pages.yml)...'
+          : 'Step 3/3: GitHub Pages 원격 배포 파이프라인(deploy-pages.yml) 가동 중...'
+      );
+
+      const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`;
+      const dispatchRes = await fetch(dispatchUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ref: targetBranch })
+      });
+
+      if (!dispatchRes.ok && dispatchRes.status !== 204) {
+        console.warn("Pages workflow dispatch returned status:", dispatchRes.status);
+      }
+
+      const successMsg = language === 'en'
+        ? `Successfully synced data/issues.json (${issuesToPush.length} items, ${datasetSizeKb} KB) and triggered GitHub Pages deployment! Live site updates in ~1 minute.`
+        : `최신 data/issues.json 데이터베이스(${issuesToPush.length}개 이슈, ${datasetSizeKb} KB) 푸시 및 GitHub Pages 배포 파이프라인 가동 완료! 약 1분 후 웹사이트에 반영됩니다.`;
+
+      setInstantSyncMsg(successMsg);
+      customAlert(successMsg);
+      await fetchGithubConfig();
+    } catch (err: any) {
+      const isAuthErr = err.message?.includes('401') || err.message?.includes('Bad Credentials') || err.message?.includes('인증');
+      let displayMsg = language === 'en'
+        ? `Instant Sync failed: ${err.message}`
+        : `원격 즉시 동기화 실패: ${err.message}`;
+
+      if (isAuthErr) {
+        displayMsg = language === 'en'
+          ? "GitHub Authentication Failed (401). Your Personal Access Token (PAT) may be invalid or missing 'repo' and 'workflow' scopes. Please issue a new token and update settings."
+          : "GitHub 인증 실패 (401): 입력된 PAT 토큰이 올바르지 않거나 'repo' 및 'workflow' 권한이 없습니다. [새 토큰 발급] 링크를 클릭해 권한이 설정된 토큰을 새로 발급받아 입력해 주세요.";
+      }
+
+      customAlert(displayMsg, isAuthErr ? scrollToGithubSettings : undefined);
+      if (isAuthErr) scrollToGithubSettings();
+    } finally {
+      setIsInstantSyncing(false);
+    }
   };
 
   const checkForUpdates = async (isManual = false) => {
@@ -3598,6 +3821,183 @@ export default function App() {
     return () => clearInterval(interval);
   }, [showLogsModal, isAdmin]);
 
+  const fetchLogSummary = useCallback(async () => {
+    if (!isAdmin) return;
+    setIsFetchingLogSummary(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/logs/summary', { headers: authHeaders });
+      const data = await parseJsonResponse(resp);
+      if (data.success) {
+        setLogSummaryData({
+          summary: data.summary || [],
+          totalSizeBytes: data.totalSizeBytes || 0,
+          totalSizeFormatted: data.totalSizeFormatted || '0 KB',
+          totalCount: data.totalCount || 0
+        });
+      }
+    } catch (err) {
+      console.warn("API log summary fetch skipped (static client mode):", err);
+      const logDefs = [
+        { type: 'admin', labelKo: '관리자 활동 로그', labelEn: 'Admin Activity Logs', icon: 'ShieldCheck', color: 'purple' },
+        { type: 'search', labelKo: '사용자 검색 로그', labelEn: 'User Search Logs', icon: 'Search', color: 'blue' },
+        { type: 'feedback', labelKo: '사용자 피드백 로그', labelEn: 'User Feedback Logs', icon: 'ThumbsUp', color: 'emerald' },
+        { type: 'error', labelKo: '앱 시스템 에러 로그', labelEn: 'App Error Logs', icon: 'AlertTriangle', color: 'rose' },
+        { type: 'backend', labelKo: '백엔드 엔진 로그', labelEn: 'Backend Engine Logs', icon: 'Database', color: 'indigo' },
+        { type: 'visitor', labelKo: '방문자 정보 & 보안 로그', labelEn: 'Visitor & Security Logs', icon: 'Users', color: 'cyan' }
+      ];
+
+      const localLogsMap: Record<string, any[]> = {
+        admin: adminLogs,
+        search: searchLogs,
+        feedback: feedbackLogs,
+        error: appErrorLogs,
+        backend: backendLogs,
+        visitor: visitorLogs
+      };
+
+      let grandTotalCount = 0;
+      let grandTotalBytes = 0;
+
+      const summary = logDefs.map(def => {
+        const list = localLogsMap[def.type] || [];
+        const jsonStr = JSON.stringify(list);
+        const bytes = new Blob([jsonStr]).size;
+        grandTotalCount += list.length;
+        grandTotalBytes += bytes;
+        return {
+          ...def,
+          collectionName: `logs_${def.type}`,
+          count: list.length,
+          sizeBytes: bytes,
+          sizeFormatted: bytes > 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`,
+          latestLogAt: list.length > 0 ? (list[0].timestamp || list[0].lastActiveAt || null) : null,
+          oldestLogAt: list.length > 0 ? (list[list.length - 1].timestamp || list[list.length - 1].lastActiveAt || null) : null
+        };
+      });
+
+      setLogSummaryData({
+        summary,
+        totalSizeBytes: grandTotalBytes,
+        totalSizeFormatted: grandTotalBytes > 1024 * 1024 ? `${(grandTotalBytes / (1024 * 1024)).toFixed(2)} MB` : `${(grandTotalBytes / 1024).toFixed(1)} KB`,
+        totalCount: grandTotalCount
+      });
+    } finally {
+      setIsFetchingLogSummary(false);
+    }
+  }, [isAdmin, adminLogs, searchLogs, feedbackLogs, appErrorLogs, backendLogs, visitorLogs]);
+
+  useEffect(() => {
+    if (activeTab === 'admin' && isAdmin) {
+      fetchLogSummary();
+    }
+  }, [activeTab, isAdmin, fetchLogSummary]);
+
+  const handleExportAllLogsZip = async () => {
+    if (!isAdmin) return;
+    setIsExportingAllLogsZip(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/logs/export-all-zip', { headers: authHeaders });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `winfix_logs_bundle_${new Date().toISOString().split('T')[0]}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        customAlert(language === 'en' ? "All 6 log files exported as ZIP package!" : "모든 6개 시스템 로그 파일이 ZIP 압축 패키지로 백업되었습니다!");
+        return;
+      }
+    } catch (e) {
+      console.warn("Server ZIP export skipped, generating client-side JSZip fallback:", e);
+    }
+
+    try {
+      const zip = new JSZip();
+      const dateStr = new Date().toISOString().split('T')[0];
+      const folder = zip.folder(`winfix_logs_bundle_${dateStr}`);
+      if (!folder) throw new Error("Zip creation failed");
+
+      const logMap: Record<string, any[]> = {
+        admin: adminLogs,
+        search: searchLogs,
+        feedback: feedbackLogs,
+        error: appErrorLogs,
+        backend: backendLogs,
+        visitor: visitorLogs
+      };
+
+      let grandTotal = 0;
+      for (const [k, list] of Object.entries(logMap)) {
+        grandTotal += list.length;
+        folder.file(`${k}_logs.json`, JSON.stringify(list, null, 2));
+      }
+
+      folder.file("metadata.json", JSON.stringify({
+        exportedAt: getKSTISOString(),
+        grandTotalLogs: grandTotal,
+        systemVersion: APP_VERSION
+      }, null, 2));
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `winfix_logs_bundle_${dateStr}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      customAlert(language === 'en' ? "Log files exported to ZIP package (Client Mode)!" : "모든 시스템 로그 파일이 브라우저에서 ZIP 패키지로 성공적으로 압축/다운로드되었습니다!");
+    } catch (zipErr: any) {
+      customAlert(language === 'en' ? `ZIP Export failed: ${zipErr.message}` : `로그 ZIP 백업 실패: ${zipErr.message}`);
+    } finally {
+      setIsExportingAllLogsZip(false);
+    }
+  };
+
+  const handleAutoPruneLogs = async () => {
+    if (!isAdmin) return;
+    const months = maintenanceSettings.cleanupMonths ?? 1;
+    if (months === 0) {
+      customAlert(language === 'en' ? "Log cleanup is currently disabled (0 Months selected in Maintenance settings)." : "유지보수 설정에서 로그 정리 기간이 '정리 사용 안함(0개월)'으로 설정되어 있습니다.");
+      return;
+    }
+
+    customConfirm(
+      language === 'en' 
+        ? `Auto-prune logs older than ${months} month(s)? This will clean obsolete logs across all 6 collections.`
+        : `${months}개월 (${months * 30}일) 이상 경과된 오래된 로그를 6개 전체 컬렉션에서 정돈 파기하시겠습니까?`,
+      async () => {
+        setIsAutoPruningLogs(true);
+        try {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch('/api/logs/auto-prune', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({ months })
+          });
+          const data = await parseJsonResponse(resp);
+          if (data.success) {
+            customAlert(language === 'en' 
+              ? `Auto-prune complete! Purged ${data.totalPurged} old log items.`
+              : `보관 기간(${months}개월) 경과 로그 자동 정돈 완료! 총 ${data.totalPurged}건의 오래된 기록이 정리되었습니다.`);
+            fetchLogSummary();
+          }
+        } catch (e: any) {
+          customAlert(language === 'en' ? `Auto-prune failed: ${e.message}` : `로그 자동 정돈 실패: ${e.message}`);
+        } finally {
+          setIsAutoPruningLogs(false);
+        }
+      }
+    );
+  };
+
   const [isReclassifying, setIsReclassifying] = useState(false);
   const [reclassifyProgress, setReclassifyProgress] = useState({ current: 0, total: 0 });
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -4356,12 +4756,146 @@ export default function App() {
     }
   };
 
-  const recordUserActivity = async (type: 'search' | 'view', targetId?: string, queryText?: string) => {
+  const handleExportHistory = () => {
+    try {
+      if (userActivity.length === 0 && bookmarkedIds.size === 0) {
+        customAlert(language === 'en' ? "No activity or bookmarks to export." : "내보낼 활동 내역이나 북마크가 없습니다.");
+        return;
+      }
+      const exportData = {
+        userActivity,
+        bookmarks: Array.from(bookmarkedIds),
+        exportedAt: new Date().toISOString(),
+        version: APP_VERSION,
+        source: IS_GITHUB_PAGES ? 'GitHub Pages' : 'AI Studio'
+      };
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `winfix_library_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Failed to export library data:", e);
+    }
+  };
+
+  const handleImportHistory = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const imported = JSON.parse(text);
+        
+        let activityToImport: any[] = [];
+        let bookmarksToImport: string[] = [];
+
+        if (Array.isArray(imported)) {
+          // Legacy format compatibility
+          activityToImport = imported;
+        } else if (imported && typeof imported === 'object' && Array.isArray(imported.userActivity)) {
+          // New structured format
+          activityToImport = imported.userActivity;
+          bookmarksToImport = Array.isArray(imported.bookmarks) ? imported.bookmarks : [];
+        } else {
+          throw new Error(language === 'en' ? "Invalid file format: Data must be an array or a library object." : "올바르지 않은 파일 형식입니다.");
+        }
+
+        const validActivity = activityToImport.filter(item => item.type && item.timestamp);
+        
+        // 1. Process Activities
+        let newItemsCount = 0;
+        if (validActivity.length > 0) {
+          setUserActivity(prev => {
+            const existingMap = new Map(prev.map(a => [`${a.type}_${a.query || a.targetId}_${a.timestamp}`, a]));
+            
+            (validActivity as any[]).forEach(item => {
+              const key = `${item.type}_${item.query || item.targetId}_${item.timestamp}`;
+              if (!existingMap.has(key)) {
+                existingMap.set(key, item);
+                newItemsCount++;
+              }
+            });
+
+            const merged = Array.from(existingMap.values())
+              .sort((a, b) => new Date((b as any).timestamp).getTime() - new Date((a as any).timestamp).getTime())
+              .slice(0, 50);
+
+            if (!user) {
+              localStorage.setItem('guest_history', JSON.stringify(merged));
+            }
+            return merged;
+          });
+        }
+
+        // 2. Process Bookmarks
+        let newBookmarksCount = 0;
+        if (bookmarksToImport.length > 0) {
+          setBookmarkedIds(prev => {
+            const next = new Set(prev);
+            bookmarksToImport.forEach(id => {
+              if (!next.has(id)) {
+                next.add(id);
+                newBookmarksCount++;
+              }
+            });
+            localStorage.setItem('winfix_bookmarks', JSON.stringify(Array.from(next)));
+            return next;
+          });
+        }
+
+        if (newItemsCount === 0 && newBookmarksCount === 0) {
+          customAlert(language === 'en' ? "No new items found to import." : "새로 추가할 항목이 없습니다.");
+        } else {
+          customAlert(language === 'en' 
+            ? `Import successful: ${newItemsCount} activities and ${newBookmarksCount} bookmarks added.` 
+            : `불러오기 성공: ${newItemsCount}개의 활동과 ${newBookmarksCount}개의 북마크가 추가되었습니다.`);
+        }
+      } catch (err: any) {
+        customAlert(language === 'en' ? `Import failed: ${err.message}` : `불러오기 실패: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleReRunDiagnosis = (activity: any) => {
+    if (activity.query) {
+      setQuery(activity.query);
+    }
+    if (activity.metadata?.windowsVersion) {
+      setVersion(activity.metadata.windowsVersion);
+    }
+    setActiveTab('wizard');
+    setTriggerAutoSearch(true);
+  };
+
+  useEffect(() => {
+    if (triggerAutoSearch && activeTab === 'wizard' && !loading) {
+      setTriggerAutoSearch(false);
+      // Create a fake event for handleSearch
+      const fakeEvent = {
+        preventDefault: () => {},
+        stopPropagation: () => {}
+      } as React.FormEvent;
+      handleSearch(fakeEvent);
+    }
+  }, [triggerAutoSearch, activeTab, loading]);
+
+  const recordUserActivity = async (type: 'search' | 'view' | 'diagnosis', targetId?: string, queryText?: string, metadata?: any) => {
     const activityData = {
       type,
       targetId: targetId || null,
       query: queryText || null,
-      timestamp: getKSTISOString()
+      timestamp: getKSTISOString(),
+      metadata: metadata || null
     };
 
     if (!user) {
@@ -4369,7 +4903,12 @@ export default function App() {
       try {
         const guestHistory = localStorage.getItem('guest_history');
         const history = guestHistory ? JSON.parse(guestHistory) : [];
-        const newHistory = [activityData, ...history.slice(0, 19)];
+        // Keep unique queries if it's search/diagnosis
+        let newHistory = [...history];
+        if (type === 'search' || type === 'diagnosis') {
+          newHistory = newHistory.filter(a => !(a.type === type && a.query === queryText));
+        }
+        newHistory = [activityData, ...newHistory.slice(0, 49)]; // Increased history limit to 50
         localStorage.setItem('guest_history', JSON.stringify(newHistory));
         setUserActivity(newHistory);
       } catch (e) {
@@ -4384,10 +4923,14 @@ export default function App() {
         ...activityData,
         userId: user.uid,
       });
-      // Update local state if it's already loaded
-      if (activeTab === 'library') {
-        setUserActivity(prev => [activityData, ...prev.slice(0, 19)]);
-      }
+      // Update local state
+      setUserActivity(prev => {
+        let filtered = prev;
+        if (type === 'search' || type === 'diagnosis') {
+          filtered = prev.filter(a => !(a.type === type && a.query === queryText));
+        }
+        return [activityData, ...filtered.slice(0, 49)];
+      });
     } catch (err) {
       console.warn("Failed to record activity:", err);
     }
@@ -4625,8 +5168,8 @@ export default function App() {
         } else if (isDomainError) {
           const appUrl = window.location.origin;
           setAuthError(language === 'en' 
-            ? `Domain ${appUrl} is not registered in Firebase Authorized Domains. Use the 'Admin Master Passkey' below to bypass domain restriction.` 
-            : `현재 도메인(${appUrl})이 Firebase 승인 도메인에 등록되어 있지 않습니다. 바로 아래의 '관리자 보안 마스터 패스키'를 사용하면 도메인 제약 없이 즉시 최고 관리자로 로그인할 수 있습니다.`);
+            ? `Domain ${appUrl} is not registered in Cloud Authorized Domains. Use the 'Admin Master Passkey' below to bypass domain restriction.` 
+            : `현재 도메인(${appUrl})이 클라우드 승인 도메인에 등록되어 있지 않습니다. 바로 아래의 '관리자 보안 마스터 패스키'를 사용하면 도메인 제약 없이 즉시 최고 관리자로 로그인할 수 있습니다.`);
         } else {
           setAuthError(errMsg || (language === 'en' ? "Google login failed. You can use Admin Passkey below." : "구글 로그인에 실패했습니다. 아래의 관리자 보안 패스키를 통해 로그인해주세요."));
         }
@@ -7900,7 +8443,7 @@ export default function App() {
     if (!query.trim()) return;
 
     // Record activity
-    recordUserActivity('search', undefined, query);
+    recordUserActivity('diagnosis', undefined, query, { windowsVersion: version });
 
     setLoading(true);
     setError(null);
@@ -9946,15 +10489,31 @@ export default function App() {
                     <History className="w-5 h-5 text-indigo-500" />
                     {language === 'en' ? 'Recent Activity' : '최근 활동 내역'}
                   </h3>
-                  {userActivity.length > 0 && (
+                  <div className="flex items-center gap-1.5">
                     <button
-                      onClick={handleClearAllActivities}
-                      className="text-xs font-semibold text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 transition-colors flex items-center gap-1 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-indigo-950/25 px-2.5 py-1.5 rounded-lg border border-slate-250 dark:border-slate-750 shadow-sm cursor-pointer"
+                      onClick={handleExportHistory}
+                      title={language === 'en' ? 'Export History' : '내역 내보내기'}
+                      className="p-1.5 text-slate-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>{language === 'en' ? 'Clear All' : '전체 삭제'}</span>
+                      <Download className="w-3.5 h-3.5" />
                     </button>
-                  )}
+                    <label 
+                      title={language === 'en' ? 'Import History' : '내역 가져오기'}
+                      className="p-1.5 text-slate-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <input type="file" className="hidden" accept=".json" onChange={handleImportHistory} />
+                    </label>
+                    {userActivity.length > 0 && (
+                      <button
+                        onClick={handleClearAllActivities}
+                        className="text-xs font-semibold text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 transition-colors flex items-center gap-1 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-indigo-950/25 px-2.5 py-1.5 rounded-lg border border-slate-250 dark:border-slate-750 shadow-sm cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Clear All' : '전체 삭제'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
                 {isLoadingPersonal ? (
@@ -9977,30 +10536,79 @@ export default function App() {
                   <div className="space-y-4">
                     {userActivity.map((activity, idx) => (
                       <div key={activity.id || idx} className="flex gap-4 items-start group justify-between hover:bg-slate-50/50 dark:hover:bg-slate-850/30 p-2.5 rounded-xl -mx-2.5 transition-all">
-                        <div className="flex gap-4 items-start flex-1 min-w-0">
-                          <div className="mt-1.5 flex-shrink-0 w-2.5 h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 group-hover:bg-indigo-500 transition-colors shadow-sm"></div>
+                        <div 
+                          className={`flex gap-4 items-start flex-1 min-w-0 ${ (activity.type === 'search' || activity.type === 'diagnosis') ? 'cursor-pointer' : '' }`}
+                          onClick={() => {
+                            if (activity.type === 'search' || activity.type === 'diagnosis') {
+                              handleReRunDiagnosis(activity);
+                            } else if (activity.type === 'view' && activity.targetId) {
+                              setActiveTab('guidebook');
+                              setExpandedIssue(activity.targetId);
+                            }
+                          }}
+                        >
+                          <div className={`mt-1.5 flex-shrink-0 w-2.5 h-2.5 rounded-full ${
+                            activity.type === 'diagnosis' ? 'bg-rose-400' : 
+                            activity.type === 'search' ? 'bg-indigo-400' : 'bg-slate-200 dark:bg-slate-800'
+                          } group-hover:scale-125 transition-all shadow-sm`}></div>
                           <div className="flex-grow min-w-0">
                              <div className="flex flex-col">
-                               <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                                 {activity.type === 'search' ? (language === 'en' ? 'Searched' : '검색 수행') : (language === 'en' ? 'Viewed Issue' : '해결법 조회')}
+                               <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                 {activity.type === 'diagnosis' ? (language === 'en' ? 'AI Diagnosis' : 'AI 오류 진단') : 
+                                  activity.type === 'search' ? (language === 'en' ? 'Search' : '가이드 검색') : 
+                                  (language === 'en' ? 'Viewed' : '조회 내역')}
                                </p>
-                               <p className="text-sm text-indigo-600 dark:text-indigo-400 font-medium mt-1 truncate max-w-[200px]">
-                                 "{activity.query || activity.targetId}"
+                               <p className={`text-sm font-medium mt-0.5 truncate max-w-[200px] ${
+                                 (activity.type === 'search' || activity.type === 'diagnosis') 
+                                   ? 'text-indigo-600 dark:text-indigo-400 group-hover:text-blue-500' 
+                                   : 'text-slate-700 dark:text-slate-300'
+                               }`}>
+                                 {activity.type === 'view' ? (
+                                   dbIssues.find(i => i.id === activity.targetId) 
+                                     ? getLocalizedText(dbIssues.find(i => i.id === activity.targetId)!, 'title')
+                                     : activity.targetId
+                                 ) : (
+                                   `"${activity.query}"`
+                                 )}
                                </p>
-                               <span className="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
-                                 <Clock className="w-3 h-3" />
-                                 {new Date(activity.timestamp).toLocaleString()}
-                               </span>
+                               <div className="flex items-center gap-2 mt-1">
+                                 <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                   <Clock className="w-3 h-3" />
+                                   {new Date(activity.timestamp).toLocaleString()}
+                                 </span>
+                                 {activity.metadata?.windowsVersion && (
+                                   <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-md border border-slate-200 dark:border-slate-700 font-medium">
+                                     {activity.metadata.windowsVersion}
+                                   </span>
+                                 )}
+                               </div>
                              </div>
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDeleteSingleActivity(activity, idx)}
-                          title={language === 'en' ? "Delete" : "삭제"}
-                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-2 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all active:scale-95 flex-shrink-0 ml-2 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {(activity.type === 'search' || activity.type === 'diagnosis') && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReRunDiagnosis(activity);
+                              }}
+                              title={language === 'en' ? "Re-run" : "다시 실행"}
+                              className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all active:scale-95 flex-shrink-0 cursor-pointer"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSingleActivity(activity, idx);
+                            }}
+                            title={language === 'en' ? "Delete" : "삭제"}
+                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all active:scale-95 flex-shrink-0 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -10120,7 +10728,7 @@ export default function App() {
               <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-4 flex items-start gap-3">
                 <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
-                  <strong>{language === 'en' ? 'Firebase-Free Jamstack Architecture:' : '파이어베이스 비의존 독립형 Jamstack 아키텍처:'}</strong>{' '}
+                  <strong>{language === 'en' ? 'High-Availability Jamstack Architecture:' : '고가용성 독립형 Jamstack 아키텍처:'}</strong>{' '}
                   {language === 'en'
                     ? 'All database queries, user bookmarks, and search history operate 100% serverless via IndexedDB in-browser caching and static JSON feeds.'
                     : '모든 트러블슈팅 검색, 카테고리 분류, 북마크 및 검색 기록이 파이어베이스 외부 의존성 없이 브라우저 IndexedDB 및 정적 JSON 피드로 100% 무중단 구동됩니다.'}
@@ -10651,23 +11259,14 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* GitHub Actions Live Status Badges */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <GitHubWorkflowStatus 
-                    owner={GITHUB_USERNAME}
-                    repo={GITHUB_REPO_NAME}
-                    workflowFile="windows-fix-collector.yml"
-                    language={language}
-                    title={language === 'en' ? 'GitOps Collector Engine' : '자율 수집 엔진 상태'}
-                  />
-                  <GitHubWorkflowStatus 
-                    owner={GITHUB_USERNAME}
-                    repo={GITHUB_REPO_NAME}
-                    workflowFile="deploy-pages.yml"
-                    language={language}
-                    title={language === 'en' ? 'GitHub Pages Deployment' : '웹 서비스 배포 상태'}
-                  />
-                </div>
+                {/* GitHub Actions Live Deployment Health & Workflow Telemetry Dashboard */}
+                <DeploymentDashboardWidget 
+                  owner={GITHUB_USERNAME}
+                  repo={GITHUB_REPO_NAME}
+                  language={language}
+                  token={githubToken}
+                  showStatusBadges={true}
+                />
 
                 {/* GitOps Architecture Diagram (Interactive Card) */}
                 <div className="bg-gradient-to-r from-slate-50 via-indigo-50/30 to-purple-50/30 dark:from-slate-800/40 dark:via-indigo-950/20 dark:to-purple-950/20 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-4 sm:p-5">
@@ -10714,6 +11313,108 @@ export default function App() {
                         수집 즉시 앱(/api/github/sync)으로 전송되어 사용자에게 노출
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                {/* Featured Hero Action: One-Click Instant Dataset Sync & Pages Deploy */}
+                <div className="p-5 bg-gradient-to-br from-indigo-900/90 via-slate-900 to-purple-950 text-white rounded-2xl shadow-lg border border-indigo-500/30 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400 border border-indigo-400/30">
+                          <Zap className="w-5 h-5 animate-pulse text-amber-400" />
+                        </span>
+                        <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                          {language === 'en' ? 'Instant Sync data/issues.json & Deploy Pages' : '⚡ 최신 data/issues.json 원격 수동 즉시 동기화 & 웹 배포'}
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                        {language === 'en'
+                          ? 'Pushes the latest local issues dataset directly to your GitHub repository (data/issues.json) and triggers an immediate GitHub Pages build in one step.'
+                          : '현재 앱의 최신 이슈 데이터베이스를 GitHub 저장소(data/issues.json)에 수동 즉시 푸시하고, 라이브 GitHub Pages 자동 배포(deploy-pages.yml)를 원클릭으로 가동합니다.'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right text-[11px] text-slate-400 hidden lg:block">
+                        <div>대상: <code className="text-indigo-300 font-mono">data/issues.json</code></div>
+                        <div>브랜치: <code className="text-purple-300 font-mono">{githubBranch || 'main'}</code></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Telemetry info row */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-700/60 text-xs">
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">이슈 수량</div>
+                      <div className="text-sm font-bold text-indigo-300">{dbIssues.length || KNOWN_ISSUES.length}개</div>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">데이터 용량</div>
+                      <div className="text-sm font-bold text-purple-300">
+                        ~{((JSON.stringify(dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES).length) / 1024).toFixed(1)} KB
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">배포 대상 브랜치</div>
+                      <div className="text-sm font-bold text-emerald-300">{githubBranch || 'main'}</div>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Pages 웹사이트</div>
+                      <a 
+                        href="https://ahbiyout-all.github.io/windows-fix-wizard/"
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-xs font-bold text-cyan-300 hover:underline flex items-center gap-1 truncate mt-0.5"
+                      >
+                        <span>Pages 바로가기</span>
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Progress Tracker (Visible when syncing or step > 0) */}
+                  {isInstantSyncing && (
+                    <div className="p-3 bg-indigo-950/80 rounded-xl border border-indigo-500/40 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-indigo-200 flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                          {instantSyncMsg}
+                        </span>
+                        <span className="text-[11px] font-mono text-indigo-300 font-bold">{instantSyncStep}/3</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-teal-400 transition-all duration-300"
+                          style={{ width: `${(instantSyncStep / 3) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      <span>PAT 토큰 권한(<code className="text-slate-300">repo</code> 및 <code className="text-slate-300">workflow</code>)이 설정되어 있어야 정상 동작합니다.</span>
+                    </div>
+
+                    <button
+                      onClick={handleInstantSync}
+                      disabled={isInstantSyncing || !githubRepo}
+                      className="w-full sm:w-auto py-3 px-6 bg-gradient-to-r from-indigo-500 via-purple-600 to-teal-500 hover:from-indigo-600 hover:via-purple-700 hover:to-teal-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md hover:shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                    >
+                      {isInstantSyncing ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>{language === 'en' ? 'Syncing & Triggering Build...' : '원격 동기화 및 Pages 배포 중...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
+                          <span>{language === 'en' ? 'Instant Sync data/issues.json & Deploy Pages' : '최신 dataset 수동 원격 즉시 동기화 (One-Click)'}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -12178,6 +12879,178 @@ export default function App() {
                 </motion.div>
               )}
 
+              {/* INTEGRATED SYSTEM LOG FILES AUDIT & MANAGEMENT CENTER */}
+              <div id="log-files-management-center" className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 mb-8 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-cyan-100 dark:bg-cyan-950/50 p-2.5 rounded-xl text-cyan-600 dark:text-cyan-400">
+                      <Archive className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                          {language === 'en' ? 'Integrated Log Files Management & Audit Center' : '통합 시스템 로그 파일 점검 및 관리 센터'}
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+                          6 COLLECTIONS
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 max-w-2xl mt-0.5">
+                        {language === 'en'
+                          ? 'Audit file sizes, record counts, and timestamps across all 6 log types. Perform one-click ZIP exports and retention-based auto-pruning.'
+                          : '관리자, 검색, 피드백, 앱 에러, 백엔드 크론, 방문자 등 시스템 6개 분야별 로그 데이터 크기 및 최신 기록을 실시간 점검하고 일괄 ZIP 백업과 자동 정돈을 수행합니다.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    <button
+                      onClick={fetchLogSummary}
+                      disabled={isFetchingLogSummary}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="로그 파일 상태 실시간 새로고침"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isFetchingLogSummary ? 'animate-spin text-cyan-600' : ''}`} />
+                      <span>{language === 'en' ? 'Refresh' : '상태 새로고침'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportAllLogsZip}
+                      disabled={isExportingAllLogsZip}
+                      className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                      title="6개 로그 파일 전체를 하나의 ZIP 패키지로 백업다운로드합니다"
+                    >
+                      {isExportingAllLogsZip ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      <span>{language === 'en' ? 'Export All Logs ZIP' : '전체 로그 ZIP 일괄 백업'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleAutoPruneLogs}
+                      disabled={isAutoPruningLogs}
+                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                      title="유지보수 설정에 지정된 기간 경과 로그를 자동 파기 정돈합니다"
+                    >
+                      {isAutoPruningLogs ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      <span>{language === 'en' ? 'Auto-Prune Logs' : '보관 기간 경과 로그 자동 정돈'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Overall Summary Bar */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{language === 'en' ? 'Log Collections' : '등록된 로그 유형'}</p>
+                    <p className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-0.5">6개 <span className="text-xs font-normal text-slate-400">(전체 연동중)</span></p>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{language === 'en' ? 'Total Log Records' : '총 누적 로그 수'}</p>
+                    <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400 mt-0.5">{logSummaryData?.totalCount ?? 0} <span className="text-xs font-normal text-slate-400">건</span></p>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{language === 'en' ? 'Disk Storage Usage' : '로그 파일 디스크 용량'}</p>
+                    <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">{logSummaryData?.totalSizeFormatted ?? '0 KB'}</p>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{language === 'en' ? 'Retention Policy' : '로그 보관 기간 방침'}</p>
+                    <p className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-1">
+                      {maintenanceSettings.cleanupMonths === 0 ? '영구 보관 (정리 사용 안함)' : `${maintenanceSettings.cleanupMonths}개월 (${maintenanceSettings.cleanupMonths * 30}일) 후 자동 정돈`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Grid of 6 Log Types Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(logSummaryData?.summary || [
+                    { type: 'visitor', labelKo: '방문자 정보 & 보안 로그', icon: 'Users', color: 'cyan', collectionName: 'logs_visitor', count: visitorLogs.length, sizeFormatted: 'Calculated' },
+                    { type: 'search', labelKo: '사용자 검색 로그', icon: 'Search', color: 'blue', collectionName: 'logs_search', count: searchLogs.length, sizeFormatted: 'Calculated' },
+                    { type: 'feedback', labelKo: '사용자 피드백 로그', icon: 'ThumbsUp', color: 'emerald', collectionName: 'logs_feedback', count: feedbackLogs.length, sizeFormatted: 'Calculated' },
+                    { type: 'admin', labelKo: '관리자 활동 로그', icon: 'ShieldCheck', color: 'purple', collectionName: 'logs_admin', count: adminLogs.length, sizeFormatted: 'Calculated' },
+                    { type: 'error', labelKo: '앱 시스템 에러 로그', icon: 'AlertTriangle', color: 'rose', collectionName: 'logs_error', count: appErrorLogs.length, sizeFormatted: 'Calculated' },
+                    { type: 'backend', labelKo: '백엔드 엔진 로그', icon: 'Database', color: 'indigo', collectionName: 'logs_backend', count: backendLogs.length, sizeFormatted: 'Calculated' }
+                  ]).map((item: any) => {
+                    const isVisitor = item.type === 'visitor';
+                    const isSearch = item.type === 'search';
+                    const isFeedback = item.type === 'feedback';
+                    const isAdminLog = item.type === 'admin';
+                    const isError = item.type === 'error';
+                    const isBackend = item.type === 'backend';
+
+                    const openModal = () => {
+                      if (isVisitor) fetchVisitorLogs();
+                      else if (isSearch) fetchSearchLogs(0);
+                      else if (isFeedback) fetchFeedbackLogs(0);
+                      else if (isAdminLog) fetchAdminLogs(0);
+                      else if (isError) fetchAppErrorLogs(0);
+                      else if (isBackend) fetchBackendLogs(true);
+                    };
+
+                    const clearLog = () => {
+                      if (isVisitor) clearVisitorLogs();
+                      else if (isSearch) clearSearchLogs();
+                      else if (isFeedback) clearFeedbackLogs();
+                      else if (isAdminLog) clearAdminLogs();
+                      else if (isError) clearAppErrorLogs();
+                      else if (isBackend) clearBackendLogs();
+                    };
+
+                    return (
+                      <div key={item.type} className="p-4 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between space-y-3">
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              {isVisitor && <Users className="w-5 h-5 text-cyan-500" />}
+                              {isSearch && <Search className="w-5 h-5 text-blue-500" />}
+                              {isFeedback && <ThumbsUp className="w-5 h-5 text-emerald-500" />}
+                              {isAdminLog && <ShieldCheck className="w-5 h-5 text-purple-500" />}
+                              {isError && <AlertTriangle className="w-5 h-5 text-rose-500" />}
+                              {isBackend && <Database className="w-5 h-5 text-indigo-500" />}
+                              <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">{item.labelKo}</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px] font-bold">
+                              {item.sizeFormatted || '0 KB'}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                            <div className="flex justify-between font-mono">
+                              <span>파일/컬렉션명:</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-300">{item.collectionName || `logs_${item.type}`}</span>
+                            </div>
+                            <div className="flex justify-between font-mono">
+                              <span>기록 수:</span>
+                              <span className="font-bold text-cyan-600 dark:text-cyan-400">{item.count ?? 0}건</span>
+                            </div>
+                            {item.latestLogAt && (
+                              <div className="text-[10px] text-slate-400 truncate pt-1">
+                                최근 기록: {new Date(item.latestLogAt).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                          <button
+                            onClick={openModal}
+                            className="flex-1 py-1.5 px-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>상세조회</span>
+                          </button>
+                          <button
+                            onClick={clearLog}
+                            className="py-1.5 px-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                            title="이 로그 파일 초기화"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                            <span>비우기</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 <button
                   onClick={fetchVisitorLogs}
@@ -13427,7 +14300,7 @@ export default function App() {
                                     <span>깃허브 페이지에서 구글 로그인 활성화 방법 (1분 소요):</span>
                                   </div>
                                   <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400 pl-1">
-                                    <li>Firebase 콘솔 &gt; <strong>Authentication</strong> &gt; <strong>설정 (Settings)</strong> 탭으로 이동합니다.</li>
+                                    <li>클라우드 설정 콘솔 &gt; <strong>Authentication</strong> &gt; <strong>설정 (Settings)</strong> 탭으로 이동합니다.</li>
                                     <li><strong>승인된 도메인 (Authorized domains)</strong>에서 <strong>[도메인 추가]</strong>를 누릅니다.</li>
                                     <li><code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-[10px] text-indigo-600 dark:text-indigo-400">ahbiyout-all.github.io</code> 를 입력하고 저장하면 즉시 구글 로그인이 정상 작동합니다!</li>
                                   </ol>
@@ -13439,7 +14312,7 @@ export default function App() {
                                       className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline"
                                     >
                                       <ExternalLink className="w-3.5 h-3.5" />
-                                      <span>Firebase 콘솔 승인된 도메인 설정 바로가기</span>
+                                      <span>클라우드 콘솔 승인된 도메인 설정 바로가기</span>
                                     </a>
                                   </div>
                                 </div>

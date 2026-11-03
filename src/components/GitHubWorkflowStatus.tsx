@@ -20,13 +20,19 @@ interface GitHubWorkflowStatusProps {
   className?: string;
 }
 
-interface WorkflowRun {
+export interface WorkflowRun {
   id: number;
   status: string;
   conclusion: string | null;
   html_url: string;
   created_at: string;
+  updated_at?: string;
+  run_started_at?: string;
   run_number: number;
+  name?: string;
+  head_branch?: string;
+  event?: string;
+  path?: string;
 }
 
 export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({

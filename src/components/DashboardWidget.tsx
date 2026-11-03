@@ -18,15 +18,21 @@ import {
 } from 'recharts';
 import { 
   Activity, Clock, ShieldCheck, AlertTriangle, Key, Cpu, 
-  TrendingUp, BarChart2, PieChart as PieIcon, Zap, CheckCircle2, LineChart as LucideLineChart
+  TrendingUp, BarChart2, PieChart as PieIcon, Zap, CheckCircle2, LineChart as LucideLineChart, Rocket
 } from 'lucide-react';
+import { DeploymentDashboardWidget } from './DeploymentDashboardWidget';
+
+export { DeploymentDashboardWidget };
 
 interface DashboardWidgetProps {
   engineStatus: any;
   language: 'ko' | 'en';
+  defaultTab?: 'engine' | 'deployment';
 }
 
-export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, language = 'ko' }) => {
+export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, language = 'ko', defaultTab = 'engine' }) => {
+  const [activeView, setActiveView] = useState<'engine' | 'deployment'>(defaultTab);
+
   // Extract and shield data
   const telemetry = engineStatus?.telemetry || {};
   const startStr = telemetry.engineStartTime || new Date().toISOString();
@@ -177,7 +183,43 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
   })();
 
   return (
-    <div id="ai-engine-analytics-dashboard" className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-8">
+    <div id="ai-engine-analytics-dashboard" className="space-y-6">
+      {/* Top View Selector Tabs */}
+      <div className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 shadow-xs">
+        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-semibold">
+          <button
+            onClick={() => setActiveView('engine')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg transition-all cursor-pointer ${
+              activeView === 'engine'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <BarChart2 className="w-4 h-4" />
+            <span>{language === 'en' ? 'AI Engine Telemetry' : 'AI 엔진 가동 품질 지표'}</span>
+          </button>
+          <button
+            onClick={() => setActiveView('deployment')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg transition-all cursor-pointer ${
+              activeView === 'deployment'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Rocket className="w-4 h-4" />
+            <span>{language === 'en' ? 'GitHub Deployments & Workflows' : 'GitHub 배포 성능 및 워크플로 성공률'}</span>
+          </button>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 pr-3 text-xs text-slate-400">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>{language === 'en' ? 'Live Telemetry' : '실시간 원격 측정'}</span>
+        </div>
+      </div>
+
+      {activeView === 'deployment' ? (
+        <DeploymentDashboardWidget language={language} showStatusBadges={true} />
+      ) : (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-8">
       {/* Dashboard Section Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6">
         <div className="flex items-center gap-3">
@@ -422,6 +464,8 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
           </ResponsiveContainer>
         </div>
       </div>
+      </div>
+    )}
     </div>
   );
 };
