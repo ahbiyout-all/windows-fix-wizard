@@ -3752,5 +3752,99 @@
     "updatedAt": "2026-11-03T13:42:44.701Z",
     "verifiedAt": "2026-11-03T13:42:44.701Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000124--whea-uncorrectable-error--mw1af634",
+    "category": "시스템/블루스크린",
+    "code": "0x00000124 (WHEA_UNCORRECTABLE_ERROR)",
+    "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 치명적 하드웨어 블루스크린 해결 방법",
+    "title_en": "How to Fix WHEA_UNCORRECTABLE_ERROR (0x00000124) BSOD in Windows 10/11",
+    "symptoms": "고부하 작업 또는 시스템 구동 중 WHEA_UNCORRECTABLE_ERROR (0x00000124) 블루스크린이 발생하며 갑자기 컴퓨터가 재부팅됩니다. 최신 고성능 CPU 전압 불안정, 메인보드 BIOS 미지원, 과도한 오버클럭(XMP/EXPO 포함) 또는 하드웨어 드라이버 손상이 원인입니다.",
+    "symptoms_en": "The system abruptly crashes with a WHEA_UNCORRECTABLE_ERROR (0x00000124) Blue Screen of Death during normal usage or high workloads. It is commonly triggered by CPU voltage instability, outdated BIOS microcode, memory overclocking (XMP/EXPO), or hardware driver corruption.",
+    "script": "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WHEA-Logger'} -MaxEvents 10 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message | Format-Table -AutoSize",
+    "manualSteps": [
+      "최신 BIOS 마이크로코드 업데이트: 메인보드 제조사 공식 지원 페이지에서 CPU 전압 안정화 패치가 적용된 최신 BIOS 버전을 다운로드하여 업데이트합니다.",
+      "오버클럭 및 XMP/EXPO 비활성화: BIOS 설정 진입 후 CPU/RAM 오버클럭, XMP, EXPO 설정을 순정 기본값(Default)으로 복원합니다.",
+      "시스템 파일 무결성 복구: 관리자 권한 명령 프롬프트에서 'sfc /scannow' 및 'DISM.exe /Online /Cleanup-image /Restorehealth'를 순차적으로 실행합니다.",
+      "전원 옵션 최적화: 제어판 > 전원 옵션에서 '고성능' 프로필을 선택하고, PCI Express 링크 상태 전원 관리를 '해제'로 설정합니다."
+    ],
+    "manualSteps_en": [
+      "Update BIOS Microcode: Visit your motherboard manufacturer's website and update to the latest BIOS version containing CPU voltage stability patches.",
+      "Disable Overclocking & XMP/EXPO: Access BIOS setup and reset all CPU/RAM overclocking, XMP, or EXPO profiles to factory defaults.",
+      "Run SFC and DISM Repairs: Open Administrator Command Prompt and run 'sfc /scannow' followed by 'DISM.exe /Online /Cleanup-image /Restorehealth'.",
+      "Adjust Power Plan Settings: In Control Panel Power Options, select the 'High Performance' plan and turn off PCI Express Link State Power Management."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x124---whea-uncorrectable-error",
+      "https://support.microsoft.com/en-us/symptom/how-to-fix-whea-uncorrectable-error-0x00000124"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "Windows 11 BSOD",
+      "블루스크린 0x124",
+      "하드웨어 오류 해결",
+      "CPU 전압 불안정"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T22:56:54.927Z",
+    "updatedAt": "2026-11-03T22:56:54.927Z",
+    "verifiedAt": "2026-11-03T22:56:54.927Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000050--page-fault-in-nonpaged-area--mw1af634",
+    "category": "시스템/블루스크린",
+    "code": "0x00000050 (PAGE_FAULT_IN_NONPAGED_AREA)",
+    "title": "Windows 10/11 PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) BSOD in Windows 10/11",
+    "symptoms": "부팅 중 또는 특정 애플리케이션 및 드라이버 구동 시 PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) 메시지와 함께 시스템이 멈춥니다. 시스템이 올바르지 않은 시스템 메모리 주소를 참조하거나 서드파티 커널 드라이버, 보안 프로그램 충돌, RAM 칩 손상 시 발생합니다.",
+    "symptoms_en": "The operating system crashes with a PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) stop code during startup or execution of apps/drivers. This occurs when Windows invalidly requests non-paged memory, caused by faulty kernel drivers, security software conflicts, or RAM failure.",
+    "script": "Get-CimInstance -ClassName Win32_NTLogEvent -Filter \"Logfile='System' AND EventCode=1001\" | Select-Object -First 5 TimeGenerated, Message | Format-List",
+    "manualSteps": [
+      "Windows 메모리 진단 실행: Win + R을 누르고 'mdsched.exe'를 입력한 후 즉시 다시 시작하여 RAM 메모리의 물리적 불량 여부를 검사합니다.",
+      "가상 메모리(페이징 파일) 재설정: 제어판 > 시스템 > 고급 시스템 설정 > 성능 설정 > 고급 > 가상 메모리 변경에서 '모든 드라이브에 대한 페이징 파일 크기 자동 관리'를 껐다 다시 설정합니다.",
+      "충돌 드라이버 및 보안 소프트웨어 제거: 안전 모드로 부팅하여 최근 설치되거나 업데이트된 백신, 안티치트, 타사 커널 드라이버를 삭제합니다.",
+      "디스크 무결성 검사: 관리자 권한 명령 프롬프트에서 'chkdsk C: /f /r' 명령어를 실행하여 파일 시스템 및 섹터 오류를 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Run Windows Memory Diagnostic: Press Win + R, type 'mdsched.exe', and choose to restart now to check physical RAM modules for defects.",
+      "Reconfigure Virtual Memory Paging File: Go to System Properties > Advanced > Performance Settings > Advanced > Virtual Memory, uncheck automatic management, apply, and re-enable it.",
+      "Uninstall Conflict Drivers & Security Software: Boot into Safe Mode and remove recently updated antivirus software, anti-cheat drivers, or third-party hardware drivers.",
+      "Perform Disk Check: Open Administrator Command Prompt and run 'chkdsk C: /f /r' to scan and fix file system integrity issues."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x50--page-fault-in-nonpaged-area",
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-4b55700f-4681-54a9-8477-718b34e4d138"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "PAGE_FAULT_IN_NONPAGED_AREA",
+      "0x00000050",
+      "블루스크린 0x50",
+      "Windows 메모리 오류",
+      "커널 드라이버 충돌",
+      "BSOD 0x00000050"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T22:56:54.927Z",
+    "updatedAt": "2026-11-03T22:56:54.927Z",
+    "verifiedAt": "2026-11-03T22:56:54.927Z",
+    "verificationStatus": "verified"
   }
 ]

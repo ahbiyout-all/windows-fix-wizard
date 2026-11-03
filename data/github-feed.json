@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-03T13:42:44.701Z",
+  "lastCollectedAt": "2026-11-03T22:56:54.927Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "스토어/앱",
+  "targetCategory": "시스템/블루스크린",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 84,
+  "totalIssuesCount": 86,
   "newIssues": [
     {
-      "id": "gh-0x80073d02-mw0qmi1q",
-      "code": "0x80073D02",
-      "title": "Microsoft Store 앱 업데이트 실패 및 패키지 리소스 충돌 오류 (0x80073D02) 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0x00000124--whea-uncorrectable-error--mw1af634",
+      "code": "0x00000124 (WHEA_UNCORRECTABLE_ERROR)",
+      "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 치명적 하드웨어 블루스크린 해결 방법",
+      "category": "시스템/블루스크린"
     },
     {
-      "id": "gh-0x80073cf9-mw0qmi1q",
-      "code": "0x80073CF9",
-      "title": "Microsoft Store 앱 설치 및 업데이트 중단 오류 (0x80073CF9) 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0x00000050--page-fault-in-nonpaged-area--mw1af634",
+      "code": "0x00000050 (PAGE_FAULT_IN_NONPAGED_AREA)",
+      "title": "Windows 10/11 PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) 블루스크린 오류 해결 방법",
+      "category": "시스템/블루스크린"
     }
   ]
 }
