@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-03T22:56:54.927Z",
-  "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "시스템/블루스크린",
+  "lastCollectedAt": "2026-11-04T04:59:20.570Z",
+  "modelUsed": "gemini-3.1-flash-lite",
+  "targetCategory": "스토어/앱",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 86,
+  "totalIssuesCount": 88,
   "newIssues": [
     {
-      "id": "gh-0x00000124--whea-uncorrectable-error--mw1af634",
-      "code": "0x00000124 (WHEA_UNCORRECTABLE_ERROR)",
-      "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 치명적 하드웨어 블루스크린 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x80073d02-mw1nd94q",
+      "code": "0x80073D02",
+      "title": "Microsoft Store 앱 설치 및 업데이트 시 패키지 배포 실패 오류",
+      "category": "스토어/앱"
     },
     {
-      "id": "gh-0x00000050--page-fault-in-nonpaged-area--mw1af634",
-      "code": "0x00000050 (PAGE_FAULT_IN_NONPAGED_AREA)",
-      "title": "Windows 10/11 PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) 블루스크린 오류 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x80244017-mw1nd94q",
+      "code": "0x80244017",
+      "title": "Microsoft Store 연결 시 프록시 또는 네트워크 통신 오류",
+      "category": "스토어/앱"
     }
   ]
 }
