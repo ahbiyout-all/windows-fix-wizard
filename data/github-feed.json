@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-04T04:59:20.570Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "스토어/앱",
+  "lastCollectedAt": "2026-11-04T13:50:28.836Z",
+  "modelUsed": "gemini-3.5-flash",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 88,
+  "totalIssuesCount": 90,
   "newIssues": [
     {
-      "id": "gh-0x80073d02-mw1nd94q",
-      "code": "0x80073D02",
-      "title": "Microsoft Store 앱 설치 및 업데이트 시 패키지 배포 실패 오류",
-      "category": "스토어/앱"
+      "id": "gh-0xc004c003-mw26cauc",
+      "code": "0xC004C003",
+      "title": "Windows 10/11 정품 인증 오류 0xC004C003 (차단된 제품 키 및 디지털 라이선스 미불합치) 해결 방법",
+      "category": "정품인증"
     },
     {
-      "id": "gh-0x80244017-mw1nd94q",
-      "code": "0x80244017",
-      "title": "Microsoft Store 연결 시 프록시 또는 네트워크 통신 오류",
-      "category": "스토어/앱"
+      "id": "gh-0xc004f074-mw26cauc",
+      "code": "0xC004F074",
+      "title": "Windows 10/11 정품 인증 오류 0xC004F074 (KMS 서버 연결 실패 및 시간 동기화 오류) 해결 방법",
+      "category": "정품인증"
     }
   ]
 }

@@ -3938,5 +3938,97 @@
     "updatedAt": "2026-11-04T04:59:20.570Z",
     "verifiedAt": "2026-11-04T04:59:20.570Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mw26cauc",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 (차단된 제품 키 및 디지털 라이선스 미불합치) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004C003 (Blocked Product Key or License Mismatch)",
+    "symptoms": "Windows 10/11 업데이트 후 또는 메인보드 등 주요 하드웨어 변경 후 정품 인증 상태가 해제되며 '이 장치의 제품 키가 차단되었습니다'라는 메시지와 함께 오류 코드 0xC004C003이 발생합니다. 주로 마이크로소프트 서버에서 키가 무효화되었거나 귀속된 디지털 권한(Digital Entitlement)과 현재 설치된 Windows 에디션(Home/Pro)이 일치하지 않을 때 발생합니다.",
+    "symptoms_en": "After a Windows 10/11 update or hardware change, Windows activation fails with error code 0xC004C003 and the message 'The product key for this device has been blocked.' This occurs when Microsoft invalidates a key or when there is an edition mismatch between the installed OS and the associated digital entitlement.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingProduct -Filter \"Name like 'Windows%'\" | Where-Object PartialProductKey | Select-Object Name, ApplicationId, LicenseStatus, PartialProductKey",
+    "manualSteps": [
+      "시작 > 설정 > 시스템 > 정품 인증으로 이동하여 현재 에디션과 인증 상태를 확인합니다.",
+      "정품 인증 페이지에서 '문제 해결(Troubleshoot)' 단추를 클릭하여 디지털 라이선스 진단 및 자동으로 라이선스 다시 연결을 시도합니다.",
+      "최근 메인보드를 교체한 경우 문제 해결 창 하단의 '최근에 이 장치의 하드웨어를 변경했습니다'를 선택한 후 Microsoft 계정으로 로그인하여 활성화를 이전합니다.",
+      "올바른 25자리 정품 키를 보유한 경우 '제품 키 변경'을 클릭하여 키를 다시 입력합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Start > Settings > System > Activation to verify your current edition and activation status.",
+      "Click the 'Troubleshoot' button on the Activation page to run automated diagnostics and restore digital license binding.",
+      "If you recently replaced the motherboard, select 'I changed hardware on this device recently' at the bottom of the Troubleshooter and sign in with your Microsoft Account.",
+      "Select 'Change product key' and re-enter your valid 25-character product key if available."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09d05e45-2551-4811-b047-3ba4914706a9",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 오류",
+      "제품키 차단",
+      "Windows activation error 0xC004C003",
+      "Digital License Mismatch"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T13:50:28.836Z",
+    "updatedAt": "2026-11-04T13:50:28.836Z",
+    "verifiedAt": "2026-11-04T13:50:28.836Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f074-mw26cauc",
+    "category": "정품인증",
+    "code": "0xC004F074",
+    "title": "Windows 10/11 정품 인증 오류 0xC004F074 (KMS 서버 연결 실패 및 시간 동기화 오류) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004F074 (KMS Server Connection or Time Sync Failure)",
+    "symptoms": "기업, 학교 또는 조직 네트워크 환경에서 KMS(키 관리 서비스)를 통해 정품 인증을 진행할 때, 클라이언트 PC가 KMS 호스트 서버에 연결하지 못하거나 클라이언트와 KMS 서버 간 시스템 시간이 일치하지 않아 활성화에 실패하며 'Software Licensing Service에서 컴퓨터를 정품 인증할 수 없다고 보고했습니다'라는 경고 메시지가 출력됩니다.",
+    "symptoms_en": "Occurs in corporate or academic environments when activating Windows via Key Management Service (KMS) if the KMS server is unreachable or system clocks between client and server differ, showing error 0xC004F074 indicating Software Licensing Service failure.",
+    "script": "w32tm /query /status\nGet-Service -Name w32time | Select-Object Status, StartType\nslmgr.vbs /dli",
+    "manualSteps": [
+      "시작 > 설정 > 시간 및 언어 > 날짜 및 시간으로 이동하여 '지금 동기화'를 눌러 시스템 시간을 정밀하게 일치시킵니다.",
+      "사내 네트워크 또는 조직 VPN에 정상 연결되어 있는지 확인하고 DNS 및 TCP 1688 포트 통신이 가능한지 점검합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 slmgr.vbs /skms <KMS서버주소:포트> 명령을 입력하여 올바른 KMS 호스트를 수동으로 지정합니다.",
+      "명령 프롬프트에서 slmgr.vbs /ato 명령을 실행하여 KMS 정품 인증을 즉시 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Start > Settings > Time & Language > Date & time and click 'Sync now' to precisely synchronize system time.",
+      "Verify connection to your corporate network or VPN and ensure port 1688 (KMS port) and DNS resolution are active.",
+      "Open Command Prompt as Administrator and run 'slmgr.vbs /skms <KMS_Server_Address:Port>' to set the correct KMS host manually.",
+      "Execute 'slmgr.vbs /ato' in the Command Prompt to force activation against the KMS host."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/error-0xc004f074-activate-windows",
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09d05e45-2551-4811-b047-3ba4914706a9"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F074",
+      "KMS 정품인증 오류",
+      "Software Licensing Service 오류",
+      "KMS activation error 0xC004F074",
+      "Windows activation time sync"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T13:50:28.836Z",
+    "updatedAt": "2026-11-04T13:50:28.836Z",
+    "verifiedAt": "2026-11-04T13:50:28.836Z",
+    "verificationStatus": "verified"
   }
 ]
