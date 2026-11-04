@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-04T13:50:28.836Z",
+  "lastCollectedAt": "2026-11-04T23:15:39.369Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "정품인증",
+  "targetCategory": "시스템/블루스크린",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 90,
+  "totalIssuesCount": 92,
   "newIssues": [
     {
-      "id": "gh-0xc004c003-mw26cauc",
-      "code": "0xC004C003",
-      "title": "Windows 10/11 정품 인증 오류 0xC004C003 (차단된 제품 키 및 디지털 라이선스 미불합치) 해결 방법",
-      "category": "정품인증"
+      "id": "gh-critical-process-died--0x000000ef--mw2qj4dl",
+      "code": "CRITICAL_PROCESS_DIED (0x000000EF)",
+      "title": "Windows 10/11 CRITICAL_PROCESS_DIED (0x000000EF) 블루스크린 오류 해결 방법",
+      "category": "시스템/블루스크린"
     },
     {
-      "id": "gh-0xc004f074-mw26cauc",
-      "code": "0xC004F074",
-      "title": "Windows 10/11 정품 인증 오류 0xC004F074 (KMS 서버 연결 실패 및 시간 동기화 오류) 해결 방법",
-      "category": "정품인증"
+      "id": "gh-whea-uncorrectable-error--0x00000124--mw2qj4dl",
+      "code": "WHEA_UNCORRECTABLE_ERROR (0x00000124)",
+      "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 블루스크린 오류 해결 방법",
+      "category": "시스템/블루스크린"
     }
   ]
 }

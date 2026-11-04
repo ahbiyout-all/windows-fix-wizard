@@ -4030,5 +4030,99 @@
     "updatedAt": "2026-11-04T13:50:28.836Z",
     "verifiedAt": "2026-11-04T13:50:28.836Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-critical-process-died--0x000000ef--mw2qj4dl",
+    "category": "시스템/블루스크린",
+    "code": "CRITICAL_PROCESS_DIED (0x000000EF)",
+    "title": "Windows 10/11 CRITICAL_PROCESS_DIED (0x000000EF) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix CRITICAL_PROCESS_DIED (0x000000EF) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows 10 및 11 시스템 운용 중 주요 백그라운드 필수 프로세스(csrss.exe, svchost.exe 등)가 비정상적으로 종료되면서 'CRITICAL_PROCESS_DIED' 메시지와 함께 블루스크린이 발생하고 시스템이 강제 재부팅됩니다. 최근 Windows 누적 업데이트 후 시스템 핵심 파일 손상, 드라이버 호환성 문제 또는 보안 프로그램 간 충돌로 주로 유발됩니다.",
+    "symptoms_en": "The operating system crashes with a 'CRITICAL_PROCESS_DIED' BSOD error (0x000000EF) when a critical background system process (such as csrss.exe or svchost.exe) terminates unexpectedly. This often occurs after recent Windows cumulative updates due to corrupted system files, incompatible device drivers, or third-party security software conflicts.",
+    "script": "Write-Host \"[1/2] Checking and repairing system image corruption via DISM...\" -ForegroundColor Cyan\nDISM.exe /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host \"[2/2] Scanning and restoring system file integrity via SFC...\" -ForegroundColor Cyan\nsfc /scannow",
+    "manualSteps": [
+      "안전 모드(Safe Mode)로 부팅한 후 최근 설치된 타사 드라이버 및 보안 소프트웨어를 제거합니다.",
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행하여 'sfc /scannow' 및 'DISM' 명령어로 손상된 시스템 파일을 복구합니다.",
+      "장치 관리자에서 그래픽, 칩셋, 저장 장치 드라이버를 최신 버전으로 업데이트하거나 이전 안정 버전으로 롤백합니다.",
+      "시스템 복원(System Restore) 기능을 활용하여 블루스크린 오류가 발생하기 전의 정상 작동 시점으로 시스템을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode and uninstall any recently installed third-party drivers or security software.",
+      "Open Command Prompt as administrator and run 'sfc /scannow' and 'DISM' commands to repair corrupted system files.",
+      "Open Device Manager to update graphics, chipset, and storage drivers to their latest versions or roll back to a stable version.",
+      "Use System Restore to revert the system configuration back to a restore point prior to the error occurrence."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/symptoms-stop-code-critical-process-died-0x000000ef",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "CRITICAL_PROCESS_DIED",
+      "0x000000EF",
+      "블루스크린 해결",
+      "Windows 11 BSOD",
+      "시스템 프로세스 중단",
+      "Stop Code 0xEF"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T23:15:39.369Z",
+    "updatedAt": "2026-11-04T23:15:39.369Z",
+    "verifiedAt": "2026-11-04T23:15:39.369Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-whea-uncorrectable-error--0x00000124--mw2qj4dl",
+    "category": "시스템/블루스크린",
+    "code": "WHEA_UNCORRECTABLE_ERROR (0x00000124)",
+    "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix WHEA_UNCORRECTABLE_ERROR (0x00000124) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows 하드웨어 오류 아키텍처(WHEA)에서 복구할 수 없는 하드웨어 에러를 감지하여 'WHEA_UNCORRECTABLE_ERROR (0x00000124)' 블루스크린이 발생합니다. CPU/GPU 과열, 과도한 오버클럭(XMP/EXPO 포함), 구버전 BIOS/UEFI 펌웨어, NVMe SSD 드라이버 불량 또는 전력 공급 불안정이 주 원인입니다.",
+    "symptoms_en": "The system abruptly crashes displaying 'WHEA_UNCORRECTABLE_ERROR' (0x00000124) when the Windows Hardware Error Architecture detects an uncorrectable hardware fault. Common triggers include CPU/GPU overheating, aggressive overclocking (XMP/EXPO), outdated BIOS/UEFI firmware, faulty NVMe drivers, or power supply instability.",
+    "script": "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WHEA-Logger'} -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message -First 10",
+    "manualSteps": [
+      "컴퓨터 재부팅 후 BIOS/UEFI 설정으로 진입하여 CPU 및 메모리 오버클럭(XMP/EXPO) 설정을 해제(Default)합니다.",
+      "메인보드 제조사의 공식 지원 페이지에서 최신 BIOS/UEFI 펌웨어 및 메인보드 칩셋 드라이버를 다운로드하여 업데이트합니다.",
+      "하드웨어 온도를 점검하고 쿨링 팬 동작 상태 확인, 먼지 제거 및 필요 시 CPU/GPU 서멀 페이스트를 재도포합니다.",
+      "Windows 메모리 진단 도구(mdsched.exe)를 실행하여 RAM 메모리의 물리적 고장 유무를 점검합니다."
+    ],
+    "manualSteps_en": [
+      "Reboot into BIOS/UEFI setup and disable all CPU/RAM overclocking configurations (XMP/EXPO) to restore default factory settings.",
+      "Visit the motherboard manufacturer's official support website to update to the latest BIOS/UEFI firmware and chipset drivers.",
+      "Monitor hardware thermal levels, verify cooling fan operation, clear dust, and reapply thermal paste to the CPU/GPU if overheating occurs.",
+      "Run the Windows Memory Diagnostic tool (mdsched.exe) to check for physical hardware failures in RAM modules."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/how-to-fix-whea-uncorrectable-error-08da0ce5-b0d1-42da-91e6-6e676794e33d",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x124---whea-uncorrectable-error"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "하드웨어 블루스크린",
+      "BIOS 업데이트",
+      "WHEA Logger",
+      "BSOD 0x124"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T23:15:39.369Z",
+    "updatedAt": "2026-11-04T23:15:39.369Z",
+    "verifiedAt": "2026-11-04T23:15:39.369Z",
+    "verificationStatus": "verified"
   }
 ]
