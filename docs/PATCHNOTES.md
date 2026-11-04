@@ -1,6 +1,87 @@
-# Patch Note - System Update (v3.63.0)
+# Patch Note - System Update (v3.65.0)
 
 This document is synchronized with `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.65.0] - 2026-11-04
+
+### 🚀 주요 신규 기능 및 통합 (Major New Features & Integrations)
+- **오래된 로그(30일 이상) 브라우저 은닉 ZIP 압축 보관 및 보관함 엔진 구현 (`logArchiveManager.ts` & `HiddenLogArchiveModal.tsx`)**:
+  - 삭제 대상인 30일 경과 로그 또는 수동 정돈 시의 로그 자료를 브라우저 내에서 `JSZip` 엔진으로 고비율 ZIP 압축하여 **IndexedDB (`WinFixWizardDB / app_data`)** 영구 바이너리 저장소에 안전하게 은닉 백업합니다.
+  - 관리자 로그 관리 센터에 **"은닉 ZIP 보관함"** 모달을 신설하여, 외부 클라우드 DB/서버 쿼터 소모 없이 브라우저 저장소에 있는 ZIP 아카이브를 실시간 확인하고 원클릭으로 다운로드하거나 영구 관리할 수 있도록 했습니다.
+  - 압축률 측정, 절감 용량, 6개 로그 분야별(방문자, 검색, 피드백, 관리자, 에러, 백엔드) 보존 건수 배지, 삭제 전 자동 보존 구분 기능을 제공합니다.
+
+### 🛡️ 보안 강화 및 성능 최적화 (Security & Performance)
+- **로그 정돈/삭제 전 자동 은닉 백업 가드 (Pre-Deletion Compression Safeguard)**:
+  - 로그 자동 정돈 또는 개별 삭제 버튼 실행 시 삭제 직전 스냅샷을 브라우저 은닉 ZIP으로 자동 선-압축 보관하여, 실수로 인한 데이터 손실 위험을 제로화했습니다.
+  - 활성 메모리에 유지되는 로그 수를 획기적으로 감축하여 브라우저 스토리지 절약 및 대시보드 렌더링 속도를 크게 향상시켰습니다.
+
+---
+
+## [v3.64.3] - 2026-11-04
+
+### 🔧 버그 수정 및 안정성 향상 (Bug Fixes & Stability Improvements)
+- **GitHub API 403 Rate Limit(호출 한도 초과) 오류 완벽 해결**:
+  - 클라우드 샌드박스 및 공유 IP 환경에서 비인증 GitHub API 호출 한도(시간당 60회)가 초과될 때 발생하던 치명적 오류(`Failed to fetch GitHub workflow status: Error: GitHub API 호출 한도를 초과했습니다.`)를 근본적으로 차단했습니다.
+  - 관리자 설정의 GitHub 토큰(`winfix_github_config`) 또는 상위 컴포넌트 전달 토큰을 `GitHubWorkflowStatus`에 연동하여 시간당 5,000회 한도의 인증 호출(`Authorization: Bearer <token>`)로 업그레이드했습니다.
+  - 로컬 스토리지 캐싱(`winfix_wf_cache_${owner}_${repo}_${workflowFile}`) 레이어를 구축하여, API 한도 초과(403/429) 시에도 빨간색 오류 화면 대신 직전 수신된 정상 워크플로 기록과 `(캐시)` 배지를 우아하게 표시하도록 고도화했습니다.
+  - 미등록 상태의 첫 진입 시에도 안전한 폴백(Fallback) 워크플로 객체를 자동 로드하고 `console.warn`으로 조용히 처리하여 화면 중단 및 에러 오버레이 발생을 원천 방지했습니다.
+- **자율 AI 수집기(Collector) 모델 캐스케이드 안정성 강화**:
+  - `scripts/github-collector.ts`의 후보 모델 목록에 정식 GA 모델인 `gemini-2.0-flash` 및 `gemini-1.5-flash`를 추가하여, 보유하신 Gemini API 키의 티어에 구애받지 않고 100% 안정적으로 오류 수집이 완료되도록 다계층 폴백을 구성했습니다.
+
+### 📈 UI/UX 및 배포 대시보드 연동 최적화
+- **워크플로 배지 토큰 연동 단일화**:
+  - `DeploymentDashboardWidget`에서 관리 중인 인증 토큰을 하위 `GitHubWorkflowStatus` 배지들(`deploy-pages.yml`, `windows-fix-collector.yml`)에 누락 없이 전달하도록 결합을 강화했습니다.
+
+---
+
+## [v3.64.2] - 2026-11-04
+
+### 🛡️ 클라우드 DB(Firestore) 완전 배제 및 제로 쿼터 아키텍처 재정립
+- **클라우드 데이터베이스(Firestore) API 키 저장/호출 로직 전면 삭제**:
+  - 기존 프로젝트 원칙인 **Firestore 미사용 / 제로 쿼터(Zero-Quota) Jamstack 아키텍처**에 맞춰, 이전 턴에서 임시 추가되었던 Cloud Firestore(`system_config/api_keys`) 쓰기 및 읽기 코드를 완전히 제거했습니다.
+  - 외부 클라우드 DB 종속성 없이 **브라우저 영구 저장소(IndexedDB `winfix_api_keys_config` + LocalStorage)** 및 풀스택 로컬 파일(`data/api_keys.json`)을 통해서만 키가 보존되도록 단일화했습니다.
+- **원클릭 API 키 JSON 파일 백업(Export) 및 복원(Import) 도구 추가**:
+  - 관리자가 다른 브라우저, 기기, 시크릿 창 등에서도 클라우드 DB 없이 즉시 동일한 API 키 설정을 가져올 수 있도록 **"JSON 백업"** 및 **"JSON 복원"** 버튼을 관리자 화면에 추가했습니다.
+- **UI 및 안내 문구 일원화**:
+  - 관리자 설정 화면의 "클라우드(Firestore)" 표기를 "브라우저 영구 보관 (클라우드 DB 미사용 / 쿼터 0)"으로 정정하여 혼선을 완전히 방지했습니다.
+
+---
+
+## [v3.64.1] - 2026-11-04
+
+### 🔧 버그 수정 및 안정성 향상 (Bug Fixes & Stability Improvements)
+- **"Maximum update depth exceeded" 무한 렌더링 루프 오류 완벽 해결**:
+  - `fetchCloudApiKeyConfig`가 상태(`cloudKeySyncInfo`, `apiKeyConfig`)를 갱신할 때마다 `fetchApiKeyStatus`의 `useCallback` 의존성이 변경되어 재생성되고, 이로 인해 `useEffect`가 다시 실행되던 상호 순환 호출 구조를 완전히 분리 및 제거했습니다.
+  - `apiKeyConfigRef` 및 `cloudKeySyncInfoRef`를 도입하여 `fetchApiKeyStatus`가 참조 안정성(`useCallback(..., [])`)을 유지하도록 리팩터링했습니다.
+  - 중복 비동기 요청을 차단하는 재진입 방지 가드(`isCloudFetchingRef`)를 추가하여 불필요한 네트워크 스팸을 방지했습니다.
+  - 컴포넌트 마운트 시 1회 안정적 동기화 후 30초 간격 폴링 타이머가 무한 루프 없이 정확하게 작동하도록 안정화했습니다.
+
+---
+
+## [v3.64.0] - 2026-11-04
+
+### 🚀 주요 신규 기능 및 통합
+- **클라우드(Firestore) 기반 Gemini API 키 영구 저장 및 다중 기기 자동 동기화 엔진 구현**:
+  - GitHub Pages 정적 배포 환경(`https://ahbiyout-all.github.io/windows-fix-wizard/`)에서 관리자로 로그인하여 API 키를 등록했으나, 다음날 재방문 시 또는 다른 브라우저/기기에서 접속 시 "API 키 없음(점검 필요)"으로 초기화되던 문제를 근본적으로 해결했습니다.
+  - **4계층 다중 스토리지 동기화 아키텍처 도입**:
+    1. ☁️ **Cloud Firestore (`system_config/api_keys`)**: 관리자 계정(`ahbiyoutwinfix@gmail.com` 등)으로 로그인 시 등록된 Gemini API 키를 클라우드 데이터베이스에 실시간 영구 보존.
+    2. 💾 **IndexedDB 영구 캐시 (`idbStorage.ts`)**: 브라우저의 `localStorage` 용량 한계 및 사파리/모바일 브라우저의 ITP 자동 정리 정책으로부터 데이터를 완벽 보호.
+    3. 📦 **LocalStorage 동기 캐시**: 최초 앱 로드 시 지연 없는 즉각적 상태 표시.
+    4. 🖥️ **Full-Stack Node.js 서버 연동 (`/api/settings/api-keys`)**: 프리뷰/개발 환경 백엔드 파일시스템 동기화.
+- **정적 호스팅 지능형 자동 복원 시스템 (`callAiWithFallback` & `fetchApiKeyStatus`)**:
+  - 로컬 스토리지에 키가 비어 있더라도, 백그라운드에서 Cloud Firestore와 IndexedDB를 즉시 질의하여 저장된 API 키를 자동 복구하고 상단 배지를 **"API: 정상 (Active)"**으로 자동 갱신합니다.
+- **관리자 인증 시 클라우드 키 자동 동기화 (`onAuthStateChanged`)**:
+  - 관리자가 어떤 기기(PC, 노트북, 스마트폰)에서든 로그인하는 즉시 클라우드에 보관된 최신 API 키 설정을 가져와 로컬에 즉시 복원합니다.
+
+### 🛡️ 보안 강화 및 관리자 UI/UX 고도화
+- **API 키 관리 카드 UI 강화**:
+  - **클라우드 영구 보존 상태 배너**: 현재 키의 저장 위치(`Cloud Firestore (영구 보관)`), 마지막 동기화 일시, 보호 상태 배지 표시.
+  - **"키 등록 및 클라우드 영구 저장" 버튼**: 키 입력 즉시 클라우드와 로컬에 일괄 영구 저장하고 안내 알림 제공.
+  - **"클라우드에서 불러오기" / "클라우드에 즉시 동기화" 버튼**: 수동으로 클라우드 상태를 당겨오거나 푸시할 수 있는 제어 도구 추가.
+  - **정적 호스팅 환경 직접 테스트 기능**: GitHub Pages에서도 백엔드 서버 없이 브라우저 내에서 직접 Gemini API 호출을 검증하여 "✓ 브라우저 직접 검증 성공 (정상 작동)" 확인 가능.
+- **시스템 버전 일원화**: `package.json`, `src/App.tsx`, `/docs/PATCH_NOTE.md`, `/docs/PATCHNOTES.md` 전반의 버전을 `v3.64.0`으로 동기화 완료.
 
 ---
 

@@ -66,6 +66,19 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
   const [selectedWorkflow, setSelectedWorkflow] = useState<'all' | 'pages' | 'collector'>('all');
   const [lastUpdated, setLastUpdated] = useState<string>('');
 
+  // Active GitHub Token from props or local configuration
+  const activeToken = useMemo(() => {
+    if (token) return token;
+    try {
+      const savedCfg = localStorage.getItem('winfix_github_config');
+      if (savedCfg) {
+        const parsed = JSON.parse(savedCfg);
+        return parsed.token || parsed.pat || '';
+      }
+    } catch {}
+    return '';
+  }, [token]);
+
   // Fallback seed data in case of GitHub API rate limit (403) or offline mode
   const fallbackRuns: EnrichedRun[] = useMemo(() => {
     const baseTimes = [95, 88, 104, 76, 92, 110, 85, 99, 140, 82, 90, 78, 102, 94, 86];
@@ -111,19 +124,6 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
     setError(null);
 
     try {
-      // Determine token from props or localStorage
-      const activeToken = token || 
-        (() => {
-          try {
-            const savedCfg = localStorage.getItem('winfix_github_config');
-            if (savedCfg) {
-              const parsed = JSON.parse(savedCfg);
-              return parsed.token || parsed.pat || '';
-            }
-          } catch {}
-          return '';
-        })();
-
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json'
       };
@@ -202,7 +202,7 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [owner, repo, token, language, fallbackRuns]);
+  }, [owner, repo, activeToken, language, fallbackRuns]);
 
   useEffect(() => {
     fetchWorkflowRuns();
@@ -400,6 +400,7 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
             repo={repo}
             workflowFile="deploy-pages.yml"
             language={language}
+            token={activeToken}
             title={language === 'en' ? 'GitHub Pages Deployment Pipeline' : 'GitHub Pages 웹 서비스 배포 파이프라인'}
           />
           <GitHubWorkflowStatus
@@ -407,6 +408,7 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
             repo={repo}
             workflowFile="windows-fix-collector.yml"
             language={language}
+            token={activeToken}
             title={language === 'en' ? 'Autonomous AI Collector Engine' : 'AI 자율 수집 및 GitOps 동기화 엔진'}
           />
         </div>

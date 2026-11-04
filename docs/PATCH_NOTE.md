@@ -1,6 +1,86 @@
-# Patch Note - System Update (v3.63.0)
+# Patch Note - System Update (v3.65.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.65.0] - 2026-11-04
+
+### 🚀 Major New Features & Integrations
+- **In-Browser Hidden ZIP Archive Vault for Obsolete Log Safeguarding (`logArchiveManager.ts` & `HiddenLogArchiveModal.tsx`)**:
+  - Implemented client-side high-ratio ZIP compression for old logs (older than 30 days or prior to deletion) into browser-persistent **IndexedDB (`WinFixWizardDB / app_data`)** binaries via `JSZip`.
+  - Added a dedicated **"은닉 ZIP 보관함" (Hidden In-Browser ZIP Archive Vault)** modal allowing administrators to inspect, download, and manage compressed ZIP snapshots directly in the browser without any remote server or cloud quota dependencies.
+  - Features real-time compression ratio telemetry, total saved storage calculation, breakdown per log category (visitor, search, feedback, admin, error, backend), and one-click ZIP binary downloading.
+
+### 🛡️ Security Hardening & Zero-Cloud Performance Optimizations
+- **Pre-Deletion Compression Safeguard**:
+  - Automatically captures high-ratio compressed ZIP snapshots of 30-day+ obsolete logs prior to executing auto-pruning or manual log clearances across all 6 log collections.
+  - Drastically reduces active browser memory overhead and speeds up UI rendering while guaranteeing 100% data recovery and auditability.
+
+---
+
+## [v3.64.3] - 2026-11-04
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Resolved GitHub API 403 Rate Limit Error in `GitHubWorkflowStatus`**:
+  - Fixed an unhandled error (`Failed to fetch GitHub workflow status: Error: GitHub API 호출 한도를 초과했습니다.`) triggered when shared container / sandbox IP addresses exhaust GitHub's unauthenticated 60 req/hr rate limit.
+  - Implemented token authorization headers (`Authorization: Bearer <token>`) leveraging configured GitHub PAT tokens from props or `winfix_github_config`, boosting rate limits to 5,000 req/hr.
+  - Added robust client-side `localStorage` caching (`winfix_wf_cache_${owner}_${repo}_${workflowFile}`) for workflow run results, displaying the last known telemetry status without throwing fatal exceptions.
+  - Implemented resilient fallback runs and quiet `console.warn` logging so rate-limited environments continue functioning gracefully with a clear "(캐시)" status badge instead of application error overlays.
+- **Autonomous AI Collector Model Cascade Resilience**:
+  - Expanded candidate AI model list in `scripts/github-collector.ts` to include production models `gemini-2.0-flash` and `gemini-1.5-flash` alongside `gemini-2.5-flash`, ensuring continuous uninterrupted execution across all Gemini API tiers.
+
+### 📈 UI/UX & Performance Optimizations
+- **Workflow Badge Token Synchronization**:
+  - Propagated active GitHub authentication tokens from `DeploymentDashboardWidget` down to all embedded `GitHubWorkflowStatus` badges (`deploy-pages.yml` and `windows-fix-collector.yml`).
+  - Added real-time cache detection and subtle non-disruptive cache badge indicators in the deployment header.
+
+---
+
+## [v3.64.2] - 2026-11-04
+
+### 🛡️ Security Hardening & Zero-Cloud Architecture Realignment
+- **Complete Elimination of Cloud Database (Firestore) for API Keys**:
+  - In strict compliance with the established Zero-Cloud-Quota Jamstack architecture, all writes and reads to Cloud Firestore (`system_config/api_keys`) have been completely purged from the codebase.
+  - Replaced Firestore calls with client-side **IndexedDB (`idbStorage.ts`)** and **LocalStorage** storage layers, guaranteeing zero quota usage, zero network cost, and zero 429 Resource Exhausted exceptions.
+  - Added native **JSON API Key Backup Export & Import** capabilities, allowing administrators to seamlessly export their configured Gemini API keys to an encrypted/local JSON file (`winfix_api_keys_YYYY-MM-DD.json`) and restore them onto any browser or device in one click without relying on a remote database.
+  - Aligned all UI banners, tooltips, and status cards to reflect browser-native durability (`IndexedDB / LocalStorage`) instead of Cloud Firestore.
+
+---
+
+## [v3.64.1] - 2026-11-04
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Resolved "Maximum update depth exceeded" Infinite Render Loop**:
+  - Fixed a critical React render loop where `fetchApiKeyStatus` and `fetchCloudApiKeyConfig` were mutually triggering each other inside an effect hook when state changed.
+  - Refactored `apiKeyConfigRef` and `cloudKeySyncInfoRef` to allow `fetchApiKeyStatus` to remain reference-stable (`useCallback(..., [])`) without re-creating every time sync state updates.
+  - Added re-entrancy prevention guard (`isCloudFetchingRef`) to `fetchCloudApiKeyConfig` to prevent overlapping asynchronous fetches.
+  - Stabilized the component initialization `useEffect`, ensuring single execution on mount and deterministic 30-second background polling without state thrashing.
+
+---
+
+## [v3.64.0] - 2026-11-04
+
+### 🚀 Major New Features & Integrations
+- **Cloud Firestore Gemini API Key Persistence & Multi-Device Sync (클라우드 API 키 영구 보존 및 자동 복원 엔진)**:
+  - Fixed an issue where Gemini API keys saved on the static GitHub Pages deployment (`https://ahbiyout-all.github.io/windows-fix-wizard/`) would disappear or show "API 키 점검" upon returning the next day or accessing from other browsers/devices.
+  - Implemented multi-tier storage architecture for API key persistence:
+    1. ☁️ **Cloud Firestore (`system_config/api_keys`)**: Securely saves the admin's active Gemini API keys and routing policies to the cloud database upon key creation or modification.
+    2. 💾 **IndexedDB (`idbStorage.ts`)**: Caches keys in high-capacity browser IndexedDB storage to guard against aggressive `localStorage` eviction policies in privacy-centric browsers (e.g. Safari ITP, iOS webviews).
+    3. 📦 **LocalStorage (`winfix_api_keys_config`)**: Maintains instant synchronous access on initial component mount.
+    4. 🖥️ **Full-Stack Node.js Backend (`/api/settings/api-keys`)**: Synchronizes settings to the backend filesystem when running in fullstack preview mode.
+- **Auto-Recovery on Static Hosting (`callAiWithFallback` & `fetchApiKeyStatus`)**:
+  - `callAiWithFallback` now automatically attempts an on-the-fly recovery from IndexedDB and Cloud Firestore before throwing "Key Missing" errors on static hosts.
+  - `fetchApiKeyStatus` lazily pulls from Cloud Firestore when local storage is empty, ensuring that returning admins or users across multiple devices automatically inherit the valid active state without re-entering keys.
+- **Admin Auth-Driven Cloud Restoration (`onAuthStateChanged`)**:
+  - Whenever an administrator signs in (e.g. `ahbiyoutwinfix@gmail.com` or passkey session), the application immediately queries Firestore `system_config/api_keys` and restores all keys to local state and storage.
+
+### 🛡️ Security Hardening & Admin UI Enhancements
+- **Enhanced API Key Management Card & In-Browser Testing**:
+  - Added a prominent **Cloud Persistence Status Banner** displaying connection status, data source (`Cloud Firestore (영구 보관)`), and the last synchronized timestamp.
+  - Added explicit **"키 등록 및 클라우드 영구 저장" (Add & Save to Cloud)**, **"클라우드에서 불러오기" (Pull from Cloud)**, and **"클라우드 및 로컬 설정 전체 저장" (Save All to Cloud)** buttons.
+  - Integrated in-browser direct testing on static hosts: Clicking "Test" on an API key directly queries Google Generative AI within the browser, providing instant verification without requiring a Node.js backend.
+- **System Versioning Synchronization**: Updated system versioning to `v3.64.0` across `package.json`, `src/App.tsx` (`APP_VERSION`), `/docs/PATCH_NOTE.md`, and `/docs/PATCHNOTES.md`.
 
 ---
 

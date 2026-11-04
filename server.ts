@@ -3446,6 +3446,45 @@ async function startServer() {
     }
   });
 
+  app.post("/api/settings/api-keys", requireAdmin, async (req, res) => {
+    try {
+      const config = req.body;
+      if (config && Array.isArray(config.keys)) {
+        const localPath = path.join(process.cwd(), 'data', 'api_keys_config.json');
+        fs.writeFileSync(localPath, JSON.stringify(config, null, 2), 'utf8');
+        try {
+          if (db) {
+            await db.collection('system_config').doc('api_keys').set(config, { merge: true });
+          }
+        } catch (_) {}
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get("/api/settings/api-keys", requireAdmin, async (req, res) => {
+    try {
+      const localPath = path.join(process.cwd(), 'data', 'api_keys_config.json');
+      if (fs.existsSync(localPath)) {
+        const raw = fs.readFileSync(localPath, 'utf8');
+        return res.json({ success: true, config: JSON.parse(raw) });
+      }
+      try {
+        if (db) {
+          const docSnap = await db.collection('system_config').doc('api_keys').get();
+          if (docSnap.exists) {
+            return res.json({ success: true, config: docSnap.data() });
+          }
+        }
+      } catch (_) {}
+      res.json({ success: true, config: null });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // ==========================================
   // GITHUB ACTIONS & GITOPS INTEGRATION ROUTES
   // ==========================================

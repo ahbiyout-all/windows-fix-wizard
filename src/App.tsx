@@ -39,6 +39,8 @@ import { ReadingProgressBar } from './components/ReadingProgressBar';
 import { parseJsonResponse, parseAiJson } from './utils/safeFetch';
 import { validateKnownIssuesData, ValidationResult } from './utils/validateKnownIssue';
 import { idbGet, idbSet, idbRemove } from './utils/idbStorage';
+import { HiddenLogArchiveModal } from './components/HiddenLogArchiveModal';
+import { compressLogsToHiddenZip, getHiddenArchiveList } from './utils/logArchiveManager';
 
 interface AppErrorLog {
   id?: string;
@@ -347,15 +349,60 @@ export const getApiKeyConfig = (): ApiKeyConfig => {
   return config;
 };
 
-export const saveApiKeyConfig = (config: ApiKeyConfig) => {
-  localStorage.setItem('winfix_api_keys_config', JSON.stringify(config));
+export const saveApiKeyConfig = async (
+  config: ApiKeyConfig, 
+  _syncToCloud: boolean = false,
+  _adminEmail?: string
+) => {
+  // 1. Synchronously persist to LocalStorage
+  try {
+    localStorage.setItem('winfix_api_keys_config', JSON.stringify(config));
+  } catch (e) {
+    console.warn("Failed to save apiKeyConfig to localStorage", e);
+  }
+
+  // 2. Persist to IndexedDB for resilient browser durability
+  try {
+    await idbSet('winfix_api_keys_config', config);
+  } catch (e) {
+    console.warn("Failed to save apiKeyConfig to IndexedDB", e);
+  }
+
+  // 3. If Node.js backend is accessible, notify server (persists to data/api_keys.json)
+  if (typeof window !== 'undefined' && !IS_GITHUB_PAGES) {
+    try {
+      const authHeaders = await getAuthHeaders();
+      await fetch('/api/settings/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(config)
+      });
+    } catch (_) {}
+  }
 };
 
 export const callAiWithFallback = async (ai: any, contents: string, config?: any): Promise<string> => {
   if (IS_GITHUB_PAGES) {
-    const configData = getApiKeyConfig();
-    const activeKeys = configData.keys.filter(k => k.isActive && isValidApiKeyFormat(k.key));
+    let configData = getApiKeyConfig();
+    let activeKeys = configData.keys.filter(k => k.isActive && isValidApiKeyFormat(k.key));
     
+    // Auto-recovery: Try reading from IndexedDB if localStorage was empty
+    if (activeKeys.length === 0) {
+      try {
+        const idbConfig = await idbGet<ApiKeyConfig>('winfix_api_keys_config');
+        if (idbConfig && Array.isArray(idbConfig.keys)) {
+          const idbActive = idbConfig.keys.filter(k => k.isActive && isValidApiKeyFormat(k.key));
+          if (idbActive.length > 0) {
+            configData = idbConfig;
+            activeKeys = idbActive;
+            try {
+              localStorage.setItem('winfix_api_keys_config', JSON.stringify(idbConfig));
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+
     if (activeKeys.length > 0) {
       try {
         const genAI = new GoogleGenerativeAI(activeKeys[0].key);
@@ -481,7 +528,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.63.0";
+const APP_VERSION = "3.65.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1222,6 +1269,22 @@ export default function App() {
   const [isFetchingLogSummary, setIsFetchingLogSummary] = useState(false);
   const [isExportingAllLogsZip, setIsExportingAllLogsZip] = useState(false);
   const [isAutoPruningLogs, setIsAutoPruningLogs] = useState(false);
+  const [showHiddenArchiveModal, setShowHiddenArchiveModal] = useState(false);
+  const [isArchiving30dLogs, setIsArchiving30dLogs] = useState(false);
+  const [hiddenArchiveCount, setHiddenArchiveCount] = useState<number>(0);
+
+  const refreshHiddenArchiveCount = useCallback(async () => {
+    try {
+      const list = await getHiddenArchiveList();
+      setHiddenArchiveCount(list.length);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) {
+      refreshHiddenArchiveCount();
+    }
+  }, [isAdmin, refreshHiddenArchiveCount]);
   const [isTestingAlert, setIsTestingAlert] = useState(false);
   const [isTestingSmtpConn, setIsTestingSmtpConn] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
@@ -1236,33 +1299,144 @@ export default function App() {
   const [showKeyStatusModal, setShowKeyStatusModal] = useState(false);
   const [testingKeyIndex, setTestingKeyIndex] = useState<number | null>(null);
   const [keyTestResults, setKeyTestResults] = useState<Record<number, { isValid: boolean; status?: string; message?: string }>>({});
+  const [cloudKeySyncInfo, setCloudKeySyncInfo] = useState<{
+    synced: boolean;
+    updatedAt?: string;
+    updatedBy?: string;
+    isSyncing?: boolean;
+    source?: string;
+  }>({
+    synced: false,
+    source: 'Local Storage'
+  });
 
-  const fetchApiKeyStatus = useCallback(async () => {
+  const apiKeyConfigRef = useRef<ApiKeyConfig>(apiKeyConfig);
+  const cloudKeySyncInfoRef = useRef(cloudKeySyncInfo);
+  const isCloudFetchingRef = useRef<boolean>(false);
+  const apiKeyFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    apiKeyConfigRef.current = apiKeyConfig;
+  }, [apiKeyConfig]);
+
+  useEffect(() => {
+    cloudKeySyncInfoRef.current = cloudKeySyncInfo;
+  }, [cloudKeySyncInfo]);
+
+  const fetchCloudApiKeyConfig = useCallback(async (_forceSync = false): Promise<ApiKeyConfig | null> => {
+    if (isCloudFetchingRef.current) return null;
+    isCloudFetchingRef.current = true;
+    setCloudKeySyncInfo(prev => ({ ...prev, isSyncing: true }));
+    let loadedConfig: ApiKeyConfig | null = null;
+    let detectedSource = 'Local Storage';
+
+    try {
+      // 1. Try reading from resilient browser IndexedDB
+      try {
+        const idbSaved = await idbGet<ApiKeyConfig>('winfix_api_keys_config');
+        if (idbSaved && Array.isArray(idbSaved.keys) && idbSaved.keys.length > 0) {
+          loadedConfig = idbSaved;
+          detectedSource = 'IndexedDB 브라우저 영구 보관';
+        }
+      } catch (e) {
+        console.warn("IndexedDB api_keys fetch error:", e);
+      }
+
+      // 2. If running with Node.js backend (!IS_GITHUB_PAGES), check local server file (data/api_keys.json)
+      if (!loadedConfig && !IS_GITHUB_PAGES) {
+        try {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch('/api/settings/api-keys', { headers: { ...authHeaders } });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.success && data.config && Array.isArray(data.config.keys) && data.config.keys.length > 0) {
+              loadedConfig = data.config;
+              detectedSource = '로컬 서버 파일 (data/api_keys.json)';
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. Fallback to LocalStorage
+      if (!loadedConfig) {
+        const local = getApiKeyConfig();
+        if (local.keys.length > 0) {
+          loadedConfig = local;
+          detectedSource = '로컬 스토리지 (LocalStorage)';
+        }
+      }
+
+      // 4. Merge or Apply
+      if (loadedConfig && Array.isArray(loadedConfig.keys) && loadedConfig.keys.length > 0) {
+        const local = getApiKeyConfig();
+        const mergedKeys = [...loadedConfig.keys];
+        for (const lKey of local.keys) {
+          if (!mergedKeys.some(m => m.key === lKey.key)) {
+            mergedKeys.push(lKey);
+          }
+        }
+        const finalConfig: ApiKeyConfig = {
+          keys: mergedKeys,
+          mode: loadedConfig.mode || local.mode || 'priority'
+        };
+
+        apiKeyConfigRef.current = finalConfig;
+        setApiKeyConfigState(finalConfig);
+        try {
+          localStorage.setItem('winfix_api_keys_config', JSON.stringify(finalConfig));
+          await idbSet('winfix_api_keys_config', finalConfig);
+        } catch (_) {}
+
+        const newSyncInfo = {
+          synced: true,
+          updatedAt: new Date().toLocaleTimeString(),
+          updatedBy: 'IndexedDB / Local',
+          isSyncing: false,
+          source: detectedSource
+        };
+        cloudKeySyncInfoRef.current = newSyncInfo;
+        setCloudKeySyncInfo(newSyncInfo);
+        return finalConfig;
+      } else {
+        setCloudKeySyncInfo(prev => ({ ...prev, isSyncing: false, source: '로컬 스토리지 (키 미설정)' }));
+      }
+      return null;
+    } finally {
+      isCloudFetchingRef.current = false;
+    }
+  }, [isAdmin, adminSessionEmail]);
+
+  const fetchApiKeyStatus = useCallback(async (targetConfigOverride?: ApiKeyConfig) => {
     setIsCheckingKeyStatus(true);
+    const targetConfig = targetConfigOverride || apiKeyConfigRef.current;
+    const currentSync = cloudKeySyncInfoRef.current;
     
-    const checkLocalOnly = () => {
-      const activeCustomKeys = apiKeyConfig.keys.filter(k => k.isActive);
+    const checkLocalOnly = (currConfig = targetConfig) => {
+      const activeCustomKeys = currConfig.keys.filter(k => k.isActive);
       const hasValidKey = activeCustomKeys.some(k => isValidApiKeyFormat(k.key));
+      const sourceLabel = currentSync.source 
+        ? currentSync.source 
+        : (hasValidKey ? (IS_GITHUB_PAGES ? 'IndexedDB / LocalStorage' : 'Local Storage (Custom)') : 'None');
       
       setApiKeyStatus({
         status: hasValidKey ? 'active' : 'invalid',
         message: hasValidKey 
-          ? (IS_GITHUB_PAGES ? '정적 호스팅 모드: 커스텀 API 키가 정상 활성화되었습니다.' : '서버 연결 불가: 로컬 커스텀 키를 사용합니다.') 
-          : (IS_GITHUB_PAGES ? '정적 호스팅 모드: 커스텀 API 키 등록이 필요합니다.' : 'Gemini API 키 점검이 필요합니다.'),
+          ? (IS_GITHUB_PAGES ? '정적 호스팅 모드: Gemini API 키가 정상 활성화되었습니다 (브라우저 영구 보관).' : '서버 연결 불가: 로컬 커스텀 키를 사용합니다.') 
+          : (IS_GITHUB_PAGES ? '정적 호스팅 모드: 커스텀 API 키 등록이 필요합니다 (관리자 설정에서 키 추가).' : 'Gemini API 키 점검이 필요합니다.'),
         messageEn: hasValidKey
-          ? (IS_GITHUB_PAGES ? 'Static Mode: Custom API key is active.' : 'Server Offline: Using local custom key.')
-          : (IS_GITHUB_PAGES ? 'Static Mode: API key registration required.' : 'Gemini API Key check required.'),
-        keySource: hasValidKey ? 'Local Storage (Custom)' : 'None',
+          ? (IS_GITHUB_PAGES ? 'Static Host: Gemini API key is active (IndexedDB & LocalStorage persistent).' : 'Server Offline: Using local custom key.')
+          : (IS_GITHUB_PAGES ? 'Static Host: API key registration required (configure in Admin Settings).' : 'Gemini API Key check required.'),
+        keySource: sourceLabel,
         maskedKey: hasValidKey ? activeCustomKeys.find(k => isValidApiKeyFormat(k.key))?.key.substring(0, 10) + '...' : 'NONE',
         isPlaceholder: !hasValidKey,
         isThrottled: false,
-        totalKeysConfigured: apiKeyConfig.keys.length,
+        totalKeysConfigured: currConfig.keys.length,
         lastChecked: new Date().toLocaleTimeString()
       });
     };
 
     if (IS_GITHUB_PAGES) {
-      checkLocalOnly();
+      checkLocalOnly(targetConfig);
       setIsCheckingKeyStatus(false);
       return;
     }
@@ -1277,7 +1451,7 @@ export default function App() {
         let messageEn = data.messageEn || '';
 
         // Cross-check with client active keys using isValidApiKeyFormat
-        const activeCustomKeys = apiKeyConfig.keys.filter(k => k.isActive);
+        const activeCustomKeys = targetConfig.keys.filter(k => k.isActive);
         if (activeCustomKeys.length > 0) {
           const hasValidCustomKey = activeCustomKeys.some(k => isValidApiKeyFormat(k.key));
           if (!hasValidCustomKey) {
@@ -1285,7 +1459,6 @@ export default function App() {
             message = '등록된 커스텀 API 키 형식이 올바르지 않습니다 (AIza로 시작하고 30자 이상 필요).';
             messageEn = 'Configured custom API key format is invalid (must start with AIza and be at least 30 chars).';
           } else if (finalStatus === 'invalid') {
-            // Server might not have keys but client does
             finalStatus = 'active';
             message = '서버 키는 없지만 커스텀 API 키가 활성화되었습니다.';
             messageEn = 'Using active custom API key.';
@@ -1296,34 +1469,46 @@ export default function App() {
           status: finalStatus,
           message,
           messageEn,
-          keySource: data.keySource || 'N/A',
-          maskedKey: data.maskedKey || 'NONE',
+          keySource: data.keySource || currentSync.source || 'N/A',
+          maskedKey: data.maskedKey || (activeCustomKeys.length > 0 ? activeCustomKeys[0].key.substring(0, 10) + '...' : 'NONE'),
           isPlaceholder: !!data.isPlaceholder,
           isThrottled: !!data.isThrottled,
           isCooldown: !!data.isCooldown,
           throttleRemainingSeconds: data.throttleRemainingSeconds || 0,
           remainingCooldownSeconds: data.remainingCooldownSeconds || 0,
-          totalKeysConfigured: data.totalKeysConfigured || 0,
+          totalKeysConfigured: data.totalKeysConfigured || targetConfig.keys.length,
           lastChecked: new Date().toLocaleTimeString()
         });
       } else {
-        checkLocalOnly();
+        checkLocalOnly(targetConfig);
       }
     } catch (err) {
       console.warn("Failed to check Gemini API key status, falling back to local check:", err);
-      checkLocalOnly();
+      checkLocalOnly(targetConfig);
     } finally {
       setIsCheckingKeyStatus(false);
     }
-  }, [apiKeyConfig]);
+  }, []);
 
   useEffect(() => {
-    fetchApiKeyStatus();
-    const interval = setInterval(fetchApiKeyStatus, 30000);
-    return () => clearInterval(interval);
-  }, [fetchApiKeyStatus]);
+    let isMounted = true;
+    const initKeys = async () => {
+      const recovered = await fetchCloudApiKeyConfig();
+      if (isMounted) {
+        fetchApiKeyStatus(recovered || undefined);
+      }
+    };
+    initKeys();
+    const interval = setInterval(() => {
+      fetchApiKeyStatus();
+    }, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [fetchCloudApiKeyConfig, fetchApiKeyStatus]);
 
-  const handleAddKey = () => {
+  const handleAddKey = async () => {
     const cleanKey = newKeyInput.trim();
     if (!cleanKey) return;
     if (!isValidApiKeyFormat(cleanKey)) {
@@ -1341,37 +1526,166 @@ export default function App() {
       isActive: true,
       isCustom: true
     });
-    saveApiKeyConfig(newConfig);
+    
+    await saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
     setNewKeyInput('');
+    setCloudKeySyncInfo({
+      synced: true,
+      updatedAt: new Date().toLocaleTimeString(),
+      updatedBy: 'Admin',
+      source: 'IndexedDB 영구 보관'
+    });
+
+    customAlert(
+      language === 'en'
+        ? "Gemini API Key registered and permanently saved to Browser IndexedDB & Local Storage! No cloud database is used."
+        : "Gemini API 키가 브라우저 영구 저장소(IndexedDB 및 LocalStorage)에 안전하게 저장되었습니다! 클라우드 DB 쿼터 소모 없이 다음날에도 유지됩니다."
+    );
+
     setTimeout(fetchApiKeyStatus, 300);
   };
 
-  const handleToggleKey = (index: number) => {
+  const handleToggleKey = async (index: number) => {
     const newConfig = { ...apiKeyConfig };
     newConfig.keys[index].isActive = !newConfig.keys[index].isActive;
-    saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
+    await saveApiKeyConfig(newConfig);
     setTimeout(fetchApiKeyStatus, 300);
   };
 
-  const handleRemoveKey = (index: number) => {
+  const handleRemoveKey = async (index: number) => {
     const newConfig = { ...apiKeyConfig };
     newConfig.keys.splice(index, 1);
-    saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
+    await saveApiKeyConfig(newConfig);
     setTimeout(fetchApiKeyStatus, 300);
   };
 
-  const handleModeChange = (mode: 'load-balance' | 'priority' | 'single') => {
+  const handleModeChange = async (mode: 'load-balance' | 'priority' | 'single') => {
     const newConfig = { ...apiKeyConfig, mode };
-    saveApiKeyConfig(newConfig);
     setApiKeyConfigState(newConfig);
+    await saveApiKeyConfig(newConfig);
+  };
+
+  const handleSaveAllApiKeySettings = async () => {
+    let configToSave = { ...apiKeyConfig };
+    const cleanKey = newKeyInput.trim();
+    if (cleanKey) {
+      if (isValidApiKeyFormat(cleanKey)) {
+        configToSave.keys.push({
+          name: `Custom Key ${configToSave.keys.length + 1}`,
+          key: cleanKey,
+          isActive: true,
+          isCustom: true
+        });
+        setNewKeyInput('');
+      } else {
+        customAlert(language === 'en' ? 'Invalid API Key format in input box.' : '입력란의 API 키 형식이 올바르지 않습니다 (AIza로 시작, 30자 이상 필요).');
+        return;
+      }
+    }
+
+    await saveApiKeyConfig(configToSave);
+    setApiKeyConfigState(configToSave);
+    setCloudKeySyncInfo({
+      synced: true,
+      updatedAt: new Date().toLocaleTimeString(),
+      updatedBy: 'Admin',
+      source: 'IndexedDB 영구 보관'
+    });
+
+    customAlert(
+      language === 'en'
+        ? "All API Key settings have been saved to Browser IndexedDB & Local Storage."
+        : "모든 Gemini API 키 설정이 브라우저 영구 저장소(IndexedDB 및 LocalStorage)에 안전하게 저장되었습니다."
+    );
+
+    setTimeout(fetchApiKeyStatus, 300);
+  };
+
+  const handleForceLocalBackup = async () => {
+    await saveApiKeyConfig(apiKeyConfig);
+    setCloudKeySyncInfo({
+      synced: true,
+      updatedAt: new Date().toLocaleTimeString(),
+      updatedBy: 'Admin',
+      source: 'IndexedDB 영구 보관'
+    });
+    customAlert(
+      language === 'en'
+        ? "Current API keys have been saved to Browser IndexedDB!"
+        : "현재 등록된 API 키가 브라우저 영구 저장소(IndexedDB)에 안전하게 저장되었습니다!"
+    );
+  };
+
+  const handleExportApiKeysJson = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(apiKeyConfig, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `winfix_api_keys_${new Date().toISOString().split('T')[0]}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleImportApiKeysJson = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        const parsed = JSON.parse(text);
+        if (parsed && Array.isArray(parsed.keys)) {
+          await saveApiKeyConfig(parsed);
+          setApiKeyConfigState(parsed);
+          setCloudKeySyncInfo({
+            synced: true,
+            updatedAt: new Date().toLocaleTimeString(),
+            updatedBy: 'Imported JSON',
+            source: 'JSON 백업 파일'
+          });
+          customAlert(language === 'en' ? "API Keys successfully imported from JSON!" : "JSON 백업 파일로부터 API 키를 성공적으로 복원했습니다!");
+          setTimeout(fetchApiKeyStatus, 300);
+        } else {
+          customAlert(language === 'en' ? "Invalid API Keys JSON file format." : "유효하지 않은 API 키 JSON 파일입니다.");
+        }
+      } catch (err: any) {
+        customAlert(language === 'en' ? "Failed to parse JSON file." : "JSON 파일 파싱 실패: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
   };
 
   const handleTestSpecificKey = async (index: number, keyVal: string) => {
     setTestingKeyIndex(index);
     try {
+      if (!isValidApiKeyFormat(keyVal)) {
+        throw new Error(language === 'en' ? 'Invalid format (Must start with AIza...)' : '형식 오류 (AIza로 시작하고 30자 이상 필요)');
+      }
+
+      // If running on static GitHub Pages, test directly using GoogleGenerativeAI client
+      if (IS_GITHUB_PAGES) {
+        const genAI = new GoogleGenerativeAI(keyVal);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const testRes = await model.generateContent("Hello, verify key connectivity.");
+        const text = testRes.response.text();
+        if (text) {
+          setKeyTestResults(prev => ({
+            ...prev,
+            [index]: {
+              isValid: true,
+              status: 'active',
+              message: language === 'en' ? 'Verified in browser (Valid)' : '브라우저 직접 검증 성공 (정상 작동)'
+            }
+          }));
+          fetchApiKeyStatus();
+          return;
+        }
+      }
+
       const res = await fetch('/api/ai/validate-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3135,6 +3449,15 @@ export default function App() {
       async () => {
         setLoadingLogs(true);
         try {
+          if (visitorLogs.length > 0) {
+            try {
+              await compressLogsToHiddenZip({ visitor: visitorLogs }, {
+                archiveAllGiven: true,
+                title: `방문자 로그 삭제 전 브라우저 은닉 보존 (${visitorLogs.length}건)`
+              });
+              await refreshHiddenArchiveCount();
+            } catch {}
+          }
           const authHeaders = await getAuthHeaders();
           await fetch('/api/logs/clear', {
             method: 'POST',
@@ -3961,6 +4284,69 @@ export default function App() {
     }
   };
 
+  const handleCompress30dLogsAndPrune = async () => {
+    if (!isAdmin) return;
+    setIsArchiving30dLogs(true);
+    try {
+      const activeCollections = {
+        visitor: visitorLogs,
+        search: searchLogs,
+        feedback: feedbackLogs,
+        admin: adminLogs,
+        error: appErrorLogs,
+        backend: backendLogs
+      };
+
+      const result = await compressLogsToHiddenZip(activeCollections, {
+        cutoffDays: 30,
+        title: language === 'en' ? '30-Day Obsolete Logs Compressed Archive' : '30일 이상 경과 로그 브라우저 은닉 압축 보관',
+        isAutomaticPrune: false
+      });
+
+      if (!result.meta) {
+        customAlert(language === 'en' 
+          ? "No logs older than 30 days were found across all 6 collections. Active logs are already clean."
+          : "전체 6개 컬렉션에서 30일 이상 경과된 오래된 로그가 없습니다. 현재 로그가 이미 최적화된 상태입니다.");
+        return;
+      }
+
+      // Update in-memory state to remove the archived 30d+ old logs
+      if (result.remainingLogs.visitor) setVisitorLogs(result.remainingLogs.visitor);
+      if (result.remainingLogs.search) setSearchLogs(result.remainingLogs.search);
+      if (result.remainingLogs.feedback) setFeedbackLogs(result.remainingLogs.feedback);
+      if (result.remainingLogs.admin) setAdminLogs(result.remainingLogs.admin);
+      if (result.remainingLogs.error) setAppErrorLogs(result.remainingLogs.error);
+      if (result.remainingLogs.backend) setBackendLogs(result.remainingLogs.backend);
+
+      // Also trigger server-side prune if running in full-stack mode
+      try {
+        const authHeaders = await getAuthHeaders();
+        await fetch('/api/logs/auto-prune', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ months: 1 })
+        });
+      } catch (srvErr) {
+        console.warn("Server auto-prune skipped in static host mode:", srvErr);
+      }
+
+      await refreshHiddenArchiveCount();
+      await fetchLogSummary();
+
+      const origKb = (result.meta.originalSizeBytes / 1024).toFixed(1);
+      const compKb = (result.meta.compressedSizeBytes / 1024).toFixed(1);
+
+      customAlert(language === 'en'
+        ? `Compression & Prune Complete!\n• Archived: ${result.meta.totalArchivedRecords} records\n• Original Size: ${origKb} KB ➔ Compressed: ${compKb} KB\n• Space Saved: ${result.meta.compressionRatio}\n\nOld logs were removed from active view and stored in the hidden IndexedDB Vault.`
+        : `30일 경과 로그 은닉 압축 보관 및 정리 완료!\n• 압축 보관된 로그: 총 ${result.meta.totalArchivedRecords}건\n• 원본 용량: ${origKb} KB ➔ 압축 용량: ${compKb} KB\n• 스토리지 절감률: ${result.meta.compressionRatio}\n\n오래된 로그가 활성 뷰에서 안전하게 정리되고 브라우저 IndexedDB 은닉 보관함에 보존되었습니다.`);
+    } catch (err: any) {
+      console.error("Error compressing 30d logs:", err);
+      customAlert(language === 'en' ? `Failed to compress logs: ${err.message}` : `로그 압축 보관 중 오류가 발생했습니다: ${err.message}`);
+    } finally {
+      setIsArchiving30dLogs(false);
+    }
+  };
+
   const handleAutoPruneLogs = async () => {
     if (!isAdmin) return;
     const months = maintenanceSettings.cleanupMonths ?? 1;
@@ -3976,6 +4362,26 @@ export default function App() {
       async () => {
         setIsAutoPruningLogs(true);
         try {
+          // Safeguard: Compress logs older than cutoff days into browser hidden ZIP archive in IndexedDB before deletion
+          try {
+            const activeCollections = {
+              visitor: visitorLogs,
+              search: searchLogs,
+              feedback: feedbackLogs,
+              admin: adminLogs,
+              error: appErrorLogs,
+              backend: backendLogs
+            };
+            await compressLogsToHiddenZip(activeCollections, {
+              cutoffDays: months * 30,
+              title: `자동 정돈 전 브라우저 은닉 압축 (${months}개월/${months * 30}일 경과)`,
+              isAutomaticPrune: true
+            });
+            await refreshHiddenArchiveCount();
+          } catch (archErr) {
+            console.warn("Pre-prune browser compression warning:", archErr);
+          }
+
           const authHeaders = await getAuthHeaders();
           const resp = await fetch('/api/logs/auto-prune', {
             method: 'POST',
@@ -4642,6 +5048,11 @@ export default function App() {
       if (isGoogleAdmin && currentUser?.email) {
         setAdminSessionEmail(currentUser.email);
         localStorage.setItem('winfix_admin_email', currentUser.email);
+      }
+
+      // Automatically sync and restore cloud API keys when admin is active
+      if (isCurrentlyAdmin) {
+        fetchCloudApiKeyConfig();
       }
 
       // Fetch AI Knowledge for everyone to enhance search
@@ -12550,21 +12961,82 @@ export default function App() {
                   </div>
                 </div>
                 
+                {/* Browser Permanent Storage Status Banner */}
+                <div className="mb-4 p-3.5 bg-gradient-to-r from-indigo-50/80 via-slate-50 to-purple-50/80 dark:from-indigo-950/40 dark:via-slate-900/60 dark:to-purple-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-indigo-500/10 dark:bg-indigo-500/20 rounded-lg text-indigo-600 dark:text-indigo-400 shrink-0">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <span>{language === 'en' ? 'Browser Permanent Storage (Zero Cloud DB / No Quota)' : '브라우저 영구 보관 (클라우드 DB 미사용 / 쿼터 0)'}</span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                          {language === 'en' ? 'Protected' : '영구 보존 활성'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        {language === 'en'
+                          ? `Storage: ${cloudKeySyncInfo.source || 'IndexedDB / LocalStorage'} | Updated: ${cloudKeySyncInfo.updatedAt || 'Recent'}`
+                          : `보관 위치: ${cloudKeySyncInfo.source || 'IndexedDB / LocalStorage'} | 갱신 일시: ${cloudKeySyncInfo.updatedAt || '방금 전'}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => fetchCloudApiKeyConfig(true)}
+                      disabled={cloudKeySyncInfo.isSyncing}
+                      className="px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                      title="브라우저 영구 스토리지(IndexedDB)에서 키 상태 새로고침"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${cloudKeySyncInfo.isSyncing ? 'animate-spin text-indigo-500' : ''}`} />
+                      <span>{language === 'en' ? 'Reload' : '새로고침'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportApiKeysJson}
+                      className="px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                      title="API 키 설정을 JSON 파일로 백업 다운로드"
+                    >
+                      <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>{language === 'en' ? 'Export JSON' : 'JSON 백업'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => apiKeyFileInputRef.current?.click()}
+                      className="px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                      title="JSON 백업 파일로부터 API 키 복원"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>{language === 'en' ? 'Import JSON' : 'JSON 복원'}</span>
+                    </button>
+                    <input
+                      type="file"
+                      ref={apiKeyFileInputRef}
+                      accept=".json"
+                      onChange={handleImportApiKeysJson}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+
                 {/* Add New Key Form */}
                 <div className="grid grid-cols-1 gap-2 mb-6">
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="password"
                       value={newKeyInput}
                       onChange={(e) => setNewKeyInput(e.target.value)}
                       placeholder={language === 'en' ? 'Add new Gemini API Key (starts with AIza...)' : '추가할 Gemini API 키 입력 (AIza로 시작)...'}
-                      className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                     />
                     <button
                       onClick={handleAddKey}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap cursor-pointer shadow-xs active:scale-95"
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap cursor-pointer shadow-xs active:scale-95 flex items-center justify-center gap-1.5"
                     >
-                      {language === 'en' ? 'Add Key' : '키 추가'}
+                      <Save className="w-4 h-4" />
+                      <span>{language === 'en' ? 'Add & Save' : '키 등록 및 로컬 영구 저장'}</span>
                     </button>
                   </div>
 
@@ -12651,7 +13123,7 @@ export default function App() {
                               onClick={() => handleTestSpecificKey(index, k.key)}
                               disabled={testingKeyIndex === index}
                               className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
-                              title="이 API 키를 서버에서 직접 검증"
+                              title="이 API 키를 직접 검증"
                             >
                               <Activity className={`w-3 h-3 ${testingKeyIndex === index ? 'animate-spin text-indigo-500' : ''}`} />
                               <span>{testingKeyIndex === index ? (language === 'en' ? 'Testing...' : '검사...') : (language === 'en' ? 'Test' : '테스트')}</span>
@@ -12686,6 +13158,26 @@ export default function App() {
                       </li>
                     )}
                   </ul>
+
+                  {/* API Key Action Toolbar & Permanent Sync Confirmation */}
+                  <div className="p-3.5 bg-slate-100/70 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span>{language === 'en' 
+                        ? 'Keys are stored in browser IndexedDB & LocalStorage (Zero Cloud DB / No Quota).' 
+                        : '등록된 키는 브라우저 영구 저장소(IndexedDB 및 LocalStorage)에 안전하게 보관되어 쿼터 소모 없이 다음날에도 유지됩니다.'}</span>
+                    </p>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={handleSaveAllApiKeySettings}
+                        className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Save All Key Settings' : 'API 키 설정 전체 저장'}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -12922,6 +13414,30 @@ export default function App() {
                     >
                       {isExportingAllLogsZip ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                       <span>{language === 'en' ? 'Export All Logs ZIP' : '전체 로그 ZIP 일괄 백업'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleCompress30dLogsAndPrune}
+                      disabled={isArchiving30dLogs}
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                      title="30일 이상 경과된 오래된 로그만 삭제 전 브라우저 IndexedDB에 고압축 ZIP 바이너리로 은닉 보관합니다"
+                    >
+                      {isArchiving30dLogs ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>{language === 'en' ? 'Compress >30d Logs' : '30일 경과 로그 은닉 압축'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowHiddenArchiveModal(true)}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer relative"
+                      title="브라우저 IndexedDB에 은닉 저장된 ZIP 압축 아카이브 보관함을 열어 다운로드 및 관리합니다"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                      <span>{language === 'en' ? 'Hidden ZIP Vault' : '은닉 ZIP 보관함'}</span>
+                      {hiddenArchiveCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-white text-indigo-700 font-extrabold ml-0.5">
+                          {hiddenArchiveCount}
+                        </span>
+                      )}
                     </button>
 
                     <button
@@ -16126,6 +16642,14 @@ export default function App() {
             </div>
           )}
         </AnimatePresence>
+
+        <HiddenLogArchiveModal
+          isOpen={showHiddenArchiveModal}
+          onClose={() => setShowHiddenArchiveModal(false)}
+          language={language}
+          onTriggerArchiveNow={handleCompress30dLogsAndPrune}
+          isArchivingNow={isArchiving30dLogs}
+        />
 
         <AnimatePresence>
           {showReviewModal && (
