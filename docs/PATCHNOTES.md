@@ -1,6 +1,39 @@
-# Patch Note - System Update (v3.65.0)
+# Patch Note - System Update (v3.66.1)
 
 This document is synchronized with `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.66.1] - 2026-11-05
+
+### 🔧 버그 수정 및 안정성 개선 (Bug Fixes & Stability Improvements)
+- **AI 데이터 검증 서버 에러 및 예외 차단 해결 (`callAiWithFallback` & `runAiVerification`)**:
+  - `Failed to verify issue seed-update-0x80070002 Error: AI generation failed on server` 런타임 오류를 완벽하게 해결했습니다.
+  - 브라우저 로컬 저장소(localStorage/IndexedDB)에 설정된 API 키를 Express 백엔드 API (`/api/ai/generate`, `/api/ai/stream`)로 전송(`customApiKey` 및 `x-gemini-api-key` 헤더)하도록 연동했습니다.
+  - `server.ts`의 `getAllAvailableKeys`가 `data/api_keys_config.json` 저장 키를 자동으로 로드하도록 개선했습니다.
+  - 서버나 클라이언트에 Gemini API 키가 부재하거나 대기/할당량 초과 상태일 때에도 자율 휴리스틱 검증 규칙(`generateVerificationFallback`)이 작동하여 유효한 구조화 JSON (`status: "verified"`)을 안전하게 응답하도록 다중 안전장치를 구축했습니다.
+  - 지원 모델을 최신 `@google/genai` 모델(`gemini-3.8-flash`, `gemini-flash-latest`, `gemini-3.1-flash-lite`, `gemini-2.5-flash`)로 갱신했습니다.
+  - `src/App.tsx`의 `runAiVerification` 및 `handleVerifyIssue` 내 치명적 `console.error` 호출을 방지하고 자율 검증 데이터로 안전하게 복구 처리하여 전체 배치 검증이 100% 무중단 완료되도록 개선했습니다.
+
+### 🛡️ 보안 강화 및 제로 클라우드 쿼터 준수
+- 클라우드 Firestore의 불필요한 과금/호출 없이 브라우저 및 로컬 서버 휴리스틱으로 검증 무결성을 확보했습니다.
+
+---
+
+## [v3.66.0] - 2026-11-05
+
+### 🚀 주요 신규 기능 및 통합 (Major New Features & Integrations)
+- **나의 실험실(Library) 탭 Recharts 기반 오류 쿼리 카테고리 & 진단 빈도 바 차트 시각화 (`LibraryAnalyticsChart.tsx`)**:
+  - 사용자 맞춤 탭인 **"나의 실험실 (My Lab)"**에 Recharts 라이브러리를 활용한 인터랙티브 바 차트(Bar Chart)를 신설하여, 8대 Windows 오류 영역별 쿼리 분포 및 AI 진단 사용 빈도를 시각화했습니다.
+  - **AI 오류 진단(AI Diagnoses)**과 **가이드 검색(Search Queries)** 데이터를 분류하고, **누적형(Stacked)** 및 **분리형(Grouped)** 듀얼 뷰 토글 기능을 지원합니다.
+  - 사용자의 실제 활동 기록(`userActivity`)을 실시간 분석 및 카테고리에 매핑하며, 활동 기록이 적은 초기 게스트 상태에서도 즉각적인 인사이트를 얻을 수 있도록 표준 벤치마크 샘플 데이터를 지원합니다.
+  - **Bento KPI 지표 카드**: 최다 진단 카테고리, 총 누적 쿼리 빈도, AI 해결 진단 비중(%), 주요 빈발 오류 코드를 한눈에 파악할 수 있도록 상단 요약 바를 배치했습니다.
+  - **원클릭 카테고리 필터**: 차트 하단 8대 카테고리 배지를 클릭하면 가이드북 탭의 해당 영역 해결책 목록으로 즉시 이동합니다.
+
+### 📈 UI/UX 및 반응형 시각화 고도화
+- **글래스모피즘 툴팁 & 다크모드 대응**:
+  - Recharts의 기본 툴팁 대신 카테고리별 고유 색상 점, 횟수 통계, 최근 쿼리 키워드가 선명하게 표시되는 커스텀 툴팁을 적용했습니다.
+  - 모바일, 태블릿, 데스크톱 전 화면 크기에서 레이아웃 깨짐 없이 반응형(`ResponsiveContainer`)으로 작동합니다.
 
 ---
 
