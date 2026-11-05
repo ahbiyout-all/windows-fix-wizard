@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-05T14:04:01.076Z",
-  "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "업데이트",
+  "lastCollectedAt": "2026-11-05T23:17:46.678Z",
+  "modelUsed": "gemini-3.1-flash-lite",
+  "targetCategory": "스토어/앱",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 96,
+  "totalIssuesCount": 98,
   "newIssues": [
     {
-      "id": "gh-0x80070643-mw3m9k8k",
-      "code": "0x80070643",
-      "title": "Windows 10/11 업데이트 오류 0x80070643 (복구 파티션 용량 부족 및 설치 실패) 해결 방법",
-      "category": "업데이트"
+      "id": "gh-0x80073d05-mw461p9y",
+      "code": "0x80073D05",
+      "title": "Windows 스토어 앱 제거 실패 및 재설치 오류 0x80073D05 해결 방법",
+      "category": "스토어/앱"
     },
     {
-      "id": "gh-0x800f081f-mw3m9k8k",
-      "code": "0x800f081f",
-      "title": "Windows 10/11 누적 업데이트 오류 0x800f081f (CBS_E_SOURCE_MISSING 저장소 손상) 해결 방법",
-      "category": "업데이트"
+      "id": "gh-0x80070005-mw461p9y",
+      "code": "0x80070005",
+      "title": "Windows 스토어 앱 업데이트 차단 및 액세스 거부 오류 (0x80070005)",
+      "category": "스토어/앱"
     }
   ]
 }
