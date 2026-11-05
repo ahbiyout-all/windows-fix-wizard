@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-04T23:15:39.369Z",
+  "lastCollectedAt": "2026-11-05T05:19:53.154Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "시스템/블루스크린",
+  "targetCategory": "디스플레이/그래픽",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 92,
+  "totalIssuesCount": 94,
   "newIssues": [
     {
-      "id": "gh-critical-process-died--0x000000ef--mw2qj4dl",
-      "code": "CRITICAL_PROCESS_DIED (0x000000EF)",
-      "title": "Windows 10/11 CRITICAL_PROCESS_DIED (0x000000EF) 블루스크린 오류 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-video-tdr-failure--0x00000116--mw33jiv7",
+      "code": "VIDEO_TDR_FAILURE (0x00000116)",
+      "title": "Windows 10/11 VIDEO_TDR_FAILURE (0x00000116) 블루스크린 오류 해결 방법",
+      "category": "디스플레이/그래픽"
     },
     {
-      "id": "gh-whea-uncorrectable-error--0x00000124--mw2qj4dl",
-      "code": "WHEA_UNCORRECTABLE_ERROR (0x00000124)",
-      "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 블루스크린 오류 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-code-43--graphics-device-error--mw33jiv7",
+      "code": "Code 43 (Graphics Device Error)",
+      "title": "Windows 10/11 그래픽 카드 디바이스 관리자 오류 코드 43 (Code 43) 해결 방법",
+      "category": "디스플레이/그래픽"
     }
   ]
 }

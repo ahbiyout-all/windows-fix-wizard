@@ -4124,5 +4124,99 @@
     "updatedAt": "2026-11-04T23:15:39.369Z",
     "verifiedAt": "2026-11-04T23:15:39.369Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--0x00000116--mw33jiv7",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (0x00000116)",
+    "title": "Windows 10/11 VIDEO_TDR_FAILURE (0x00000116) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix VIDEO_TDR_FAILURE (0x00000116) BSOD Error in Windows 10/11",
+    "symptoms": "고사양 게임, 3D 작업 또는 웹 브라우저의 하드웨어 가속 기능 사용 중 화면이 순간적으로 정지된 후 VIDEO_TDR_FAILURE (0x00000116) 블루스크린이 발생합니다. 그래픽 드라이버(nvlddmkm.sys, atikmpag.sys, igdkmd64.sys) 응답 시간이 초과(TDR)하여 Windows가 드라이버를 재설정하지 못할 때 나타납니다.",
+    "symptoms_en": "The system crashes with a VIDEO_TDR_FAILURE (0x00000116) BSOD during GPU-intensive games, 3D rendering, or web browsing with hardware acceleration. It occurs when the Timeout Detection and Recovery (TDR) mechanism fails to reset a non-responsive graphics driver (nvlddmkm.sys, atikmpag.sys, igdkmd64.sys).",
+    "script": "Write-Host 'Checking Display Device status...' -ForegroundColor Cyan\nGet-PnpDevice -Class 'Display' | Select-Object FriendlyName, Status, InstanceId\n\nWrite-Host 'Checking TDR Delay setting in Registry...' -ForegroundColor Cyan\nGet-ItemProperty -Path 'HKLM:\\\\SYSTEM\\\\CurrentControlSet\\\\Control\\\\GraphicsDrivers' -Name 'TdrDelay' -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "DDU(Display Driver Uninstaller)를 사용하여 안전 모드에서 기존 그래픽 드라이버를 완전히 삭제한 후 제조사(NVIDIA, AMD, Intel) 최신 안정 버전 드라이버 재설치",
+      "웹 브라우저(Chrome, Edge 등) 및 미디어 재생 프로그램의 '하드웨어 가속' 옵션 비활성화",
+      "전원 관리 옵션을 '고성능'으로 설정하고 MSI Afterburner 등의 GPU 오버클럭/언더볼팅 설정을 기본값으로 복구",
+      "레지스트리 편집기(regedit)를 실행하여 HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers 경로로 이동한 뒤 DWORD(32비트) 값 'TdrDelay'를 신규 생성하고 16진수 값 8(초)로 설정"
+    ],
+    "manualSteps_en": [
+      "Completely uninstall the graphics driver in Safe Mode using DDU (Display Driver Uninstaller), then reinstall the latest stable driver from the GPU manufacturer (NVIDIA, AMD, Intel).",
+      "Disable 'Hardware Acceleration' in web browsers (Chrome, Edge) and background media applications.",
+      "Set Windows Power Options to 'High Performance' and reset any GPU overclocking or undervolting profiles to default.",
+      "Open Registry Editor (regedit), navigate to HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers, create a DWORD (32-bit) named 'TdrDelay', and set its hexadecimal value to 8."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x116--video-tdr-failure",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-5c62bfe8-6772-556a-4f4d-4956623549e4"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE",
+      "0x00000116",
+      "nvlddmkm.sys",
+      "atikmpag.sys",
+      "그래픽 드라이버 블루스크린",
+      "TDRDelay"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T05:19:53.154Z",
+    "updatedAt": "2026-11-05T05:19:53.154Z",
+    "verifiedAt": "2026-11-05T05:19:53.154Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-43--graphics-device-error--mw33jiv7",
+    "category": "디스플레이/그래픽",
+    "code": "Code 43 (Graphics Device Error)",
+    "title": "Windows 10/11 그래픽 카드 디바이스 관리자 오류 코드 43 (Code 43) 해결 방법",
+    "title_en": "How to Fix Graphics Card Code 43 Error in Windows 10/11 Device Manager",
+    "symptoms": "디바이스 관리자의 디스플레이 어댑터 항목에 노란색 경고 표시가 나타나며 '이 장치에서 문제가 보고되었으므로 장치를 중지했습니다. (코드 43)' 메시지가 출력됩니다. 그래픽 카드가 가동되지 않아 해상도가 떨어지거나 외장 GPU를 활용하는 게임 및 멀티 모니터 출력이 불가능해집니다.",
+    "symptoms_en": "A yellow exclamation mark appears next to the display adapter in Device Manager with the message 'Windows has stopped this device because it has reported problems. (Code 43)'. The graphics device fails to load, causing resolution degradation, loss of secondary monitor support, and failure in 3D applications.",
+    "script": "Write-Host 'Checking Display Adapters with Error Status...' -ForegroundColor Cyan\nGet-PnpDevice -Class 'Display' | Where-Object { $_.Status -ne 'OK' } | Select-Object FriendlyName, Status, Class, InstanceId",
+    "manualSteps": [
+      "디바이스 관리자(devmgmt.msc)를 실행하여 문제의 그래픽 카드를 우클릭한 뒤 '디바이스 사용 안 함' 후 '디바이스 사용'으로 다시 활성화",
+      "제조사 공식 사이트에서 최신 드라이버 패키지를 다운로드한 후 설치 단계에서 '새로 설치(Clean Installation)' 옵션을 선택하여 실행",
+      "데스크톱 전원을 차단하고 그래픽 카드를 메인보드 PCIe 슬롯에서 분리 후 먼지를 제거하고 재장착, 8핀/6핀 전원 케이블 결착 상태 확인",
+      "메인보드 BIOS/UEFI 버전을 최신으로 업데이트하고 BIOS 설정 메뉴에서 Primary Display Output을 PCIe/PEG로 설정"
+    ],
+    "manualSteps_en": [
+      "Open Device Manager (devmgmt.msc), right-click the affected display adapter, select 'Disable device', wait a few seconds, then select 'Enable device'.",
+      "Download the latest driver installer package from the graphics manufacturer's website and select the 'Clean Installation' option during setup.",
+      "Power off the PC, remove the graphics card from the PCIe slot, clean contacts, securely re-seat the card, and re-check all 6/8-pin power connectors.",
+      "Update the motherboard BIOS/UEFI to the latest version and ensure the Primary Graphics Adapter setting in BIOS is configured to PCIe/PEG."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/fix-graphics-device-problems-with-error-code-43-19544158-450f-48d8-be94-39fa2799db68",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-prob-code-43"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Code 43",
+      "코드 43",
+      "디바이스 관리자 그래픽 오류",
+      "이 장치에서 문제가 보고되었으므로 장치를 중지했습니다",
+      "Graphics Driver Code 43",
+      "Display Adapter Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T05:19:53.154Z",
+    "updatedAt": "2026-11-05T05:19:53.154Z",
+    "verifiedAt": "2026-11-05T05:19:53.154Z",
+    "verificationStatus": "verified"
   }
 ]
