@@ -1,6 +1,87 @@
-# Patch Note - System Update (v3.66.1)
+# Patch Note - System Update (v3.72.0)
 
 This document is synchronized with `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.72.0] - 2026-11-05
+
+### 🚀 주요 신규 기능 및 AI 자동화 오류 수정 (Major New Features & AI Automation Fixes)
+- **수집 카드 전용 자동 PowerShell 스크립트 생성 및 생성 보장 엔진 탑재 (`generateDefaultPowerShellScript`)**:
+  - 오류/솔루션 수집 카드 생성 시 스크립트 누락 현상을 수정했습니다.
+  - `server.ts`, `scripts/github-collector.ts`, `src/App.tsx` 전반에 `generateDefaultPowerShellScript` 헬퍼 함수를 구축하여 카테고리 및 오류 코드별 맞춤형 PowerShell 자동 복구 스크립트(SFC/DISM, Netsh/IPConfig, wsreset/Get-AppxPackage, slmgr, MpCmdRun 등) 생성을 보장하도록 개선했습니다.
+  - 서버 측 AI 수집 프롬프트 및 GitHub Actions 컬렉터 프롬프트를 수정하여 스크립트 생성을 필수 지침으로 강제했습니다.
+  - 모든 수집 카드 렌더링 시 스크립트가 100% 표시되고 복사 및 안심 검사소 연동 기능이 동작합니다.
+
+---
+
+## [v3.71.0] - 2026-11-05
+
+### 🚀 주요 신규 기능 및 UI/UX 개선 (Major New Features & UI/UX Enhancements)
+- **모든 오류/솔루션 수집 카드 수집 날짜 표시 (`formatCollectionDate`)**:
+  - '라이브러리(Library)' 탭, 컴팩트 카드 보기, 북마크 솔루션 섹션의 모든 이슈 카드에 `Calendar` 아이콘과 함께 보라색 수집일 태그(`수집일: YYYY-MM-DD` / `Collected: YYYY-MM-DD`)를 추가했습니다.
+  - ISO 문자열, 타임스탬프, Date 객체를 안전하게 포맷팅하는 `formatCollectionDate` 헬퍼 함수를 탑재했습니다.
+
+---
+
+## [v3.70.0] - 2026-11-05
+
+### 🔧 최적화 및 레거시 모듈 정제 (Optimization & Legacy Cleanup)
+- **미사용 파이어베이스 / 파이어스톤 UI 요소 및 참조 정제**:
+  - `DailyQuotaUsageChart.tsx` 내 구형 파이어스톤 읽기/쓰기 50k 할당량 미터기를 서버 DB 및 Jamstack 지표로 완전히 전환했습니다.
+  - `src/App.tsx` 내 외부 파이어베이스 콘솔 하드코딩 링크 및 구형 인증 가이드 UI 블록을 정제했습니다.
+  - 모니터링 시스템을 정적 Jamstack 피드, 서버 REST DB 연산 및 Gemini AI API 사용량 중심으로 단순화했습니다.
+
+---
+
+## [v3.69.0] - 2026-11-05
+
+### 🚀 주요 신규 기능 및 통합 (Major New Features & Integrations)
+- **풀스택 Gemini API 아키텍처 서버 이관 통합**:
+  - Gemini AI 텍스트 생성, 키 검증, 검색 그라운딩 및 대화형 진단 호출을 서버 측 아키텍처(`server.ts`)로 이관했습니다.
+  - 백엔드의 모든 `@google/genai` 인스턴스에 `httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }` 설정을 적용했습니다.
+  - 클라이언트(`src/App.tsx`) 내 브라우저 직접 호출용 Gemini SDK 인스턴스화를 전면 제거했습니다.
+  - `metadata.json` 파일의 주요 기능 태그(`MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API`)를 유지하고 강화했습니다.
+
+### 🛡️ 보안 강화 및 인증 (Security Hardening & Authentication)
+- `vite.config.ts` 내 구형 `define` 항목을 제거하여 API 키 관리를 서버 측 환경변수로 단일화했습니다.
+
+---
+
+## [v3.68.0] - 2026-11-05
+
+### 🚀 주요 신규 기능 및 통합 (Major New Features & Integrations)
+- **'마법사(Wizard)' 결과 페이지 인쇄/PDF 기술 리포트 생성 기능 탑재 (`handleGeneratePdfReport`)**:
+  - 마법사 AI 진단 결과 페이지 상단 및 하단에 **"PDF 리포트 출력(Export PDF Report)"** 버튼을 추가했습니다.
+  - 클릭 시 아래 내용을 담은 공식 규격 기술 진단 리포트를 생성합니다:
+    - 고유 문서 번호(`WFW-RPT-XXXX`) 및 KST 생성 일시
+    - 진단 대상 Windows OS 버전 및 사용자 오류 증상
+    - AI 원인 분석 및 전문 기술 진단 내용
+    - 자동 해결 PowerShell 스크립트(관리자 실행 지침 및 보안 경고 포함)
+    - 단계별 수동 복구 가이드라인 (번호순 항목)
+    - Microsoft 공식 기술 참고 문서 URL
+    - 보안 검증 직인 및 푸터 면책 조항
+  - 브라우저 네이티브 `window.print()` ("PDF로 저장" / "프린터 인쇄") 및 팝업 차단 환경 대응 인비저블 프레임 폴백을 지원합니다.
+
+### 🛡️ 보안 강화 및 제로 클라우드 쿼터 준수
+- 외부 PDF 변환 API나 서드파티 서버 전송 없이 브라우저 내에서 100% 로컬 렌더링되므로, 개인정보와 시스템 진단 기록이 외부에 유출되지 않습니다.
+
+---
+
+## [v3.67.0] - 2026-11-05
+
+### 🚀 주요 신규 기능 및 통합 (Major New Features & Integrations)
+- **알려진 문제(Known Issues) 목록 전용 '북마크(Bookmarks)' 토글 버튼 탑재**:
+  - 가이드북 내 각 문제 카드에 앰버 골드 톤의 직관적인 **'북마크(Bookmark)' 토글 버튼**을 신설하여, 원클릭으로 문제를 사용자 프로필에 저장하거나 해제할 수 있도록 개선했습니다.
+  - 저장 여부에 따라 아이콘(`Bookmark` ↔ `BookmarkCheck`)과 라벨(`북마크` ↔ `북마크됨`)이 실시간 전환되며, 모바일 환경에서는 콤팩트 아이콘으로 최적화 반응형 디자인을 적용했습니다.
+- **나의 실험실(Library) 탭 내 북마크 보관함 UI 고도화**:
+  - 보관된 문제를 한눈에 확인할 수 있는 카테고리 배지, 오류 코드 배지, 대상 Windows 버전, 증상 2줄 요약 프리뷰를 지원합니다.
+  - 카드 내에서 즉시 실행 명령을 복사할 수 있는 **PowerShell 스크립트 프리뷰 & 복사 단추**(`Copied!` 피드백 포함)를 탑재했습니다.
+  - 해당 문제를 가이드북에서 즉시 펼쳐볼 수 있는 **"가이드북에서 전체 상세 보기"** 바로가기 링크를 제공합니다.
+  - 북마크 목록 내 실시간 검색(제목, 코드, 증상) 및 카테고리별 필터 칩 바, 전체 북마크 일괄 해제 단추를 추가했습니다.
+
+### 🛡️ 보안 강화 및 제로 클라우드 쿼터 준수
+- 북마크 데이터는 브라우저 `LocalStorage` 및 `IndexedDB`에 다중 동기화되어 오프라인 및 게스트 모드에서도 Firestore 쿼터 소모 없이 100% 영구 보존됩니다.
 
 ---
 

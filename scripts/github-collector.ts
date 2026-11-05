@@ -107,6 +107,34 @@ async function runCollector() {
     'gemini-2.5-flash-lite'
   ];
 
+function generateDefaultPowerShellScript(code: string = '', category: string = '', title: string = ''): string {
+  const codeUpper = (code || '').toUpperCase();
+  const cat = (category || '').trim();
+  const titleLower = (title || '').toLowerCase();
+
+  if (cat.includes('네트워크') || cat.includes('Network') || codeUpper.includes('0X80072EFE') || codeUpper.includes('0X80072F78') || titleLower.includes('network') || titleLower.includes('인터넷')) {
+    return `# Windows ${codeUpper || 'Network'} Automatic Recovery Script\n# Target: Reset TCP/IP Stack, DNS Cache & Winsock Catalog\n\nWrite-Host "[1/4] Flushing DNS Resolver Cache..." -ForegroundColor Cyan\nipconfig /flushdns\n\nWrite-Host "[2/4] Resetting Winsock & IP Interfaces..." -ForegroundColor Cyan\nnetsh winsock reset\nnetsh int ip reset\n\nWrite-Host "[3/4] Releasing & Renewing IPv4 Leases..." -ForegroundColor Cyan\nipconfig /release\nipconfig /renew\n\nWrite-Host "[4/4] Restarting Network Location Awareness Service..." -ForegroundColor Cyan\nRestart-Service -Name "NlaSvc" -Force -ErrorAction SilentlyContinue\n\nWrite-Host "[+] Network stack reset complete. Please restart your PC." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('업데이트') || cat.includes('Update') || codeUpper.startsWith('0X8024') || codeUpper.startsWith('0X80070') || titleLower.includes('update') || titleLower.includes('업데이트')) {
+    return `# Windows Update ${codeUpper || 'Error'} Automated Repair Script\n# Target: Reset Windows Update Components & SoftwareDistribution Cache\n\nWrite-Host "[1/5] Stopping Windows Update & BITS Services..." -ForegroundColor Cyan\nStop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue\nStop-Service -Name "bits" -Force -ErrorAction SilentlyContinue\nStop-Service -Name "cryptsvc" -Force -ErrorAction SilentlyContinue\n\nWrite-Host "[2/5] Purging Update Cache Directories..." -ForegroundColor Cyan\nRemove-Item -Path "$env:SystemRoot\\SoftwareDistribution\\Download\\*" -Recurse -Force -ErrorAction SilentlyContinue\nRemove-Item -Path "$env:SystemRoot\\System32\\catroot2\\*" -Recurse -Force -ErrorAction SilentlyContinue\n\nWrite-Host "[3/5] Re-registering Update DLL Libraries..." -ForegroundColor Cyan\nregsvr32.exe /s wuaueng.dll\nregsvr32.exe /s qmgr.dll\n\nWrite-Host "[4/5] Restarting Core Update Services..." -ForegroundColor Cyan\nStart-Service -Name "cryptsvc" -ErrorAction SilentlyContinue\nStart-Service -Name "bits" -ErrorAction SilentlyContinue\nStart-Service -Name "wuauserv" -ErrorAction SilentlyContinue\n\nWrite-Host "[5/5] Triggering Windows Update Detection Cycle..." -ForegroundColor Cyan\nusoclient StartScan\n\nWrite-Host "[+] Windows Update repair complete. Retry updating now." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('스토어') || cat.includes('Store') || cat.includes('앱') || codeUpper.startsWith('0X80073') || titleLower.includes('store') || titleLower.includes('스토어')) {
+    return `# Windows Store & AppX Package Repair Script\n# Target: Re-register Microsoft Store & Repair System Apps\n\nWrite-Host "[1/3] Resetting Microsoft Store Cache..." -ForegroundColor Cyan\nwsreset.exe\n\nWrite-Host "[2/3] Re-registering all AppX Packages for Current User..." -ForegroundColor Cyan\nGet-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\\AppXManifest.xml" -ErrorAction SilentlyContinue}\n\nWrite-Host "[3/3] Checking AppX Deployment Service Status..." -ForegroundColor Cyan\nGet-Service -Name "AppXSvc" | Start-Service -ErrorAction SilentlyContinue\n\nWrite-Host "[+] Microsoft Store repair completed." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('정품인증') || cat.includes('Activation') || codeUpper.startsWith('0XC004') || titleLower.includes('activation') || titleLower.includes('정품')) {
+    return `# Windows Licensing & Software Protection Service Diagnostic Script\n# Target: Clear License Cache & Restart Software Protection Service (sppsvc)\n\nWrite-Host "[1/3] Restarting Software Protection Service..." -ForegroundColor Cyan\nRestart-Service -Name "sppsvc" -Force -ErrorAction SilentlyContinue\n\nWrite-Host "[2/3] Querying Current Licensing Status..." -ForegroundColor Cyan\ncscript.exe //NoLogo "$env:SystemRoot\\System32\\slmgr.vbs" /dli\n\nWrite-Host "[3/3] Re-arm License State..." -ForegroundColor Cyan\ncscript.exe //NoLogo "$env:SystemRoot\\System32\\slmgr.vbs" /ato\n\nWrite-Host "[+] Windows activation diagnostic complete." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('보안') || cat.includes('Security') || cat.includes('백신') || titleLower.includes('defender') || titleLower.includes('security')) {
+    return `# Windows Security & Defender Repair Script\n# Target: Update Defender Signatures & Reset Security Platform\n\nWrite-Host "[1/3] Updating Microsoft Defender Intelligence Signatures..." -ForegroundColor Cyan\n& "$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe" -SignatureUpdate\n\nWrite-Host "[2/3] Triggering Defender Quick Scan..." -ForegroundColor Cyan\n& "$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 1\n\nWrite-Host "[3/3] Resetting Windows Security Service..." -ForegroundColor Cyan\nRestart-Service -Name "SecurityHealthService" -Force -ErrorAction SilentlyContinue\n\nWrite-Host "[+] Windows Security diagnostic complete." -ForegroundColor Green`;
+  }
+
+  return `# Windows System Integrity Repair Script (${codeUpper || 'System Fix'})\n# Target: SFC System File Checker & DISM Image Servicing\n\nWrite-Host "[1/3] Running System File Checker (SFC)..." -ForegroundColor Cyan\nsfc /scannow\n\nWrite-Host "[2/3] Checking Component Store Health via DISM..." -ForegroundColor Cyan\ndism /Online /Cleanup-Image /CheckHealth\n\nWrite-Host "[3/3] Restoring Component Store Corruption via DISM..." -ForegroundColor Cyan\ndism /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host "[+] System file integrity repair complete. Please restart your system." -ForegroundColor Green`;
+}
+
   const prompt = `Search and identify ${batchSize} verified and LATEST (2024-2026) Windows 10/11 troubleshooting guide(s) or error code(s).
 Category focus: "${targetCategory}".
 Do NOT generate these existing issues: [${avoidTitles.substring(0, 400)}...].
@@ -116,7 +144,7 @@ Requirements for each item:
 1. Specific Windows error code (e.g., 0x80070005, 0x8024402f, WHEA_UNCORRECTABLE_ERROR, 0x80073D02) or clear identifier.
 2. Accurate Korean title & symptoms explaining why it occurs in recent Windows 10/11 updates.
 3. English title and English symptoms.
-4. A safe, non-destructive PowerShell script for diagnostic/repair if applicable (or empty string if purely manual).
+4. A MANDATORY, working, non-destructive PowerShell repair or diagnostic script specifically tailored for this error (e.g. sfc /scannow, DISM, Get-AppxPackage, netsh winsock reset, etc.). Do NOT leave script empty or null!
 5. 3-5 structured step-by-step recovery instructions in Korean (manualSteps) and English (manualSteps_en).
 6. 1-2 legitimate source URLs (e.g. support.microsoft.com, learn.microsoft.com, or official tech portals).
 7. Applicable Windows versions (['Windows 11', 'Windows 10']).
@@ -136,7 +164,7 @@ JSON Schema:
     "title_en": "English Title",
     "symptoms": "Korean Symptoms",
     "symptoms_en": "English Symptoms",
-    "script": "PowerShell Script or empty",
+    "script": "Mandatory PowerShell Script for this error",
     "manualSteps": ["Step 1", "Step 2", "Step 3"],
     "manualSteps_en": ["Step 1", "Step 2", "Step 3"],
     "sourceUrls": ["https://support.microsoft.com/..."],
@@ -238,7 +266,9 @@ JSON Schema:
       title_en: raw.title_en || title,
       symptoms: raw.symptoms || title,
       symptoms_en: raw.symptoms_en || raw.symptoms || '',
-      script: raw.script || '',
+      script: (raw.script && typeof raw.script === 'string' && raw.script.trim().length >= 15)
+        ? raw.script.trim()
+        : generateDefaultPowerShellScript(cleanCode, raw.category || targetCategory, title),
       manualSteps: Array.isArray(raw.manualSteps) && raw.manualSteps.length > 0 ? raw.manualSteps : [
         'Windows 설정 > 문제 해결 도구를 실행합니다.',
         '관리자 권한 명령 프롬프트에서 sfc /scannow 검사를 진행합니다.'

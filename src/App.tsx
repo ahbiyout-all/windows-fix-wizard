@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import JSZip from 'jszip';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { 
   Terminal, Search, AlertCircle, AlertOctagon, Wrench, CheckCircle2, Copy, LayoutList,
   ExternalLink, ShieldCheck, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, ChevronsUp, ChevronsDown, Info, BookOpen, 
   RefreshCw, Wifi, Monitor, ShoppingBag, Key, Shield, Database, Globe, LogIn, LogOut, AlertTriangle, Moon, Sun, Download, Upload, Edit2, Trash2, X, XCircle, Save, ThumbsUp, ThumbsDown, FileCheck, Sparkles, Flame, Settings, Cloud, Zap, Layers, ShieldAlert, Check, ArrowRight, Activity, Sliders, Mail, RotateCcw,
-  Heart, Bookmark, Clock, History, User as UserIcon, Filter, Users, UserCheck, Smartphone, Laptop, Tablet, Ban, Eye, EyeOff, Server, Bot, HelpCircle, LifeBuoy, Menu,
+  Heart, Bookmark, BookmarkCheck, BookmarkX, Clock, History, User as UserIcon, Filter, Users, UserCheck, Smartphone, Laptop, Tablet, Ban, Eye, EyeOff, Server, Bot, HelpCircle, LifeBuoy, Menu,
   Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2, Mic, MicOff, HardDrive, Volume2, Keyboard, Tv, Cpu,
-  Archive, FileText, CheckSquare, Square, Hash, Plus
+  Archive, FileText, Printer, CheckSquare, Square, Hash, Plus, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, getDocs, getDoc, setDoc, doc, query as firestoreQuery, limit, startAfter, orderBy, where, QueryDocumentSnapshot, updateDoc, deleteDoc, writeBatch, getCountFromServer } from 'firebase/firestore';
@@ -407,22 +406,6 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
     contentsStr.includes("verificationStatus");
 
   if (IS_GITHUB_PAGES) {
-    if (clientKey) {
-      const genAI = new GoogleGenerativeAI(clientKey);
-      const candidateModels = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
-      for (const modelName of candidateModels) {
-        try {
-          const model = genAI.getGenerativeModel({ model: modelName });
-          const result = await model.generateContent(contents);
-          const response = await result.response;
-          const text = response.text();
-          if (text) return text;
-        } catch (_) {
-          continue;
-        }
-      }
-    }
-
     if (isVerification) {
       return JSON.stringify({
         status: "verified",
@@ -471,24 +454,7 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
       });
     }
   } catch (serverErr: any) {
-    console.warn("Server AI call fetch failed, attempting client fallback:", serverErr?.message || serverErr);
-  }
-
-  // Fallback to client-side Gemini if clientKey is available
-  if (clientKey) {
-    try {
-      const genAI = new GoogleGenerativeAI(clientKey);
-      const candidateModels = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
-      for (const modelName of candidateModels) {
-        try {
-          const model = genAI.getGenerativeModel({ model: modelName });
-          const result = await model.generateContent(contents);
-          const response = await result.response;
-          const text = response.text();
-          if (text) return text;
-        } catch (_) {}
-      }
-    } catch (_) {}
+    console.warn("Server AI call fetch failed:", serverErr?.message || serverErr);
   }
 
   // Safe heuristic fallback for verification
@@ -588,7 +554,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.66.1";
+const APP_VERSION = "3.72.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -608,6 +574,55 @@ const getKSTISOString = () => {
   const pad = (n: number) => n.toString().padStart(2, '0');
   const msPad = (n: number) => n.toString().padStart(3, '0');
   return `${kst.getFullYear()}-${pad(kst.getMonth() + 1)}-${pad(kst.getDate())}T${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}.${msPad(kst.getMilliseconds())}+09:00`;
+};
+
+const formatCollectionDate = (rawDate: any): string => {
+  if (!rawDate) return '2026-11-05';
+  if (typeof rawDate === 'string') {
+    if (rawDate.includes('T')) return rawDate.split('T')[0];
+    return rawDate;
+  }
+  if (rawDate?.toDate && typeof rawDate.toDate === 'function') {
+    try {
+      const d = rawDate.toDate();
+      return d.toISOString().split('T')[0];
+    } catch (_) {}
+  }
+  try {
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch (_) {}
+  return String(rawDate);
+};
+
+const generateDefaultPowerShellScript = (code: string = '', category: string = '', title: string = ''): string => {
+  const codeUpper = (code || '').toUpperCase();
+  const cat = (category || '').trim();
+  const titleLower = (title || '').toLowerCase();
+
+  if (cat.includes('네트워크') || cat.includes('Network') || codeUpper.includes('0X80072EFE') || codeUpper.includes('0X80072F78') || titleLower.includes('network') || titleLower.includes('인터넷')) {
+    return `# Windows ${codeUpper || 'Network'} Automatic Recovery Script\r\n# Target: Reset TCP/IP Stack, DNS Cache & Winsock Catalog\r\n\r\nWrite-Host "[1/4] Flushing DNS Resolver Cache..." -ForegroundColor Cyan\r\nipconfig /flushdns\r\n\r\nWrite-Host "[2/4] Resetting Winsock & IP Interfaces..." -ForegroundColor Cyan\r\nnetsh winsock reset\r\nnetsh int ip reset\r\n\r\nWrite-Host "[3/4] Releasing & Renewing IPv4 Leases..." -ForegroundColor Cyan\r\nipconfig /release\r\nipconfig /renew\r\n\r\nWrite-Host "[4/4] Restarting Network Location Awareness Service..." -ForegroundColor Cyan\r\nRestart-Service -Name "NlaSvc" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[+] Network stack reset complete. Please restart your PC." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('업데이트') || cat.includes('Update') || codeUpper.startsWith('0X8024') || codeUpper.startsWith('0X80070') || titleLower.includes('update') || titleLower.includes('업데이트')) {
+    return `# Windows Update ${codeUpper || 'Error'} Automated Repair Script\r\n# Target: Reset Windows Update Components & SoftwareDistribution Cache\r\n\r\nWrite-Host "[1/5] Stopping Windows Update & BITS Services..." -ForegroundColor Cyan\r\nStop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue\r\nStop-Service -Name "bits" -Force -ErrorAction SilentlyContinue\r\nStop-Service -Name "cryptsvc" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[2/5] Purging Update Cache Directories..." -ForegroundColor Cyan\r\nRemove-Item -Path "$env:SystemRoot\\SoftwareDistribution\\Download\\*" -Recurse -Force -ErrorAction SilentlyContinue\r\nRemove-Item -Path "$env:SystemRoot\\System32\\catroot2\\*" -Recurse -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[3/5] Re-registering Update DLL Libraries..." -ForegroundColor Cyan\r\nregsvr32.exe /s wuaueng.dll\r\nregsvr32.exe /s qmgr.dll\r\n\r\nWrite-Host "[4/5] Restarting Core Update Services..." -ForegroundColor Cyan\r\nStart-Service -Name "cryptsvc" -ErrorAction SilentlyContinue\r\nStart-Service -Name "bits" -ErrorAction SilentlyContinue\r\nStart-Service -Name "wuauserv" -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[5/5] Triggering Windows Update Detection Cycle..." -ForegroundColor Cyan\r\nusoclient StartScan\r\n\r\nWrite-Host "[+] Windows Update repair complete. Retry updating now." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('스토어') || cat.includes('Store') || cat.includes('앱') || codeUpper.startsWith('0X80073') || titleLower.includes('store') || titleLower.includes('스토어')) {
+    return `# Windows Store & AppX Package Repair Script\r\n# Target: Re-register Microsoft Store & Repair System Apps\r\n\r\nWrite-Host "[1/3] Resetting Microsoft Store Cache..." -ForegroundColor Cyan\r\nwsreset.exe\r\n\r\nWrite-Host "[2/3] Re-registering all AppX Packages for Current User..." -ForegroundColor Cyan\r\nGet-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\\AppXManifest.xml" -ErrorAction SilentlyContinue}\r\n\r\nWrite-Host "[3/3] Checking AppX Deployment Service Status..." -ForegroundColor Cyan\r\nGet-Service -Name "AppXSvc" | Start-Service -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[+] Microsoft Store repair completed." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('정품인증') || cat.includes('Activation') || codeUpper.startsWith('0XC004') || titleLower.includes('activation') || titleLower.includes('정품')) {
+    return `# Windows Licensing & Software Protection Service Diagnostic Script\r\n# Target: Clear License Cache & Restart Software Protection Service (sppsvc)\r\n\r\nWrite-Host "[1/3] Restarting Software Protection Service..." -ForegroundColor Cyan\r\nRestart-Service -Name "sppsvc" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[2/3] Querying Current Licensing Status..." -ForegroundColor Cyan\r\ncscript.exe //NoLogo "$env:SystemRoot\\System32\\slmgr.vbs" /dli\r\n\r\nWrite-Host "[3/3] Re-arm License State..." -ForegroundColor Cyan\r\ncscript.exe //NoLogo "$env:SystemRoot\\System32\\slmgr.vbs" /ato\r\n\r\nWrite-Host "[+] Windows activation diagnostic complete." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('보안') || cat.includes('Security') || cat.includes('백신') || titleLower.includes('defender') || titleLower.includes('security')) {
+    return `# Windows Security & Defender Repair Script\r\n# Target: Update Defender Signatures & Reset Security Platform\r\n\r\nWrite-Host "[1/3] Updating Microsoft Defender Intelligence Signatures..." -ForegroundColor Cyan\r\n& "$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe" -SignatureUpdate\r\n\r\nWrite-Host "[2/3] Triggering Defender Quick Scan..." -ForegroundColor Cyan\r\n& "$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 1\r\n\r\nWrite-Host "[3/3] Resetting Windows Security Service..." -ForegroundColor Cyan\r\nRestart-Service -Name "SecurityHealthService" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[+] Windows Security diagnostic complete." -ForegroundColor Green`;
+  }
+
+  return `# Windows System Integrity Repair Script (${codeUpper || 'System Fix'})\r\n# Target: SFC System File Checker & DISM Image Servicing\r\n\r\nWrite-Host "[1/3] Running System File Checker (SFC)..." -ForegroundColor Cyan\r\nsfc /scannow\r\n\r\nWrite-Host "[2/3] Checking Component Store Health via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /CheckHealth\r\n\r\nWrite-Host "[3/3] Restoring Component Store Corruption via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /RestoreHealth\r\n\r\nWrite-Host "[+] System file integrity repair complete. Please restart your system." -ForegroundColor Green`;
 };
 
 const GITHUB_WORKFLOW_YAML = `name: Windows Fix Autonomous Collector & GitOps Sync
@@ -734,6 +749,9 @@ export default function App() {
   
   // User Personalization State
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState<string>('');
+  const [bookmarkCategoryFilter, setBookmarkCategoryFilter] = useState<string>('전체');
+  const [copiedBookmarkScriptId, setCopiedBookmarkScriptId] = useState<string | null>(null);
   const [userActivity, setUserActivity] = useState<any[]>([]);
   const [isLoadingPersonal, setIsLoadingPersonal] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'local_active' | 'permission_denied' | 'error'>('checking');
@@ -1726,24 +1744,18 @@ export default function App() {
         throw new Error(language === 'en' ? 'Invalid format (Must start with AIza...)' : '형식 오류 (AIza로 시작하고 30자 이상 필요)');
       }
 
-      // If running on static GitHub Pages, test directly using GoogleGenerativeAI client
+      // If running on static GitHub Pages, validate format locally
       if (IS_GITHUB_PAGES) {
-        const genAI = new GoogleGenerativeAI(keyVal);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const testRes = await model.generateContent("Hello, verify key connectivity.");
-        const text = testRes.response.text();
-        if (text) {
-          setKeyTestResults(prev => ({
-            ...prev,
-            [index]: {
-              isValid: true,
-              status: 'active',
-              message: language === 'en' ? 'Verified in browser (Valid)' : '브라우저 직접 검증 성공 (정상 작동)'
-            }
-          }));
-          fetchApiKeyStatus();
-          return;
-        }
+        setKeyTestResults(prev => ({
+          ...prev,
+          [index]: {
+            isValid: true,
+            status: 'active',
+            message: language === 'en' ? 'Key format verified' : 'API 키 형식 검증 완료'
+          }
+        }));
+        fetchApiKeyStatus();
+        return;
       }
 
       const res = await fetch('/api/ai/validate-key', {
@@ -5360,7 +5372,7 @@ export default function App() {
     }
   }, [triggerAutoSearch, activeTab, loading]);
 
-  const recordUserActivity = async (type: 'search' | 'view' | 'diagnosis', targetId?: string, queryText?: string, metadata?: any) => {
+  const recordUserActivity = async (type: 'search' | 'view' | 'diagnosis' | 'bookmark', targetId?: string, queryText?: string, metadata?: any) => {
     const activityData = {
       type,
       targetId: targetId || null,
@@ -5413,47 +5425,75 @@ export default function App() {
       e.stopPropagation();
     }
     
-    if (!user) {
-      // Guest mode: Use LocalStorage
-      const next = new Set(bookmarkedIds);
-      if (next.has(issueId)) {
-        next.delete(issueId);
-      } else {
-        next.add(issueId);
-      }
-      setBookmarkedIds(next);
-      localStorage.setItem('guest_bookmarks', JSON.stringify(Array.from(next)));
-      return;
+    const next = new Set(bookmarkedIds);
+    const willBookmark = !next.has(issueId);
+    if (willBookmark) {
+      next.add(issueId);
+      recordUserActivity('bookmark', issueId);
+    } else {
+      next.delete(issueId);
     }
+    setBookmarkedIds(next);
 
-    const isBookmarked = bookmarkedIds.has(issueId);
-    
+    const bookmarksArr = Array.from(next);
+    // 1. Persist to LocalStorage synchronously
     try {
-      if (isBookmarked) {
-        const q = firestoreQuery(collection(db, 'bookmarks'), where('userId', '==', user.uid), where('issueId', '==', issueId));
-        const snap = await getDocs(q);
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        
-        const next = new Set(bookmarkedIds);
-        next.delete(issueId);
-        setBookmarkedIds(next);
+      localStorage.setItem('winfix_bookmarks', JSON.stringify(bookmarksArr));
+      if (user) {
+        localStorage.setItem(`user_bookmarks_${user.uid}`, JSON.stringify(bookmarksArr));
       } else {
-        const bookmarkRef = doc(collection(db, 'bookmarks'));
-        await setDoc(bookmarkRef, {
-          userId: user.uid,
-          issueId,
-          timestamp: getKSTISOString()
-        });
-        
-        const next = new Set(bookmarkedIds);
-        next.add(issueId);
-        setBookmarkedIds(next);
+        localStorage.setItem('guest_bookmarks', JSON.stringify(bookmarksArr));
       }
-    } catch (err) {
-      console.error("Failed to toggle bookmark:", err);
+    } catch (_) {}
+
+    // 2. Persist to IndexedDB asynchronously
+    try {
+      await idbSet('winfix_bookmarks', bookmarksArr);
+      if (user) {
+        await idbSet(`user_bookmarks_${user.uid}`, bookmarksArr);
+      }
+    } catch (_) {}
+
+    // 3. If user is logged in, attempt background sync with Firestore if configured
+    if (user && db) {
+      try {
+        if (!willBookmark) {
+          const q = firestoreQuery(collection(db, 'bookmarks'), where('userId', '==', user.uid), where('issueId', '==', issueId));
+          const snap = await getDocs(q);
+          const batch = writeBatch(db);
+          snap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        } else {
+          const bookmarkRef = doc(collection(db, 'bookmarks'));
+          await setDoc(bookmarkRef, {
+            userId: user.uid,
+            issueId,
+            timestamp: getKSTISOString()
+          });
+        }
+      } catch (err) {
+        console.warn("Firestore bookmark sync deferred (local profile active):", err);
+      }
     }
+  };
+
+  const handleClearAllBookmarks = () => {
+    if (bookmarkedIds.size === 0) return;
+    const confirmMsg = language === 'en'
+      ? `Are you sure you want to remove all ${bookmarkedIds.size} saved issues from your profile bookmarks?`
+      : `북마크된 ${bookmarkedIds.size}개 문제 항목을 모두 보관 해제하시겠습니까?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setBookmarkedIds(new Set());
+    try {
+      localStorage.removeItem('guest_bookmarks');
+      localStorage.removeItem('winfix_bookmarks');
+      if (user) {
+        localStorage.removeItem(`user_bookmarks_${user.uid}`);
+        idbRemove(`user_bookmarks_${user.uid}`);
+      }
+      idbRemove('winfix_bookmarks');
+    } catch (_) {}
   };
 
   const handleDeleteSingleActivity = async (activityToRemove: any, index: number) => {
@@ -8989,6 +9029,349 @@ export default function App() {
     setLoading(false);
   };
 
+  const handleGeneratePdfReport = () => {
+    if (!result) return;
+
+    const reportId = `WFW-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const formattedDate = getKSTISOString();
+    const isEn = language === 'en';
+
+    const pdfHtml = `
+<!DOCTYPE html>
+<html lang="${isEn ? 'en' : 'ko'}">
+<head>
+  <meta charset="UTF-8">
+  <title>${isEn ? 'Windows Fix Wizard Diagnostic Report' : 'Windows Fix Wizard 진단 및 복구 리포트'} - ${reportId}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 15mm;
+    }
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.6;
+      font-size: 13px;
+      padding: 24px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 14px;
+      margin-bottom: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #ffffff;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 22px;
+      box-shadow: 0 2px 6px rgba(37,99,235,0.3);
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+    .brand-subtitle {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 500;
+    }
+    .meta-box {
+      text-align: right;
+      font-size: 11px;
+      color: #475569;
+    }
+    .meta-id {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      color: #2563eb;
+      background: #eff6ff;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .section-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 6px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-blue {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+    }
+    .badge-emerald {
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+    .query-highlight {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e1b4b;
+      background: #e0e7ff;
+      padding: 12px 14px;
+      border-left: 4px solid #4f46e5;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .code-block {
+      background: #0f172a;
+      color: #38bdf8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      padding: 14px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin-top: 8px;
+      border: 1px solid #1e293b;
+      line-height: 1.5;
+    }
+    .warning-box {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      color: #78350f;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      margin-bottom: 10px;
+    }
+    ol.steps-list {
+      padding-left: 20px;
+    }
+    ol.steps-list li {
+      margin-bottom: 8px;
+      color: #334155;
+      line-height: 1.6;
+    }
+    .footer {
+      margin-top: 28px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #94a3b8;
+    }
+    .print-btn-bar {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 9999;
+      display: flex;
+      gap: 8px;
+      background: #ffffff;
+      padding: 8px 12px;
+      border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      border: 1px solid #cbd5e1;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+    }
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+  <div class="print-btn-bar no-print">
+    <button class="btn btn-primary" onclick="window.print()">🖨️ ${isEn ? 'Print or Save as PDF' : '인쇄 또는 PDF로 저장'}</button>
+    <button class="btn btn-secondary" onclick="window.close()">${isEn ? 'Close Window' : '창 닫기'}</button>
+  </div>
+
+  <div class="header">
+    <div class="brand">
+      <div class="brand-logo">W</div>
+      <div>
+        <div class="brand-title">Windows Fix Wizard</div>
+        <div class="brand-subtitle">${isEn ? 'Autonomous System Repair & Technical Diagnostic Report' : '지능형 시스템 오류 진단 및 기술 복구 리포트'}</div>
+      </div>
+    </div>
+    <div class="meta-box">
+      <div>${isEn ? 'Report ID:' : '문서 번호:'} <span class="meta-id">${reportId}</span></div>
+      <div>${isEn ? 'Generated:' : '발행 일시:'} ${formattedDate}</div>
+      <div>${isEn ? 'Target OS:' : '대상 환경:'} <strong>${version}</strong></div>
+    </div>
+  </div>
+
+  <!-- Section 1: User Query -->
+  <div class="section-card">
+    <div class="section-title">
+      <span>📌 ${isEn ? 'Diagnosed Symptom / Error Code' : '진단 요청 증상 및 오류 코드'}</span>
+    </div>
+    <div class="query-highlight">
+      ${query}
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <span class="badge badge-blue">${version}</span>
+      <span class="badge badge-emerald">${isEn ? 'AI Health Check: Verified' : 'AI 시스템 무결성 검증 완료'}</span>
+    </div>
+  </div>
+
+  <!-- Section 2: Diagnosis -->
+  <div class="section-card">
+    <div class="section-title">
+      <span>🔍 ${isEn ? 'AI Cause Analysis & Technical Diagnosis' : 'AI 원인 분석 및 전문 진단'}</span>
+    </div>
+    <p style="white-space: pre-line; color: #334155; line-height: 1.6;">${result.diagnosis}</p>
+  </div>
+
+  <!-- Section 3: PowerShell Script -->
+  ${result.script && result.isScriptApplicable ? `
+    <div class="section-card">
+      <div class="section-title">
+        <span>⚡ ${isEn ? 'Automated PowerShell Fix Script' : '자동 해결 PowerShell 스크립트 (관리자 권한)'}</span>
+      </div>
+      ${result.scriptSafetyWarning ? `<div class="warning-box">⚠️ <strong>${isEn ? 'Safety Warning' : '주의사항'}:</strong> ${result.scriptSafetyWarning}</div>` : ''}
+      <p style="font-size: 11px; color: #64748b; margin-bottom: 4px;">
+        ${isEn ? 'How to run: Press Win + X, select "Terminal (Admin)" or "PowerShell (Admin)", copy and paste the code below:' : '실행 방법: 시작 단추 우클릭 > "터미널(관리자)" 또는 "PowerShell(관리자)" 실행 후 아래 명령어를 입력하십시오:'}
+      </p>
+      <div class="code-block">${result.script}</div>
+    </div>
+  ` : ''}
+
+  <!-- Section 4: Manual Instructions -->
+  ${result.manualSteps && result.manualSteps.length > 0 ? `
+    <div class="section-card">
+      <div class="section-title">
+        <span>🛠️ ${isEn ? 'Step-by-Step Manual Recovery Instructions' : '단계별 수동 복구 가이드라인'}</span>
+      </div>
+      <ol class="steps-list">
+        ${result.manualSteps.map(step => `<li>${step}</li>`).join('')}
+      </ol>
+    </div>
+  ` : ''}
+
+  <!-- Section 5: References -->
+  ${result.sourceUrls && result.sourceUrls.length > 0 ? `
+    <div class="section-card">
+      <div class="section-title">
+        <span>📚 ${isEn ? 'Official References & Guidance' : '공식 기술 문서 및 참고 출처'}</span>
+      </div>
+      <ul style="padding-left: 20px; font-size: 11px; color: #2563eb;">
+        ${result.sourceUrls.map(url => `<li><a href="${url}" target="_blank" style="color: #2563eb; text-decoration: underline;">${url}</a></li>`).join('')}
+      </ul>
+    </div>
+  ` : ''}
+
+  <div class="footer">
+    <div>Official Technical Verification Document | Windows Fix Wizard v${APP_VERSION}</div>
+    <div>© ${new Date().getFullYear()} AhBiYout. Powered by Google Gemini AI & GitOps.</div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 300);
+    };
+  </script>
+</body>
+</html>
+    `;
+
+    const printWin = window.open('', '_blank', 'width=850,height=900,scrollbars=yes');
+    if (printWin) {
+      printWin.document.open();
+      printWin.document.write(pdfHtml);
+      printWin.document.close();
+    } else {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(pdfHtml);
+        doc.close();
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => {
+            try { document.body.removeChild(iframe); } catch (_) {}
+          }, 2000);
+        }, 500);
+      }
+    }
+  };
+
   const copyToClipboard = (text: string, id: string) => {
     try {
       navigator.clipboard.writeText(text);
@@ -9786,10 +10169,20 @@ export default function App() {
                   <ReadingProgressBar targetRef={wizardResultRef} />
                   {/* Diagnosis Card */}
                   <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                      <AlertCircle className="w-5 h-5 text-amber-500" />
-                      {language === 'en' ? 'Diagnosis' : '원인 진단'}
-                    </h2>
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                      <h2 className="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                        <AlertCircle className="w-5 h-5 text-amber-500" />
+                        {language === 'en' ? 'Diagnosis' : '원인 진단'}
+                      </h2>
+                      <button
+                        onClick={handleGeneratePdfReport}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 transition-all font-semibold text-xs shadow-2xs active:scale-95 cursor-pointer"
+                        title={language === 'en' ? 'Generate & Print PDF Diagnostic Report' : '인쇄용 PDF 진단 리포트 생성'}
+                      >
+                        <Printer className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <span>{language === 'en' ? 'Export PDF Report' : 'PDF 리포트 출력'}</span>
+                      </button>
+                    </div>
                     <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{result.diagnosis}</p>
                   </div>
 
@@ -9913,6 +10306,32 @@ export default function App() {
                       </ul>
                     </div>
                   )}
+
+                  {/* PDF Export Banner Bar */}
+                  <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
+                    <div className="flex items-center gap-3.5">
+                      <div className="p-2.5 bg-blue-500/20 text-blue-400 rounded-xl border border-blue-500/30 shrink-0">
+                        <Printer className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-slate-100">
+                          {language === 'en' ? 'Print or Save Diagnostic Report as PDF' : '진단 결과 및 복구 절차 PDF 리포트 출력'}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                          {language === 'en' 
+                            ? 'Generate an official printable report containing the diagnosis, PowerShell fix script, and manual steps.' 
+                            : '원인 진단, PowerShell 해결 스크립트, 단계별 수동 복구 지침이 포함된 기술 리포트를 인쇄 및 PDF 저장합니다.'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleGeneratePdfReport}
+                      className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>{language === 'en' ? 'Export PDF Report' : 'PDF 리포트 출력'}</span>
+                    </button>
+                  </div>
 
                   {/* Feedback Section */}
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-6 border border-blue-100 dark:border-blue-800/50 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -10491,9 +10910,14 @@ export default function App() {
                                     {v}
                                   </span>
                                 ))}
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-[10px] font-bold shrink-0 whitespace-nowrap border border-purple-200/80 dark:border-purple-800/60" title={language === 'en' ? 'Date Collected' : '오류 수집 일시'}>
+                                  <Calendar className="w-3 h-3 text-purple-500" />
+                                  <span>{language === 'en' ? 'Collected:' : '수집일:'} {formatCollectionDate(issue.createdAt)}</span>
+                                </span>
                                 {issue.verifiedAt && (
-                                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium shrink-0 whitespace-nowrap ml-0.5">
-                                    {language === 'en' ? 'Verified:' : '검증:'} {new Date(issue.verifiedAt).toLocaleDateString()}
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium shrink-0 whitespace-nowrap ml-0.5">
+                                    <FileCheck className="w-3 h-3 text-emerald-500" />
+                                    <span>{language === 'en' ? 'Verified:' : '검증:'} {formatCollectionDate(issue.verifiedAt)}</span>
                                   </span>
                                 )}
                               </div>
@@ -10531,14 +10955,30 @@ export default function App() {
 
                               <button
                                 onClick={(e) => handleToggleBookmark(issue.id, e)}
-                                className={`p-1.5 sm:p-2 rounded-lg transition-all active:scale-90 border ${
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all duration-200 active:scale-95 border text-xs font-semibold select-none shadow-xs ${
                                   bookmarkedIds.has(issue.id) 
-                                    ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-500 border-rose-200 dark:border-rose-800' 
-                                    : 'text-slate-400 hover:text-rose-500 border-slate-200/70 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/80 ring-1 ring-amber-400/20 shadow-amber-500/10' 
+                                    : 'text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-slate-800 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800/60'
                                 }`}
-                                title={bookmarkedIds.has(issue.id) ? (language === 'en' ? 'Remove from saved' : '저장 해제') : (language === 'en' ? 'Save for later' : '나중을 위해 저장')}
+                                title={
+                                  bookmarkedIds.has(issue.id) 
+                                    ? (language === 'en' ? 'Remove from Profile Bookmarks' : '프로필 북마크 해제') 
+                                    : (language === 'en' ? 'Save to Profile Bookmarks' : '프로필 북마크에 저장')
+                                }
+                                aria-label={
+                                  bookmarkedIds.has(issue.id) 
+                                    ? (language === 'en' ? 'Remove from Bookmarks' : '북마크 해제') 
+                                    : (language === 'en' ? 'Add to Bookmarks' : '북마크 추가')
+                                }
                               >
-                                <Heart className={`w-4 h-4 ${bookmarkedIds.has(issue.id) ? 'fill-current' : ''}`} />
+                                <Bookmark className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                  bookmarkedIds.has(issue.id) ? 'fill-current text-amber-500 scale-110' : ''
+                                }`} />
+                                <span className="hidden sm:inline">
+                                  {bookmarkedIds.has(issue.id) 
+                                    ? (language === 'en' ? 'Bookmarked' : '북마크됨') 
+                                    : (language === 'en' ? 'Bookmark' : '북마크')}
+                                </span>
                               </button>
                             </div>
 
@@ -10593,7 +11033,7 @@ export default function App() {
                                 </div>
                               )}
 
-                              {issue.script && (
+                              {((issue.script && issue.script.trim().length >= 10) || true) && (
                                 <div className="space-y-4">
                                   <div className="bg-slate-900 dark:bg-slate-950 rounded-xl overflow-hidden">
                                     <div className="bg-slate-800/50 dark:bg-slate-900/50 px-3 sm:px-4 py-2 sm:py-2.5 border-b border-slate-700/50 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
@@ -10604,7 +11044,7 @@ export default function App() {
                                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                                         <button
                                           onClick={() => {
-                                            const scriptToSend = scriptSignedOverrides[issue.id] || issue.script!;
+                                            const scriptToSend = scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title')));
                                             copyToClipboard(scriptToSend, issue.id);
                                             const event = new CustomEvent('uwes-set-validator-script', {
                                               detail: { script: scriptToSend }
@@ -10619,7 +11059,7 @@ export default function App() {
                                           <span>{language === 'ko' ? '🛡️ 안심 검사소로 전송' : '🛡️ Send to Verifier'}</span>
                                         </button>
                                         <button
-                                          onClick={() => copyToClipboard(scriptSignedOverrides[issue.id] || issue.script!, issue.id)}
+                                          onClick={() => copyToClipboard(scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title'))), issue.id)}
                                           className="text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium bg-slate-700/50 hover:bg-slate-700 px-2.5 py-1 rounded-md"
                                         >
                                           {copiedScript === issue.id ? (
@@ -10638,13 +11078,13 @@ export default function App() {
                                     </div>
                                     <div className="p-4 overflow-x-auto">
                                       <pre className="text-sm font-mono text-blue-300 leading-relaxed">
-                                        <code>{scriptSignedOverrides[issue.id] || issue.script}</code>
+                                        <code>{scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title')))}</code>
                                       </pre>
                                     </div>
                                   </div>
 
                                   <PowerShellVerifierPanel
-                                    scriptText={scriptSignedOverrides[issue.id] || issue.script}
+                                    scriptText={scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title')))}
                                     language={language}
                                     onScriptSigned={(newScript) => {
                                       setScriptSignedOverrides(prev => ({
@@ -10854,8 +11294,9 @@ export default function App() {
                         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                           {issue.category}
                         </span>
-                        <span className="text-[10px] text-slate-400">
-                          {issue.createdAt ? new Date(issue.createdAt).toLocaleDateString() : (language === 'en' ? 'Recent' : '최근')}
+                        <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold flex items-center gap-1 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-100 dark:border-purple-900/40">
+                          <Calendar className="w-3 h-3 text-purple-500" />
+                          <span>{language === 'en' ? 'Collected:' : '수집일:'} {formatCollectionDate(issue.createdAt)}</span>
                         </span>
                       </div>
                       <h4 className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
@@ -10930,69 +11371,251 @@ export default function App() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Left Side: Bookmarks */}
-              <div className="lg:col-span-2 space-y-6">
-                <div className="flex items-center justify-between">
-                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                    <Bookmark className="w-5 h-5 text-blue-500" />
-                    {language === 'en' ? 'Saved Solutions' : '관심 있는 해결법'}
-                    <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-xs font-bold text-slate-500">{bookmarkedIds.size}</span>
-                  </h3>
+              <div className="lg:col-span-2 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/20">
+                      <BookmarkCheck className="w-5 h-5 text-amber-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        {language === 'en' ? 'Bookmarked Issues & Fixes' : '북마크한 해결법 목록'}
+                        <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full text-xs font-bold font-mono">
+                          {bookmarkedIds.size}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {language === 'en'
+                          ? 'Quickly access saved Windows solutions across all your sessions'
+                          : '가이드북에서 북마크한 Windows 문제와 복구 명령을 모아봅니다'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {bookmarkedIds.size > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleClearAllBookmarks}
+                        className="text-xs font-semibold text-slate-500 hover:text-rose-500 dark:text-slate-400 dark:hover:text-rose-400 transition-colors flex items-center gap-1.5 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-rose-50 dark:hover:bg-rose-950/30 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
+                        title={language === 'en' ? 'Clear all saved bookmarks' : '모든 북마크 해제'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Clear All' : '전체 해제'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
+                {/* Filter and Search Bar when bookmarks exist */}
+                {dbIssues.filter(i => bookmarkedIds.has(i.id)).length > 2 && (
+                  <div className="space-y-3 bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-200/70 dark:border-slate-800/80">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={bookmarkSearchQuery}
+                        onChange={(e) => setBookmarkSearchQuery(e.target.value)}
+                        placeholder={language === 'en' ? 'Search inside your bookmarks (title, error code, symptoms)...' : '북마크 검색 (제목, 오류 코드, 증상)...'}
+                        className="w-full pl-9 pr-8 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      {bookmarkSearchQuery && (
+                        <button
+                          onClick={() => setBookmarkSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {Array.from(new Set(dbIssues.filter(i => bookmarkedIds.has(i.id)).map(i => i.category))).length > 1 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {['전체', ...Array.from(new Set(dbIssues.filter(i => bookmarkedIds.has(i.id)).map(i => i.category)))].map((cat) => (
+                          <button
+                            key={cat}
+                            onClick={() => setBookmarkCategoryFilter(cat)}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                              bookmarkCategoryFilter === cat
+                                ? 'bg-amber-500 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {isLoadingPersonal ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 animate-pulse">
-                        <div className="flex gap-2 mb-3">
-                          <div className="h-4 w-12 bg-slate-200 dark:bg-slate-800 rounded"></div>
-                          <div className="h-4 w-16 bg-slate-100 dark:bg-slate-800 rounded"></div>
-                        </div>
-                        <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded w-full mb-3"></div>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 animate-pulse space-y-3">
                         <div className="flex gap-2">
-                          <div className="h-4 w-1/3 bg-slate-100 dark:bg-slate-800 rounded"></div>
+                          <div className="h-5 w-20 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                          <div className="h-5 w-24 bg-slate-100 dark:bg-slate-800 rounded"></div>
                         </div>
+                        <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded w-3/4"></div>
+                        <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-full"></div>
                       </div>
                     ))}
                   </div>
                 ) : bookmarkedIds.size === 0 ? (
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center">
-                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Bookmark className="w-8 h-8 text-slate-300" />
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-10 text-center shadow-xs">
+                    <div className="w-16 h-16 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl flex items-center justify-center mx-auto mb-4 text-amber-500">
+                      <Bookmark className="w-8 h-8 text-amber-500" />
                     </div>
-                    <h4 className="font-bold text-slate-900 dark:text-slate-100">{language === 'en' ? 'No Saved Solutions' : '저장된 해결법이 없습니다'}</h4>
-                    <p className="text-sm text-slate-500 mt-2">{language === 'en' ? 'Click the heart icon on any issue to save it here.' : '해결 방법 옆의 하트 아이콘을 눌러 이곳에 보관하세요.'}</p>
+                    <h4 className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                      {language === 'en' ? 'No Bookmarked Solutions Yet' : '저장된 북마크가 없습니다'}
+                    </h4>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-md mx-auto leading-relaxed">
+                      {language === 'en'
+                        ? 'Click the "Bookmark" toggle button on any issue in the Guidebook to save it to your profile for quick offline access.'
+                        : '가이드북 목록에서 각 문제의 [북마크] 버튼을 누르면 이곳에 저장되어 오프라인에서도 언제든 즉시 찾아볼 수 있습니다.'}
+                    </p>
                     <button 
                       onClick={() => setActiveTab('guidebook')}
-                      className="mt-6 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg font-bold text-sm hover:bg-blue-200 transition-colors"
+                      className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
                     >
-                      {language === 'en' ? 'Go to Guidebook' : '가이드북 둘러보기'}
+                      <BookOpen className="w-4 h-4" />
+                      <span>{language === 'en' ? 'Explore Guidebook' : '가이드북 둘러보기'}</span>
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {dbIssues.filter(i => bookmarkedIds.has(i.id)).map(issue => (
-                      <div 
-                        key={issue.id}
-                        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 hover:border-blue-300 dark:hover:border-blue-700 transition-all flex items-center justify-between group shadow-sm"
-                      >
-                        <div className="flex items-center gap-4 cursor-pointer overflow-hidden" onClick={() => { setActiveTab('guidebook'); setExpandedIssue(issue.id); }}>
-                           <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 shadow-inner flex-shrink-0">
-                             {getCategoryIcon(issue.category)}
-                           </div>
-                           <div className="truncate">
-                             <h4 className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 transition-colors truncate">{getLocalizedText(issue, 'title')}</h4>
-                             <p className="text-[10px] text-slate-500 font-mono mt-0.5">{issue.code}</p>
-                           </div>
+                  (() => {
+                    const savedIssues = dbIssues.filter(i => bookmarkedIds.has(i.id));
+                    const filteredSavedIssues = savedIssues.filter(issue => {
+                      if (bookmarkCategoryFilter !== '전체' && issue.category !== bookmarkCategoryFilter) {
+                        return false;
+                      }
+                      if (!bookmarkSearchQuery.trim()) return true;
+                      const q = bookmarkSearchQuery.toLowerCase();
+                      return (
+                        (issue.title && issue.title.toLowerCase().includes(q)) ||
+                        (issue.title_en && issue.title_en.toLowerCase().includes(q)) ||
+                        (issue.code && issue.code.toLowerCase().includes(q)) ||
+                        (issue.symptoms && issue.symptoms.toLowerCase().includes(q)) ||
+                        (issue.category && issue.category.toLowerCase().includes(q))
+                      );
+                    });
+
+                    if (filteredSavedIssues.length === 0) {
+                      return (
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center">
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? 'No bookmarked items match your search filter.' : '선택한 필터나 검색어에 맞는 북마크 항목이 없습니다.'}
+                          </p>
+                          <button
+                            onClick={() => { setBookmarkSearchQuery(''); setBookmarkCategoryFilter('전체'); }}
+                            className="mt-3 text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+                          >
+                            {language === 'en' ? 'Reset Filters' : '필터 초기화'}
+                          </button>
                         </div>
-                        <button 
-                          onClick={() => handleToggleBookmark(issue.id)}
-                          className="p-3 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all active:scale-95 shadow-sm"
-                        >
-                          <Heart className="w-5 h-5 fill-current" />
-                        </button>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3.5">
+                        {filteredSavedIssues.map(issue => (
+                          <div 
+                            key={issue.id}
+                            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 hover:border-amber-400/60 dark:hover:border-amber-600/60 transition-all duration-200 shadow-xs hover:shadow-sm group space-y-3"
+                          >
+                            {/* Card Header */}
+                            <div className="flex flex-wrap items-center justify-between gap-2.5">
+                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                <span className="px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold shrink-0 border border-slate-200/60 dark:border-slate-700/60 flex items-center gap-1">
+                                  {getCategoryIcon(issue.category)}
+                                  <span>{issue.category}</span>
+                                </span>
+                                <span className="text-xs font-mono text-red-500 dark:text-red-400 font-bold shrink-0 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded-md border border-red-100 dark:border-red-900/40">
+                                  {issue.code}
+                                </span>
+                                {issue.windowsVersions && issue.windowsVersions.length > 0 && (
+                                  <span className="hidden sm:inline-flex text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100/60 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200/40 dark:border-slate-700/40 font-medium">
+                                    {issue.windowsVersions.join(', ')}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Bookmark Unsave Toggle Button */}
+                              <button 
+                                onClick={() => handleToggleBookmark(issue.id)}
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 border border-amber-300 dark:border-amber-700 hover:border-rose-300 dark:hover:border-rose-700 rounded-lg transition-all active:scale-95 shadow-2xs group/btn cursor-pointer"
+                                title={language === 'en' ? 'Remove from Bookmarks' : '북마크 해제'}
+                              >
+                                <BookmarkCheck className="w-3.5 h-3.5 group-hover/btn:hidden text-amber-500" />
+                                <BookmarkX className="w-3.5 h-3.5 hidden group-hover/btn:inline text-rose-500" />
+                                <span>{language === 'en' ? 'Bookmarked' : '북마크됨'}</span>
+                              </button>
+                            </div>
+
+                            {/* Title & Symptoms */}
+                            <div 
+                              className="cursor-pointer group/title"
+                              onClick={() => { setActiveTab('guidebook'); setExpandedIssue(issue.id); }}
+                            >
+                              <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base group-hover/title:text-blue-600 dark:group-hover/title:text-blue-400 transition-colors">
+                                {getLocalizedText(issue, 'title')}
+                              </h4>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                                {getLocalizedText(issue, 'symptoms')}
+                              </p>
+                            </div>
+
+                            {/* Script Snippet (if available) */}
+                            {issue.script && (
+                              <div className="bg-slate-900 rounded-xl p-2.5 sm:p-3 flex items-center justify-between gap-2 overflow-hidden border border-slate-800 font-mono text-[11px] text-slate-300">
+                                <div className="truncate flex-1">
+                                  <span className="text-emerald-400 mr-1.5 select-none font-bold">PS &gt;</span>
+                                  <span className="text-slate-200">{issue.script.split('\n')[0]}</span>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    copyToClipboard(issue.script!, issue.id);
+                                    setCopiedBookmarkScriptId(issue.id);
+                                    setTimeout(() => setCopiedBookmarkScriptId(null), 2000);
+                                  }}
+                                  className="shrink-0 flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md text-[11px] font-sans font-medium transition-colors cursor-pointer"
+                                  title={language === 'en' ? 'Copy PowerShell Script' : 'PowerShell 스크립트 복사'}
+                                >
+                                  {copiedBookmarkScriptId === issue.id ? (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      <span className="text-emerald-400">{language === 'en' ? 'Copied' : '복사됨'}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3 text-slate-400" />
+                                      <span>{language === 'en' ? 'Copy' : '복사'}</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Action Link Footer */}
+                            <div className="flex items-center justify-between pt-1 text-xs">
+                              <button
+                                onClick={() => { setActiveTab('guidebook'); setExpandedIssue(issue.id); }}
+                                className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline cursor-pointer"
+                              >
+                                <span>{language === 'en' ? 'Open in Guidebook' : '가이드북에서 전체 상세 보기'}</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                {issue.verificationStatus === 'verified' && (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ AI 검증 완료</span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()
                 )}
               </div>
 
@@ -14497,15 +15120,15 @@ export default function App() {
                             <h4 className="font-bold text-slate-900 dark:text-slate-100 truncate mb-1">
                               {issue.title}
                             </h4>
-                            <div className="flex items-center gap-3 text-[10px] text-slate-400">
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {issue.createdAt ? (typeof issue.createdAt === 'string' ? new Date(issue.createdAt).toLocaleDateString() : (issue.createdAt as any).toDate?.().toLocaleDateString() || 'N/A') : 'Unknown'}
+                            <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400">
+                              <div className="flex items-center gap-1 font-bold text-purple-600 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded border border-purple-200/60 dark:border-purple-800/60">
+                                <Calendar className="w-3 h-3 text-purple-500" />
+                                <span>{language === 'en' ? 'Collected:' : '수집일:'} {formatCollectionDate(issue.createdAt)}</span>
                               </div>
                               {issue.verifiedAt && (
-                                <div className="flex items-center gap-1 text-emerald-500 dark:text-emerald-400 font-medium">
+                                <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
                                   <FileCheck className="w-3 h-3" />
-                                  {language === 'en' ? 'Last Verified:' : '마지막 검증:'} {new Date(issue.verifiedAt).toLocaleDateString()}
+                                  {language === 'en' ? 'Last Verified:' : '마지막 검증:'} {formatCollectionDate(issue.verifiedAt)}
                                 </div>
                               )}
                             </div>
@@ -14912,30 +15535,6 @@ export default function App() {
                                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                                 <span className="leading-relaxed">{authError}</span>
                               </div>
-                              {authError.includes('Firebase') && (
-                                <div className="mt-1 pt-2 border-t border-red-200/60 dark:border-red-800/60 text-[11px] text-slate-700 dark:text-slate-300 space-y-1.5">
-                                  <div className="font-bold text-red-700 dark:text-red-300 flex items-center gap-1.5">
-                                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                                    <span>깃허브 페이지에서 구글 로그인 활성화 방법 (1분 소요):</span>
-                                  </div>
-                                  <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400 pl-1">
-                                    <li>클라우드 설정 콘솔 &gt; <strong>Authentication</strong> &gt; <strong>설정 (Settings)</strong> 탭으로 이동합니다.</li>
-                                    <li><strong>승인된 도메인 (Authorized domains)</strong>에서 <strong>[도메인 추가]</strong>를 누릅니다.</li>
-                                    <li><code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-[10px] text-indigo-600 dark:text-indigo-400">ahbiyout-all.github.io</code> 를 입력하고 저장하면 즉시 구글 로그인이 정상 작동합니다!</li>
-                                  </ol>
-                                  <div className="pt-1 flex items-center justify-between">
-                                    <a
-                                      href="https://console.firebase.google.com/project/gen-lang-client-0325089792/authentication/settings"
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                                    >
-                                      <ExternalLink className="w-3.5 h-3.5" />
-                                      <span>클라우드 콘솔 승인된 도메인 설정 바로가기</span>
-                                    </a>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           )}
 

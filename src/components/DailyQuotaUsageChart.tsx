@@ -743,16 +743,16 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                   <Bar
                     yAxisId="primary"
                     dataKey="firestoreReads"
-                    name={language === 'en' ? 'Firestore Reads' : 'Firestore 클라우드 읽기'}
-                    fill="#f97316"
+                    name={language === 'en' ? 'Server DB Reads' : '서버 DB 읽기연산'}
+                    fill="#3b82f6"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={16}
                   />
                   <Bar
                     yAxisId="primary"
                     dataKey="firestoreWrites"
-                    name={language === 'en' ? 'Firestore Writes' : 'Firestore 클라우드 쓰기'}
-                    fill="#fb923c"
+                    name={language === 'en' ? 'Server DB Writes' : '서버 DB 쓰기연산'}
+                    fill="#60a5fa"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={16}
                   />
@@ -783,8 +783,8 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
               <span>{language === 'en' ? 'Jamstack' : '정적 피드'}</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />
-              <span>{language === 'en' ? 'Firestore' : '클라우드 DB'}</span>
+              <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" />
+              <span>{language === 'en' ? 'Server DB' : '서버 DB'}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
@@ -794,7 +794,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
 
           <div className="flex items-center gap-1.5 text-slate-400">
             <Info className="w-3.5 h-3.5" />
-            <span>{language === 'en' ? 'Monitoring dual-layer DB (Static Jamstack + Cloud Firestore)' : '이중 레이어 DB (정적 Jamstack + 클라우드 Firestore) 통합 모니터링 중'}</span>
+            <span>{language === 'en' ? 'Monitoring dual-layer architecture (Jamstack Static + Server DB Engine)' : '이중 레이어 아키텍처 (정적 Jamstack + 서버 DB 엔진) 통합 모니터링 중'}</span>
           </div>
         </div>
       </div>

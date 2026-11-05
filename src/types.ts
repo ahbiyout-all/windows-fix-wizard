@@ -123,7 +123,7 @@ export interface FeedbackLog {
 export interface UserActivity {
   id?: string;
   userId: string;
-  type: 'search' | 'view';
+  type: 'search' | 'view' | 'diagnosis' | 'bookmark';
   targetId?: string;
   query?: string;
   timestamp: any;

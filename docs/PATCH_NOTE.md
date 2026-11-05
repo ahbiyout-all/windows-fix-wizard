@@ -1,6 +1,91 @@
-# Patch Note - System Update (v3.66.1)
+# Patch Note - System Update (v3.72.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.72.0] - 2026-11-05
+
+### 🚀 Major New Features & AI Automation Fixes
+- **Mandatory PowerShell Auto-Script Generator & Fallback Engine (`generateDefaultPowerShellScript`)**:
+  - Fixed an issue where collected issue cards were missing PowerShell repair scripts.
+  - Implemented `generateDefaultPowerShellScript` fallback generator across `server.ts`, `scripts/github-collector.ts`, and `src/App.tsx` to construct category and error code-specific PowerShell scripts (SFC/DISM, Netsh/IPConfig, wsreset/Get-AppxPackage, slmgr, MpCmdRun, etc.).
+  - Updated AI Collector prompts in `server.ts` and `github-collector.ts` to strictly mandate PowerShell script generation.
+  - Ensured UI card renderer always displays a valid, copyable PowerShell script and enables the Verifier sandbox for every collected card.
+
+---
+
+## [v3.71.0] - 2026-11-05
+
+### 🚀 Major New Features & UI/UX Enhancements
+- **Collected Date Badge on All Issue Cards (`formatCollectionDate`)**:
+  - Added a prominent, styled collection date badge (`수집일: YYYY-MM-DD` / `Collected: YYYY-MM-DD`) with a `Calendar` icon to all issue cards in the 'Library' tab, compact cards view, and bookmarked solutions section.
+  - Implemented `formatCollectionDate` helper to handle ISO strings, timestamps, and date objects cleanly across all client-side views.
+
+---
+
+## [v3.70.0] - 2026-11-05
+
+### 🔧 Optimization & Legacy Cleanup
+- **Cleanup Unused Legacy Firebase / Firestore UI Elements & References**:
+  - Refactored `DailyQuotaUsageChart.tsx` to replace obsolete Firestore daily quota meters (50k reads/writes) with Server DB and Jamstack Engine metrics.
+  - Removed obsolete hardcoded external Firebase console links and authentication setup guides from `src/App.tsx`.
+  - Streamlined system monitoring to focus on Jamstack static feeds, Server DB REST operations, and Gemini AI API usage.
+
+---
+
+## [v3.69.0] - 2026-11-05
+
+### 🚀 Major New Features & Integrations
+- **Full-Stack Gemini API Architecture Migration**:
+  - Migrated all Gemini AI generation, key validation, search grounding, and diagnosis capabilities to server-side routes in `server.ts`.
+  - Configured `@google/genai` initialization with standard `httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }` header for all backend requests.
+  - Removed browser-side Gemini SDK instantiations and cleaned up client-side fallback routes in `src/App.tsx`.
+  - Maintained `metadata.json` major capabilities flag (`MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API`).
+
+### 🛡️ Security Hardening & Authentication
+- Removed legacy `define` entries from `vite.config.ts` so API keys are handled exclusively on the backend via environment variables.
+
+---
+
+## [v3.68.0] - 2026-11-05
+
+### 🚀 Major New Features & Integrations
+- **Printable PDF Diagnostic Report Generator in Wizard (`handleGeneratePdfReport`)**:
+  - Implemented an official **"Export PDF Report" (PDF 리포트 출력)** button on the 'Wizard' AI diagnosis result page.
+  - Generates a standalone, beautifully formatted printable document containing:
+    - Official Microsoft/Windows Fix Wizard header with unique report ID (`WFW-RPT-XXXX`) and generation timestamp (KST).
+    - Target OS environment (e.g., Windows 11 / Windows 10) and user query/symptom highlight.
+    - AI Cause Analysis & Technical Diagnosis details.
+    - Automated PowerShell Fix Script in high-contrast code block with execution instructions and safety warnings.
+    - Step-by-Step Manual Recovery Instructions.
+    - Official Microsoft Documentation reference URLs.
+    - Security verification seal and official disclaimer footer.
+  - Supports instant native browser `window.print()` ("Save as PDF") with dedicated print action bar, media `@page` CSS optimizations, and invisible iframe fallback for popup-blocked environments.
+
+### 🛡️ Security Hardening & Zero-Cloud-Quota Adherence
+- Executed entirely client-side without sending sensitive system data to third-party PDF services or consuming billable cloud resources.
+
+---
+
+## [v3.67.0] - 2026-11-05
+
+### 🚀 Major New Features & Integrations
+- **'Bookmarks' Toggle Button on Known Issues List Items**:
+  - Replaced the legacy generic icon with a dedicated, responsive **'Bookmarks' toggle button** on each Known Issue card in the Guidebook.
+  - Features clear visual states with amber badge accents, active scaling (`active:scale-95`), `Bookmark` / `BookmarkCheck` icons, and responsive label display (`Bookmark` / `Bookmarked` on desktop/tablet, compact icon on mobile).
+  - Enables one-click instant save/unsave of troubleshooting issues and PowerShell scripts directly to the user's profile.
+- **Enhanced Bookmarked Issues Showcase in the Library Tab**:
+  - Redesigned the Bookmarks section of the **"나의 실험실" (Library / My Lab)** tab with rich issue cards displaying error code badges, category icons, target Windows OS tags, and symptom previews.
+  - Embedded one-click **PowerShell Fix Script preview & copy button** with instant visual feedback (`Copied!` / `복사됨`).
+  - Added an **"Open in Guidebook" (가이드북에서 열기)** deep-link navigation button that transitions to the Guidebook tab and automatically expands the selected issue.
+  - Implemented an in-library **Search & Category Filter bar** allowing users to instantly filter their saved fixes by keyword, error code, or category.
+  - Added a **"Clear All" (전체 해제)** bulk-removal action with confirmation protection.
+
+### 🛡️ Security Hardening & Zero-Cloud-Quota Adherence
+- **Multi-Tier Zero-Quota Profile Persistence**:
+  - Bookmarks are persisted synchronously to browser `LocalStorage` (`winfix_bookmarks`, `user_bookmarks_${uid}`, `guest_bookmarks`) and asynchronously to `IndexedDB`.
+  - Bookmarks are fully accessible in offline mode without requiring Firestore queries or consuming cloud database quotas.
 
 ---
 

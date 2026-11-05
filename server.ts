@@ -459,6 +459,34 @@ async function syncBundlesToFirestore() {
   }
 }
 
+function generateDefaultPowerShellScript(code: string = '', category: string = '', title: string = ''): string {
+  const codeUpper = (code || '').toUpperCase();
+  const cat = (category || '').trim();
+  const titleLower = (title || '').toLowerCase();
+
+  if (cat.includes('네트워크') || cat.includes('Network') || codeUpper.includes('0X80072EFE') || codeUpper.includes('0X80072F78') || titleLower.includes('network') || titleLower.includes('인터넷')) {
+    return `# Windows ${codeUpper || 'Network'} Automatic Recovery Script\r\n# Target: Reset TCP/IP Stack, DNS Cache & Winsock Catalog\r\n\r\nWrite-Host "[1/4] Flushing DNS Resolver Cache..." -ForegroundColor Cyan\r\nipconfig /flushdns\r\n\r\nWrite-Host "[2/4] Resetting Winsock & IP Interfaces..." -ForegroundColor Cyan\r\nnetsh winsock reset\r\nnetsh int ip reset\r\n\r\nWrite-Host "[3/4] Releasing & Renewing IPv4 Leases..." -ForegroundColor Cyan\r\nipconfig /release\r\nipconfig /renew\r\n\r\nWrite-Host "[4/4] Restarting Network Location Awareness Service..." -ForegroundColor Cyan\r\nRestart-Service -Name "NlaSvc" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[+] Network stack reset complete. Please restart your PC." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('업데이트') || cat.includes('Update') || codeUpper.startsWith('0X8024') || codeUpper.startsWith('0X80070') || titleLower.includes('update') || titleLower.includes('업데이트')) {
+    return `# Windows Update ${codeUpper || 'Error'} Automated Repair Script\r\n# Target: Reset Windows Update Components & SoftwareDistribution Cache\r\n\r\nWrite-Host "[1/5] Stopping Windows Update & BITS Services..." -ForegroundColor Cyan\r\nStop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue\r\nStop-Service -Name "bits" -Force -ErrorAction SilentlyContinue\r\nStop-Service -Name "cryptsvc" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[2/5] Purging Update Cache Directories..." -ForegroundColor Cyan\r\nRemove-Item -Path "$env:SystemRoot\\SoftwareDistribution\\Download\\*" -Recurse -Force -ErrorAction SilentlyContinue\r\nRemove-Item -Path "$env:SystemRoot\\System32\\catroot2\\*" -Recurse -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[3/5] Re-registering Update DLL Libraries..." -ForegroundColor Cyan\r\nregsvr32.exe /s wuaueng.dll\r\nregsvr32.exe /s qmgr.dll\r\n\r\nWrite-Host "[4/5] Restarting Core Update Services..." -ForegroundColor Cyan\r\nStart-Service -Name "cryptsvc" -ErrorAction SilentlyContinue\r\nStart-Service -Name "bits" -ErrorAction SilentlyContinue\r\nStart-Service -Name "wuauserv" -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[5/5] Triggering Windows Update Detection Cycle..." -ForegroundColor Cyan\r\nusoclient StartScan\r\n\r\nWrite-Host "[+] Windows Update repair complete. Retry updating now." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('스토어') || cat.includes('Store') || cat.includes('앱') || codeUpper.startsWith('0X80073') || titleLower.includes('store') || titleLower.includes('스토어')) {
+    return `# Windows Store & AppX Package Repair Script\r\n# Target: Re-register Microsoft Store & Repair System Apps\r\n\r\nWrite-Host "[1/3] Resetting Microsoft Store Cache..." -ForegroundColor Cyan\r\nwsreset.exe\r\n\r\nWrite-Host "[2/3] Re-registering all AppX Packages for Current User..." -ForegroundColor Cyan\r\nGet-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\\AppXManifest.xml" -ErrorAction SilentlyContinue}\r\n\r\nWrite-Host "[3/3] Checking AppX Deployment Service Status..." -ForegroundColor Cyan\r\nGet-Service -Name "AppXSvc" | Start-Service -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[+] Microsoft Store repair completed." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('정품인증') || cat.includes('Activation') || codeUpper.startsWith('0XC004') || titleLower.includes('activation') || titleLower.includes('정품')) {
+    return `# Windows Licensing & Software Protection Service Diagnostic Script\r\n# Target: Clear License Cache & Restart Software Protection Service (sppsvc)\r\n\r\nWrite-Host "[1/3] Restarting Software Protection Service..." -ForegroundColor Cyan\r\nRestart-Service -Name "sppsvc" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[2/3] Querying Current Licensing Status..." -ForegroundColor Cyan\r\ncscript.exe //NoLogo "$env:SystemRoot\\System32\\slmgr.vbs" /dli\r\n\r\nWrite-Host "[3/3] Re-arm License State..." -ForegroundColor Cyan\r\ncscript.exe //NoLogo "$env:SystemRoot\\System32\\slmgr.vbs" /ato\r\n\r\nWrite-Host "[+] Windows activation diagnostic complete." -ForegroundColor Green`;
+  }
+
+  if (cat.includes('보안') || cat.includes('Security') || cat.includes('백신') || titleLower.includes('defender') || titleLower.includes('security')) {
+    return `# Windows Security & Defender Repair Script\r\n# Target: Update Defender Signatures & Reset Security Platform\r\n\r\nWrite-Host "[1/3] Updating Microsoft Defender Intelligence Signatures..." -ForegroundColor Cyan\r\n& "$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe" -SignatureUpdate\r\n\r\nWrite-Host "[2/3] Triggering Defender Quick Scan..." -ForegroundColor Cyan\r\n& "$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 1\r\n\r\nWrite-Host "[3/3] Resetting Windows Security Service..." -ForegroundColor Cyan\r\nRestart-Service -Name "SecurityHealthService" -Force -ErrorAction SilentlyContinue\r\n\r\nWrite-Host "[+] Windows Security diagnostic complete." -ForegroundColor Green`;
+  }
+
+  return `# Windows System Integrity Repair Script (${codeUpper || 'System Fix'})\r\n# Target: SFC System File Checker & DISM Image Servicing\r\n\r\nWrite-Host "[1/3] Running System File Checker (SFC)..." -ForegroundColor Cyan\r\nsfc /scannow\r\n\r\nWrite-Host "[2/3] Checking Component Store Health via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /CheckHealth\r\n\r\nWrite-Host "[3/3] Restoring Component Store Corruption via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /RestoreHealth\r\n\r\nWrite-Host "[+] System file integrity repair complete. Please restart your system." -ForegroundColor Green`;
+}
+
 async function saveIssuesToServer(issuesData: any[]) {
   console.log(`Server-side sync: attempt to save ${issuesData.length} issues`);
   let addedCount = 0;
@@ -482,6 +510,11 @@ async function saveIssuesToServer(issuesData: any[]) {
         console.warn(`Skipping invalid issue data: missing ${missing.join(', ')}`);
         skippedCount++;
         continue;
+      }
+
+      // Guarantee PowerShell script is populated
+      if (!issueData.script || typeof issueData.script !== 'string' || issueData.script.trim().length < 15) {
+        issueData.script = generateDefaultPowerShellScript(issueData.code, issueData.category, issueData.title);
       }
 
       // Check duplicates in local array database
@@ -756,7 +789,10 @@ async function executeServerGeminiCall(
   let lastError: any = null;
 
   for (const k of validKeys) {
-    const ai = new GoogleGenAI({ apiKey: k.value });
+    const ai = new GoogleGenAI({ 
+      apiKey: k.value, 
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
+    });
     for (const modelName of candidateModels) {
       try {
         const configToUse = { ...options.config };
@@ -1201,7 +1237,10 @@ async function runAiSyncInternal(): Promise<any> {
     if (success) break;
     
     console.log(`[Engine Sync] Attempting sync with key '${k.name}'...`);
-    const ai = new GoogleGenAI({ apiKey: k.value });
+    const ai = new GoogleGenAI({ 
+      apiKey: k.value, 
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
+    });
 
     for (const modelName of modelsToTry) {
       if (success) break;
@@ -1745,7 +1784,17 @@ async function startServer() {
         });
       }
 
-      res.json({ success: true, issues: list });
+      const enrichedList = list.map(i => {
+        if (!i.script || typeof i.script !== 'string' || i.script.trim().length < 15) {
+          return {
+            ...i,
+            script: generateDefaultPowerShellScript(i.code, i.category, i.title)
+          };
+        }
+        return i;
+      });
+
+      res.json({ success: true, issues: enrichedList });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -2103,9 +2152,12 @@ async function startServer() {
       }
 
       try {
-        const testAi = new GoogleGenAI({ apiKey: trimmed });
+        const testAi = new GoogleGenAI({ 
+          apiKey: trimmed, 
+          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
+        });
         await testAi.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: 'test',
           config: { maxOutputTokens: 2 }
         });
