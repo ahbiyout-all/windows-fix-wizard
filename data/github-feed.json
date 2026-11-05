@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-05T05:19:53.154Z",
+  "lastCollectedAt": "2026-11-05T14:04:01.076Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "디스플레이/그래픽",
+  "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 94,
+  "totalIssuesCount": 96,
   "newIssues": [
     {
-      "id": "gh-video-tdr-failure--0x00000116--mw33jiv7",
-      "code": "VIDEO_TDR_FAILURE (0x00000116)",
-      "title": "Windows 10/11 VIDEO_TDR_FAILURE (0x00000116) 블루스크린 오류 해결 방법",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x80070643-mw3m9k8k",
+      "code": "0x80070643",
+      "title": "Windows 10/11 업데이트 오류 0x80070643 (복구 파티션 용량 부족 및 설치 실패) 해결 방법",
+      "category": "업데이트"
     },
     {
-      "id": "gh-code-43--graphics-device-error--mw33jiv7",
-      "code": "Code 43 (Graphics Device Error)",
-      "title": "Windows 10/11 그래픽 카드 디바이스 관리자 오류 코드 43 (Code 43) 해결 방법",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x800f081f-mw3m9k8k",
+      "code": "0x800f081f",
+      "title": "Windows 10/11 누적 업데이트 오류 0x800f081f (CBS_E_SOURCE_MISSING 저장소 손상) 해결 방법",
+      "category": "업데이트"
     }
   ]
 }

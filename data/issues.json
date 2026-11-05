@@ -4218,5 +4218,101 @@
     "updatedAt": "2026-11-05T05:19:53.154Z",
     "verifiedAt": "2026-11-05T05:19:53.154Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mw3m9k8k",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows 10/11 업데이트 오류 0x80070643 (복구 파티션 용량 부족 및 설치 실패) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Update Error 0x80070643 (WinRE Partition Failure)",
+    "symptoms": "Windows 보안 업데이트(KB5034441 등) 설치 시 0x80070643 (ERROR_INSTALL_FAILURE) 오류가 발생하며 업데이트 실패가 반복됩니다. 복구 환경(WinRE) 파티션의 여유 공간 부족 또는 손상된 시스템 파일로 인해 발생합니다.",
+    "symptoms_en": "Windows security update installation (such as KB5034441) fails repeatedly with error 0x80070643 (ERROR_INSTALL_FAILURE). This is primarily caused by insufficient free space in the Windows Recovery Environment (WinRE) partition or corrupted servicing files.",
+    "script": "if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {\n    Write-Host \"Please run PowerShell as Administrator.\" -ForegroundColor Red\n    return\n}\nWrite-Host \"[1/4] Checking WinRE Status...\" -ForegroundColor Green\nreagentc /info\n\nWrite-Host \"[2/4] Stopping Windows Update Services...\" -ForegroundColor Yellow\nStop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\nStop-Service -Name bits -Force -ErrorAction SilentlyContinue\nStop-Service -Name cryptsvc -Force -ErrorAction SilentlyContinue\n\nWrite-Host \"[3/4] Renaming SoftwareDistribution Cache...\" -ForegroundColor Yellow\nif (Test-Path \"C:\\\\Windows\\\\SoftwareDistribution\") {\n    Rename-Item -Path \"C:\\\\Windows\\\\SoftwareDistribution\" -NewName \"SoftwareDistribution.bak\" -Force -ErrorAction SilentlyContinue\n}\n\nWrite-Host \"[4/4] Restarting Update Services...\" -ForegroundColor Green\nStart-Service -Name wuauserv\nStart-Service -Name bits\nStart-Service -Name cryptsvc\n\nWrite-Host \"Completed. Next, run 'sfc /scannow' or resize the WinRE partition if issue persists.\" -ForegroundColor Green",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 실행하고 'reagentc /info'를 입력하여 WinRE 복구 환경 활성화 여부를 확인합니다.",
+      "WinRE 파티션 용량 문제인 경우, 'reagentc /disable' 명령을 실행한 후 diskpart를 이용하여 OS 파티션을 일부 축소하고 복구 파티션을 250MB 이상 확장합니다.",
+      "Windows Update 서비스(wuauserv, bits, cryptsvc)를 중지하고 C:\\Windows\\SoftwareDistribution 폴더의 이름을 변경하여 캐시를 정돈합니다.",
+      "명령 프롬프트에서 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth'를 실행하여 손상된 시스템 파일을 복구합니다.",
+      "컴퓨터를 다시 시작한 후 Windows 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'reagentc /info' to check the status of the Windows Recovery Environment.",
+      "If the issue is caused by low space on the WinRE partition, disable WinRE via 'reagentc /disable' and use diskpart to shrink the main partition and expand the recovery partition by at least 250MB.",
+      "Stop the Windows Update services (wuauserv, bits, cryptsvc) and rename the C:\\Windows\\SoftwareDistribution folder to clear cached update files.",
+      "Run 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' to repair damaged system components.",
+      "Reboot the system and retry Windows Update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-windows-recovery-environment-update-for-windows-10-version-21h2-and-22h2-january-9-2024-79452b48-de8e-438c-a5d6-0b82f066060f",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "KB5034441",
+      "WinRE 파티션 오류",
+      "Windows Update Error 0x80070643",
+      "윈도우 업데이트 설치 실패 0x80070643"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T14:04:01.076Z",
+    "updatedAt": "2026-11-05T14:04:01.076Z",
+    "verifiedAt": "2026-11-05T14:04:01.076Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f081f-mw3m9k8k",
+    "category": "업데이트",
+    "code": "0x800f081f",
+    "title": "Windows 10/11 누적 업데이트 오류 0x800f081f (CBS_E_SOURCE_MISSING 저장소 손상) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Cumulative Update Error 0x800f081f (Source Files Not Found)",
+    "symptoms": "Windows 10/11 누적 업데이트 진행 중 설치가 일정 비율(예: 96%)에서 멈추거나 0x800f081f (CBS_E_SOURCE_MISSING) 오류 코드를 내며 실패합니다. 시스템 파일 저장소(WinSxS) 내 필수 원본 파일이 누락되었거나 손상되었을 때 발생합니다.",
+    "symptoms_en": "Windows 10/11 Cumulative Update fails to install, returning error code 0x800f081f (CBS_E_SOURCE_MISSING). This error occurs when the core source files required by the servicing component in WinSxS are missing or corrupted.",
+    "script": "if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {\n    Write-Host \"Please run PowerShell as Administrator.\" -ForegroundColor Red\n    return\n}\nWrite-Host \"[1/3] Cleaning superseded components...\" -ForegroundColor Green\nDism /Online /Cleanup-Image /StartComponentCleanup\n\nWrite-Host \"[2/3] Repairing Component Store via DISM...\" -ForegroundColor Yellow\nDism /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host \"[3/3] Running System File Checker...\" -ForegroundColor Yellow\nsfc /scannow\n\nWrite-Host \"DISM & SFC verification completed. Please reboot your PC and retry Windows Update.\" -ForegroundColor Green",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell 또는 명령 프롬프트를 실행합니다.",
+      "'DISM /Online /Cleanup-Image /StartComponentCleanup' 명령어를 실행하여 대체된 오래된 구성 요소 데이터를 정리합니다.",
+      "'DISM /Online /Cleanup-Image /RestoreHealth' 명령어를 입력하여 온라인 Windows 이미지 복구를 진행합니다.",
+      "'sfc /scannow' 명령으로 시스템 무결성을 확인하고 손상된 구성 요소를 복구합니다.",
+      "업데이트가 지속적으로 실패할 경우 Microsoft Update 카탈로그(catalog.update.microsoft.com)에서 해당 KB 패키지를 직접 다운로드하여 수동 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Open PowerShell or Command Prompt with elevated Administrator privileges.",
+      "Execute 'DISM /Online /Cleanup-Image /StartComponentCleanup' to clean superseded component files.",
+      "Run 'DISM /Online /Cleanup-Image /RestoreHealth' to repair corrupted servicing stack components online.",
+      "Perform 'sfc /scannow' to verify and auto-repair system file integrity.",
+      "If the automatic update continues to fail, manually download the standalone KB package from the Microsoft Update Catalog (catalog.update.microsoft.com) and install it."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-795e5682-9620-471e-978d-b86e0600a2e3",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-troubleshoot"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f081f",
+      "CBS_E_SOURCE_MISSING",
+      "Windows Update 0x800f081f",
+      "DISM RestoreHealth",
+      "윈도우 업데이트 오류 0x800f081f"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T14:04:01.076Z",
+    "updatedAt": "2026-11-05T14:04:01.076Z",
+    "verifiedAt": "2026-11-05T14:04:01.076Z",
+    "verificationStatus": "verified"
   }
 ]
