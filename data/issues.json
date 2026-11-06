@@ -4502,5 +4502,97 @@
     "updatedAt": "2026-11-06T05:19:30.250Z",
     "verifiedAt": "2026-11-06T05:19:30.250Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000139-mw4uenly",
+    "category": "시스템/블루스크린",
+    "code": "0x00000139",
+    "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결",
+    "title_en": "Resolving KERNEL_SECURITY_CHECK_FAILURE (0x00000139) BSOD Error on Windows 10/11",
+    "symptoms": "Windows 10/11 최신 누적 업데이트(23H2/24H2) 적용 후 시스템 작업 중이나 고사양 게임/프로그램 실행 시 'KERNEL_SECURITY_CHECK_FAILURE' 문구와 함께 0x00000139 블루스크린이 발생하며 시스템이 강제 재부팅됩니다. 커널 데이터 구조 손상 또는 메모리 무결성(HVCI) 기능과 충돌하는 호환되지 않는 드라이버로 인해 발생합니다.",
+    "symptoms_en": "After applying recent cumulative updates on Windows 10/11 (23H2/24H2), a KERNEL_SECURITY_CHECK_FAILURE BSOD (0x00000139) occurs during general operation or under high workloads, forcing a system restart. This is primarily caused by corrupted kernel data structures or driver conflicts with Hypervisor-Protected Code Integrity (HVCI).",
+    "script": "Write-Host 'Starting System File Diagnostics and Driver Verification...' -ForegroundColor Green\nsfc /scannow\ndism /online /cleanup-image /restorehealth\nWrite-Host 'Checking Hypervisor-Protected Code Integrity (HVCI) Status...' -ForegroundColor Yellow\nGet-CimInstance -ClassName Win32_DeviceGuard -Namespace root\\Microsoft\\Windows\\DeviceGuard | Select-Object VirtualizationBasedSecurityStatus, SecurityServicesRunning",
+    "manualSteps": [
+      "안전 모드로 부팅하여 SFC(sfc /scannow) 및 DISM 명령어를 실행하여 손상된 시스템 커널 파일을 복구합니다.",
+      "Windows 보안 설정에서 '코어 격리 > 메모리 무결성' 옵션을 토글(꺼짐 후 재부팅 또는 켜짐)하여 드라이버 호환성을 검증합니다.",
+      "최근 업데이트된 타사 보안 프로그램, 백신 또는 주요 드라이버(그래픽, 네트워크)를 최신 버전으로 업데이트하거나 제거합니다.",
+      "Windows 메모리 진단 도구(mdsched.exe)를 실행하여 RAM의 물리적 불량 여부를 검사합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode and execute SFC (sfc /scannow) and DISM commands to repair corrupted kernel files.",
+      "Navigate to Windows Security > Core Isolation > Memory Integrity and toggle the setting to resolve driver incompatibility.",
+      "Update or uninstall recently updated third-party antivirus software or major hardware drivers (GPU, Network).",
+      "Run Windows Memory Diagnostic (mdsched.exe) to check physical RAM modules for hardware defects."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139--kernel-security-check-failure",
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-10-4b4574d1-d3b7-0573-7726-46e2d613522b"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x00000139",
+      "KERNEL_SECURITY_CHECK_FAILURE",
+      "블루스크린 0x139",
+      "메모리 무결성 블루스크린",
+      "Windows 11 BSOD 0x139"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T10:39:41.830Z",
+    "updatedAt": "2026-11-06T10:39:41.830Z",
+    "verifiedAt": "2026-11-06T10:39:41.830Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x0000007b-mw4uenly",
+    "category": "시스템/블루스크린",
+    "code": "0x0000007B",
+    "title": "Windows 10/11 INACCESSIBLE_BOOT_DEVICE (0x0000007B) 부팅 루프 블루스크린 해결",
+    "title_en": "Resolving INACCESSIBLE_BOOT_DEVICE (0x0000007B) BSOD Boot Loop Error on Windows 10/11",
+    "symptoms": "Windows 부팅 시작 단계에서 'INACCESSIBLE_BOOT_DEVICE' (0x0000007B) 오류 메시지가 표시되며 부팅에 실패하고 무한 재부팅됩니다. 최신 누적/보안 업데이트 설치 후 AHCI/NVMe 스토리지 컨트롤러 드라이버 손상, BCD(부팅 구성 데이터) 오류 또는 드라이버 필터 문제로 시스템 드라이브를 로드하지 못할 때 발생합니다.",
+    "symptoms_en": "During system startup, an INACCESSIBLE_BOOT_DEVICE (0x0000007B) BSOD appears, preventing Windows from loading and causing continuous reboot loops. This occurs after Windows updates when storage controller drivers (AHCI/NVMe) are corrupted or BCD/storage filter driver configurations fail.",
+    "script": "Write-Host 'Checking Storage Subsystem and Disk Volume Integrity...' -ForegroundColor Green\nGet-PhysicalDisk | Select-Object DeviceId, FriendlyName, OperationalStatus, HealthStatus\nGet-Volume | Select-Object DriveLetter, FileSystemLabel, DriveType, HealthStatus\nWrite-Host 'Verifying System Drive Accessibility...' -ForegroundColor Yellow\nTest-Path 'C:\\Windows\\System32\\drivers\\volsnap.sys'",
+    "manualSteps": [
+      "전원 재부팅 3회 시도로 Windows 복구 환경(WinRE)에 진입한 후 '문제 해결 > 고급 옵션 > 고급 시작'에서 안전 모드 부팅을 시도합니다.",
+      "WinRE 명령 프롬프트에서 'bootrec /fixmbr', 'bootrec /fixboot', 'bootrec /rebuildbcd'를 실행하여 부팅 구성 데이터를 재구축합니다.",
+      "메인보드 BIOS/UEFI 설정에 진입하여 SATA/NVMe 컨트롤러 모드가 기존 설치 방식(AHCI 또는 RAID/VMD)과 일치하는지 확인합니다.",
+      "WinRE 환경에서 손상된 최신 누적 업데이트를 지우기 위해 DISM 오프라인령(dism /image:C:\\ /cleanup-image /revertpendingactions)을 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Access Windows Recovery Environment (WinRE) after three failed boots and attempt booting into Safe Mode.",
+      "Open Command Prompt in WinRE and execute 'bootrec /fixmbr', 'bootrec /fixboot', and 'bootrec /rebuildbcd' to rebuild BCD.",
+      "Enter BIOS/UEFI settings and verify SATA/NVMe operation mode matches system setup (AHCI vs. RAID/VMD).",
+      "Run offline DISM cleanup command ('dism /image:C:\\ /cleanup-image /revertpendingactions') in WinRE to rollback pending updates."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x7b--inaccessible-boot-device",
+      "https://support.microsoft.com/en-us/topic/troubleshoot-inaccessible-boot-device-error-in-windows-10-11-893f1d5e-d670-4bc3-9fa7-b4d08ec4f7ec"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x0000007B",
+      "INACCESSIBLE_BOOT_DEVICE",
+      "부팅 불가 블루스크린",
+      "윈도우11 부팅 루프",
+      "NVMe 드라이버 블루스크린"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T10:39:41.830Z",
+    "updatedAt": "2026-11-06T10:39:41.830Z",
+    "verifiedAt": "2026-11-06T10:39:41.830Z",
+    "verificationStatus": "verified"
   }
 ]

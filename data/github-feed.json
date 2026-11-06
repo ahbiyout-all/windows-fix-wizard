@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-06T05:19:30.250Z",
+  "lastCollectedAt": "2026-11-06T10:39:41.830Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "업데이트",
+  "targetCategory": "시스템/블루스크린",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 100,
+  "totalIssuesCount": 102,
   "newIssues": [
     {
-      "id": "gh-0x80070490-mw4iyvuy",
-      "code": "0x80070490",
-      "title": "Windows 10/11 누적 업데이트 설치 실패 오류 0x80070490 해결 방법",
-      "category": "업데이트"
+      "id": "gh-0x00000139-mw4uenly",
+      "code": "0x00000139",
+      "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결",
+      "category": "시스템/블루스크린"
     },
     {
-      "id": "gh-0x80246007-mw4iyvuz",
-      "code": "0x80246007",
-      "title": "Windows 10/11 업데이트 다운로드 중단 및 0x80246007 오류 해결 방법",
-      "category": "업데이트"
+      "id": "gh-0x0000007b-mw4uenly",
+      "code": "0x0000007B",
+      "title": "Windows 10/11 INACCESSIBLE_BOOT_DEVICE (0x0000007B) 부팅 루프 블루스크린 해결",
+      "category": "시스템/블루스크린"
     }
   ]
 }
