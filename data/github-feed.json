@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-05T23:17:46.678Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "스토어/앱",
+  "lastCollectedAt": "2026-11-06T05:19:30.250Z",
+  "modelUsed": "gemini-3.5-flash",
+  "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 98,
+  "totalIssuesCount": 100,
   "newIssues": [
     {
-      "id": "gh-0x80073d05-mw461p9y",
-      "code": "0x80073D05",
-      "title": "Windows 스토어 앱 제거 실패 및 재설치 오류 0x80073D05 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0x80070490-mw4iyvuy",
+      "code": "0x80070490",
+      "title": "Windows 10/11 누적 업데이트 설치 실패 오류 0x80070490 해결 방법",
+      "category": "업데이트"
     },
     {
-      "id": "gh-0x80070005-mw461p9y",
-      "code": "0x80070005",
-      "title": "Windows 스토어 앱 업데이트 차단 및 액세스 거부 오류 (0x80070005)",
-      "category": "스토어/앱"
+      "id": "gh-0x80246007-mw4iyvuz",
+      "code": "0x80246007",
+      "title": "Windows 10/11 업데이트 다운로드 중단 및 0x80246007 오류 해결 방법",
+      "category": "업데이트"
     }
   ]
 }

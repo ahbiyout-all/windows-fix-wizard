@@ -4406,5 +4406,101 @@
     "updatedAt": "2026-11-05T23:17:46.678Z",
     "verifiedAt": "2026-11-05T23:17:46.678Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070490-mw4iyvuy",
+    "category": "업데이트",
+    "code": "0x80070490",
+    "title": "Windows 10/11 누적 업데이트 설치 실패 오류 0x80070490 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Cumulative Update Installation Error 0x80070490",
+    "symptoms": "Windows 업데이트 진행 시 패키지 설치 단계에서 'ERROR_NOT_FOUND' 상태 코드와 함께 0x80070490 오류가 발생하여 업데이트가 중단됩니다. 시스템 컴포넌트 기반 서비싱(CBS) 매니페스트 레지스트리 키가 손상되었거나 필요한 시스템 구성 요소 파일을 참조할 수 없을 때 발생합니다.",
+    "symptoms_en": "Windows Update fails during the installation stage with error code 0x80070490 (ERROR_NOT_FOUND). This issue occurs when Component-Based Servicing (CBS) manifest registry entries are corrupted or when required update files cannot be located.",
+    "script": "# Safe Repair Script for Windows Update Error 0x80070490\nWrite-Host 'Stopping Windows Update services...' -ForegroundColor Green\nStop-Service -Name wuauserv, bits, cryptsvc -Force -ErrorAction SilentlyContinue\n\nWrite-Host 'Running DISM Component Store Repair...' -ForegroundColor Green\n& dism.exe /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host 'Running System File Checker...' -ForegroundColor Green\n& sfc /scannow\n\nWrite-Host 'Restarting Windows Update services...' -ForegroundColor Green\nStart-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue\nWrite-Host 'Repair complete. Please reboot and retry Windows Update.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "관리자 권한으로 Windows PowerShell 또는 명령 프롬프트를 실행합니다.",
+      "DISM 도구를 실행하여 시스템 이미지 및 구성 요소 저장소를 복구합니다: dism /online /cleanup-image /restorehealth",
+      "시스템 파일 무결성 검사를 실행합니다: sfc /scannow",
+      "복구 프로세스가 완료되면 컴퓨터를 재부팅합니다.",
+      "설정 > Windows 업데이트로 이동하여 업데이트를 다시 확인하고 설치를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows PowerShell or Command Prompt as Administrator.",
+      "Run the DISM tool to repair system component store: dism /online /cleanup-image /restorehealth",
+      "Run System File Checker to repair corrupted files: sfc /scannow",
+      "Restart the computer once the repair processes are complete.",
+      "Go to Settings > Windows Update and click Check for updates to retry installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x80070490-e2b2fb98-1e0e-43a9-a9a7-897b48325779",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/fix-windows-update-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070490",
+      "Windows Update Error 0x80070490",
+      "ERROR_NOT_FOUND",
+      "CBS Manifest Corruption",
+      "Windows 11 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T05:19:30.250Z",
+    "updatedAt": "2026-11-06T05:19:30.250Z",
+    "verifiedAt": "2026-11-06T05:19:30.250Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80246007-mw4iyvuz",
+    "category": "업데이트",
+    "code": "0x80246007",
+    "title": "Windows 10/11 업데이트 다운로드 중단 및 0x80246007 오류 해결 방법",
+    "title_en": "Fix Windows 10/11 Update Download Stuck Error 0x80246007",
+    "symptoms": "Windows 업데이트 다운로드 진행률이 특정 퍼센트에서 멈추거나 진행되지 않고 0x80246007 오류 메시지를 출력합니다. 배경 지능형 전송 서비스(BITS)가 중지되었거나 BITS 전송 작업 큐가 손상되어 패키지를 정상적으로 받지 못할 때 발생합니다.",
+    "symptoms_en": "Windows Update download process gets stuck at a certain percentage and fails with error code 0x80246007. This occurs when the Background Intelligent Transfer Service (BITS) is stopped or its transfer job queue becomes corrupted.",
+    "script": "# Safe BITS & Download Cache Reset Script for Error 0x80246007\nWrite-Host 'Configuring BITS Service...' -ForegroundColor Green\nSet-Service -Name BITS -StartupType Automatic -ErrorAction SilentlyContinue\nStart-Service -Name BITS -ErrorAction SilentlyContinue\n\nWrite-Host 'Clearing BITS Transfer Queue...' -ForegroundColor Green\nImport-Module BitsTransfer -ErrorAction SilentlyContinue\nGet-BitsTransfer -AllUsers | Remove-BitsTransfer -ErrorAction SilentlyContinue\n\nWrite-Host 'Resetting Windows Update Download Directory...' -ForegroundColor Green\nStop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\n$downloadDir = \"$env:SystemRoot\\SoftwareDistribution\\Download\"\nif (Test-Path $downloadDir) {\n    Remove-Item -Path \"$downloadDir\\*\" -Recurse -Force -ErrorAction SilentlyContinue\n}\nStart-Service -Name wuauserv -ErrorAction SilentlyContinue\nWrite-Host 'BITS reset completed. Retry Windows Update now.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "키보드의 Win + R을 누르고 services.msc를 입력하여 서비스 관리자를 엽니다.",
+      "'Background Intelligent Transfer Service (BITS)'를 찾아 두 번 클릭한 후 시작 유형을 '자동'으로 변경하고 '시작' 버튼을 누릅니다.",
+      "관리자 권한 PowerShell을 열고 'Get-BitsTransfer | Remove-BitsTransfer'를 실행하여 멈춘 전송 작업을 취소합니다.",
+      "Windows Update 서비스(wuauserv)를 일시 중지한 후 C:\\Windows\\SoftwareDistribution\\Download 폴더 내부 파일을 모두 삭제합니다.",
+      "서비스를 다시 시작하고 Windows 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type services.msc, and press Enter to open Services manager.",
+      "Locate 'Background Intelligent Transfer Service (BITS)', set its startup type to 'Automatic', and click 'Start'.",
+      "Open PowerShell as Administrator and execute 'Get-BitsTransfer | Remove-BitsTransfer' to clear stalled queue items.",
+      "Stop the Windows Update service (wuauserv) and clear all files inside C:\\Windows\\SoftwareDistribution\\Download.",
+      "Restart the services and retry Windows Update."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d177d13e57"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80246007",
+      "Windows Update Error 0x80246007",
+      "BITS Service Reset",
+      "Windows 업데이트 다운로드 멈춤",
+      "SoftwareDistribution Download Clear"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T05:19:30.250Z",
+    "updatedAt": "2026-11-06T05:19:30.250Z",
+    "verifiedAt": "2026-11-06T05:19:30.250Z",
+    "verificationStatus": "verified"
   }
 ]
