@@ -4594,5 +4594,97 @@
     "updatedAt": "2026-11-06T10:39:41.830Z",
     "verifiedAt": "2026-11-06T10:39:41.830Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007001f-mw5160ms",
+    "category": "오디오/사운드",
+    "code": "0x8007001f",
+    "title": "Windows 10/11 오디오 재생 및 드라이버 기능 장애 오류 (0x8007001f)",
+    "title_en": "Windows 10/11 Audio Playback and Driver Failure Error (0x8007001f)",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 실행 또는 오디오 장치 사용 중 소리가 전혀 출력되지 않으며, 소리 문제 해결사 실행 시 '오디오 서비스를 시작할 수 없음' 또는 '장치가 작동하지 않음' 메시지와 함께 0x8007001f 오류가 발생합니다. 이는 시스템 오디오 하위 시스템과 오디오 드라이버 간의 통신 서비스 실패로 인해 발생합니다.",
+    "symptoms_en": "After installing Windows updates or connecting audio devices, sound playback stops completely. Running the Sound Troubleshooter displays error 0x8007001f with messages indicating that audio services failed to initialize or the device is not functioning. This occurs due to communication pipeline failures between the audio driver and the Windows audio subsystem.",
+    "script": "Stop-Service -Name \"Audiosrv\" -Force -ErrorAction SilentlyContinue\nStop-Service -Name \"AudioEndpointBuilder\" -Force -ErrorAction SilentlyContinue\nSet-Service -Name \"AudioEndpointBuilder\" -StartupType Automatic\nSet-Service -Name \"Audiosrv\" -StartupType Automatic\nStart-Service -Name \"AudioEndpointBuilder\" -ErrorAction SilentlyContinue\nStart-Service -Name \"Audiosrv\" -ErrorAction SilentlyContinue\nGet-Service -Name \"Audiosrv\", \"AudioEndpointBuilder\" | Select-Object Name, Status, StartType",
+    "manualSteps": [
+      "Windows 서비스(services.msc)를 실행하여 'Windows Audio' 및 'Windows Audio Endpoint Builder' 서비스의 시작 유형을 '자동'으로 변경하고 재시작합니다.",
+      "장치 관리자(devmgmt.msc)를 열고 '사운드, 비디오 및 게임 컨트롤러' 아래의 오디오 드라이버(Realtek/Intel High Definition Audio 등)를 우클릭하여 '장치 제거'를 진행한 후 PC를 재부팅합니다.",
+      "설정 > 시스템 > 소리 > 더 보기 소리 설정(Control Panel Sound)에서 기본 재생 장치 속성을 열고 '모든 음향 효과 비활성화(Disable all enhancements)'를 체크합니다.",
+      "관리자 권한 명령 프롬프트에서 `sfc /scannow` 및 `DISM /Online /Cleanup-Image /RestoreHealth` 명령어를 실행하여 손상된 오디오 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows Services (services.msc), ensure 'Windows Audio' and 'Windows Audio Endpoint Builder' services are set to 'Automatic', and restart both services.",
+      "Open Device Manager (devmgmt.msc), expand 'Sound, video and game controllers', right-click your audio driver (e.g., Realtek or Intel HD Audio), select 'Uninstall device', and reboot your PC.",
+      "Go to Settings > System > Sound > More sound settings, open the Properties of your default playback device, and enable 'Disable all enhancements'.",
+      "Run `sfc /scannow` and `DISM /Online /Cleanup-Image /RestoreHealth` in an elevated Command Prompt to repair corrupted system audio components."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-73025246-b61c-40c6-b00d-34180f114003",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-10-upgrade-complete-error-0x8007001f"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007001f",
+      "Windows Audio error 0x8007001f",
+      "오디오 오류 0x8007001f",
+      "사운드 문제 해결 0x8007001f",
+      "Audio playback error 0x8007001f"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T13:48:56.115Z",
+    "updatedAt": "2026-11-06T13:48:56.115Z",
+    "verifiedAt": "2026-11-06T13:48:56.115Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-error-1068-mw5160ms",
+    "category": "오디오/사운드",
+    "code": "Error 1068",
+    "title": "Windows Audio 서비스 종속성 시작 실패 오류 (Error 1068)",
+    "title_en": "Windows Audio Service Dependency Failed to Start Error (Error 1068)",
+    "symptoms": "Windows 10/11에서 작업 표시줄의 음량 아이콘에 빨간색 X 표시가 표시되고 소리가 재생되지 않습니다. 서비스(services.msc)에서 'Windows Audio(Audiosrv)' 서비스를 수동으로 시작하려고 시도할 때 '오류 1068: 종속성 서비스나 그룹이 시작될 수 없습니다'라는 오류 메시지가 나타나며 오디오 서비스가 비활성화됩니다.",
+    "symptoms_en": "A red 'X' mark appears on the volume icon in the taskbar on Windows 10/11, rendering all sound output non-functional. Attempting to start the 'Windows Audio' (Audiosrv) service manually in services.msc yields 'Error 1068: The dependency service or group failed to start', indicating corrupted service dependencies like AudioEndpointBuilder or RPC.",
+    "script": "$services = @(\"RpcSs\", \"DcomLaunch\", \"AudioEndpointBuilder\", \"Audiosrv\")\nforeach ($svc in $services) {\n    Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue\n    Start-Service -Name $svc -ErrorAction SilentlyContinue\n    $st = Get-Service -Name $svc -ErrorAction SilentlyContinue\n    Write-Host \"$($svc): $($st.Status)\"\n}",
+    "manualSteps": [
+      "Windows 서비스(services.msc)를 실행하여 'RPC Endpoint Mapper', 'DCOM Server Process Launcher', 'Windows Audio Endpoint Builder' 서비스가 모두 '실행 중' 및 '자동' 상태인지 확인합니다.",
+      "관리자 권한 명령 프롬프트를 열고 `net localgroup Administrators /add localservice` 및 `net localgroup Administrators /add networkservice`를 실행하여 서비스 계정 권한을 복원합니다.",
+      "레지스트리 편집기(regedit)에서 `HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Audiosrv` 경로로 이동하여 `DependOnService` 항목에 `AudioEndpointBuilder`, `RpcSs` 값이 올바르게 지정되어 있는지 점검합니다.",
+      "시스템을 재부팅한 후 Windows Audio 서비스가 정상적으로 자동 시작되는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows Services (services.msc) and verify that 'RPC Endpoint Mapper', 'DCOM Server Process Launcher', and 'Windows Audio Endpoint Builder' are all set to 'Automatic' and currently 'Running'.",
+      "Open Command Prompt as Administrator and execute `net localgroup Administrators /add localservice` and `net localgroup Administrators /add networkservice` to restore proper service account permissions.",
+      "Open Registry Editor (regedit), navigate to `HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Audiosrv`, and check if `DependOnService` contains `AudioEndpointBuilder` and `RpcSs`.",
+      "Restart the computer and verify that the Windows Audio service automatically starts without error."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-73025246-b61c-40c6-b00d-34180f114003",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/system-management-components/error-1068-when-start-service"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Error 1068",
+      "Windows Audio Error 1068",
+      "오디오 서비스 오류 1068",
+      "Audiosrv Error 1068",
+      "AudioEndpointBuilder 1068"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T13:48:56.115Z",
+    "updatedAt": "2026-11-06T13:48:56.115Z",
+    "verifiedAt": "2026-11-06T13:48:56.115Z",
+    "verificationStatus": "verified"
   }
 ]

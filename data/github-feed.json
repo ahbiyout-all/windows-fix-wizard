@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-06T10:39:41.830Z",
+  "lastCollectedAt": "2026-11-06T13:48:56.115Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "시스템/블루스크린",
+  "targetCategory": "오디오/사운드",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 102,
+  "totalIssuesCount": 104,
   "newIssues": [
     {
-      "id": "gh-0x00000139-mw4uenly",
-      "code": "0x00000139",
-      "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x8007001f-mw5160ms",
+      "code": "0x8007001f",
+      "title": "Windows 10/11 오디오 재생 및 드라이버 기능 장애 오류 (0x8007001f)",
+      "category": "오디오/사운드"
     },
     {
-      "id": "gh-0x0000007b-mw4uenly",
-      "code": "0x0000007B",
-      "title": "Windows 10/11 INACCESSIBLE_BOOT_DEVICE (0x0000007B) 부팅 루프 블루스크린 해결",
-      "category": "시스템/블루스크린"
+      "id": "gh-error-1068-mw5160ms",
+      "code": "Error 1068",
+      "title": "Windows Audio 서비스 종속성 시작 실패 오류 (Error 1068)",
+      "category": "오디오/사운드"
     }
   ]
 }
