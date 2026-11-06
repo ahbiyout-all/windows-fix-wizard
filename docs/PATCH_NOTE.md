@@ -1,6 +1,181 @@
-# Patch Note - System Update (v3.72.0)
+# Patch Note - System Update (v3.81.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.81.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **Real-Time GitHub Actions Workflow Status Badge & Telemetry (`GitHubWorkflowStatus.tsx` & `DeploymentDashboardWidget.tsx`)**:
+  - Integrated real-time status visualization for `windows-fix-collector.yml` utilizing GitHub Actions REST API (`/repos/{owner}/{repo}/actions/workflows/windows-fix-collector.yml/runs`).
+  - **Live Relative Timestamp Engine**: Added relative execution timing ("3m ago", "2h ago" / "3분 전", "2시간 전") and run duration telemetry (`1m 24s`).
+  - **Live Polling & Pulsing LED Indicators**: Added 45-second automatic telemetry polling with animated glowing status LED badges (`Passed` 🟢 / `Failed` 🔴 / `In Progress` 🔵).
+  - **Official SVG Badge & Dispatch Trigger**:
+    - Embedded official GitHub Actions SVG status badge (`badge.svg`).
+    - Added a 1-click **Cloud Run (Run / 실행)** trigger button enabling operators to dispatch `windows-fix-collector.yml` directly from the dashboard UI.
+    - Added an official SVG status badge preview to the GitHub Actions dashboard toolbar in `src/App.tsx`.
+
+---
+
+## [v3.80.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **Enhanced Real-Time PowerShell Linter & 1-Click Refactoring Engine (`PowerShellSandbox.tsx` & `psLinter.ts`)**:
+  - Expanded static analysis rule coverage to **17 enterprise PSScriptAnalyzer rules**, introducing `PSAvoidWriteHostInFunctions`, `PSAvoidUsingInternalPing`, and `PSAvoidUsingRegExeDirectly`.
+  - **1-Click Auto-Fix Engine (`autoFixDiagnostic` & `autoFixAllFixable`)**:
+    - Added automated script refactoring for cmdlet aliases (`rm` -> `Remove-Item`, `ls` -> `Get-ChildItem`), WMI deprecations (`Get-WmiObject` -> `Get-CimInstance`), null comparisons (`$var -eq $null` -> `$null -eq $var`), and TLS protocol security headers.
+    - Integrated an **Auto-Fix All** batch action button in the Linter inspector panel header.
+  - **Real-Time Editor Line Gutter Diagnostic Indicators**:
+    - Added visual severity indicators (`🔴` Error / `⚠️` Warning / `🔵` Info) directly inside the line numbers gutter adjacent to lines with code quality issues.
+    - Hovering over line markers shows a diagnostic summary tooltip, and clicking redirects straight to the Linter Inspector tab.
+
+---
+
+## [v3.79.0] - 2026-11-06
+
+### 🚀 Official Creator & Organization Profile Update
+- **Updated Developer & Affiliation Information**:
+  - **Developer**: `AhBiYout`
+  - **GitHub Repository**: `https://github.com/AhBiYout-all`
+  - **Official Blog**: `https://ahbiyoutvibe.blogspot.com/`
+  - **Affiliation**: `https://www.cisnet.co.kr`
+  - **Company**: `(주)청운정보시스템 ( cisnet.co.kr )`
+- **UI Component Synchronization**:
+  - Synchronized developer profile details across system footer and update/about modal guidance cards (`App.tsx`).
+  - Updated constants (`OFFICIAL_COMPANY_NAME`, `OFFICIAL_AFFILIATION_URL`, `OFFICIAL_BLOG_URL`) and synchronized version bump (`v3.79.0`).
+
+---
+
+## [v3.78.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **Real-Time PowerShell Rule-Based Linter & Best-Practices Analyzer (`psLinter.ts`)**:
+  - Built a comprehensive PSScriptAnalyzer-aligned static analysis engine (`src/utils/psLinter.ts`) that runs real-time rule checks on custom PowerShell scripts.
+  - **15+ Enterprise Static Analysis Rules**:
+    - `PSUseApprovedVerbs`: Warns when custom functions use unapproved verbs (e.g. `Do-Update`, `Run-Fix` vs `Start-`, `Invoke-`, `Repair-`).
+    - `PSAvoidUsingWMICmdlets`: Detects deprecated `Get-WmiObject` / `wmic` and suggests `Get-CimInstance`.
+    - `PSAvoidUsingCmdletAliases`: Flags unportable aliases (`rm`, `cp`, `ls`, `dir`, `cat`, `select`, `where`, `%`, `?`, `curl`) and provides canonical cmdlet replacements.
+    - `PSAvoidUsingInvokeExpression`: Warns on dynamic string execution risks (`iex`, `Invoke-Expression`).
+    - `PSAvoidUsingPlaintextForPassword`: Flags hardcoded plaintext passwords or sensitive API tokens.
+    - `PSPossibleIncorrectUsageOfAssignmentOperator`: Flags `=` inside `if (...)` conditions instead of `-eq`.
+    - `PSAvoidUsingEmptyCatchBlock`: Detects empty `catch { }` blocks that swallow errors silently.
+    - `PSAvoidUsingNullComparisonOnRight`: Recommends `$null -eq $var` over `$var -eq $null` to avoid array filtering bugs.
+    - `PSAvoidGlobalVars`: Flags `$global:` scope pollution.
+    - `PSAvoidUsingDeprecatedSecurityProtocols`: Recommends TLS 1.2/1.3 over insecure SSL3/TLS 1.0.
+    - `PSAvoidDestructiveWildcard`: Flags destructive `Remove-Item C:\*` wildcard wipes.
+    - `PSUseConsistentIndentationAndQuotes`: Detects unclosed quotes (`"`, `'`) and unclosed brackets/parens (`{}`, `()`).
+  - **Editor Header Live Linter Score & Badges**:
+    - Added a live quality score badge (`Lint 100/100`, `Err`, `Warn`) to the Editor title bar in `PowerShellSandbox.tsx`.
+  - **Interactive Linter Inspector Panel**:
+    - Added a dedicated `Rule Linter` inspector tab featuring quality score meters, rule evaluation tallies, severity filters (`All`, `Errors`, `Warnings`, `Infos`), line number pointers, localized explanations, code snippets, and actionable fix suggestions.
+
+---
+
+## [v3.77.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **PowerShell Syntax Highlighting & Line Numbers Engine (`PrismJS`)**:
+  - Integrated `prismjs` with native PowerShell grammar (`prismjs/components/prism-powershell`) and the high-contrast `prism-tomorrow.css` theme into the `PowerShellSandbox` component.
+  - **Dual-Layer Real-Time Syntax Editor**:
+    - Implemented a synchronized dual-layer editor combining an underlying Prism-highlighted `<pre>` token layer with a transparent `<textarea>` overlay (`caret-cyan-400`).
+    - Cmdlets, parameters (`-Name`, `-Force`), variables (`$env:SystemRoot`), strings, and comments are highlighted in real time as the user types.
+    - Synchronized horizontal and vertical scrolling between editor textarea, highlight underlay, and the line numbers gutter.
+  - **Dynamic Line Numbers Gutter**:
+    - Added an aligned line numbers gutter (1, 2, 3...) that dynamically expands and scrolls alongside custom multi-line scripts.
+  - **Editor Mode & Highlighting Toggles**:
+    - Added a 1-click syntax toggle (`Prism: ON / OFF`) allowing users to switch between syntax-highlighted and plain text editing.
+    - Added an Edit / Preview mode toggle (`Eye` / `Edit3`) to easily switch between interactive editing and read-only formatted code view.
+  - **Version History & Checkpoint Syntax Highlighting**:
+    - Upgraded the Version History modal preview box to render historical script snapshots with full Prism PowerShell syntax highlighting.
+
+---
+
+## [v3.76.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **PowerShell Sandbox Script Version History & Revert Engine (`ScriptVersion`)**:
+  - Implemented a complete version control and checkpoint management system inside `PowerShellSandbox.tsx`.
+  - **Save & Checkpoint Management**:
+    - Added 1-click "Save Version" (버전 저장) and "Versions" (버전 관리) buttons in the editor title bar with live checkpoint count badges.
+    - Allows operators to label each iteration with descriptive names (e.g. `v1.2 - Added BITS timeout check`).
+    - Automatically captures timestamps, line counts, and character lengths.
+  - **1-Click Revert & Rollback**:
+    - Users can revert their active editor to any previous script iteration with one click (`handleRevertToVersion`).
+    - Reverting logs a detailed audit entry directly into the sandbox terminal (`[Version Control] Reverted editor to '...'`).
+  - **Inline Label Renaming & Code Previewing**:
+    - Supports inline renaming of version checkpoints (`Edit3`).
+    - Features an expandable code preview box allowing operators to review older script code before choosing to revert.
+    - Direct clipboard copy and individual checkpoint deletion support.
+  - **Persistent Local Storage**:
+    - Checkpoints are saved to browser local storage (`winfix_sandbox_script_versions`), persisting across reloads and test sessions.
+
+---
+
+## [v3.75.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **Windows System Restore Point Utility (`SystemRestoreUtility`)**:
+  - Implemented the `SystemRestoreUtility` component that leverages native PowerShell cmdlets (`Checkpoint-Computer`, `Get-ComputerRestorePoint`, `Restore-Computer`) to manage system recovery snapshots.
+  - **1-Click Restore Point Creation**:
+    - Generates a customized, elevated PowerShell creation script with automatic System Protection verification (`Enable-ComputerRestore -Drive "C:\"`).
+    - Bypasses the default Windows 24-hour creation cooldown threshold via `SystemRestorePointCreationFrequency = 0` to guarantee immediate snapshot creation.
+    - Integrates 1-click execution support, `.ps1` script download, and immediate bridging to the WebAssembly PowerShell Sandbox and Threat Verifier.
+  - **Recent Restore Points Inspector**:
+    - Provides a real-time table of active recovery checkpoints, including SequenceNumber, Description, CreationTime, and Checkpoint Type (`MODIFY_SETTINGS`, `APPLICATION_INSTALL`, `DEVICE_DRIVER_INSTALL`).
+    - Includes query cmdlets and Volume Shadow Copy Service (VSS) disk quota diagnostics (`vssadmin list shadowstorage`).
+  - **Rollback & Recovery Support**:
+    - Generates automated PowerShell rollback commands (`Restore-Computer -RestorePoint <Seq>`) and quick-launch support for the official Windows System Restore GUI (`rstrui.exe`).
+  - **Pre-Execution Safety Recommendation Banner in Wizard**:
+    - Displays a prominent safety recommendation banner in the AI diagnostic results, prompting users to take a restore point before running any PowerShell repair scripts.
+  - **Header & Mobile Shortcuts**:
+    - Added quick launcher buttons in the Guidebook top toolbar and mobile navigation Quick Tools.
+
+### 🛡️ Security Hardening & Safe Troubleshooting
+- Ensures 100% loss-free rollback protection: personal files and documents remain completely untouched while system files and registry hives can be restored to a known good state.
+
+---
+
+## [v3.74.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **AI Solution Script Effectiveness Thumbs-Up / Thumbs-Down Rating System (`WizardScriptRatingPanel`)**:
+  - Implemented an interactive thumbs-up / thumbs-down rating system attached directly to each generated PowerShell fix script in the 'Wizard' diagnosis results.
+  - Allows operators to test and immediately verify the real-world effectiveness of AI-generated solutions.
+  - **Dynamic Effectiveness Ratio & Verification Score**:
+    - Calculates and displays live community effectiveness rates (e.g. `96% Effective / 검증됨`) with visual multi-color ratio meter bars.
+    - Features animated feedback confirmation badges with instant visual state feedback (`ThumbsUp` highlighted in emerald green, `ThumbsDown` in rose red).
+  - **Structured Negative Rating & Improvement Drawer**:
+    - When selecting thumbs-down, provides a structured reason selector with quick preset tags (cmdlet syntax error, issue persists, permission/elevation denied, antivirus conflict) and an optional error output notes input.
+    - Logs detailed validation telemetry to `/api/logs/add` (`type: 'script_rating'`) to continuously fine-tune AI diagnosis prompts and script quality.
+  - **Persistent Local Caching & Reset Support**:
+    - Caches user ratings in `localStorage` keyed by script hash, remembering previous ratings when revisiting diagnoses.
+    - Includes a one-click reset/re-vote capability.
+  - **Integrated Sandbox Quick-Launch in Wizard Result**:
+    - Added the `⚡ Test in Sandbox` (⚡ 샌드박스 실행) button to the Wizard script card header for instant dry-run testing before real-world execution.
+
+---
+
+## [v3.73.0] - 2026-11-06
+
+### 🚀 Major New Features & Integrations
+- **Safe Client-Side WebAssembly Isolated PowerShell Sandbox (`PowerShellSandbox`)**:
+  - Implemented the `PowerShellSandbox` component providing an isolated, zero-risk virtual PowerShell execution environment in the browser.
+  - Added as a dedicated top-level tab (`'powershell-sandbox'`) in both desktop navigation and mobile drawer.
+  - **Full Simulated Windows Runtime Environment**:
+    - Interactive Terminal prompt (`PS C:\Windows\System32>`) with ANSI color output (`Write-Host -ForegroundColor Cyan/Yellow/Green/Red/Magenta`).
+    - Virtual Windows Services state inspector (`wuauserv`, `bits`, `cryptsvc`, `NlaSvc`, `AppXSvc`, `sppsvc`, `SecurityHealthService`, `WinDefend`, `mpssvc`).
+    - Virtual File System (VFS) tree inspector simulating `C:\Windows\System32`, `SoftwareDistribution`, `catroot2`, and file state mutations (`Remove-Item`, `New-Item`, `ren`).
+    - Virtual Registry inspector monitoring `HKLM:\SOFTWARE\Policies\...`, `HKLM:\SYSTEM\...`, and SCHANNEL protocols (`TLS 1.2`, `TLS 1.3`).
+    - Step-by-step interactive debugger allowing operators to step through complex multi-line repair commands and observe state transitions in real time.
+    - Integrated optional WebAssembly engine support (Pyodide WASM python/powershell-parser bridge) with seamless fallback to client-side virtual VM.
+  - **1-Click Card Integration**:
+    - Added "⚡ 샌드박스 실행" / "⚡ Test in Sandbox" button to every issue card action bar.
+    - Listens to `uwes-set-sandbox-script` custom events to immediately inject fix scripts into the sandbox editor and switch views.
+
+### 🛡️ Security Hardening & Zero-Risk Execution
+- 100% client-side memory execution ensures zero risk to the operator's actual operating system.
+- Leverages AST and heuristic validation from `psVerifier.ts` to detect malicious commands, obfuscation, or unauthorized access attempts before virtual execution.
 
 ---
 

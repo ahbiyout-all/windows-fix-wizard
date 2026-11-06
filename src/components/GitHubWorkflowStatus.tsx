@@ -8,7 +8,12 @@ import {
   ExternalLink,
   Activity,
   AlertTriangle,
-  Play
+  Play,
+  Zap,
+  Tag,
+  GitBranch,
+  Radio,
+  Sparkles
 } from 'lucide-react';
 
 interface GitHubWorkflowStatusProps {
@@ -19,6 +24,8 @@ interface GitHubWorkflowStatusProps {
   title?: string;
   token?: string;
   className?: string;
+  showBadgeImage?: boolean;
+  onTriggerSuccess?: () => void;
 }
 
 export interface WorkflowRun {
@@ -36,6 +43,43 @@ export interface WorkflowRun {
   path?: string;
 }
 
+function getRelativeTimeString(dateStr: string, language: 'ko' | 'en'): string {
+  try {
+    const now = Date.now();
+    const past = new Date(dateStr).getTime();
+    const diffSec = Math.max(0, Math.floor((now - past) / 1000));
+
+    if (diffSec < 45) {
+      return language === 'en' ? 'just now' : '방금 전';
+    }
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) {
+      return language === 'en' ? `${diffMin}m ago` : `${diffMin}분 전`;
+    }
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) {
+      return language === 'en' ? `${diffHour}h ago` : `${diffHour}시간 전`;
+    }
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 30) {
+      return language === 'en' ? `${diffDay}d ago` : `${diffDay}일 전`;
+    }
+    return new Date(dateStr).toLocaleDateString(language === 'en' ? 'en-US' : 'ko-KR');
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatDurationSec(sec: number, language: 'ko' | 'en'): string {
+  if (sec <= 0) return '0s';
+  const mins = Math.floor(sec / 60);
+  const secs = sec % 60;
+  if (mins > 0) {
+    return `${mins}m ${secs}s`;
+  }
+  return `${secs}s`;
+}
+
 export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
   owner,
   repo,
@@ -43,7 +87,9 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
   language,
   title,
   token,
-  className = ''
+  className = '',
+  showBadgeImage = true,
+  onTriggerSuccess
 }) => {
   const cacheKey = `winfix_wf_cache_${owner}_${repo}_${workflowFile}`;
 
@@ -57,10 +103,10 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
       event: isPages ? 'workflow_run' : 'schedule',
       status: 'completed',
       conclusion: 'success',
-      created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-      updated_at: new Date(Date.now() - 3600000 * 2 + 75000).toISOString(),
-      run_started_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-      html_url: `https://github.com/${owner}/${repo}/actions`,
+      created_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+      updated_at: new Date(Date.now() - 3600000 * 1.5 + 84000).toISOString(),
+      run_started_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+      html_url: `https://github.com/${owner}/${repo}/actions/workflows/${workflowFile}`,
       head_branch: 'main'
     };
   }, [owner, repo, workflowFile]);
@@ -75,8 +121,11 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     } catch {}
     return null;
   });
+
   const [isLoading, setIsLoading] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [dispatchToast, setDispatchToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeToken = useMemo(() => {
@@ -163,10 +212,53 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     }
   }, [owner, repo, workflowFile, activeToken, cacheKey, getFallbackRun]);
 
+  // Dispatch workflow run manually via GitHub REST API
+  const handleTriggerDispatch = async () => {
+    if (!activeToken) {
+      setDispatchToast(language === 'en' ? 'PAT Token required' : 'GitHub PAT 토큰 필요');
+      setTimeout(() => setDispatchToast(null), 3000);
+      return;
+    }
+
+    setIsDispatching(true);
+    setDispatchToast(null);
+    try {
+      const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowFile}/dispatches`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'Authorization': `Bearer ${activeToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ref: lastRun?.head_branch || 'main',
+          inputs: { topic: 'all' }
+        })
+      });
+
+      if (res.ok || res.status === 204) {
+        setDispatchToast(language === 'en' ? 'Workflow triggered successfully!' : '워크플로 가동 요청 성공!');
+        if (onTriggerSuccess) onTriggerSuccess();
+        setTimeout(() => {
+          fetchStatus();
+        }, 2500);
+      } else {
+        const errText = await res.text();
+        setDispatchToast(language === 'en' ? `Dispatch failed: ${res.status}` : `실행 실패: ${res.status}`);
+      }
+    } catch (err: any) {
+      setDispatchToast(err?.message || 'Trigger failed');
+    } finally {
+      setIsDispatching(false);
+      setTimeout(() => setDispatchToast(null), 4000);
+    }
+  };
+
   useEffect(() => {
     fetchStatus();
-    // Refresh every 5 minutes if tab is active
-    const interval = setInterval(fetchStatus, 300000);
+    // Auto polling every 45 seconds for real-time status updates
+    const interval = setInterval(fetchStatus, 45000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
@@ -178,7 +270,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     if (lastRun.status === 'completed') {
       return lastRun.conclusion === 'success' ? 'text-emerald-500' : 'text-rose-500';
     }
-    return 'text-blue-500'; // in_progress, queued, etc.
+    return 'text-blue-500'; // in_progress, queued
   };
 
   const getStatusBg = () => {
@@ -187,92 +279,199 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     if (!lastRun) return 'bg-slate-100 dark:bg-slate-800';
 
     if (lastRun.status === 'completed') {
-      return lastRun.conclusion === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-rose-50 dark:bg-rose-950/30';
+      return lastRun.conclusion === 'success' 
+        ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60' 
+        : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/60';
     }
-    return 'bg-blue-50 dark:bg-blue-950/30';
+    return 'bg-blue-50/80 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/60';
   };
 
   const getStatusIcon = () => {
-    if (isLoading) return <RefreshCw className="w-4 h-4 animate-spin" />;
-    if (error) return <AlertTriangle className="w-4 h-4" />;
-    if (!lastRun) return <Activity className="w-4 h-4" />;
+    if (isLoading) return <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />;
+    if (error) return <AlertTriangle className="w-4 h-4 text-rose-500" />;
+    if (!lastRun) return <Activity className="w-4 h-4 text-slate-400" />;
 
     if (lastRun.status === 'completed') {
-      return lastRun.conclusion === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />;
+      return lastRun.conclusion === 'success' 
+        ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 
+        : <XCircle className="w-4 h-4 text-rose-500 shrink-0" />;
     }
-    return <Play className="w-4 h-4 animate-pulse" />;
+    return <Play className="w-4 h-4 text-blue-500 animate-pulse shrink-0" />;
   };
 
-  return (
-    <div className={`p-4 rounded-xl border transition-all ${getStatusBg()} ${error ? 'border-rose-200 dark:border-rose-800' : 'border-slate-200 dark:border-slate-700'} ${className}`}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Github className={`w-4 h-4 ${getStatusColor()}`} />
-          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[150px]">
-            {title || workflowFile}
-          </span>
-        </div>
-        <button 
-          onClick={fetchStatus} 
-          disabled={isLoading}
-          className="p-1 hover:bg-white/50 dark:hover:bg-black/20 rounded transition-colors cursor-pointer"
-          title={language === 'en' ? 'Refresh Status' : '상태 갱신'}
-        >
-          <RefreshCw className={`w-3 h-3 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
+  // Duration in seconds
+  const runDurationSec = useMemo(() => {
+    if (!lastRun?.run_started_at || !lastRun?.updated_at) return 0;
+    const start = new Date(lastRun.run_started_at).getTime();
+    const end = new Date(lastRun.updated_at).getTime();
+    return Math.max(0, Math.round((end - start) / 1000));
+  }, [lastRun]);
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className={`flex items-center gap-1.5 text-[11px] font-bold ${getStatusColor()}`}>
-            {getStatusIcon()}
-            <span className="uppercase">
-              {isLoading && !lastRun ? (language === 'en' ? 'Updating...' : '갱신 중...') : 
-               error ? (language === 'en' ? 'Error' : '오류') :
-               !lastRun ? (language === 'en' ? 'No Runs' : '실행 기록 없음') :
-               lastRun.status === 'completed' ? (lastRun.conclusion === 'success' ? 'Success' : 'Failed') :
-               lastRun.status.replace('_', ' ')}
-            </span>
-            {isRateLimited && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-normal">
-                {language === 'en' ? 'Cached' : '캐시'}
-              </span>
+  const svgBadgeUrl = `https://github.com/${owner}/${repo}/actions/workflows/${workflowFile}/badge.svg`;
+
+  return (
+    <div className={`p-4 sm:p-4.5 rounded-2xl border transition-all ${getStatusBg()} ${className}`}>
+      {/* Top Header: Title & Actions */}
+      <div className="flex items-center justify-between gap-2 mb-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative shrink-0 flex items-center justify-center">
+            <Github className={`w-4 h-4 ${getStatusColor()}`} />
+            {lastRun?.status === 'in_progress' && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500 animate-ping" />
             )}
           </div>
-          {lastRun && (
-            <span className="text-[10px] font-mono text-slate-500">
-              #{lastRun.run_number}
-            </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                {title || workflowFile}
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+                {workflowFile}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Refresh & Dispatch Actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button 
+            type="button"
+            onClick={fetchStatus} 
+            disabled={isLoading}
+            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-black/20 rounded-lg transition-colors cursor-pointer"
+            title={language === 'en' ? 'Refresh Real-time Telemetry' : '실시간 워크플로 상태 갱신'}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-500' : ''}`} />
+          </button>
+
+          {activeToken && (
+            <button
+              type="button"
+              onClick={handleTriggerDispatch}
+              disabled={isDispatching}
+              className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              title={language === 'en' ? 'Trigger Cloud Workflow Run' : '클라우드 Actions 워크플로 수동 가동'}
+            >
+              <Zap className={`w-3 h-3 ${isDispatching ? 'animate-spin' : ''}`} />
+              <span>{isDispatching ? '...' : (language === 'en' ? 'Run' : '실행')}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {dispatchToast && (
+        <div className="mb-2 px-2.5 py-1 rounded-lg bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px] font-mono animate-fade-in flex items-center gap-1">
+          <Sparkles className="w-3 h-3 text-amber-400" />
+          <span>{dispatchToast}</span>
+        </div>
+      )}
+
+      {/* Main Status & Relative Last Run Time Pill */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-white/70 dark:bg-slate-900/70 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            {getStatusIcon()}
+            <div className="flex items-center gap-1.5">
+              <span className={`text-xs font-bold uppercase tracking-wider ${getStatusColor()}`}>
+                {isLoading && !lastRun ? (language === 'en' ? 'Connecting...' : '연결 중...') : 
+                 error ? (language === 'en' ? 'Error' : '오류') :
+                 !lastRun ? (language === 'en' ? 'No Runs' : '실행 내역 없음') :
+                 lastRun.status === 'completed' ? (lastRun.conclusion === 'success' ? 'Passed' : 'Failed') :
+                 lastRun.status.replace('_', ' ')}
+              </span>
+
+              {lastRun?.run_number && (
+                <span className="px-1.5 py-0.2 rounded font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
+                  #{lastRun.run_number}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Relative Time Badge */}
+          {lastRun?.created_at && (
+            <div className="flex items-center gap-1 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/90 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+              <Clock className="w-3 h-3 text-indigo-500" />
+              <span>{getRelativeTimeString(lastRun.created_at, language)}</span>
+            </div>
           )}
         </div>
 
+        {/* Workflow Telemetry Details Row */}
         {lastRun && (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
-              <Clock className="w-3 h-3" />
-              <span>
-                {new Date(lastRun.created_at).toLocaleString(language === 'en' ? 'en-US' : 'ko-KR', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+          <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-600 dark:text-slate-400 pt-0.5">
+            <div className="flex items-center gap-1.5">
+              <Tag className="w-3 h-3 text-slate-400 shrink-0" />
+              <span className="truncate">
+                {language === 'en' ? 'Trigger: ' : '트리거: '}
+                <strong className="text-slate-800 dark:text-slate-200 font-mono">
+                  {lastRun.event || 'schedule'}
+                </strong>
               </span>
             </div>
+
+            {runDurationSec > 0 && (
+              <div className="flex items-center gap-1.5 justify-end">
+                <Activity className="w-3 h-3 text-emerald-500 shrink-0" />
+                <span>
+                  {language === 'en' ? 'Duration: ' : '소요 시간: '}
+                  <strong className="text-slate-800 dark:text-slate-200 font-mono">
+                    {formatDurationSec(runDurationSec, language)}
+                  </strong>
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 col-span-2 justify-between border-t border-slate-200/60 dark:border-slate-800/60 pt-2 mt-1">
+              <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                <GitBranch className="w-3 h-3 text-purple-500" />
+                <span className="font-mono text-slate-700 dark:text-slate-300">{lastRun.head_branch || 'main'}</span>
+                {isRateLimited && (
+                  <span className="text-[9px] px-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-normal">
+                    {language === 'en' ? 'Cached' : '캐시'}
+                  </span>
+                )}
+              </div>
+
+              <a 
+                href={lastRun.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold"
+              >
+                <span>{language === 'en' ? 'View Run Logs' : '실행 로그'}</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Official GitHub Actions SVG Badge Image Preview */}
+        {showBadgeImage && owner && repo && (
+          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between">
+            <span className="text-[10px] text-slate-400 font-medium">
+              {language === 'en' ? 'Official GitHub Badge:' : 'GitHub 공식 상태 배지:'}
+            </span>
             <a 
-              href={lastRun.html_url}
-              target="_blank"
+              href={`https://github.com/${owner}/${repo}/actions/workflows/${workflowFile}`}
+              target="_blank" 
               rel="noopener noreferrer"
-              className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 mt-1 font-medium"
+              className="hover:opacity-90 transition-opacity"
             >
-              <span>{language === 'en' ? 'View Run Log' : '로그 상세 보기'}</span>
-              <ExternalLink className="w-2.5 h-3" />
+              <img 
+                src={svgBadgeUrl} 
+                alt={`${workflowFile} status badge`}
+                className="h-4 rounded border border-slate-300 dark:border-slate-700"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
             </a>
           </div>
         )}
 
         {error && (
-          <p className="text-[10px] text-rose-600 dark:text-rose-400 leading-tight">
+          <p className="text-[10px] text-rose-600 dark:text-rose-400 leading-tight bg-rose-100/50 dark:bg-rose-950/50 p-2 rounded-lg border border-rose-200 dark:border-rose-900">
             {error}
           </p>
         )}
@@ -280,3 +479,4 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     </div>
   );
 };
+

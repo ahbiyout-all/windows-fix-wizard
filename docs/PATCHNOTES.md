@@ -1,6 +1,171 @@
-# Patch Note - System Update (v3.72.0)
+# Patch Note - System Update (v3.81.0)
 
 This document is synchronized with `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.81.0] - 2026-11-06
+
+### 🚀 GitHub Actions 'windows-fix-collector.yml' 실시간 상태 배지 시각화 엔진 (Real-time Workflow Status Badge)
+- **GitHub Actions API 기반 실시간 상태 시각화 (`GitHubWorkflowStatus.tsx` & `DeploymentDashboardWidget.tsx`)**:
+  - GitHub Actions REST API를 연동하여 `windows-fix-collector.yml` 자율 수집 워크플로의 최신 실행 상태, 실행 결과 및 소요 시간을 대시보드에 실시간 시각화했습니다.
+  - **상대 시간 표기 (Relative Run Time)**: 최근 기동 시점을 "방금 전", "15분 전", "2시간 전" 등 경과 시간 단위로 시각화.
+  - **45초 실시간 갱신 및 상태 애니메이션**: 애니메이션 점등 LED 배지(`Passed` 🟢 / `Failed` 🔴 / `In Progress` 🔵) 및 45초 자동 폴링 탑재.
+  - **공식 SVG 상태 배지 및 1-클릭 실행 (Dispatch)**:
+    - GitHub 공식 SVG 워크플로 상태 배지(`badge.svg`)를 대시보드 상단 툴바 및 카드에 연동.
+    - 대시보드 내에서 `windows-fix-collector.yml`을 1-클릭으로 즉시 클라우드 가동할 수 있는 실행(Run) 버튼 연동.
+
+---
+
+## [v3.80.0] - 2026-11-06
+
+### 🚀 주요 신규 기능 및 실시간 린터 자동 교정 엔진 (Enhanced Real-Time Linter & 1-Click Auto-Fix Engine)
+- **PowerShell 실시간 정적 분석 린터 기능 고도화 (`PowerShellSandbox.tsx` & `psLinter.ts`)**:
+  - PSScriptAnalyzer 정적 분석 룰을 **17종 엔터프라이즈 규칙**으로 확장했습니다 (`PSAvoidWriteHostInFunctions`, `PSAvoidUsingInternalPing`, `PSAvoidUsingRegExeDirectly` 신규 추가).
+  - **1-클릭 코드 자동 수정 엔진 탑재 (`autoFixDiagnostic` & `autoFixAllFixable`)**:
+    - 축약 별칭(`rm` -> `Remove-Item`, `ls` -> `Get-ChildItem`), 구형 WMI (`Get-WmiObject` -> `Get-CimInstance`), null 우측 비교(`$var -eq $null` -> `$null -eq $var`), TLS 1.2 보안 헤더 지정 등을 1-클릭으로 자동 리팩토링합니다.
+    - 린터 패널 상단에 **"전체 자동 수정(Auto-Fix All)"** 일괄 처리 버튼을 배치했습니다.
+  - **편집기 줄 번호 거터(Line Gutter) 실시간 경고 표시기**:
+    - 스크립트 에디터 좌측 줄 번호 옆에 진단 심각도에 따른 실시간 표시등(`🔴` 오류 / `⚠️` 경고 / `🔵` 권장)을 시각화하고, 마우스 호버 시 상세 진단 툴팁을 제공합니다.
+
+---
+
+## [v3.79.0] - 2026-11-06
+
+### 🚀 공식 제작자 및 소속회사 정보 변경 반영 (Official Creator & Organization Profile Update)
+- **개발자 및 소속 공식 채널 정보 최신화**:
+  - **개발자**: `AhBiYout`
+  - **GitHub 저장소**: `https://github.com/AhBiYout-all`
+  - **공식 구글 블로그**: `https://ahbiyoutvibe.blogspot.com/`
+  - **소속**: `https://www.cisnet.co.kr`
+  - **소속회사**: `(주)청운정보시스템 ( cisnet.co.kr )`
+- **UI 및 푸터 정보 동기화**:
+  - 하단 푸터(Footer) 및 시스템 업데이트/안내 모달 카드 내 제작자·소속회사 명칭 및 공식 채널 동기화.
+  - 전역 상수 (`OFFICIAL_COMPANY_NAME`, `OFFICIAL_AFFILIATION_URL`, `OFFICIAL_BLOG_URL`) 정비 및 시스템 버전 `v3.79.0` 업데이트.
+
+---
+
+## [v3.78.0] - 2026-11-06
+
+### 🚀 주요 신규 기능 및 시스템 정적 분석 엔진 (Major New Features & Integrations)
+- **PowerShell 실시간 룰 기반 린터 & 베스트 프랙티스 분석기 탑재 (`psLinter.ts`)**:
+  - Microsoft `PSScriptAnalyzer` 규칙 기준에 정합하는 자체 정적 분석 및 린트 엔진(`src/utils/psLinter.ts`)을 신설하고 `PowerShellSandbox`에 실시간 연동했습니다.
+  - **15종 이상의 엔터프라이즈 룰 기반 정적 검사 지원**:
+    - `PSUseApprovedVerbs`: 사용자 정의 함수/명령어가 비승인 동사(예: `Do-`, `Run-` 등)를 사용할 때 경고하며 공식 승인 동사(`Start-`, `Invoke-`, `Repair-`, `Get-`, `Set-`) 사용을 권장.
+    - `PSAvoidUsingWMICmdlets`: 구형 `Get-WmiObject` / `wmic` 감지 시 최신 `Get-CimInstance` 사용 권장.
+    - `PSAvoidUsingCmdletAliases`: 이식성을 해치는 별칭(`rm`, `cp`, `ls`, `dir`, `cat`, `select`, `where`, `%`, `?`, `curl` 등) 감지 시 공식 Cmdlet 대체 안내.
+    - `PSAvoidUsingInvokeExpression`: 동적 문자열 실행(`iex`, `Invoke-Expression`) 위협 경고.
+    - `PSAvoidUsingPlaintextForPassword`: 하드코딩된 평문 비밀번호 및 API 토큰 변수 감지 및 경고.
+    - `PSPossibleIncorrectUsageOfAssignmentOperator`: `if (...)` 조건문 내부 대입 연산자(=) 오용 감지 및 `-eq` 연산자 권장.
+    - `PSAvoidUsingEmptyCatchBlock`: 예외를 무시하는 비어 있는 `catch { }` 블록 감지.
+    - `PSAvoidUsingNullComparisonOnRight`: 배열 필터링 부작용을 방지하기 위해 `$null -eq $var` 좌측 비교 배치 권장.
+    - `PSAvoidGlobalVars`: `$global:` 전역 변수 스코프 오염 감지.
+    - `PSAvoidUsingDeprecatedSecurityProtocols`: 취약한 SSL 3.0 및 TLS 1.0 지정 감지 시 TLS 1.2/1.3 강제 권장.
+    - `PSAvoidDestructiveWildcard`: C:\ 루트 디렉터리 와일드카드 파괴적 삭제 감지 및 오류 표시.
+    - `PSUseConsistentIndentationAndQuotes`: 큰따옴표/작은따옴표 미스매치 및 중괄호 `{}` / 소괄호 `()` 개수 불일치 구문 오류 탐지.
+  - **편집기 상단 실시간 린트 점수 배지 (Live Quality Score Badge)**:
+    - 스크립트 수정 시 편집기 상단 툴바에 실시간 점수(`Lint 100/100`, `Err`, `Warn`)가 즉시 갱신되어 배지로 표시됩니다.
+  - **인터랙티브 린터 인스펙터 패널 (`Rule Linter`)**:
+    - 샌드박스 우측 인스펙터에 '실시간 린터' 전용 탭을 추가하여 스크립트 품질 점수(Quality Score), 통과된 룰 통계, 심각도 필터(`전체`, `오류`, `경고`, `권장`), 라인 위치 표기, 한국어/영어 상세 설명, 코드 스니펫 및 수정 제안을 제공합니다.
+
+---
+
+## [v3.77.0] - 2026-11-06
+
+### 🚀 주요 신규 기능 및 UI/UX 구문 강조 엔진 (Major New Features & Integrations)
+- **PowerShell 샌드박스 PrismJS 구문 강조(Syntax Highlighting) 및 줄 번호 시스템 탑재**:
+  - `PowerShellSandbox` 컴포넌트에 가볍고 안정적인 `prismjs` 및 공식 PowerShell 문법 파서(`prism-powershell`), 고대비 다크 테마(`prism-tomorrow.css`)를 연동했습니다.
+  - **이중 레이어 실시간 구문 강조 편집기 (Dual-Layer Syntax Editor)**:
+    - 타이핑과 동시에 명령어(Cmdlet), 파라미터(`-Name`, `-Force`), 환경 변수(`$env:SystemRoot`), 문자열, 주석(`# ...`) 등이 실시간으로 컬러링되는 동기화 이중 레이어 구조를 구축했습니다.
+    - 투명 텍스트 영역과 하위 Prism 렌더링 레이어 간 수직/수평 스크롤이 완벽히 동기화됩니다.
+  - **동적 줄 번호 거터 (Line Numbers Gutter)**:
+    - 스크립트 작성 시 좌측에 줄 번호(1, 2, 3...)가 표시되어 긴 스크립트 디버깅 및 특정 라인 추적이 용이합니다.
+  - **구문 강조 토글 및 모드 전환 지원**:
+    - `Prism: ON / OFF` 토글 버튼을 통해 구문 강조 활성화를 즉시 제어할 수 있습니다.
+    - `미리보기(Preview)` / `편집(Edit)` 모드 전환 버튼을 통해 읽기 전용 강조 뷰어와 인터랙티브 에디터 모드를 자유롭게 오갈 수 있습니다.
+  - **버전 관리 미리보기 연계**:
+    - 버전 히스토리 모달의 과거 스크립트 스냅샷 미리보기 영역에도 Prism PowerShell 구문 강조를 기본 적용했습니다.
+
+---
+
+## [v3.76.0] - 2026-11-06
+
+### 🚀 주요 신규 기능 및 시스템 안전 통합 (Major New Features & Integrations)
+- **PowerShell 샌드박스 커스텀 스크립트 버전 관리 및 복원 기능 (`ScriptVersion`)**:
+  - 'PowerShell 샌드박스(PowerShellSandbox)' 내에서 사용자가 수정한 스크립트를 단계별 체크포인트로 저장하고 라벨을 부여하며 이전 버전으로 자유롭게 되돌릴 수 있는 버전 관리 엔진을 신설했습니다.
+  - **원클릭 버전 저장 및 체크포인트 관리**:
+    - 편집기 상단 툴바에 "버전 관리(Versions)" 및 "버전 저장(Save Version)" 버튼을 배치하여 언제든 현재 작업본을 스냅샷으로 저장할 수 있습니다.
+    - 버전 저장 시 사용자 맞춤 라벨(예: `v1.2 - BITS 타임아웃 검사 추가`)을 입력할 수 있으며, 타임스탬프와 줄 수/글자 수가 자동 기록됩니다.
+  - **이전 버전으로 1-클릭 복원 (Revert)**:
+    - 저장된 버전 카드에서 "복원(Revert)" 버튼을 누르면 편집기 코드가 즉시 해당 버전으로 롤백되며, 가상 터미널에 복원 감사 로그가 기록됩니다.
+  - **라벨 수정(인라인) 및 코드 미리보기 (Preview)**:
+    - 저장된 버전의 이름을 언제든 수정(`Edit3`)할 수 있으며, 복원 전 이전 코드 내용을 펼쳐서 확인할 수 있는 '미리보기' 창을 제공합니다.
+  - **브라우저 로컬 스토리지 영구 보관**:
+    - 모든 버전 데이터는 브라우저 로컬 저장소(`winfix_sandbox_script_versions`)에 안전하게 저장되어 페이지를 새로고침하거나 브라우저를 다시 열어도 그대로 유지됩니다.
+
+---
+
+## [v3.75.0] - 2026-11-06
+
+### 🚀 주요 신규 기능 및 시스템 안전 통합 (Major New Features & Integrations)
+- **PowerShell 기반 Windows 시스템 복원 지점 관리 유틸리티 (`SystemRestoreUtility`)**:
+  - Windows의 기본 PowerShell 복원 지점 제어 명령(`Checkpoint-Computer`, `Get-ComputerRestorePoint`, `Restore-Computer`)을 직관적인 UI로 제어하는 복원 지점 관리 컴포넌트를 신설했습니다.
+  - **1-클릭 즉시 복원 지점 생성**:
+    - 시스템 보호 활성화(`Enable-ComputerRestore -Drive "C:\"`) 자동 점검 및 Windows 기본 24시간 생성 쿨다운 제한을 우회(`SystemRestorePointCreationFrequency = 0`)하는 고도화된 PowerShell 스크립트를 즉시 생성 및 복사/다운로드할 수 있습니다.
+    - 복원 지점 이름 및 유형(`MODIFY_SETTINGS`, `APPLICATION_INSTALL`, `DEVICE_DRIVER_INSTALL`)을 자유롭게 지정 가능합니다.
+  - **최근 복원 지점 스냅샷 목록 조회**:
+    - `Get-ComputerRestorePoint` 명령을 통해 시스템 내 보관된 복원 지점(순번, 설명, 생성일시, 유형)을 표 형태로 한눈에 조회합니다.
+    - 볼륨 섀도 복사본(VSS) 저장소 할당 용량 진단 팁(`vssadmin list shadowstorage`)을 제공합니다.
+  - **무손실 롤백 및 공식 윈도우 복구 마법사 연동**:
+    - 스크립트를 통한 복원(`Restore-Computer -RestorePoint <Seq>`)뿐만 아니라 윈도우 공식 GUI 복원 창(`rstrui.exe`)을 원클릭으로 실행할 수 있는 명령어 복사를 지원합니다.
+  - **마법사 결과 및 상단 툴바 연계**:
+    - '마법사' AI 진단 결과의 해결 스크립트 상단에 "사전 안전 권장: 시스템 복원 지점 생성" 배너를 배치하여 스크립트 실행 전 스냅샷 확보를 적극 유도합니다.
+    - 가이드북 상단 툴바 및 모바일 빠른 도구에 바로가기 버튼을 추가했습니다.
+
+### 🛡️ 이 기능이 필수적인 이유 (Why System Restore Point is Essential)
+1. **무손실 롤백 보장 (위험 제로)**: 복잡한 레지스트리 수정, 네트워크 초기화, 시스템 파일 복구 시 예기치 못한 부작용이나 호환성 문제가 생겨도 수 분 안에 이전 정상 상태로 완벽히 되돌릴 수 있습니다.
+2. **개인 데이터 안전 보존**: 시스템 복원은 개인 문서, 사진, 다운로드 파일을 일체 건드리지 않고 운영체제 핵심 파일과 설정값만 안전하게 복구합니다.
+3. **완벽한 수리 파이프라인 완성**: "가상 샌드박스 모의 실행 → 안심 검사소 위협 검증 → 사전 복원 지점 생성 → 안전한 실제 실행"의 4단계 엔터프라이즈 안전 체계를 구축합니다.
+
+---
+
+## [v3.74.0] - 2026-11-06
+
+### 🚀 주요 신규 기능 및 시스템 통합 (Major New Features & Integrations)
+- **마법사(Wizard) AI 진단 생성 스크립트 전용 추천/비추천(Thumbs-Up/Down) 실효성 평가 시스템 (`WizardScriptRatingPanel`)**:
+  - '마법사' 탭의 AI 오류 진단 결과 화면에 표시되는 각각의 PowerShell 자동 복구 스크립트에 대해 사용자가 직접 해결 효과를 검증하고 평가할 수 있는 추천/비추천 평가 시스템을 구축했습니다.
+  - **실시간 실효성 비율 및 검증 배지 표시**:
+    - 스크립트별 커뮤니티 유효성 검증 비율(예: `96% 검증됨`)과 2색 비율 게이지 바를 실시간으로 시각화합니다.
+    - 추천 클릭 시 초록색 하이라이트(`ThumbsUp`)와 함께 "감사합니다! 이 복구 스크립트가 효과적인 솔루션으로 검증되었습니다" 알림 배너가 표시됩니다.
+  - **비추천(해결 안 됨) 상세 피드백 드로어**:
+    - 비추천 시 구문/명령어 오류, 증상 지속, 관리자 권한 거부, 백신 차단 등 핵심 원인 프리셋 태그와 추가 에러 로그 입력란을 제공합니다.
+    - 수집된 피드백은 `/api/logs/add`(`type: 'script_rating'`)를 통해 서버 로그에 체계적으로 기록되어 AI 프롬프트 개선 및 해결 스크립트 자동 정제에 반영됩니다.
+  - **로컬 스토리지 상태 기억 및 평가 초기화**:
+    - 스크립트 고유 해시값을 기반으로 사용자의 이전 평가 내역을 브라우저에 저장하여 재방문 시에도 투표 상태를 유지합니다.
+    - 잘못 누른 경우 언제든 평가를 재설정(초기화)할 수 있는 다시 시도 버튼을 지원합니다.
+  - **마법사 결과 내 가상 샌드박스 원클릭 실행 연동**:
+    - 진단 결과 스크립트 헤더에 "⚡ 샌드박스 실행" 버튼을 추가하여 실제 PC 적용 전 WebAssembly 가상 환경에서 사전 검증할 수 있도록 연계했습니다.
+
+---
+
+## [v3.73.0] - 2026-11-06
+
+### 🚀 주요 신규 기능 및 시스템 통합 (Major New Features & Integrations)
+- **클라이언트 사이드 격리 가상 환경 PowerShell 샌드박스 (`PowerShellSandbox`)**:
+  - 사용자 PC의 실제 환경을 건드리지 않고 브라우저 메모리 상에서 안전하게 PowerShell 복구 스크립트를 모의 실행하고 결과를 확인할 수 있는 전용 '샌드박스(PowerShell Sandbox)' 탭을 신설했습니다.
+  - **가상 Windows 환경 시뮬레이터 탑재**:
+    - 콘솔 인터랙티브 터미널 프롬프트(`PS C:\Windows\System32>`) 및 컬러 ANSI 출력(`Write-Host -ForegroundColor Cyan/Yellow/Green/Red/Magenta`).
+    - 가상 서비스 상태 관리자(`wuauserv`, `bits`, `cryptsvc`, `NlaSvc`, `AppXSvc`, `sppsvc`, `WinDefend` 등 시작/중지 모니터링).
+    - 가상 파일 시스템(VFS) 탐색기(`C:\Windows\System32`, `SoftwareDistribution`, `catroot2` 디렉터리/파일 생성 및 초기화 시뮬레이션).
+    - 가상 레지스트리 탐색기(`HKLM:\SOFTWARE\Policies\...`, `SCHANNEL` TLS 프로토콜 상태 반영).
+    - 다단계 스크립트를 한 줄씩 관찰하며 가상 상태 변화를 디버깅할 수 있는 스텝 디버거(Step-by-Step Debugger).
+    - WebAssembly 기반 파이썬/파워셸 파서 브리지(Pyodide) 및 경량 VM 엔진을 통한 빠른 클라이언트 사이드 가상 실행.
+  - **카드 즉시 연동 기능**:
+    - 모든 가이드북 이슈 카드의 해결 스크립트 영역에 "⚡ 샌드박스 실행" 버튼을 추가하여, 단 한 번의 클릭으로 스크립트를 샌드박스 에디터로 전송하고 테스트할 수 있도록 지원합니다.
+
+### 🛡️ 보안 강화 및 제로 리스크 보장 (Security Hardening & Zero-Risk Execution)
+- 100% 클라이언트 사이드 격리 구조로 실제 시스템 변조나 부작용 없이 사전에 스크립트 안전성을 검증할 수 있습니다.
+- `psVerifier.ts`의 정적 분석 및 휴리스틱 검증 규칙과 연동되어 악성 명령어 및 난독화 구문을 가상 실행 전 사전에 탐지합니다.
 
 ---
 

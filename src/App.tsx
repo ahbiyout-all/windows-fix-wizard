@@ -27,6 +27,9 @@ import {
   Type
 } from './types';
 import { PowerShellVerifierPanel } from './components/PowerShellVerifierPanel';
+import { PowerShellSandbox } from './components/PowerShellSandbox';
+import { WizardScriptRatingPanel } from './components/WizardScriptRatingPanel';
+import { SystemRestoreUtility } from './components/SystemRestoreUtility';
 import { InteractiveRoadmap } from './components/InteractiveRoadmap';
 import { DashboardWidget } from './components/DashboardWidget';
 import { DailyQuotaUsageChart } from './components/DailyQuotaUsageChart';
@@ -554,7 +557,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.72.0";
+const APP_VERSION = "3.81.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -562,6 +565,7 @@ const GITHUB_REPO_URL = "https://github.com/AhBiYout-all/windows-fix-wizard";
 const GITHUB_PAGES_URL = "https://ahbiyout-all.github.io/windows-fix-wizard/";
 const OFFICIAL_BLOG_URL = "https://ahbiyoutvibe.blogspot.com/";
 const OFFICIAL_AFFILIATION_URL = "https://www.cisnet.co.kr";
+const OFFICIAL_COMPANY_NAME = "(주)청운정보시스템 ( cisnet.co.kr )";
 const IS_GITHUB_PAGES = typeof window !== 'undefined' && (
   window.location.hostname.endsWith('github.io') ||
   window.location.hostname.includes('pages.dev')
@@ -723,7 +727,7 @@ jobs:
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'wizard' | 'guidebook' | 'admin' | 'library' | 'threat-verifier'>('guidebook');
+  const [activeTab, setActiveTab] = useState<'wizard' | 'guidebook' | 'admin' | 'library' | 'threat-verifier' | 'powershell-sandbox'>('guidebook');
   const [triggerAutoSearch, setTriggerAutoSearch] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scriptSignedOverrides, setScriptSignedOverrides] = useState<Record<string, string>>({});
@@ -1066,6 +1070,7 @@ export default function App() {
   const [guidebookQuery, setGuidebookQuery] = useState('');
   const [openFaqId, setOpenFaqId] = useState<string | null>('faq-1');
   const [showHelpCenter, setShowHelpCenter] = useState(false);
+  const [showSystemRestoreModal, setShowSystemRestoreModal] = useState(false);
   
   const [dbIssues, setDbIssues] = useState<KnownIssue[]>(() => {
     // Try to load from LocalStorage on initialization
@@ -9788,6 +9793,21 @@ export default function App() {
                     </button>
 
                     <button
+                      onClick={() => { setActiveTab('powershell-sandbox'); setMobileMenuOpen(false); }}
+                      className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
+                        activeTab === 'powershell-sandbox'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Cpu className="w-4 h-4 text-cyan-500" />
+                        <span>{language === 'en' ? 'PowerShell Sandbox' : 'PowerShell 샌드박스'}</span>
+                      </div>
+                      {activeTab === 'powershell-sandbox' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                    </button>
+
+                    <button
                       onClick={() => { setActiveTab('library'); setMobileMenuOpen(false); }}
                       className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
                         activeTab === 'library'
@@ -9845,6 +9865,14 @@ export default function App() {
                       <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                       <span>{language === 'ko' ? "GitHub Pages 열기" : "Open GitHub Pages"}</span>
                     </a>
+
+                    <button
+                      onClick={() => { setShowSystemRestoreModal(true); setMobileMenuOpen(false); }}
+                      className="col-span-2 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>{language === 'ko' ? "🛡️ 시스템 복원 지점 관리 (System Restore)" : "🛡️ System Restore Point Utility"}</span>
+                    </button>
 
                     <button
                       onClick={() => { checkForUpdates(true); setMobileMenuOpen(false); }}
@@ -9914,6 +9942,18 @@ export default function App() {
                 >
                   <ShieldAlert className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>{language === 'en' ? 'Threat Verifier' : '지능형 위협 검증'}</span>
+                </button>
+
+                <button
+                  onClick={() => { setActiveTab('powershell-sandbox'); setMobileMenuOpen(false); }}
+                  className={`shrink-0 py-1.5 sm:py-2 px-2.5 sm:px-3.5 rounded-xl text-xs sm:text-sm font-medium flex items-center gap-1.5 whitespace-nowrap transition-all ${
+                    activeTab === 'powershell-sandbox' 
+                      ? 'bg-blue-600 text-white shadow-xs font-semibold' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Cpu className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                  <span>{language === 'en' ? 'PS Sandbox' : 'PS 샌드박스'}</span>
                 </button>
 
                 <button
@@ -10201,6 +10241,35 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* System Restore Point Pre-Execution Recommendation */}
+                  {result.script && result.isScriptApplicable && (
+                    <div className="p-3.5 sm:p-4 rounded-2xl bg-indigo-950/40 border border-indigo-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/30 shrink-0">
+                          <RotateCcw className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-indigo-200">
+                            {language === 'en' ? 'Safety Precaution: Create a Restore Point' : '사전 안전 권장: 시스템 복원 지점 생성'}
+                          </h4>
+                          <p className="text-[11px] text-indigo-300/80 mt-0.5 leading-relaxed">
+                            {language === 'en' 
+                              ? 'Take an instant system snapshot before executing any PowerShell script so you can rollback anytime.'
+                              : '자동 복구 스크립트를 실행하기 전 즉시 복원 지점을 만들어 두면 문제 발생 시 100% 롤백할 수 있습니다.'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowSystemRestoreModal(true)}
+                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shrink-0 flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? '1-Click Restore Point' : '1-클릭 복원 지점 생성'}</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Script Card */}
                   {result.script && result.isScriptApplicable && (
                     <div className="bg-slate-900 dark:bg-slate-950 rounded-2xl shadow-sm border border-slate-800 dark:border-slate-800/50 overflow-hidden">
@@ -10227,6 +10296,21 @@ export default function App() {
                             <span>{language === 'ko' ? '🛡️ 안심 검사소로 전송' : '🛡️ Send to Verifier'}</span>
                           </button>
                           <button
+                            onClick={() => {
+                              const scriptToSend = result.script;
+                              const event = new CustomEvent('uwes-set-sandbox-script', {
+                                detail: { script: scriptToSend }
+                              });
+                              window.dispatchEvent(event);
+                              setActiveTab('powershell-sandbox');
+                            }}
+                            className="text-cyan-300 hover:text-white hover:bg-cyan-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-cyan-950/40 border border-cyan-900/50 px-2.5 py-1.5 rounded-md"
+                            title={language === 'ko' ? '이 해결 스크립트를 격리된 WebAssembly 가상 환경에서 모의 실행하고 시스템 상태 변화를 관찰합니다.' : 'Transmit this resolution script to the isolated WebAssembly sandbox to simulate execution.'}
+                          >
+                            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{language === 'ko' ? '⚡ 샌드박스 실행' : '⚡ Test in Sandbox'}</span>
+                          </button>
+                          <button
                             onClick={() => copyToClipboard(result.script, 'wizard-script')}
                             className="text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium bg-slate-700/50 hover:bg-slate-700 px-3 py-1.5 rounded-md"
                           >
@@ -10238,7 +10322,7 @@ export default function App() {
                             ) : (
                               <>
                                 <Copy className="w-3.5 h-3.5" />
-                                {language === 'en' ? 'Copy' : '복사하기'}
+                                <span className="text-slate-300">{language === 'en' ? 'Copy' : '복사하기'}</span>
                               </>
                             )}
                           </button>
@@ -10253,6 +10337,15 @@ export default function App() {
                         <Info className="w-4 h-4 flex-shrink-0" />
                         {language === 'en' ? "Search for 'PowerShell' in the Start menu, click 'Run as Administrator', and paste the code above." : "시작 메뉴에서 'PowerShell'을 검색하고 '관리자 권한으로 실행'을 클릭한 후 위 코드를 붙여넣으세요."}
                       </div>
+
+                      {/* AI Generated Script Thumbs-Up / Thumbs-Down Rating System */}
+                      <WizardScriptRatingPanel
+                        scriptText={result.script}
+                        scriptCode={result.code}
+                        query={query}
+                        windowsVersion={version}
+                        language={language}
+                      />
                     </div>
                   )}
 
@@ -10398,6 +10491,15 @@ export default function App() {
                   <HelpCircle className="w-4 h-4" />
                   {language === 'en' ? 'Help & Support Center' : '도움말 및 지원 센터'}
                   {showHelpCenter ? <ChevronUp className="w-3.5 h-3.5 ml-0.5" /> : <ChevronDown className="w-3.5 h-3.5 ml-0.5" />}
+                </button>
+
+                <button
+                  onClick={() => setShowSystemRestoreModal(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border shadow-sm bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-slate-800"
+                  title={language === 'en' ? 'Open System Restore Point Utility' : '시스템 복원 지점 관리 유틸리티 열기'}
+                >
+                  <RotateCcw className="w-4 h-4 text-indigo-500" />
+                  <span>{language === 'en' ? 'System Restore Point' : '시스템 복원 지점 관리'}</span>
                 </button>
               </div>
             </div>
@@ -11056,7 +11158,22 @@ export default function App() {
                                           title={language === 'ko' ? '이 해결 스크립트를 안심 검사소 가상 편집기로 즉시 보내 검증 및 롤백 스크립트를 컴파일합니다.' : 'Transmit this resolution script straight to the secure sandbox verifier code block.'}
                                         >
                                           <ShieldAlert className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                                          <span>{language === 'ko' ? '🛡️ 안심 검사소로 전송' : '🛡️ Send to Verifier'}</span>
+                                          <span>{language === 'ko' ? '🛡️ 안심 검사소' : '🛡️ Verifier'}</span>
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            const scriptToSend = scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title')));
+                                            const event = new CustomEvent('uwes-set-sandbox-script', {
+                                              detail: { script: scriptToSend }
+                                            });
+                                            window.dispatchEvent(event);
+                                            setActiveTab('powershell-sandbox');
+                                          }}
+                                          className="text-cyan-300 hover:text-white hover:bg-cyan-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-cyan-950/40 border border-cyan-900/50 px-2.5 py-1 rounded-md"
+                                          title={language === 'ko' ? '이 해결 스크립트를 격리된 WebAssembly 가상 환경에서 모의 실행하고 시스템 상태 변화를 관찰합니다.' : 'Transmit this resolution script to the isolated WebAssembly sandbox to simulate execution.'}
+                                        >
+                                          <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                                          <span>{language === 'ko' ? '⚡ 샌드박스 실행' : '⚡ Test in Sandbox'}</span>
                                         </button>
                                         <button
                                           onClick={() => copyToClipboard(scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title'))), issue.id)}
@@ -12372,6 +12489,23 @@ export default function App() {
                       <Github className="w-3.5 h-3.5 text-indigo-500" />
                       <span>{language === 'en' ? 'GitHub Issues:' : 'GitHub 수집 데이터:'} <strong className="font-bold">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</strong></span>
                     </span>
+
+                    {/* Real-time Collector Workflow Badge */}
+                    <a 
+                      href={`https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/actions/workflows/windows-fix-collector.yml`}
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-500 transition-all text-xs font-semibold cursor-pointer"
+                      title={language === 'en' ? 'windows-fix-collector.yml Real-Time Workflow Status' : 'windows-fix-collector.yml 실시간 워크플로 상태 배지'}
+                    >
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Collector:</span>
+                      <img 
+                        src={`https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/actions/workflows/windows-fix-collector.yml/badge.svg`}
+                        alt="windows-fix-collector.yml badge"
+                        className="h-4 rounded border border-slate-300 dark:border-slate-700"
+                        onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                      />
+                    </a>
 
                     {githubLastSync?.at ? (
                       <span className="px-2.5 py-1 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1.5 font-medium">
@@ -15199,6 +15333,27 @@ export default function App() {
           </motion.div>
         )}
 
+        {/* POWERSHELL SANDBOX TAB */}
+        {activeTab === 'powershell-sandbox' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6 animate-fade-in"
+          >
+            <PowerShellSandbox language={language} />
+          </motion.div>
+        )}
+
+        {/* System Restore Point Utility Modal */}
+        {showSystemRestoreModal && (
+          <SystemRestoreUtility
+            isOpen={showSystemRestoreModal}
+            onClose={() => setShowSystemRestoreModal(false)}
+            language={language}
+          />
+        )}
+
         {/* Edit Modal */}
         {editingIssue && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
@@ -17488,9 +17643,10 @@ export default function App() {
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                title={OFFICIAL_COMPANY_NAME}
               >
                 <Building2 className="w-3 h-3" />
-                소속: CISNet
+                소속회사: {OFFICIAL_COMPANY_NAME}
               </a>
               <span className="text-slate-300 dark:text-slate-700">•</span>
               <a 
@@ -18754,16 +18910,19 @@ export default function App() {
                       • 개발자: <strong className="text-slate-900 dark:text-slate-100">{DEVELOPER_NAME}</strong> ({GITHUB_USERNAME})
                     </div>
                     <div>
-                      • 소속: <a href={OFFICIAL_AFFILIATION_URL} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">CISNet (cisnet.co.kr)</a>
+                      • 소속회사: <a href={OFFICIAL_AFFILIATION_URL} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 font-semibold hover:underline">{OFFICIAL_COMPANY_NAME}</a>
                     </div>
                     <div className="sm:col-span-2">
-                      • 공식 블로그: <a href={OFFICIAL_BLOG_URL} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://ahbiyoutvibe.blogspot.com/</a>
+                      • 소속 링크: <a href={OFFICIAL_AFFILIATION_URL} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">{OFFICIAL_AFFILIATION_URL}</a>
+                    </div>
+                    <div className="sm:col-span-2">
+                      • 공식 구글 블로그: <a href={OFFICIAL_BLOG_URL} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-all">{OFFICIAL_BLOG_URL}</a>
+                    </div>
+                    <div className="sm:col-span-2">
+                      • GitHub 저장소: <a href="https://github.com/AhBiYout-all" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-all">https://github.com/AhBiYout-all</a>
                     </div>
                     <div className="sm:col-span-2">
                       • 공식 웹사이트: <a href={updateInfo?.pagesUrl || GITHUB_PAGES_URL} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline break-all">{updateInfo?.pagesUrl || GITHUB_PAGES_URL}</a>
-                    </div>
-                    <div className="sm:col-span-2">
-                      • GitHub 경로: <a href={updateInfo?.repoUrl || GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">{updateInfo?.repoUrl || GITHUB_REPO_URL}</a>
                     </div>
                   </div>
                 </div>
