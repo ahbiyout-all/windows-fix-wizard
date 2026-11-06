@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-06T13:48:56.115Z",
-  "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "오디오/사운드",
+  "lastCollectedAt": "2026-11-06T22:45:04.630Z",
+  "modelUsed": "gemini-3.1-flash-lite",
+  "targetCategory": "시스템/블루스크린",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 104,
+  "totalIssuesCount": 106,
   "newIssues": [
     {
-      "id": "gh-0x8007001f-mw5160ms",
-      "code": "0x8007001f",
-      "title": "Windows 10/11 오디오 재생 및 드라이버 기능 장애 오류 (0x8007001f)",
-      "category": "오디오/사운드"
+      "id": "gh-0x00000139--kernel-security-check-failure--mw5kbi0m",
+      "code": "0x00000139 (KERNEL_SECURITY_CHECK_FAILURE)",
+      "title": "Windows 11 최신 보안 업데이트 이후 발생하는 커널 보안 검사 실패",
+      "category": "시스템/블루스크린"
     },
     {
-      "id": "gh-error-1068-mw5160ms",
-      "code": "Error 1068",
-      "title": "Windows Audio 서비스 종속성 시작 실패 오류 (Error 1068)",
-      "category": "오디오/사운드"
+      "id": "gh-0x000000f4--critical-object-termination--mw5kbi0m",
+      "code": "0x000000F4 (CRITICAL_OBJECT_TERMINATION)",
+      "title": "Windows 시스템 서비스 비정상 종료 및 블루스크린 발생",
+      "category": "시스템/블루스크린"
     }
   ]
 }
