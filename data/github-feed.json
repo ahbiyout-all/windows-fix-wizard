@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-06T22:45:04.630Z",
+  "lastCollectedAt": "2026-11-07T04:48:55.315Z",
   "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "시스템/블루스크린",
+  "targetCategory": "스토어/앱",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 106,
+  "totalIssuesCount": 108,
   "newIssues": [
     {
-      "id": "gh-0x00000139--kernel-security-check-failure--mw5kbi0m",
-      "code": "0x00000139 (KERNEL_SECURITY_CHECK_FAILURE)",
-      "title": "Windows 11 최신 보안 업데이트 이후 발생하는 커널 보안 검사 실패",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x80073d05-mw5xbeoj",
+      "code": "0x80073D05",
+      "title": "Microsoft Store 앱 제거 잔여물로 인한 설치 실패 오류",
+      "category": "스토어/앱"
     },
     {
-      "id": "gh-0x000000f4--critical-object-termination--mw5kbi0m",
-      "code": "0x000000F4 (CRITICAL_OBJECT_TERMINATION)",
-      "title": "Windows 시스템 서비스 비정상 종료 및 블루스크린 발생",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x8007000b-mw5xbeoj",
+      "code": "0x8007000B",
+      "title": "Windows 스토어 앱 업데이트 중 잘못된 형식 오류",
+      "category": "스토어/앱"
     }
   ]
 }

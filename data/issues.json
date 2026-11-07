@@ -4778,5 +4778,95 @@
     "updatedAt": "2026-11-06T22:45:04.630Z",
     "verifiedAt": "2026-11-06T22:45:04.630Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d05-mw5xbeoj",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Microsoft Store 앱 제거 잔여물로 인한 설치 실패 오류",
+    "title_en": "Installation Failure due to Remaining Microsoft Store App Fragments",
+    "symptoms": "Windows 11/10 최신 업데이트 이후, 이전에 제거한 앱을 다시 설치하려고 할 때 발생하며, 시스템에 남아있는 이전 패키지 폴더와 충돌하여 앱 설치가 차단됨.",
+    "symptoms_en": "Occurs after recent Windows 11/10 updates when attempting to reinstall previously removed apps; conflicts with lingering package folders in the system directory block the installation.",
+    "script": "Get-AppxPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}; Get-AppXProvisionedPackage -online | Foreach {Add-AppxProvisionedPackage -Online -PackageName $_.PackageName}",
+    "manualSteps": [
+      "Windows 검색창에 'wsreset.exe'를 입력하고 관리자 권한으로 실행합니다.",
+      "C:\\Program Files\\WindowsApps 폴더의 소유권을 확인하고 필요 시 접근 권한을 부여합니다.",
+      "설정 > 앱 > 설치된 앱에서 문제가 되는 앱을 찾아 '고급 옵션'의 '초기화'를 실행합니다.",
+      "시스템을 다시 시작한 후 Microsoft Store에서 다시 설치를 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Type 'wsreset.exe' in the Windows search bar and run as administrator.",
+      "Check the ownership of the C:\\\\Program Files\\\\WindowsApps folder and grant access if necessary.",
+      "Go to Settings > Apps > Installed Apps, locate the app, and select 'Reset' under 'Advanced options'.",
+      "Restart the system and try installing again from the Microsoft Store."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/appx-deployment-service-errors",
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3df6-6a75-a4342371b010"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "스토어 앱 설치 오류",
+      "Microsoft Store App Install Error",
+      "AppxDeploymentFailure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T04:48:55.315Z",
+    "updatedAt": "2026-11-07T04:48:55.315Z",
+    "verifiedAt": "2026-11-07T04:48:55.315Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007000b-mw5xbeoj",
+    "category": "스토어/앱",
+    "code": "0x8007000B",
+    "title": "Windows 스토어 앱 업데이트 중 잘못된 형식 오류",
+    "title_en": "Invalid Format Error during Windows Store App Update",
+    "symptoms": "최신 윈도우 환경에서 앱 업데이트 실행 시 라이브러리 파일이 올바르게 로드되지 않거나 패키지 인덱스 불일치로 인해 발생하는 오류입니다.",
+    "symptoms_en": "An error occurring during app updates in the latest Windows environment, caused by failure to correctly load library files or package index mismatches.",
+    "script": "sfc /scannow; DISM /Online /Cleanup-Image /RestoreHealth; Get-AppXPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "명령 프롬프트를 관리자 권한으로 실행합니다.",
+      "위의 스크립트 중 DISM과 SFC 명령어를 순차적으로 입력하여 시스템 파일을 복구합니다.",
+      "서비스 창(services.msc)을 열고 'Microsoft Store Install Service'가 실행 중인지 확인합니다.",
+      "Windows 업데이트를 최신 상태로 유지하고 스토어 캐시를 삭제합니다."
+    ],
+    "manualSteps_en": [
+      "Run Command Prompt as administrator.",
+      "Execute the DISM and SFC commands from the script above sequentially to repair system files.",
+      "Open the Services window (services.msc) and verify that the 'Microsoft Store Install Service' is running.",
+      "Keep Windows updated and clear the Store cache."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/using-system-file-checker-in-windows-365e0031-36b1-6031-f804-8fd86e0ef4ca",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007000B",
+      "스토어 업데이트 오류",
+      "Store Update Failed",
+      "Invalid Image Format"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T04:48:55.315Z",
+    "updatedAt": "2026-11-07T04:48:55.315Z",
+    "verifiedAt": "2026-11-07T04:48:55.315Z",
+    "verificationStatus": "verified"
   }
 ]
