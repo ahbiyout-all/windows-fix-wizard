@@ -1,20 +1,20 @@
 {
-  "lastCollectedAt": "2026-11-07T12:31:24.564Z",
-  "modelUsed": "gemini-3.1-flash-lite",
+  "lastCollectedAt": "2026-11-07T21:29:21.455Z",
+  "modelUsed": "gemini-3.5-flash",
   "targetCategory": "네트워크",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 110,
+  "totalIssuesCount": 112,
   "newIssues": [
     {
-      "id": "gh-0x800704cf-mw6du650",
+      "id": "gh-0x800704cf-mw6x1z5b",
       "code": "0x800704cf",
-      "title": "네트워크 위치에 액세스할 수 없음 (네트워크 경로를 찾을 수 없음)",
+      "title": "Windows 10/11 네트워크 위치 연결 실패 오류 0x800704cf 해결 방법",
       "category": "네트워크"
     },
     {
-      "id": "gh-0x80244010-mw6du651",
-      "code": "0x80244010",
-      "title": "Windows 업데이트 서비스 네트워크 연결 시간 초과",
+      "id": "gh-0x80072efe-mw6x1z5b",
+      "code": "0x80072efe",
+      "title": "Windows 10/11 네트워크 연결 중단 오류 0x80072efe 해결 방법",
       "category": "네트워크"
     }
   ]
