@@ -1,6 +1,54 @@
-# Patch Note - System Update (v3.81.0)
+# Patch Note - System Update (v3.85.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.85.0] - 2026-11-06
+
+### 🛡️ Default Database Mode Switched to Server File DB / Jamstack (`server_file`)
+- **Zero Firestore Quota Default (`dbMode = 'server_file'`)**:
+  - Updated default database operating mode in `src/App.tsx` (`dbMode`) to strictly initialize in **`server_file` (Jamstack & Local File DB mode)** instead of Cloud Firestore.
+  - This ensures that upon boot or fresh session, the app 100% bypasses Cloud Firestore queries, eliminating quota limit concerns entirely and providing instant local/static dataset responses.
+
+---
+
+## [v3.84.0] - 2026-11-06
+
+### 🛡️ Complete Removal of Cloud Firestore Dependency for Issue Datasets
+- **Cloud Firestore Dependency Removal (`issue_bundles`)**:
+  - Completely removed Cloud Firestore dependency and dataset querying (`issue_bundles`) from both client (`src/App.tsx`) and server (`server.ts`).
+  - **100% Serverless Jamstack Architecture**: The application now relies purely on static repository datasets (`data/issues.json` & `data/github-feed.json`), Local File DB, and browser persistent storage (IndexedDB/LocalStorage).
+  - **Enhanced GitOps & Dataset Sync**: Replaced legacy Firestore bundle sync endpoints with an optimized Jamstack Static Dataset & Local Cache Sync engine (`Action 5`), ensuring zero cloud database quota consumption and robust offline reliability.
+
+---
+
+## [v3.83.0] - 2026-11-06
+
+### 🚀 Cloud Firestore Data Collection & Jamstack Dataset Lossless Merge
+- **Cloud Firestore (`issue_bundles` Collection) ↔ Jamstack (`data/issues.json`) Integration**:
+  - Integrated bidirectional dataset extraction and merging between Cloud Firestore database (`issue_bundles` collection) and the static Jamstack repository feed (`data/issues.json` & `data/github-feed.json`).
+  - **Server API Endpoint (`/api/admin/firestore-bundles/pull-and-merge`)**: Added server endpoint to collect all blob documents (`bundle_0`, `bundle_1`, ...) from Cloud Firestore `issue_bundles` collection, extract contained `issues`, deduplicate by ID, error code, and title against local static files (`data/issues.json`), and save clean merged outputs.
+  - **Quota-Aware Hybrid Fallback & Lossless Merge**: Equipped with automatic fallback for Cloud Firestore daily read quota limit (36.3% / 50k reads reset daily at 00:00 UTC / 09:00 KST), ensuring seamless fallback to local static dataset (102 records) and browser IndexedDB (`winfix_merged_issues`).
+  - **Admin GitOps Action Toolbar Card (Action 5)**: Embedded an interactive card in the GitOps & Database Management dashboard in `src/App.tsx`, providing 1-click **"Pull & Merge Firestore Data"** and **"Bundle local issues.json to Firestore"** buttons with auto-download for GitHub repository commits.
+
+---
+
+## [v3.82.0] - 2026-11-06
+
+### 🚀 Autonomous Data Collection & Dataset Integration
+- **GitHub Actions Dataset Integration (`data/issues.json` & `data/github-feed.json`)**:
+  - Expanded total static troubleshooting dataset to **102 verified Windows issue guides**.
+  - **Newly Harvested Enterprise Troubleshooting Guides**:
+    - `0x80070643`: Windows 10/11 Security Update WinRE Partition Low Space & Installation Recovery.
+    - `0x800f081f`: Cumulative Update CBS_E_SOURCE_MISSING WinSxS Store Repair.
+    - `0x80073D05`: Windows Store App Package Removal & Reinstallation Database Lock Resolution.
+    - `0x80070005`: Windows Store Update Access Denied & Permission Conflict Reset.
+    - `0x80070490`: Component-Based Servicing (CBS) Manifest Registry Corruption & Update Restore.
+    - `0x80246007`: Background Intelligent Transfer Service (BITS) Transfer Queue Reset.
+    - `0x00000139`: KERNEL_SECURITY_CHECK_FAILURE Kernel & HVCI Memory Integrity BSOD Fix.
+    - `0x0000007B`: INACCESSIBLE_BOOT_DEVICE Storage Controller Driver & BCD Rebuild Boot Loop Fix.
+  - **Feed Telemetry Synchronization**: Updated `github-feed.json` telemetry with latest collection timestamps and category breakdowns.
 
 ---
 

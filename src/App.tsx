@@ -557,7 +557,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.81.0";
+const APP_VERSION = "3.85.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -732,7 +732,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scriptSignedOverrides, setScriptSignedOverrides] = useState<Record<string, string>>({});
   const [dbMode, setDbMode] = useState<'firestore' | 'server_file'>(() => {
-    return (localStorage.getItem('winfix_db_mode') as 'firestore' | 'server_file') || 'firestore';
+    return (localStorage.getItem('winfix_db_mode') as 'firestore' | 'server_file') || 'server_file';
   });
   
   const [isOptimizingAi, setIsOptimizingAi] = useState(false);
@@ -773,6 +773,7 @@ export default function App() {
   const [hasServerSshKey, setHasServerSshKey] = useState<boolean>(false);
   const [githubLastSync, setGithubLastSync] = useState<{ at: string | null; count?: number; status?: string } | null>(null);
   const [isPullingGithub, setIsPullingGithub] = useState<boolean>(false);
+  const [isPullingFirestoreBundles, setIsPullingFirestoreBundles] = useState<boolean>(false);
   const [isDispatchingWorkflow, setIsDispatchingWorkflow] = useState<boolean>(false);
   const [isDeployingPages, setIsDeployingPages] = useState<boolean>(false);
   const [isPushingGithub, setIsPushingGithub] = useState<boolean>(false);
@@ -784,6 +785,7 @@ export default function App() {
   const [copiedWorkflow, setCopiedWorkflow] = useState<boolean>(false);
   const [selectedGithubTopic, setSelectedGithubTopic] = useState<string>('all');
   const [showGitOpsGuideModal, setShowGitOpsGuideModal] = useState<boolean>(false);
+  const [showGitOpsDiagramCard, setShowGitOpsDiagramCard] = useState<boolean>(true);
   const [gitOpsGuideActiveTab, setGitOpsGuideActiveTab] = useState<'architecture' | 'permissions' | 'secrets' | 'cron' | 'cli'>('architecture');
   const [copiedGuideMarkdown, setCopiedGuideMarkdown] = useState<boolean>(false);
 
@@ -5954,40 +5956,18 @@ export default function App() {
         return;
       }
 
-      // Hybrid Blob Bundle Fetching (cached for 2 hours to minimize reads to 0-1)
+      // Jamstack Static Dataset & Local Storage Cache Fallback
       const bundleCache = localStorage.getItem('winfix_unpacked_bundles');
       const bundleCacheTime = localStorage.getItem('winfix_unpacked_bundles_time');
-      let allUnpacked: KnownIssue[] = [];
+      let allUnpacked: KnownIssue[] = [...KNOWN_ISSUES];
 
       if (!force && bundleCache && bundleCacheTime && Date.now() - Number(bundleCacheTime) < 1000 * 60 * 120) {
         try {
-          allUnpacked = JSON.parse(bundleCache);
-        } catch (e) {
-          allUnpacked = [];
-        }
-      }
-
-      if (allUnpacked.length === 0) {
-        try {
-          const bundlesSnap = await getDocs(collection(db, 'issue_bundles'));
-          if (!bundlesSnap.empty) {
-            trackUsage(bundlesSnap.size, 0);
-            bundlesSnap.forEach((bDoc) => {
-              if (bDoc.id !== '_metadata') {
-                const bData = bDoc.data();
-                if (Array.isArray(bData.issues)) {
-                  allUnpacked.push(...bData.issues);
-                }
-              }
-            });
-            if (allUnpacked.length > 0) {
-              localStorage.setItem('winfix_unpacked_bundles', JSON.stringify(allUnpacked));
-              localStorage.setItem('winfix_unpacked_bundles_time', Date.now().toString());
-            }
+          const parsed = JSON.parse(bundleCache);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            allUnpacked = parsed;
           }
-        } catch (bundleErr) {
-          console.info("Firestore blob bundle fetch skipped, using local fallback...", bundleErr);
-        }
+        } catch (e) {}
       }
 
       if (allUnpacked.length > 0) {
@@ -7319,22 +7299,48 @@ export default function App() {
     }
   };
 
-  const handleRunBundleSync = async () => {
-    if (!isAdmin) return;
+  const handleSyncJamstackDataset = async () => {
+    setIsPullingFirestoreBundles(true);
     try {
-      const authHeaders = await getAuthHeaders();
-      const resp = await fetch('/api/admin/bundle-sync', {
-        method: 'POST',
-        headers: authHeaders
-      });
-      const json = await parseJsonResponse(resp);
-      if (json.success) {
-        customAlert(json.message);
-      } else {
-        customAlert(language === 'en' ? `Bundle sync failed: ${json.error}` : `번들링 동기화 실패: ${json.error}`);
+      const currentList: KnownIssue[] = [...KNOWN_ISSUES];
+      const existingCacheStr = localStorage.getItem('winfix_unpacked_bundles') || localStorage.getItem(ISSUES_CACHE_KEY);
+      if (existingCacheStr) {
+        try {
+          const parsed = JSON.parse(existingCacheStr);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(item => {
+              if (!currentList.some(existing => existing.id === item.id || (existing.code && item.code && existing.code.toUpperCase() === item.code.toUpperCase()))) {
+                currentList.push(item);
+              }
+            });
+          }
+        } catch (e) {}
       }
+
+      localStorage.setItem('winfix_unpacked_bundles', JSON.stringify(currentList));
+      localStorage.setItem('winfix_unpacked_bundles_time', Date.now().toString());
+      localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(currentList));
+      localStorage.setItem(ISSUES_CACHE_KEY + '_time', Date.now().toString());
+
+      setDbIssues(currentList);
+      fetchCategoryCounts(true);
+
+      const downloadBlob = new Blob([JSON.stringify(currentList, null, 2)], { type: 'application/json' });
+      const dlUrl = URL.createObjectURL(downloadBlob);
+      const dlLink = document.createElement('a');
+      dlLink.href = dlUrl;
+      dlLink.download = 'issues.json';
+      document.body.appendChild(dlLink);
+      dlLink.click();
+      document.body.removeChild(dlLink);
+      URL.revokeObjectURL(dlUrl);
+
+      customAlert(`[Jamstack 정적 데이터셋 동기화 완료!]\n\n• 총 통합 레코드: ${currentList.length}개\n• Cloud Firestore 외부 DB 의존성 없이 100% 서버리스로 정렬되었습니다.\n• GitHub Pages 배포 및 커밋용 'issues.json' 파일이 다운로드되었습니다.`);
+      await logAdminAction('import', 'jamstack_dataset_sync', `Jamstack 정적 dataset 동기화 완료 (${currentList.length}개 레코드)`, 'success', 'DATABASE');
     } catch (err: any) {
-      customAlert(language === 'en' ? `Error: ${err.message}` : `오류 발생: ${err.message}`);
+      customAlert(`데이터 동기화 중 오류가 발생했습니다: ${err.message}`);
+    } finally {
+      setIsPullingFirestoreBundles(false);
     }
   };
 
@@ -12540,51 +12546,66 @@ export default function App() {
                 />
 
                 {/* GitOps Architecture Diagram (Interactive Card) */}
-                <div className="bg-gradient-to-r from-slate-50 via-indigo-50/30 to-purple-50/30 dark:from-slate-800/40 dark:via-indigo-950/20 dark:to-purple-950/20 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                      {language === 'en' ? 'Autonomous Data Harvesting Architecture' : 'GitHub Actions ➔ GitOps 데이터 파이프라인 흐름도'}
-                    </span>
+                <div className="bg-gradient-to-r from-slate-50 via-indigo-50/30 to-purple-50/30 dark:from-slate-800/40 dark:via-indigo-950/20 dark:to-purple-950/20 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-4 sm:p-5 transition-all">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                        {language === 'en' ? 'Autonomous Data Harvesting Architecture' : 'GitHub Actions ➔ GitOps 데이터 파이프라인 흐름도'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowGitOpsDiagramCard(!showGitOpsDiagramCard)}
+                      className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                      title={showGitOpsDiagramCard ? (language === 'en' ? 'Fold Diagram' : '흐름도 접기') : (language === 'en' ? 'Expand Diagram' : '흐름도 펼치기')}
+                    >
+                      <span>{showGitOpsDiagramCard ? (language === 'en' ? 'Fold' : '접기') : (language === 'en' ? 'Expand' : '펼치기')}</span>
+                      <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showGitOpsDiagramCard ? 'rotate-90' : ''}`} />
+                    </button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                    <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                      <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                        <Clock className="w-3.5 h-3.5 text-blue-500" />
-                        1. 무료 클라우드 크론
+
+                  {showGitOpsDiagramCard && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs mt-3 animate-fade-in">
+                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
+                          <Clock className="w-3.5 h-3.5 text-blue-500" />
+                          1. 무료 클라우드 크론
+                        </div>
+                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                          GitHub Actions가 매 6시간마다 슬립 없이 자율 기동
+                        </p>
                       </div>
-                      <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                        GitHub Actions가 매 6시간마다 슬립 없이 자율 기동
-                      </p>
-                    </div>
-                    <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                      <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                        <Bot className="w-3.5 h-3.5 text-purple-500" />
-                        2. Gemini AI 자율 수집
+                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
+                          <Bot className="w-3.5 h-3.5 text-purple-500" />
+                          2. Gemini AI 자율 수집
+                        </div>
+                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                          실시간 웹 검색 그라운딩으로 최신 오류와 해결 스크립트 발굴
+                        </p>
                       </div>
-                      <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                        실시간 웹 검색 그라운딩으로 최신 오류와 해결 스크립트 발굴
-                      </p>
-                    </div>
-                    <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                      <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                        <GitBranch className="w-3.5 h-3.5 text-emerald-500" />
-                        3. Git 자동 커밋 (GitOps)
+                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
+                          <GitBranch className="w-3.5 h-3.5 text-emerald-500" />
+                          3. Git 자동 커밋 (GitOps)
+                        </div>
+                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                          data/issues.json에 누적 커밋하여 영구 보존 및 무제한 CDN 활용
+                        </p>
                       </div>
-                      <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                        data/issues.json에 누적 커밋하여 영구 보존 및 무제한 CDN 활용
-                      </p>
-                    </div>
-                    <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                      <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                        <Zap className="w-3.5 h-3.5 text-amber-500" />
-                        4. 앱 웹훅 & 실시간 반영
+                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
+                          <Zap className="w-3.5 h-3.5 text-amber-500" />
+                          4. 앱 웹훅 & 실시간 반영
+                        </div>
+                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                          수집 즉시 앱(/api/github/sync)으로 전송되어 사용자에게 노출
+                        </p>
                       </div>
-                      <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                        수집 즉시 앱(/api/github/sync)으로 전송되어 사용자에게 노출
-                      </p>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Featured Hero Action: One-Click Instant Dataset Sync & Pages Deploy */}
@@ -12845,6 +12866,48 @@ export default function App() {
                         </>
                       )}
                     </button>
+                  </div>
+
+                  {/* Action 5: Jamstack Static Dataset & Local Cache Sync */}
+                  <div className="p-4 sm:p-5 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-slate-900/20 rounded-xl border border-indigo-500/30 flex flex-col justify-between space-y-3 col-span-1 md:col-span-2">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2">
+                          <Database className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {language === 'en' ? 'Jamstack Static Dataset & Local Cache Sync' : 'Jamstack 정적 데이터셋 및 로컬 캐시 무손실 동기화'}
+                          </h3>
+                        </div>
+                        <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950/80 px-2 py-0.5 rounded-full border border-indigo-300 dark:border-indigo-800">
+                          {language === 'en' ? 'Serverless Jamstack Mode' : '100% 서버리스 Jamstack 모드'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {language === 'en'
+                          ? 'Synchronizes local and cached troubleshooting issues into a single optimized issues.json dataset for GitHub Pages deployment with zero cloud database dependency.'
+                          : '로컬 및 캐시된 모든 트러블슈팅 가이드를 최적의 issues.json 합본으로 동기화하고, 클라우드 DB 할당량 소모 없이 100% Jamstack 정적 CDN 배포용 파일을 생성합니다.'}
+                      </p>
+                    </div>
+
+                    <div className="pt-1">
+                      <button
+                        onClick={handleSyncJamstackDataset}
+                        disabled={isPullingFirestoreBundles}
+                        className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {isPullingFirestoreBundles ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>{language === 'en' ? 'Synchronizing Dataset...' : 'Jamstack 정적 데이터셋 동기화 중...'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4" />
+                            <span>{language === 'en' ? 'Sync Dataset & Download issues.json' : '정적 dataset 동기화 및 issues.json 다운로드'}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
 

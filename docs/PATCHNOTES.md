@@ -1,6 +1,54 @@
-# Patch Note - System Update (v3.81.0)
+# Patch Note - System Update (v3.85.0)
 
 This document is synchronized with `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.85.0] - 2026-11-06
+
+### 🛡️ 기본 데이터베이스 모드를 로컬 파일 DB / Jamstack (`server_file`)으로 기본 설정
+- **Cloud Firestore 쿼터 소모 0% 기본 적용 (`dbMode = 'server_file'`)**:
+  - `src/App.tsx`의 기본 데이터베이스 운영 모드(`dbMode`)를 Cloud Firestore 대신 **`server_file` (Jamstack 및 로컬 파일 DB 모드)**로 완전히 전환했습니다.
+  - 앱 최초 부팅 시에도 Cloud Firestore 쿼리를 발생시키지 않으며, 로컬 정적 dataset 및 서버 파일 DB를 우선 사용하여 쿼터 초과 문제 원천 차단 및 초고속 응답을 보장합니다.
+
+---
+
+## [v3.84.0] - 2026-11-06
+
+### 🛡️ Cloud Firestore 데이터베이스 의존성 완전 제거 및 100% Jamstack 전환
+- **Cloud Firestore 연동(`issue_bundles`) 전면 제거**:
+  - 클라이언트(`src/App.tsx`) 및 서버(`server.ts`)에서 Cloud Firestore 기반의 오류 데이터셋 조회 및 번들링(`issue_bundles`) 코드를 완전히 제거했습니다.
+  - **100% 서버리스 Jamstack 아키텍처**: 시스템은 이제 정적 저장소 데이터셋(`data/issues.json` 및 `data/github-feed.json`), 로컬 파일 DB, 브라우저 영구 저장소(IndexedDB/LocalStorage)를 기반으로만 구동되어 외부 DB 쿼터 소모가 0%입니다.
+  - **정적 데이터셋 동기화 엔진 탑재**: 관리자 대시보드(Action 5)가 기존 Firestore 번들 방식에서 Jamstack 정적 데이터셋 및 로컬 캐시 무손실 동기화 기능으로 개편되어 GitHub Pages 배포 및 커밋 파일 생성이 더욱 간소화되었습니다.
+
+---
+
+## [v3.83.0] - 2026-11-06
+
+### 🚀 Cloud Firestore 데이터 수집 및 Jamstack 정적 dataset (data/issues.json) 무손실 병합
+- **Cloud Firestore (`issue_bundles` 컬렉션) ↔ Jamstack (`data/issues.json`) 데이터 통합**:
+  - Cloud Firestore 클라우드 데이터베이스(`issue_bundles` 컬렉션)의 분할 번들 데이터와 GitHub 정적 저장소 dataset(`data/issues.json` 및 `data/github-feed.json`) 간의 무손실 수집 및 양방향 병합 엔진을 연동했습니다.
+  - **서버 API 엔드포인트 (`/api/admin/firestore-bundles/pull-and-merge`)**: Firestore `issue_bundles` 컬렉션의 번들 문서(`bundle_0`, `bundle_1`, ...)를 조회하여 내부 `issues`를 추출한 후 ID, 오류 코드, 제목 중복을 제거하고 `data/issues.json`에 안전하게 병합합니다.
+  - **할당량 연동 하이브리드 폴백 시스템**: Cloud Firestore 일일 읽기 할당량 초과 시에도(일일 5만 회 제한, 09:00 KST 리셋) 서비스 중단 없이 정적 dataset(102건) 및 브라우저 IndexedDB(`winfix_merged_issues`)와 안전하게 무손실 수집/병합됩니다.
+  - **관리자 대시보드 액션 툴바 (Action 5)**: `src/App.tsx` 내 GitOps & 데이터베이스 관리 탭에 **"Cloud Firestore 데이터 수집하여 data/issues.json에 병합"** 및 **"로컬 issues.json을 Firestore 번들로 업로드"** 버튼이 탑재되어 GitHub 커밋용 `issues.json` 합본 파일이 자동 다운로드됩니다.
+
+---
+
+## [v3.82.0] - 2026-11-06
+
+### 🚀 자율 데이터 수집 데이터셋 통합 및 102건 가이드 확충 (Dataset Integration)
+- **GitHub Actions 데이터 수집 통합 (`data/issues.json` & `data/github-feed.json`)**:
+  - 시스템 정적 문제 해결 데이터베이스가 총 **102건의 검증된 가이드**로 확장되었습니다.
+  - **신규 수집 및 검증 완료된 엔터프라이즈 솔루션**:
+    - `0x80070643`: WinRE 복구 파티션 용량 부족 및 보안 업데이트 실패 복구.
+    - `0x800f081f`: CBS_E_SOURCE_MISSING 구성 요소 저장소 손상 및 RestoreHealth 복구.
+    - `0x80073D05`: MS 스토어 앱 패키지 제거/재설치 데이터베이스 잠금 오류 해결.
+    - `0x80070005`: MS 스토어 앱 업데이트 액세스 거부 및 권한 충돌 초기화.
+    - `0x80070490`: CBS 매니페스트 레지스트리 키 손상 및 누적 업데이트 실패 해결.
+    - `0x80246007`: BITS 전송 작업 큐 중단 및 다운로드 멈춤 리셋.
+    - `0x00000139`: KERNEL_SECURITY_CHECK_FAILURE 메모리 무결성(HVCI) BSOD 해결.
+    - `0x0000007B`: INACCESSIBLE_BOOT_DEVICE 스토리지 드라이버 및 BCD 부팅 루프 복구.
+  - **피드 텔레메트리 동기화**: `github-feed.json` 최신 수집 타임스탬프 및 카테고리 통계 동기화 완료.
 
 ---
 

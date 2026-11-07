@@ -426,37 +426,7 @@ async function logSyncEvent(event: { type: 'start' | 'success' | 'failure' | 'in
 }
 
 async function syncBundlesToFirestore() {
-  try {
-    const allIssues = readLocalCollection('issues');
-    if (!Array.isArray(allIssues) || allIssues.length === 0) return;
-
-    const BUNDLE_SIZE = 100;
-    const totalBundles = Math.ceil(allIssues.length / BUNDLE_SIZE);
-
-    // 1. Write metadata document
-    await db.collection('issue_bundles').doc('_metadata').set({
-      totalRecords: allIssues.length,
-      totalBundles,
-      bundleSize: BUNDLE_SIZE,
-      updatedAt: getKSTISOString(),
-      version: 1
-    }, { merge: true });
-
-    // 2. Write chunk bundle documents (100 items per blob doc)
-    for (let i = 0; i < totalBundles; i++) {
-      const chunk = allIssues.slice(i * BUNDLE_SIZE, (i + 1) * BUNDLE_SIZE);
-      const bundleId = `bundle_${i}`;
-      await db.collection('issue_bundles').doc(bundleId).set({
-        index: i,
-        count: chunk.length,
-        updatedAt: getKSTISOString(),
-        issues: chunk
-      });
-    }
-    console.log(`[Blob Bundle Sync] Successfully bundled ${allIssues.length} issues into ${totalBundles} Firestore documents.`);
-  } catch (err: any) {
-    console.info(`[Blob Bundle Sync] Firestore bundle sync skipped (using local File DB): ${err.message || err}`);
-  }
+  // Firestore dependency removed for dataset bundles; relying on Jamstack data/issues.json and GitHub GitOps.
 }
 
 function generateDefaultPowerShellScript(code: string = '', category: string = '', title: string = ''): string {
@@ -3312,20 +3282,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/admin/bundle-sync", requireAdmin, async (req, res) => {
-    try {
-      await syncBundlesToFirestore();
-      const localIssues = readLocalCollection('issues');
-      res.json({
-        success: true,
-        message: `Firestore 번들링 동기화 완료: 총 ${localIssues.length}개 항목이 ${Math.ceil(localIssues.length / 100)}개 블롭 문서로 패키징되었습니다.`,
-        totalRecords: localIssues.length,
-        totalBundles: Math.ceil(localIssues.length / 100)
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message || "Bundle sync failed" });
-    }
-  });
+
 
   app.get("/api/engine/status", requireAdmin, (req, res) => {
     const { keySource, isPlaceholder, maskedKey } = getApiKeyInfo();
