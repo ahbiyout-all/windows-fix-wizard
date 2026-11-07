@@ -4868,5 +4868,93 @@
     "updatedAt": "2026-11-07T04:48:55.315Z",
     "verifiedAt": "2026-11-07T04:48:55.315Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mw6du650",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "네트워크 위치에 액세스할 수 없음 (네트워크 경로를 찾을 수 없음)",
+    "title_en": "Network Path Not Found (Error 0x800704cf)",
+    "symptoms": "Windows 10/11 업데이트 후 로컬 네트워크 공유 폴더나 NAS에 접근할 때 발생하는 오류로, TCP/IP 스택 또는 네트워크 어댑터 구성이 손상되었을 때 나타납니다.",
+    "symptoms_en": "This error occurs when attempting to access local network shares or NAS after recent Windows 10/11 updates, typically caused by corrupted TCP/IP stack or network adapter configurations.",
+    "script": "netsh int ip reset; netsh winsock reset; ipconfig /flushdns",
+    "manualSteps": [
+      "제어판에서 '네트워크 및 공유 센터'를 엽니다.",
+      "어댑터 설정 변경을 클릭합니다.",
+      "사용 중인 네트워크 어댑터를 마우스 오른쪽 버튼으로 클릭하고 '속성'을 선택합니다.",
+      "Microsoft 네트워크용 클라이언트의 체크를 해제했다가 다시 체크하고 확인을 누릅니다."
+    ],
+    "manualSteps_en": [
+      "Open 'Network and Sharing Center' from the Control Panel.",
+      "Click on 'Change adapter settings'.",
+      "Right-click your network adapter and select 'Properties'.",
+      "Uncheck 'Client for Microsoft Networks', click OK, then re-check it and click OK again."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/netsh-int-ip-reset-command"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704cf 해결",
+      "네트워크 경로 찾을 수 없음",
+      "0x800704cf fix",
+      "Network path not found error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T12:31:24.564Z",
+    "updatedAt": "2026-11-07T12:31:24.564Z",
+    "verifiedAt": "2026-11-07T12:31:24.564Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80244010-mw6du651",
+    "category": "네트워크",
+    "code": "0x80244010",
+    "title": "Windows 업데이트 서비스 네트워크 연결 시간 초과",
+    "title_en": "Windows Update Network Connection Timeout (0x80244010)",
+    "symptoms": "Windows 업데이트를 확인할 때 네트워크 통신이 원활하지 않아 발생하는 오류로, 최근 보안 패치 적용 과정에서 프록시 설정 오류나 캐시 데이터 충돌로 인해 발생합니다.",
+    "symptoms_en": "An error that occurs when Windows Update fails to communicate due to connection timeouts, often triggered by proxy misconfigurations or corrupted cache data during recent security patch cycles.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow",
+    "manualSteps": [
+      "Windows 검색에서 'cmd'를 입력하고 관리자 권한으로 실행합니다.",
+      "net stop wuauserv를 입력하여 업데이트 서비스를 중지합니다.",
+      "C:\\\\Windows\\\\SoftwareDistribution 폴더의 내용을 삭제합니다.",
+      "net start wuauserv를 입력하여 서비스를 다시 시작합니다."
+    ],
+    "manualSteps_en": [
+      "Type 'cmd' in Windows search and run as Administrator.",
+      "Type 'net stop wuauserv' to stop the update service.",
+      "Delete the contents of the C:\\\\Windows\\\\SoftwareDistribution folder.",
+      "Type 'net start wuauserv' to restart the service."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d177eb136c"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80244010 해결",
+      "Windows 업데이트 오류",
+      "0x80244010 fix",
+      "Windows update connection timeout"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T12:31:24.564Z",
+    "updatedAt": "2026-11-07T12:31:24.564Z",
+    "verifiedAt": "2026-11-07T12:31:24.564Z",
+    "verificationStatus": "verified"
   }
 ]
