@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-07T21:29:21.455Z",
+  "lastCollectedAt": "2026-11-08T04:39:59.807Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "네트워크",
+  "targetCategory": "스토어/앱",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 112,
+  "totalIssuesCount": 114,
   "newIssues": [
     {
-      "id": "gh-0x800704cf-mw6x1z5b",
-      "code": "0x800704cf",
-      "title": "Windows 10/11 네트워크 위치 연결 실패 오류 0x800704cf 해결 방법",
-      "category": "네트워크"
+      "id": "gh-0x80073d02-mw7cfs5c",
+      "code": "0x80073D02",
+      "title": "Windows 10/11 Microsoft Store 앱 업데이트 오류 0x80073D02 해결 방법",
+      "category": "스토어/앱"
     },
     {
-      "id": "gh-0x80072efe-mw6x1z5b",
-      "code": "0x80072efe",
-      "title": "Windows 10/11 네트워크 연결 중단 오류 0x80072efe 해결 방법",
-      "category": "네트워크"
+      "id": "gh-0x80073d05-mw7cfs5c",
+      "code": "0x80073D05",
+      "title": "Windows 10/11 Microsoft Store 패키지 데이터 삭제 실패 오류 0x80073D05 해결 방법",
+      "category": "스토어/앱"
     }
   ]
 }

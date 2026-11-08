@@ -5050,5 +5050,97 @@
     "updatedAt": "2026-11-07T21:29:21.455Z",
     "verifiedAt": "2026-11-07T21:29:21.455Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d02-mw7cfs5c",
+    "category": "스토어/앱",
+    "code": "0x80073D02",
+    "title": "Windows 10/11 Microsoft Store 앱 업데이트 오류 0x80073D02 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Update Error 0x80073D02 in Windows 10/11",
+    "symptoms": "Microsoft Store에서 앱이나 게임을 설치 또는 업데이트할 때 0x80073D02 오류가 발생하며 진행이 중단됩니다. 이 오류는 업데이트하려는 애플리케이션 또는 관련 백그라운드 프로세스가 현재 실행 중이어서 시스템이 앱 패키지 리소스를 수정하거나 교체하지 못할 때 주로 발생합니다.",
+    "symptoms_en": "Error 0x80073D02 occurs when installing or updating apps or games from the Microsoft Store, causing installation to fail. This typically happens because the application or its associated background process is currently running, preventing Windows from modifying package resources.",
+    "script": "Get-Process -Name 'WinStore.App', 'StoreExperienceHost' -ErrorAction SilentlyContinue | Stop-Process -Force\nStart-Process 'wsreset.exe' -Wait\nGet-AppxPackage -AllUsers *WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자(Ctrl + Shift + Esc)를 열고 실행 중인 Microsoft Store 및 관련 앱 백그라운드 프로세스를 찾아 모두 종료합니다.",
+      "Win + R 키를 눌러 실행 창을 열고 'wsreset.exe'를 입력한 후 확인을 눌러 Microsoft Store 캐시를 초기화합니다.",
+      "설정 > 앱 > 설치된 앱으로 이동하여 'Microsoft Store' 항목의 [고급 옵션]을 클릭한 후 [복구] 및 [초기화]를 실행합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 Microsoft Store 패키지 재등록 명령어를 수행한 후 컴퓨터를 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager (Ctrl + Shift + Esc) and end any running Microsoft Store and related application background processes.",
+      "Press Win + R, type 'wsreset.exe', and press Enter to reset the Microsoft Store cache.",
+      "Go to Settings > Apps > Installed apps, find 'Microsoft Store', click 'Advanced options', and select 'Repair' followed by 'Reset'.",
+      "Launch PowerShell as Administrator, execute the Microsoft Store package re-registration command, and restart your PC."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/microsoft-store-won-t-open-1544narrow-61f4-30cf-d912-70b54e4a727b",
+      "https://learn.microsoft.com/en-us/windows/msi/error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D02",
+      "Microsoft Store 오류",
+      "스토어 앱 업데이트 실패",
+      "AppX deployment error 0x80073D02",
+      "Store app update error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T04:39:59.807Z",
+    "updatedAt": "2026-11-08T04:39:59.807Z",
+    "verifiedAt": "2026-11-08T04:39:59.807Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d05-mw7cfs5c",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Windows 10/11 Microsoft Store 패키지 데이터 삭제 실패 오류 0x80073D05 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Data Deletion Error 0x80073D05 in Windows 10/11",
+    "symptoms": "Microsoft Store에서 앱을 업데이트하거나 재설치할 때 ERROR_DELETING_EXISTING_APPLICATIONDATA_STORE_FAILED(0x80073D05) 오류가 발생하며 다운로드가 실패합니다. 시스템이 이전 앱 패키지의 애플리케이션 데이터 폴더(LocalState/LocalCache)를 삭제하려 할 때 데이터 손상이나 파일 잠금으로 인해 접근이 거부되는 경우 발생합니다.",
+    "symptoms_en": "When updating or reinstalling apps from the Microsoft Store, the download fails with error code 0x80073D05 (ERROR_DELETING_EXISTING_APPLICATIONDATA_STORE_FAILED). This occurs when Windows attempts to delete existing application data folders (such as LocalState/LocalCache) from previous installations but encounters corruption or access restrictions.",
+    "script": "Stop-Service -Name 'AppXSvc' -Force -ErrorAction SilentlyContinue\n$cachePath = \"$env:LOCALAPPDATA\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe\\LocalCache\"\nif (Test-Path $cachePath) { Remove-Item -Path \"$cachePath\\*\" -Recurse -Force -ErrorAction SilentlyContinue }\nStart-Service -Name 'AppXSvc' -ErrorAction SilentlyContinue\nGet-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "Win + R 키를 눌러 실행 창을 열고 '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe' 경로를 입력합니다.",
+      "LocalCache 폴더 내부로 이동하여 포함된 모든 파일과 폴더를 삭제합니다.",
+      "서비스 관리자(services.msc)를 열고 'AppX Deployment Service (AppXSvc)' 항목을 찾아 서비스를 다시 시작합니다.",
+      "관리자 권한으로 PowerShell을 실행하여 Microsoft Store 앱을 다시 등록하고 스토어를 재열어 다운로드를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe', and press Enter.",
+      "Open the 'LocalCache' folder and delete all files and subfolders contained inside it.",
+      "Open Services (services.msc), locate 'AppX Deployment Service (AppXSvc)', and restart the service.",
+      "Run PowerShell as Administrator, execute the Microsoft Store re-registration script, and retry downloading from the Store."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-problems-with-apps-from-microsoft-store-93ed1bcf-9d3e-4b49-b541-4296dcac30e6",
+      "https://learn.microsoft.com/en-us/windows/uwp/packaging/app-capability-declarations"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "ERROR_DELETING_EXISTING_APPLICATIONDATA_STORE_FAILED",
+      "스토어 캐시 삭제 오류",
+      "Microsoft Store AppData error",
+      "AppX deployment failure 0x80073D05"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T04:39:59.807Z",
+    "updatedAt": "2026-11-08T04:39:59.807Z",
+    "verifiedAt": "2026-11-08T04:39:59.807Z",
+    "verificationStatus": "verified"
   }
 ]
