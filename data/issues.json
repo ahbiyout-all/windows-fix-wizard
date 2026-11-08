@@ -5236,5 +5236,103 @@
     "updatedAt": "2026-11-08T12:49:46.614Z",
     "verifiedAt": "2026-11-08T12:49:46.614Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704ec-mw8d09eu",
+    "category": "보안/백신",
+    "code": "0x800704ec",
+    "title": "Windows 10/11 Windows Defender 실행 차단 오류 0x800704ec 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Windows Defender Blocked Error 0x800704ec",
+    "symptoms": "Windows 보안(Windows Defender)을 실행하거나 실시간 감시를 활성화하려 할 때 '이 앱은 그룹 정책에 의해 차단되었습니다'라는 메시지와 함께 오류 코드 0x800704ec가 발생합니다. 타사 백신 프로그램 잔재, DisableAntiSpyware 레지스트리 키 설정 손상 또는 그룹 정책 설정 충돌로 인해 보안 기능이 정지되는 현상입니다.",
+    "symptoms_en": "Occurs when launching Windows Security/Defender or enabling real-time protection, showing error 0x800704ec ('This app is turned off by group policy'). This is caused by leftover files from third-party antivirus software, corrupted DisableAntiSpyware registry keys, or group policy conflicts.",
+    "script": "# PowerShell Repair Script for Defender Error 0x800704ec\n$regPaths = @(\n    'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender',\n    'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender\\Real-Time Protection'\n)\n\nforeach ($path in $regPaths) {\n    if (Test-Path $path) {\n        Remove-ItemProperty -Path $path -Name 'DisableAntiSpyware' -ErrorAction SilentlyContinue\n        Remove-ItemProperty -Path $path -Name 'DisableRealtimeMonitoring' -ErrorAction SilentlyContinue\n        Write-Host \"Removed restriction policy from $path\"\n    }\n}\n\nSet-Service -Name 'WinDefend' -StartupType Automatic -ErrorAction SilentlyContinue\nStart-Service -Name 'WinDefend' -ErrorAction SilentlyContinue\nUpdate-MpSignature -ErrorAction SilentlyContinue\nGet-Service -Name 'WinDefend' | Select-Object Name, Status, StartType",
+    "manualSteps": [
+      "그룹 정책 에디터(gpedit.msc)를 실행하여 [컴퓨터 구성] > [관리 템플릿] > [Windows 구성 요소] > [Microsoft Defender 바이러스 백신]으로 이동합니다.",
+      "'Microsoft Defender 바이러스 백신 끄기' 항목을 두 번 클릭하여 '구성되지 않음' 또는 '사용 안 함'으로 변경한 후 확인을 클릭합니다.",
+      "타사 백신 프로그램(McAfee, Avast, Norton 등)이 설치되어 있다면 해당 전용 삭제 툴을 사용하여 완전히 제거합니다.",
+      "명령 프롬프트(관리자 권한)를 열고 `gpupdate /force`를 입력하여 그룹 정책을 즉시 새로 고칩니다.",
+      "시스템을 재부팅한 후 Windows 보안 앱에서 '지금 켜기'를 눌러 실시간 보호 상태를 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Local Group Policy Editor (gpedit.msc) and navigate to [Computer Configuration] > [Administrative Templates] > [Windows Components] > [Microsoft Defender Antivirus].",
+      "Double-click 'Turn off Microsoft Defender Antivirus', set it to 'Not Configured' or 'Disabled', and click OK.",
+      "If third-party antivirus software (e.g., McAfee, Avast, Norton) is installed, completely uninstall it using its official removal tool.",
+      "Open Command Prompt as Administrator and run `gpupdate /force` to refresh policy settings immediately.",
+      "Restart the system, open Windows Security, and click 'Turn on' to restore real-time antivirus protection."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-1748541c-b6cd-403a-9669-0428d052af27",
+      "https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-antivirus-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704ec",
+      "Windows Defender 0x800704ec",
+      "그룹 정책에 의해 차단되었습니다",
+      "DisableAntiSpyware",
+      "Windows 보안 실행 오류",
+      "Defender Realtime Protection Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T21:43:41.478Z",
+    "updatedAt": "2026-11-08T21:43:41.478Z",
+    "verifiedAt": "2026-11-08T21:43:41.478Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070424-mw8d09ev",
+    "category": "보안/백신",
+    "code": "0x80070424",
+    "title": "Windows 10/11 보안 센터 및 Defender 서비스 오류 0x80070424 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Security Center and Defender Service Error 0x80070424",
+    "symptoms": "Windows 보안 센터(Security Center) 서비스 또는 Windows Defender 실시간 보호를 활성화하려고 할 때 '지정된 서비스가 설치된 서비스로 존재하지 않습니다' 메시지와 함께 오류 0x80070424가 출력됩니다. 악성코드 감염 또는 누적 업데이트 손상으로 인해 보안 필수 서비스(WinDefend, wscsvc, mpsvc) 레지스트리가 유실되거나 비활성화되어 발생합니다.",
+    "symptoms_en": "Occurs when attempting to start Windows Security Center or Defender real-time protection, displaying error 0x80070424 ('The specified service does not exist as an installed service'). This happens when critical security services (WinDefend, wscsvc, mpsvc) are disabled, corrupted, or removed due to malware or update failures.",
+    "script": "# PowerShell Repair Script for Security Service Error 0x80070424\n$secServices = @('wscsvc', 'WinDefend', 'mpsvc', 'SecurityHealthService')\n\nforeach ($serviceName in $secServices) {\n    $svc = Get-Service -Name $serviceName -ErrorAction SilentlyContinue\n    if ($svc) {\n        Set-Service -Name $serviceName -StartupType Automatic -ErrorAction SilentlyContinue\n        if ($svc.Status -ne 'Running') {\n            Start-Service -Name $serviceName -ErrorAction SilentlyContinue\n        }\n        Write-Host \"Service '$serviceName' status: $($svc.Status)\"\n    } else {\n        Write-Warning \"Service '$serviceName' is missing from registry.\"\n    }\n}\n\nWrite-Host \"Running system integrity check...\"\nsfc /scannow\nDISM.exe /Online /Cleanup-Image /RestoreHealth",
+    "manualSteps": [
+      "Windows Key + R을 누르고 `services.msc`를 입력하여 서비스 관리자를 엽니다.",
+      "'Security Center', 'Windows Defender Antivirus Service', 'Windows Defender Firewall' 서비스를 각각 찾아 시작 유형을 '자동'으로 변경하고 서비스를 시작합니다.",
+      "서비스가 목록에 아예 없다면 관리자 권한 PowerShell을 실행하여 DISM 복구 명령(`DISM.exe /Online /Cleanup-Image /RestoreHealth`)을 수행합니다.",
+      "악성코드 검사를 위해 Microsoft Safety Scanner(MSERT)를 다운로드하여 전체 검사를 진행합니다.",
+      "컴퓨터를 다시 시작한 후 Windows 업데이트를 실행하여 보안 플랫폼 최신 패치를 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type `services.msc`, and press Enter to open Services management.",
+      "Locate 'Security Center', 'Windows Defender Antivirus Service', and 'Windows Defender Firewall', set their Startup type to 'Automatic', and start them.",
+      "If the services are missing from the list, open PowerShell as administrator and execute DISM repair (`DISM.exe /Online /Cleanup-Image /RestoreHealth`).",
+      "Download and run Microsoft Safety Scanner (MSERT) to perform a full system scan and remove any malware blocking security services.",
+      "Reboot the PC and run Windows Update to apply the latest Security Health Platform updates."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-79aa868f-054c-416d-865e-7d721706733b",
+      "https://learn.microsoft.com/en-us/windows/security/application-security/device-control/microsoft-defender-antivirus-in-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070424",
+      "Windows Defender 0x80070424",
+      "지정된 서비스가 설치된 서비스로 존재하지 않습니다",
+      "Security Center Service missing",
+      "WinDefend service error",
+      "Windows 보안 센터 오류 0x80070424"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T21:43:41.478Z",
+    "updatedAt": "2026-11-08T21:43:41.478Z",
+    "verifiedAt": "2026-11-08T21:43:41.478Z",
+    "verificationStatus": "verified"
   }
 ]
