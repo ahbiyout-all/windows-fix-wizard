@@ -5142,5 +5142,99 @@
     "updatedAt": "2026-11-08T04:39:59.807Z",
     "verifiedAt": "2026-11-08T04:39:59.807Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mw7txn5j",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 (제품 키 차단 및 라이선스 유효성 검사 실패) 해결 방법",
+    "title_en": "Fix Windows 10/11 Activation Error 0xC004C003 (Product Key Blocked or Invalid License)",
+    "symptoms": "Windows 정품 인증 설정 페이지에 '입력한 제품 키가 작동하지 않습니다' 또는 오류 코드 0xC004C003이 표시됩니다. 메인보드 교체 등 주요 하드웨어 변경 후 디지털 라이선스가 정상 연결되지 않거나 마이크로소프트 정품 인증 서버에서 유효하지 않은 라이선스로 인식할 때 발생합니다.",
+    "symptoms_en": "The Windows Activation settings page displays 'The product key you entered didn't work' or error code 0xC004C003. This occurs when a digital license fails to re-activate after significant hardware changes (such as a motherboard replacement) or when the activation server flags the product key as invalid.",
+    "script": "# PowerShell Diagnostic & Repair Script for Activation Error 0xC004C003\nWrite-Host 'Restarting Software Protection Service (sppsvc)...' -ForegroundColor Cyan\nStop-Service -Name sppsvc -Force -ErrorAction SilentlyContinue\nStart-Service -Name sppsvc\n\nWrite-Host 'Checking BIOS Embedded OEM Product Key...' -ForegroundColor Cyan\n$oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey\n\nif ($oemKey) {\n    Write-Host \"Found embedded OEM Key: $oemKey. Re-applying key...\" -ForegroundColor Green\n    cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ipk $oemKey\n    cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ato\n} else {\n    Write-Host 'No embedded OEM Key found in BIOS. Attempting to force activation refresh...' -ForegroundColor Yellow\n    cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ato\n}",
+    "manualSteps": [
+      "[설정] > [시스템] > [정품 인증] 메뉴로 이동하여 [문제 해결] 버튼을 실행합니다.",
+      "메인보드 등 하드웨어를 변경한 경우 '최근에 이 장치의 하드웨어를 변경했습니다' 링크를 선택하고 기존 Microsoft 계정으로 로그인하여 디지털 라이선스를 재연결합니다.",
+      "관리자 권한으로 명령 프롬프트를 열고 `slmgr.vbs /rearm`을 입력한 뒤 PC를 재부팅합니다.",
+      "올바른 25자리 Windows 정품 제품 키를 다시 입력하거나 Microsoft 고객 지원을 통해 키 차단 해제를 요청합니다."
+    ],
+    "manualSteps_en": [
+      "Go to [Settings] > [System] > [Activation] and click on the [Troubleshoot] option.",
+      "If you recently replaced hardware, select 'I changed hardware on this device recently' and sign in with your linked Microsoft account to re-bind the digital license.",
+      "Open Command Prompt as Administrator, execute `slmgr.vbs /rearm`, and restart your computer.",
+      "Re-enter a valid 25-character Windows product key or contact Microsoft Support if the product key was incorrectly blocked."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d90571-0050-4159-a49f-a9b570e3a82b",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 0xC004C003",
+      "제품 키 차단 오류",
+      "Windows 11 activation error 0xC004C003",
+      "slmgr rearm 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T12:49:46.614Z",
+    "updatedAt": "2026-11-08T12:49:46.614Z",
+    "verifiedAt": "2026-11-08T12:49:46.614Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803fa067-mw7txn5j",
+    "category": "정품인증",
+    "code": "0x803FA067",
+    "title": "Windows 10/11 Home에서 Pro 에디션 업그레이드 실패 및 오류 0x803FA067 해결 방법",
+    "title_en": "Fix Windows 10/11 Activation Error 0x803FA067 (Home to Pro Edition Upgrade Failure)",
+    "symptoms": "Windows 10 또는 11 Home 에디션에서 Pro 에디션 라이선스 키를 입력하여 에디션 업그레이드를 시도할 때 'Windows를 게시 버전으로 업데이트할 수 없습니다. 오류 코드 0x803FA067' 메시지가 출력되며 업그레이드가 중단됩니다.",
+    "symptoms_en": "When attempting to upgrade from Windows 10/11 Home to Pro edition by entering a product key, the upgrade process fails with the error message 'We couldn't upgrade your copy of Windows. Error code 0x803FA067'.",
+    "script": "# PowerShell Script to Bypass Activation Server Check during Home-to-Pro Upgrade\nWrite-Host 'Temporarily disabling active network adapters...' -ForegroundColor Cyan\n$adapters = Get-NetAdapter | Where-Object Status -eq 'Up'\n$adapters | Disable-NetAdapter -Confirm:$false\n\nWrite-Host 'Applying Windows Pro Default Generic Key for Edition Upgrade...' -ForegroundColor Yellow\n$genericProKey = 'VK7JG-NPHTM-C97JM-9MPGT-3V66T'\ncscript //nologo C:\\Windows\\System32\\slmgr.vbs /ipk $genericProKey\n\nWrite-Host 'Re-enabling network adapters...' -ForegroundColor Green\n$adapters | Enable-NetAdapter -Confirm:$false\n\nWrite-Host 'Script completed. Please restart your PC to complete the Pro upgrade, then activate with your digital license/key.' -ForegroundColor Cyan",
+    "manualSteps": [
+      "네트워크 연결(Wi-Fi 또는 이더넷 케이블)을 일시적으로 완전 해제합니다.",
+      "[설정] > [시스템] > [정품 인증] > [제품 키 변경] 메뉴를 클릭합니다.",
+      "기본 Pro 업그레이드 전용 범용 키인 `VK7JG-NPHTM-C97JM-9MPGT-3V66T`를 입력하고 업그레이드를 시작합니다.",
+      "시스템 재부팅 후 Windows Pro 에디션으로 변경되면 인터넷을 다시 연결합니다.",
+      "[제품 키 변경]을 다시 선택하여 구매한 25자리 정품 Windows Pro 키를 입력하고 최종 정품 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Disconnect your active internet connection (Wi-Fi or Ethernet cable).",
+      "Navigate to [Settings] > [System] > [Activation] and click [Change product key].",
+      "Enter the generic Windows Pro upgrade key `VK7JG-NPHTM-C97JM-9MPGT-3V66T` and initiate the edition upgrade.",
+      "Once the PC restarts and updates to Windows Pro, reconnect to the internet.",
+      "Return to Activation settings, click [Change product key], and enter your genuine Windows Pro product key to complete final activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/upgrade-windows-home-to-windows-pro-ef3800e0-5492-b92f-b490-2f5090324d65",
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d90571-0050-4159-a49f-a9b570e3a82b"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x803FA067",
+      "Windows Home Pro 업그레이드 오류",
+      "Windows 11 Pro 업그레이드 0x803FA067",
+      "VK7JG-NPHTM-C97JM-9MPGT-3V66T",
+      "Windows activation error 0x803FA067"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T12:49:46.614Z",
+    "updatedAt": "2026-11-08T12:49:46.614Z",
+    "verifiedAt": "2026-11-08T12:49:46.614Z",
+    "verificationStatus": "verified"
   }
 ]

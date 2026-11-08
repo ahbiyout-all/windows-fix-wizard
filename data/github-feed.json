@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-08T04:39:59.807Z",
+  "lastCollectedAt": "2026-11-08T12:49:46.614Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "스토어/앱",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 114,
+  "totalIssuesCount": 116,
   "newIssues": [
     {
-      "id": "gh-0x80073d02-mw7cfs5c",
-      "code": "0x80073D02",
-      "title": "Windows 10/11 Microsoft Store 앱 업데이트 오류 0x80073D02 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0xc004c003-mw7txn5j",
+      "code": "0xC004C003",
+      "title": "Windows 10/11 정품 인증 오류 0xC004C003 (제품 키 차단 및 라이선스 유효성 검사 실패) 해결 방법",
+      "category": "정품인증"
     },
     {
-      "id": "gh-0x80073d05-mw7cfs5c",
-      "code": "0x80073D05",
-      "title": "Windows 10/11 Microsoft Store 패키지 데이터 삭제 실패 오류 0x80073D05 해결 방법",
-      "category": "스토어/앱"
+      "id": "gh-0x803fa067-mw7txn5j",
+      "code": "0x803FA067",
+      "title": "Windows 10/11 Home에서 Pro 에디션 업그레이드 실패 및 오류 0x803FA067 해결 방법",
+      "category": "정품인증"
     }
   ]
 }
