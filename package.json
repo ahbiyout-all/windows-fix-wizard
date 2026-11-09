@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "3.85.0",
+  "version": "3.92.2",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -23,8 +23,6 @@
     "dotenv": "^17.2.3",
     "esbuild": "^0.28.0",
     "express": "^4.22.1",
-    "firebase": "^12.11.0",
-    "firebase-admin": "^13.7.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",

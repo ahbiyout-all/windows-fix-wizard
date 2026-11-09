@@ -406,7 +406,7 @@ export function InteractiveRoadmap({ language }: Props) {
       descKo: "오류 증상과 Microsoft KB 공식 문서 및 커뮤니티 해결책을 동적으로 연계하는 빌더 코어 시스템 구축 완료.",
       steps: [
         { name: "Symptom Diagnosis Matrix Integration", nameKo: "오류 진단 매트릭스 매칭 시스템 구현", done: true },
-        { name: "Dual-mode Persistence Engine (Firestore & File)", nameKo: "이중 영속화 채널 기어 연동 (Firestore/파일)", done: true },
+        { name: "Dual-mode Persistence Engine (Jamstack & File DB)", nameKo: "이중 영속화 채널 기어 연동 (Jamstack/로컬 파일 DB)", done: true },
         { name: "Semantic Solution Search Keywords Handler", nameKo: "시맨틱 솔루션 실시간 가중치 검색 적용", done: true }
       ]
     },

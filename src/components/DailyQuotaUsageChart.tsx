@@ -36,8 +36,8 @@ export interface DailyQuotaRecord {
   dayLabel: string;
   jamstackReads: number;
   indexedDbQueries: number;
-  firestoreReads: number;
-  firestoreWrites: number;
+  serverDbReads: number;
+  serverDbWrites: number;
   gitopsSyncs: number;
   geminiRequests: number;
   geminiTokens: number;
@@ -81,20 +81,18 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
       const isSpikeDay = i === 2 || i === 8;
       const baseJamstack = Math.round((18000 + Math.sin((days - i) * 0.7) * 5500 + (isSpikeDay ? 22000 : 0)) * weekendFactor);
       const baseIdb = Math.round((42000 + Math.cos((days - i) * 0.5) * 12000 + (isSpikeDay ? 35000 : 0)) * weekendFactor);
-      const baseFsRead = Math.round((1200 + Math.sin((days - i) * 0.4) * 400 + (isSpikeDay ? 1500 : 0)) * weekendFactor);
-      const baseFsWrite = Math.round((240 + Math.cos((days - i) * 0.3) * 80 + (isSpikeDay ? 300 : 0)) * weekendFactor);
+      const baseServerDbRead = Math.round((1200 + Math.sin((days - i) * 0.4) * 400 + (isSpikeDay ? 1500 : 0)) * weekendFactor);
+      const baseServerDbWrite = Math.round((240 + Math.cos((days - i) * 0.3) * 80 + (isSpikeDay ? 300 : 0)) * weekendFactor);
       const baseGitops = 4; // 4 runs/day (6h cron)
       const baseGemini = Math.round((280 + Math.sin((days - i) * 0.8) * 140 + (isSpikeDay ? 420 : 0)) * weekendFactor);
       const baseTokens = baseGemini * 1150;
 
       const geminiPct = parseFloat(((baseGemini / GEMINI_REQUESTS_QUOTA) * 100).toFixed(1));
-      const fsReadPct = parseFloat(((baseFsRead / 50000) * 100).toFixed(1));
-      const fsWritePct = parseFloat(((baseFsWrite / 20000) * 100).toFixed(1));
 
       let status: 'safe' | 'warning' | 'critical' = 'safe';
-      if (geminiPct >= 90 || fsReadPct >= 90 || fsWritePct >= 90) {
+      if (geminiPct >= 90) {
         status = 'critical';
-      } else if (geminiPct >= 70 || fsReadPct >= 70 || fsWritePct >= 70) {
+      } else if (geminiPct >= 70) {
         status = 'warning';
       }
 
@@ -103,14 +101,14 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
         dayLabel,
         jamstackReads: baseJamstack,
         indexedDbQueries: baseIdb,
-        firestoreReads: baseFsRead,
-        firestoreWrites: baseFsWrite,
+        serverDbReads: baseServerDbRead,
+        serverDbWrites: baseServerDbWrite,
         gitopsSyncs: baseGitops,
         geminiRequests: baseGemini,
         geminiTokens: baseTokens,
         geminiRequestsQuota: GEMINI_REQUESTS_QUOTA,
-        readQuotaPercent: fsReadPct,
-        writeQuotaPercent: fsWritePct,
+        readQuotaPercent: 0,
+        writeQuotaPercent: 0,
         geminiQuotaPercent: geminiPct,
         status
       });
@@ -120,6 +118,21 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
 
   const fetchDailyUsage = useCallback(async () => {
     setIsLoading(true);
+    // Instant Cache Hydration: Check sessionStorage for 0ms tab transitions
+    const cacheKey = `winfix_daily_quota_${timeRange}`;
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.records) && (Date.now() - parsed.timestamp < 10 * 60 * 1000)) {
+          setRecords(parsed.records);
+          setLastRefreshed(parsed.lastRefreshed || new Date().toLocaleTimeString());
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch (_) {}
+
     try {
       const res = await fetch(`/api/admin/daily-quota-stats?days=${timeRange}`);
       if (res.ok) {
@@ -127,28 +140,32 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
         if (data && data.success && Array.isArray(data.records) && data.records.length > 0) {
           const normalized: DailyQuotaRecord[] = data.records.map((r: any) => {
             const geminiRequests = Number(r.geminiRequests ?? 325);
-            const firestoreReads = Number(r.firestoreReads ?? 0);
-            const firestoreWrites = Number(r.firestoreWrites ?? 0);
+            const serverDbReads = Number(r.serverDbReads ?? r.firestoreReads ?? 0);
+            const serverDbWrites = Number(r.serverDbWrites ?? r.firestoreWrites ?? 0);
             
             return {
               date: r.date || '',
               dayLabel: r.dayLabel || '',
               jamstackReads: Number(r.jamstackReads ?? 19420),
               indexedDbQueries: Number(r.indexedDbQueries ?? 48500),
-              firestoreReads,
-              firestoreWrites,
+              serverDbReads,
+              serverDbWrites,
               gitopsSyncs: Number(r.gitopsSyncs ?? 4),
               geminiRequests,
               geminiTokens: Number(r.geminiTokens ?? 360000),
               geminiRequestsQuota: Number(r.geminiRequestsQuota ?? GEMINI_REQUESTS_QUOTA),
-              readQuotaPercent: Number(r.readQuotaPercent ?? parseFloat(((firestoreReads / 50000) * 100).toFixed(1))),
-              writeQuotaPercent: Number(r.writeQuotaPercent ?? parseFloat(((firestoreWrites / 20000) * 100).toFixed(1))),
+              readQuotaPercent: 0,
+              writeQuotaPercent: 0,
               geminiQuotaPercent: Number(r.geminiQuotaPercent ?? parseFloat(((geminiRequests / GEMINI_REQUESTS_QUOTA) * 100).toFixed(1))),
               status: r.status || 'safe'
             };
           });
           setRecords(normalized);
-          setLastRefreshed(new Date().toLocaleTimeString());
+          const timeStr = new Date().toLocaleTimeString();
+          setLastRefreshed(timeStr);
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify({ records: normalized, lastRefreshed: timeStr, timestamp: Date.now() }));
+          } catch (_) {}
           return;
         }
       }
@@ -179,13 +196,13 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
       return {
         jamstackReads: 19420,
         indexedDbQueries: 48500,
-        firestoreReads: 1200,
-        firestoreWrites: 240,
+        serverDbReads: 1200,
+        serverDbWrites: 240,
         gitopsSyncs: 4,
         geminiRequests: 325,
         geminiQuotaPercent: 21.7,
-        readQuotaPercent: 2.4,
-        writeQuotaPercent: 1.2,
+        readQuotaPercent: 0,
+        writeQuotaPercent: 0,
         status: 'safe' as const
       };
     }
@@ -193,19 +210,19 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
     return {
       jamstackReads: Number(last.jamstackReads ?? 19420),
       indexedDbQueries: Number(last.indexedDbQueries ?? 48500),
-      firestoreReads: Number(last.firestoreReads ?? 0),
-      firestoreWrites: Number(last.firestoreWrites ?? 0),
+      serverDbReads: Number(last.serverDbReads ?? 0),
+      serverDbWrites: Number(last.serverDbWrites ?? 0),
       gitopsSyncs: Number(last.gitopsSyncs ?? 4),
       geminiRequests: Number(last.geminiRequests ?? 325),
       geminiQuotaPercent: Number(last.geminiQuotaPercent ?? 21.7),
-      readQuotaPercent: Number(last.readQuotaPercent ?? 0),
-      writeQuotaPercent: Number(last.writeQuotaPercent ?? 0),
+      readQuotaPercent: 0,
+      writeQuotaPercent: 0,
       status: last.status || 'safe'
     };
   }, [filteredRecords]);
 
   const isApproachingQuota = useMemo(() => {
-    return (todayRecord.geminiQuotaPercent || 0) >= 70 || (todayRecord.readQuotaPercent || 0) >= 70 || (todayRecord.writeQuotaPercent || 0) >= 70;
+    return (todayRecord.geminiQuotaPercent || 0) >= 70;
   }, [todayRecord]);
 
   return (
@@ -227,8 +244,8 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
               {language === 'en'
-                ? 'Monitors Jamstack static feed traffic, Gemini AI daily requests (1,500 RPD), and Google Cloud Firestore database quotas (50k/20k).'
-                : '정적 Jamstack 피드, Gemini AI 일일 무료 한도(1,500회 RPD), 그리고 Google Cloud Firestore DB 할당량(5만/2만) 트렌드를 실시간 시각화합니다.'}
+                ? 'Monitors Jamstack static feed traffic, Gemini AI daily requests (1,500 RPD), and Local Server DB operations (Zero Cloud Quota).'
+                : '정적 Jamstack 피드, Gemini AI 일일 무료 한도(1,500회 RPD), 그리고 로컬 서버 DB 처리량(클라우드 쿼터 0 소모) 트렌드를 실시간 시각화합니다.'}
             </p>
           </div>
         </div>
@@ -301,7 +318,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                   <Pie
                     data={[
                       { name: 'Cached', value: todayRecord.indexedDbQueries || 48500 },
-                      { name: 'Remote', value: (todayRecord.firestoreReads || 0) + (todayRecord.geminiRequests || 0) || 1500 }
+                      { name: 'Remote', value: (todayRecord.serverDbReads || 0) + (todayRecord.geminiRequests || 0) || 1500 }
                     ]}
                     cx="50%"
                     cy="50%"
@@ -311,7 +328,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                     dataKey="value"
                   >
                     <Cell fill="#3b82f6" />
-                    <Cell fill="#f97316" />
+                    <Cell fill="#6366f1" />
                   </Pie>
                   <Tooltip 
                     contentStyle={{ borderRadius: '8px', fontSize: '10px', backgroundColor: '#0f172a', border: 'none', color: '#fff' }}
@@ -326,25 +343,25 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                   {language === 'en' ? 'Local Cache Hits' : '로컬 캐시 처리 (저비용)'}
                 </p>
                 <div className="text-lg font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {Math.round(((todayRecord.indexedDbQueries || 48500) / ((todayRecord.indexedDbQueries || 48500) + (todayRecord.firestoreReads || 1200) + (todayRecord.geminiRequests || 300))) * 100)}%
+                  {Math.round(((todayRecord.indexedDbQueries || 48500) / ((todayRecord.indexedDbQueries || 48500) + (todayRecord.serverDbReads || 1200) + (todayRecord.geminiRequests || 300))) * 100)}%
                 </div>
                 <p className="text-[9px] text-slate-500">Served by IndexedDB</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-tight">
-                  {language === 'en' ? 'Quota Consumption' : '원격 호출 (할당량 소모)'}
+                <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-tight">
+                  {language === 'en' ? 'AI Calls' : 'AI 진단 호출'}
                 </p>
                 <div className="text-lg font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {100 - Math.round(((todayRecord.indexedDbQueries || 48500) / ((todayRecord.indexedDbQueries || 48500) + (todayRecord.firestoreReads || 1200) + (todayRecord.geminiRequests || 300))) * 100)}%
+                  {100 - Math.round(((todayRecord.indexedDbQueries || 48500) / ((todayRecord.indexedDbQueries || 48500) + (todayRecord.serverDbReads || 1200) + (todayRecord.geminiRequests || 300))) * 100)}%
                 </div>
-                <p className="text-[9px] text-slate-500">Firestore & Gemini API</p>
+                <p className="text-[9px] text-slate-500">Gemini AI Engine</p>
               </div>
               <div className="col-span-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                 <span className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
                   {language === 'en' 
-                    ? 'IndexedDB optimization is currently saving ~97% of daily Firestore read costs.' 
-                    : 'IndexedDB 최적화를 통해 일일 Firestore 읽기 비용의 약 97%를 절감하고 있습니다.'}
+                    ? '100% Serverless Jamstack & Local DB architecture completely eliminates cloud database costs.' 
+                    : '100% 서버리스 Jamstack 및 로컬 파일 DB 전환으로 클라우드 데이터베이스 비용을 영구 제거했습니다.'}
                 </span>
               </div>
             </div>
@@ -419,40 +436,31 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
           </div>
         </div>
 
-        {/* Metric 2: Firestore Cloud Reads */}
-        <div className="p-4 rounded-xl border border-orange-200 dark:border-orange-800/60 bg-orange-50/30 dark:bg-orange-950/20 flex flex-col justify-between">
+        {/* Metric 2: Server DB Operations (Zero Cloud Dependency) */}
+        <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/30 dark:bg-blue-950/20 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span className="font-semibold flex items-center gap-1.5 text-orange-800 dark:text-orange-300">
-                <Database className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
-                Firestore Reads
+              <span className="font-semibold flex items-center gap-1.5 text-blue-800 dark:text-blue-300">
+                <Database className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                Server DB Operations
               </span>
-              <span className="font-mono text-[11px] font-bold text-orange-600 dark:text-orange-400">
-                {todayRecord?.readQuotaPercent ?? 0}%
+              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/30 font-mono">
+                ● LOCAL FILE
               </span>
             </div>
             <div className="flex items-baseline gap-1 mt-1">
               <span className="text-xl font-mono font-black text-slate-900 dark:text-slate-100">
-                {(todayRecord?.firestoreReads ?? 0).toLocaleString()}
+                {(todayRecord?.serverDbReads ?? 0).toLocaleString()}
               </span>
-              <span className="text-xs text-slate-400 font-mono">/ 50k</span>
+              <span className="text-xs text-slate-400 font-mono">ops (Zero Quota)</span>
             </div>
           </div>
           <div className="mt-3">
-            <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  (todayRecord?.readQuotaPercent ?? 0) >= 90
-                    ? 'bg-rose-500'
-                    : (todayRecord?.readQuotaPercent ?? 0) >= 70
-                      ? 'bg-amber-500'
-                      : 'bg-orange-500'
-                }`}
-                style={{ width: `${Math.min(todayRecord?.readQuotaPercent ?? 0, 100)}%` }}
-              />
+            <div className="w-full h-2 bg-blue-200 dark:bg-blue-900/60 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500 rounded-full w-full" />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1.5">
-              {(50000 - (todayRecord?.firestoreReads ?? 0)).toLocaleString()} {language === 'en' ? 'reads remaining today' : '회 오늘 잔여'}
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5">
+              {language === 'en' ? 'Served via Local JSON DB & IndexedDB (Zero Cloud Quota)' : '로컬 JSON DB 및 IndexedDB 기반 (클라우드 할당량 0 소모)'}
             </p>
           </div>
         </div>
@@ -697,21 +705,6 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                 />
               )}
               
-              {(serviceView === 'all' || serviceView === 'database') && (
-                <ReferenceLine
-                  yAxisId="primary"
-                  y={50000}
-                  stroke="#f97316"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: 'FS Read Quota (50k)',
-                    fill: '#fb923c',
-                    fontSize: 9,
-                    position: 'insideTopLeft'
-                  }}
-                />
-              )}
-
               {/* Data Series Elements */}
               {(serviceView === 'all' || serviceView === 'jamstack') && (
                 <>
@@ -742,7 +735,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                 <>
                   <Bar
                     yAxisId="primary"
-                    dataKey="firestoreReads"
+                    dataKey="serverDbReads"
                     name={language === 'en' ? 'Server DB Reads' : '서버 DB 읽기연산'}
                     fill="#3b82f6"
                     radius={[4, 4, 0, 0]}
@@ -750,7 +743,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                   />
                   <Bar
                     yAxisId="primary"
-                    dataKey="firestoreWrites"
+                    dataKey="serverDbWrites"
                     name={language === 'en' ? 'Server DB Writes' : '서버 DB 쓰기연산'}
                     fill="#60a5fa"
                     radius={[4, 4, 0, 0]}

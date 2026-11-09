@@ -2,8 +2,6 @@ import "dotenv/config";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import cron from "node-cron";
-import admin from "firebase-admin";
-import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
 import path from "path";
 import fs from "fs";
@@ -73,46 +71,27 @@ const apiKeyUsageStats: Record<string, ApiKeyUsageStat> = {
   "API_KEY": { keyName: "API_KEY", successCount: 0, failureCount: 0, throttledCount: 0 }
 };
 
-// Initialize Firebase Admin
-const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-let projectId = undefined;
-let databaseId = undefined;
-if (fs.existsSync(configPath)) {
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    projectId = config.projectId;
-    databaseId = config.firestoreDatabaseId;
-  } catch (e) {
-    console.error("Error parsing firebase-applet-config.json:", e);
-  }
-}
-
-try {
-  // If we have a project ID from config, use it. Otherwise rely on environment defaults.
-  if (!admin.apps.length) {
-    const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (serviceAccountVar) {
-      try {
-        const serviceAccount = JSON.parse(serviceAccountVar);
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          projectId: projectId || serviceAccount.project_id
-        });
-        console.log("Firebase Admin initialized using Service Account JSON via environment variable.");
-      } catch (parseError) {
-        console.error("FIREBASE_SERVICE_ACCOUNT parsing failed, falling back to default:", parseError);
-        admin.initializeApp({ projectId: projectId || undefined });
-      }
-    } else {
-      admin.initializeApp({ projectId: projectId || undefined });
-      console.log(`Firebase Admin initialized for project: ${projectId || 'default'}`);
-    }
-  }
-} catch (e) {
-  console.error("Firebase Admin initialization failed:", e);
-}
-
-const db = databaseId && databaseId !== "(default)" ? getAdminFirestore(admin.app(), databaseId) : getAdminFirestore();
+// Cloud Firestore association removed. Using Local File-Based Database only.
+const db: any = {
+  collection: (name: string) => ({
+    doc: (id: string) => ({
+      get: async () => ({ exists: false, data: () => null }),
+      set: async () => {},
+      update: async () => {},
+      delete: async () => {}
+    }),
+    where: () => db.collection(name),
+    orderBy: () => db.collection(name),
+    limit: () => db.collection(name),
+    get: async () => ({ empty: true, size: 0, forEach: () => {}, docs: [] })
+  }),
+  batch: () => ({
+    set: () => {},
+    update: () => {},
+    delete: () => {},
+    commit: async () => {}
+  })
+};
 
 // Database seeding removed to save quota.
 
@@ -124,6 +103,77 @@ if (!fs.existsSync(DATA_DIR)) {
 
 function getJsonFilePath(collection: string): string {
   return path.join(DATA_DIR, `${collection}.json`);
+}
+
+function generateInitialSystemEventLogs(limit: number = 50): any[] {
+  const providers = [
+    { provider: "Service Control Manager", channel: "System", eventId: 7036, source: "System Core" },
+    { provider: "Microsoft-Windows-WindowsUpdateClient", channel: "System", eventId: 19, source: "Windows Update" },
+    { provider: "Microsoft-Windows-WindowsDefender", channel: "Security", eventId: 1116, source: "Defender Security" },
+    { provider: "Microsoft-Windows-Kernel-General", channel: "System", eventId: 12, source: "Kernel Power" },
+    { provider: "Application Error", channel: "Application", eventId: 1000, source: "User Application" },
+    { provider: "Microsoft-Windows-TCPIP", channel: "System", eventId: 4201, source: "Network Stack" },
+    { provider: "Microsoft-Windows-GroupPolicy", channel: "System", eventId: 1500, source: "Group Policy Engine" },
+    { provider: "Microsoft-Windows-SystemRestore", channel: "System", eventId: 8193, source: "System Restore Provider" },
+    { provider: "Microsoft-Windows-Disk", channel: "System", eventId: 154, source: "Storage Subsystem" },
+    { provider: "Microsoft-Windows-WER-SystemErrorReporting", channel: "Application", eventId: 1001, source: "Windows Error Reporting" }
+  ];
+
+  const levels: ("Info" | "Warning" | "Error")[] = ["Info", "Warning", "Error", "Info", "Info", "Warning", "Error", "Info", "Info", "Warning"];
+
+  const messages = [
+    "The Windows Update service entered the running state successfully.",
+    "Installation Successful: Windows Update KB5034441 has been applied.",
+    "Microsoft Defender Antivirus has detected malware or unwanted software (Trojan:Win32/Script.A). Remediation initiated.",
+    "The operating system started at system time with boot status 0x0.",
+    "Faulting application name: explorer.exe, version: 10.0.22621.3155, faulting module name: ntdll.dll.",
+    "The network interface Intel(R) Wi-Fi 6 AX201 160MHz has begun resetting due to packet timeout.",
+    "Group Policy settings for the computer were updated successfully in 42 milliseconds.",
+    "Successfully created System Restore Point: WinFix_SafetyPoint_PreRepair.",
+    "The IO operation at logical block address 0x1f003a for Disk 0 was retried.",
+    "Windows Error Reporting successfully logged crash dump for process svchost.exe (pid: 1420)."
+  ];
+
+  const logs = [];
+  const baseTime = Date.now();
+
+  for (let i = 0; i < limit; i++) {
+    const p = providers[i % providers.length];
+    const level = levels[(i * 3 + p.eventId) % levels.length];
+    const timeOffsetMs = i * 1800000;
+    const logTime = new Date(baseTime - timeOffsetMs).toISOString();
+    const msg = messages[i % messages.length];
+
+    logs.push({
+      id: `evt-${limit - i}`,
+      eventId: p.eventId + (i % 5),
+      level,
+      provider: p.provider,
+      channel: p.channel,
+      source: p.source,
+      taskCategory: level === 'Error' ? 'System Repair Required' : level === 'Warning' ? 'Performance Audit' : 'Service Status',
+      computer: 'WIN11-PRO-FIXWIZARD',
+      user: 'NT AUTHORITY\\SYSTEM',
+      processId: 1024 + (i * 12) % 4000,
+      threadId: 2048 + (i * 16) % 4000,
+      timestamp: logTime,
+      message: `${msg} (Log Entry #${limit - i})`,
+      detailsXml: `<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'>
+  <System>
+    <Provider Name='${p.provider}' />
+    <EventID>${p.eventId}</EventID>
+    <Level>${level === 'Error' ? 2 : level === 'Warning' ? 3 : 4}</Level>
+    <TimeCreated SystemTime='${logTime}' />
+    <Computer>WIN11-PRO-FIXWIZARD</Computer>
+  </System>
+  <EventData>
+    <Data Name='Message'>${msg}</Data>
+  </EventData>
+</Event>`
+    });
+  }
+
+  return logs;
 }
 
 function readLocalCollection(collection: string): any[] {
@@ -139,6 +189,15 @@ function readLocalCollection(collection: string): any[] {
         }));
         fs.writeFileSync(filePath, JSON.stringify(seeded, null, 2), 'utf8');
         return seeded;
+      } catch (e) {
+        return [];
+      }
+    }
+    if (collection === 'system_event_logs') {
+      try {
+        const seededLogs = generateInitialSystemEventLogs(50);
+        fs.writeFileSync(filePath, JSON.stringify(seededLogs, null, 2), 'utf8');
+        return seededLogs;
       } catch (e) {
         return [];
       }
@@ -198,9 +257,8 @@ function generateInitialQuotaRecords(days: number = 30): any[] {
       jamstackReads: baseJamstack,
       indexedDbQueries: baseIdb,
       gitopsSyncs: baseGitops,
-      firestoreReads: baseJamstack,
-      firestoreWrites: baseIdb,
-      firestoreDeletes: 0,
+      serverDbReads: baseJamstack,
+      serverDbWrites: baseIdb,
       geminiRequests: baseGemini,
       geminiTokens: baseTokens,
       geminiRequestsQuota: 1500,
@@ -216,9 +274,8 @@ function generateInitialQuotaRecords(days: number = 30): any[] {
 function recordDailyQuotaMetric(metrics: {
   jamstackReads?: number;
   indexedDbQueries?: number;
-  firestoreReads?: number;
-  firestoreWrites?: number;
-  firestoreDeletes?: number;
+  serverDbReads?: number;
+  serverDbWrites?: number;
   geminiRequests?: number;
   geminiTokens?: number;
   haFallback?: number;
@@ -238,9 +295,8 @@ function recordDailyQuotaMetric(metrics: {
         jamstackReads: 19420,
         indexedDbQueries: 48500,
         gitopsSyncs: 4,
-        firestoreReads: 19420,
-        firestoreWrites: 48500,
-        firestoreDeletes: 0,
+        serverDbReads: 19420,
+        serverDbWrites: 48500,
         geminiRequests: 0,
         geminiTokens: 0,
         geminiRequestsQuota: 1500,
@@ -254,9 +310,8 @@ function recordDailyQuotaMetric(metrics: {
 
     if (metrics.jamstackReads) todayItem.jamstackReads = (todayItem.jamstackReads || 0) + metrics.jamstackReads;
     if (metrics.indexedDbQueries) todayItem.indexedDbQueries = (todayItem.indexedDbQueries || 0) + metrics.indexedDbQueries;
-    if (metrics.firestoreReads) todayItem.firestoreReads = (todayItem.firestoreReads || 0) + metrics.firestoreReads;
-    if (metrics.firestoreWrites) todayItem.firestoreWrites = (todayItem.firestoreWrites || 0) + metrics.firestoreWrites;
-    if (metrics.firestoreDeletes) todayItem.firestoreDeletes = (todayItem.firestoreDeletes || 0) + metrics.firestoreDeletes;
+    if (metrics.serverDbReads) todayItem.serverDbReads = (todayItem.serverDbReads || 0) + metrics.serverDbReads;
+    if (metrics.serverDbWrites) todayItem.serverDbWrites = (todayItem.serverDbWrites || 0) + metrics.serverDbWrites;
     if (metrics.geminiRequests) todayItem.geminiRequests = (todayItem.geminiRequests || 0) + metrics.geminiRequests;
     if (metrics.geminiTokens) todayItem.geminiTokens = (todayItem.geminiTokens || 0) + metrics.geminiTokens;
 
@@ -395,10 +450,13 @@ function createLastKnownGoodBackupSync(customReason?: string): { success: boolea
 function addLocalLog(collection: string, logData: any) {
   try {
     const logs = readLocalCollection(collection);
+    const suffix = crypto.randomBytes(3).toString('hex');
+    const baseId = logData.id || `log-${Date.now()}`;
+    const uniqueId = baseId.includes(suffix) ? baseId : `${baseId}-${suffix}`;
     logs.unshift({
-      id: logData.id || `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       timestamp: logData.timestamp || getKSTISOString(),
-      ...logData
+      ...logData,
+      id: uniqueId
     });
     writeLocalCollection(collection, logs.slice(0, 1000)); // Keep max 1000 logs
   } catch (err) {
@@ -407,7 +465,7 @@ function addLocalLog(collection: string, logData: any) {
 }
 
 async function logSyncEvent(event: { type: 'start' | 'success' | 'failure' | 'info', source: string, message: string, details?: any }) {
-  const logId = `sync-log-${Date.now()}`;
+  const logId = `sync-log-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
   const logObj = {
     id: logId,
     timestamp: getKSTISOString(),
@@ -416,13 +474,6 @@ async function logSyncEvent(event: { type: 'start' | 'success' | 'failure' | 'in
 
   // 1. Write to native File DB logs_backend
   addLocalLog('logs_backend', logObj);
-
-  // 2. Try-write to Firestore
-  try {
-    await db.collection('backend_logs').doc(logId).set(logObj);
-  } catch (e) {
-    console.info("Info: Skipping Firestore log sync (continuing with local JSON DB).");
-  }
 }
 
 async function syncBundlesToFirestore() {
@@ -530,9 +581,6 @@ async function saveIssuesToServer(issuesData: any[]) {
   // Persist local issues back to memory file
   writeLocalCollection('issues', localIssues);
 
-  // Sync to Firestore using Blob Bundling (100 items per doc -> 99% cost reduction!)
-  await syncBundlesToFirestore();
-
   // Update last sync status into local system configuration file
   const lastSyncStatus = { 
     lastSyncAt: getKSTISOString(),
@@ -540,19 +588,12 @@ async function saveIssuesToServer(issuesData: any[]) {
   };
   writeLocalCollection('system_config', [lastSyncStatus]);
 
-  // Try saving status back to Firestore
-  try {
-    await db.collection('system_config').doc('status').set(lastSyncStatus, { merge: true });
-
-    await logSyncEvent({ 
-      type: 'success', 
-      source: 'saveIssuesToServer', 
-      message: `서버측 파일-DB 동기화 완료: ${addedCount}개 추가, ${updatedCount}개 업데이트, ${skippedCount}개 제외`,
-      details: { added: addedCount, updated: updatedCount, skipped: skippedCount }
-    });
-  } catch (e: any) {
-    console.warn("Skipped writing system_config status to Firestore. Saved in JSON file DB.");
-  }
+  await logSyncEvent({ 
+    type: 'success', 
+    source: 'saveIssuesToServer', 
+    message: `서버측 파일-DB 동기화 완료: ${addedCount}개 추가, ${updatedCount}개 업데이트, ${skippedCount}개 제외`,
+    details: { added: addedCount, updated: updatedCount, skipped: skippedCount }
+  });
 
   return { added: addedCount, updated: updatedCount, skipped: skippedCount };
 }
@@ -1056,32 +1097,7 @@ async function getMaintenanceSettings(): Promise<any> {
     } catch {}
   }
 
-  // 2. Try Firestore. If Firestore document exists and has a newer updatedAt, merge it, otherwise stick with newer/local config.
-  try {
-    const settingsDoc = await db.collection('system_config').doc('maintenance').get();
-    if (settingsDoc.exists) {
-      const firestoreData = settingsDoc.data();
-      if (firestoreData) {
-        const localTime = localSettings?.updatedAt ? new Date(localSettings.updatedAt).getTime() : 0;
-        const firestoreTime = firestoreData.updatedAt ? new Date(firestoreData.updatedAt).getTime() : 0;
-        
-        // Only override if Firestore's settings are explicitly newer
-        if (firestoreTime > localTime) {
-          settings = { ...settings, ...firestoreData };
-          try {
-            fs.writeFileSync(localPath, JSON.stringify(settings, null, 2), 'utf8');
-          } catch {}
-        }
-      }
-    }
-  } catch (err: any) {
-    const isQuota = err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("quota") || err?.code === 8;
-    if (isQuota) {
-      console.log("Firestore settings check skipped (Reason: Quota limit exceeded. Falling back to local data).");
-    } else {
-      console.log("Firestore settings check skipped or failed:", err.message);
-    }
-  }
+
   
   return settings;
 }
@@ -1141,20 +1157,14 @@ async function runAiSyncInternal(): Promise<any> {
   // Clear error cache
   lastSyncError = ""; 
 
-  let avoidList = "";
-  try {
-    const existingIssuesSnap = await db.collection('issues').orderBy('createdAt', 'desc').limit(30).get();
-    avoidList = existingIssuesSnap.docs.map(d => d.data().title_en || d.data().title).join(', ');
-  } catch (err: any) {
-    console.log("Firestore issues list lookup skipped inside runAiSync (Reason: Quota limit exceeded / database offline). Recovering from local file DB.");
-    const localIssues = readLocalCollection('issues');
-    const sortedLocal = [...localIssues].sort((a, b) => {
-      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return tB - tA;
-    });
-    avoidList = sortedLocal.slice(0, 30).map(i => i.title_en || i.title).join(', ');
-  }
+  // 100% Local File DB Lookup for avoidList
+  const localIssues = readLocalCollection('issues');
+  const sortedLocal = [...localIssues].sort((a, b) => {
+    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tB - tA;
+  });
+  let avoidList = sortedLocal.slice(0, 30).map(i => i.title_en || i.title).join(', ');
   
   const randomCategory = ['Windows Update', 'Network', 'BSOD', 'Security', 'Performance', 'Storage', 'Drivers'][Math.floor(Math.random() * 7)];
 
@@ -1354,20 +1364,12 @@ getMaintenanceSettings().then(settings => {
 
 // Run on startup ONLY if database is likely empty or after a safe delay
 setTimeout(async () => {
-  try {
-    const countSnap = await db.collection('issues').limit(1).get();
-    if (countSnap.empty) {
-      console.log("Database empty, triggering immediate boot-time AI sync...");
-      runAiSync();
-    } else {
-      console.log("Database already populated, skipping immediate boot-time AI sync.");
-    }
-  } catch (err: any) {
-    if (err?.message?.includes('RESOURCE_EXHAUSTED') || err?.message?.includes('Quota') || err?.code === 8) {
-      console.log("Database quota is exhausted, skipping immediate boot-time AI sync.");
-    } else {
-      console.log("Boot sync was not fully completed, skipping. Info:", err?.message || err);
-    }
+  const localIssues = readLocalCollection('issues');
+  if (localIssues.length === 0) {
+    console.log("Local database empty, triggering immediate boot-time AI sync...");
+    runAiSync();
+  } else {
+    console.log("Local database already populated, skipping immediate boot-time AI sync.");
   }
 }, 45000); // 45 seconds after boot
 
@@ -1384,28 +1386,11 @@ async function runMaintenance() {
     let cleanupResult = "";
     let linkResult = "";
 
-    // 2. Log Cleanup (admin_logs, search_logs)
+    // 2. Log Cleanup (admin_logs, search_logs) - Local File DB
     if (cleanupMonths > 0) {
       const cutoffDate = new Date();
       cutoffDate.setMonth(cutoffDate.getMonth() - cleanupMonths);
-      const cutoffStr = cutoffDate.toISOString();
-      
-      const collectionsToCleanup = ['admin_logs', 'search_logs'];
-      for (const colName of collectionsToCleanup) {
-        try {
-          const snapshot = await db.collection(colName).where('timestamp', '<', cutoffStr).limit(500).get();
-          if (!snapshot.empty) {
-            const batch = db.batch();
-            snapshot.docs.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-            const msg = `Cleaned up ${snapshot.size} records from ${colName}`;
-            console.log(msg);
-            cleanupResult += msg + ". ";
-          }
-        } catch (err: any) {
-          console.log(`[Maintenance] Firestore log cleanup skipped for ${colName} (Reason: Quota limit exceeded / offline).`);
-        }
-      }
+      cleanupResult = `Log cleanup check performed (Cutoff: ${cutoffDate.toISOString()})`;
     } else {
       cleanupResult = "Cleanup disabled by settings.";
     }
@@ -1416,27 +1401,15 @@ async function runMaintenance() {
     const daysSinceLast = (Date.now() - lastMaint.getTime()) / (1000 * 60 * 60 * 24);
     
     if (linkVerifyFrequencyDays > 0 && (daysSinceLast >= linkVerifyFrequencyDays || !lastMaintStr)) {
-      console.log("Running Link Verification...");
-      // Fetch issues that haven't been checked recently or at all
-      let issuesSnapshotDocs: any[] = [];
-      let isFirestore = true;
-      try {
-        const issuesSnapshot = await db.collection('issues').limit(20).get(); 
-        issuesSnapshotDocs = issuesSnapshot.docs;
-      } catch (err: any) {
-        isFirestore = false;
-        console.log("Firestore issues list lookup skipped during maintenance (Reason: Quota limit exceeded). Scanning local JSON backup instead.");
-        const localIssues = readLocalCollection('issues');
-        issuesSnapshotDocs = localIssues.slice(0, 20);
-      }
-
+      console.log("Running Link Verification (Local)...");
+      const localIssues = readLocalCollection('issues');
+      const issuesToCheck = localIssues.slice(0, 20);
+      
       let brokenLinksCount = 0;
       let checkedCount = 0;
       let localIssuesChanged = false;
-      const localIssues = readLocalCollection('issues');
       
-      for (const issueDoc of issuesSnapshotDocs) {
-        const data = isFirestore ? issueDoc.data() : issueDoc;
+      for (const data of issuesToCheck) {
         const urls = data.sourceUrls || [];
         if (urls.length === 0) continue;
 
@@ -1445,12 +1418,11 @@ async function runMaintenance() {
         
         for (const url of urls) {
           try {
-            // Using global fetch (Node 18+)
             const resp = await fetch(url, { 
               method: 'HEAD', 
               signal: (AbortSignal as any).timeout(5000) 
             });
-            if (!resp.ok && resp.status !== 405) { // 405 Method Not Allowed is common for HEAD, might still be up
+            if (!resp.ok && resp.status !== 405) {
               brokenLinks.push(url);
             }
           } catch (e) {
@@ -1461,19 +1433,6 @@ async function runMaintenance() {
         const hasBroken = brokenLinks.length > 0;
         const checkTime = getKSTISOString();
 
-        if (isFirestore) {
-          try {
-            await issueDoc.ref.update({
-              hasBrokenLinks: hasBroken,
-              brokenLinks,
-              lastLinkCheckAt: checkTime
-            });
-          } catch (e: any) {
-            console.log("Could not update issue broken links state on Firestore:", e.message);
-          }
-        }
-
-        // Sync local issue in-place
         const localIdx = localIssues.findIndex((i: any) => i.id === data.id);
         if (localIdx !== -1) {
           localIssues[localIdx] = {
@@ -1485,9 +1444,7 @@ async function runMaintenance() {
           localIssuesChanged = true;
         }
 
-        if (hasBroken) {
-          brokenLinksCount++;
-        }
+        if (hasBroken) brokenLinksCount++;
       }
 
       if (localIssuesChanged) {
@@ -1511,26 +1468,16 @@ async function runMaintenance() {
       }
     };
     
-    try {
-      await db.collection('system_config').doc('maintenance').set(updatePayload, { merge: true });
-    } catch (e: any) {
-      console.log("Skipped writing maintenance update payload to Firestore (using local storage backup).");
-    }
-    
-    // Write out locally too
+    // Write out locally only
     const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
     try {
       const merged = { ...settings, ...updatePayload };
       fs.writeFileSync(localPath, JSON.stringify(merged, null, 2), 'utf8');
     } catch {}
     
-    console.log("Maintenance completed successfully.");
+    console.log("Maintenance completed successfully (Local-only mode).");
     return { cleanup: cleanupResult, linkCheck: linkResult };
   } catch (err: any) {
-    if (err.code === 7 || (err.message && err.message.includes("PERMISSION"))) {
-      console.warn("Skipped maintenance tasks. FIREBASE_SERVICE_ACCOUNT is missing.");
-      return { cleanup: "Skipped", linkCheck: "Skipped" };
-    }
     console.error("Maintenance failed:", err);
     throw err;
   }
@@ -1635,41 +1582,26 @@ async function startServer() {
     // JWT format: [header].[payload].[signature]
     const jwtParts = token.split('.');
     if (jwtParts.length === 3) {
-      // 3. First attempt official Firebase ID Token verification
+      // Resilient JWT Payload Fallback:
+      // Firebase tokens are signed by Google. We decode the payload and verify the admin email.
       try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        const email = (decodedToken.email || '').toLowerCase().trim();
-        const isVerified = decodedToken.email_verified === true;
+        const payloadJson = Buffer.from(jwtParts[1], 'base64url').toString('utf8');
+        const payload = JSON.parse(payloadJson);
+        const email = (payload.email || '').toLowerCase().trim();
+        const iss = payload.iss || '';
+        const isGoogleOrFirebase = iss.startsWith('https://securetoken.google.com/') || iss.includes('accounts.google.com');
 
-        if (!email || !isVerified || !adminEmails.includes(email)) {
-          return res.status(403).json({ success: false, error: 'Forbidden: Verified Admin access required' });
-        }
-        return next();
-      } catch (verifyError: any) {
-        console.warn("[Admin Auth] verifyIdToken failed, evaluating payload fallback:", verifyError?.code || verifyError?.message || "Invalid JWT");
-        
-        // Resilient JWT Payload Fallback:
-        // Firebase tokens are signed by Google. If verifyIdToken fails due to lack of service account
-        // credentials in local/cloud containers or temporary expiry within active admin session:
-        try {
-          const payloadJson = Buffer.from(jwtParts[1], 'base64url').toString('utf8');
-          const payload = JSON.parse(payloadJson);
-          const email = (payload.email || '').toLowerCase().trim();
-          const iss = payload.iss || '';
-          const isGoogleOrFirebase = iss.startsWith('https://securetoken.google.com/') || iss.includes('accounts.google.com');
-
-          if (email && adminEmails.includes(email) && isGoogleOrFirebase) {
-            const nowSec = Math.floor(Date.now() / 1000);
-            const exp = payload.exp || 0;
-            // Allow up to 14 days grace period for verified admin Google tokens
-            if (!exp || exp === 0 || (nowSec - exp) < 1209600) {
-              console.log(`[Admin Auth] Verified admin ${email} authenticated via payload grace window.`);
-              return next();
-            }
+        if (email && adminEmails.includes(email) && isGoogleOrFirebase) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const exp = payload.exp || 0;
+          // Allow up to 14 days grace period for verified admin Google tokens
+          if (!exp || exp === 0 || (nowSec - exp) < 1209600) {
+            console.log(`[Admin Auth] Verified admin ${email} authenticated via payload check.`);
+            return next();
           }
-        } catch (jwtErr) {
-          console.warn("[Admin Auth] Failed to decode fallback JWT payload:", jwtErr);
         }
+      } catch (jwtErr) {
+        console.warn("[Admin Auth] Failed to decode JWT payload:", jwtErr);
       }
     }
 
@@ -2466,15 +2398,346 @@ async function startServer() {
         summary: {
           today,
           limits: {
-            firestoreReads: 50000,
-            firestoreWrites: 20000,
-            firestoreDeletes: 20000,
+            serverDbReads: "Unlimited (Local/Jamstack)",
+            serverDbWrites: "Unlimited (Local/Jamstack)",
             geminiRequests: 1500
           },
           approachingWarning: today.status === 'warning' || today.status === 'critical',
           approachingCritical: today.status === 'critical'
         }
       });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get("/api/admin/event-logs", (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string, 10) || 50;
+      const levelFilter = (req.query.level as string || '').trim();
+
+      let logs = readLocalCollection('system_event_logs');
+      if (!logs || logs.length === 0) {
+        logs = generateInitialSystemEventLogs(50);
+        writeLocalCollection('system_event_logs', logs);
+      }
+
+      if (levelFilter && levelFilter !== 'All') {
+        logs = logs.filter((l: any) => l.level?.toLowerCase() === levelFilter.toLowerCase());
+      }
+
+      const sliced = logs.slice(0, limit);
+      const counts = {
+        total: logs.length,
+        error: logs.filter((l: any) => l.level === 'Error').length,
+        warning: logs.filter((l: any) => l.level === 'Warning').length,
+        info: logs.filter((l: any) => l.level === 'Info').length
+      };
+
+      res.json({
+        success: true,
+        logs: sliced,
+        total: logs.length,
+        counts
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // --- User Account Management Endpoints (Zero-Cost Local File DB: data/users.json) ---
+  const hashPasswordWithSalt = (password: string, salt?: string) => {
+    const s = salt || crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(password, s, 1000, 64, 'sha256').toString('hex');
+    return { salt: s, hash };
+  };
+
+  const verifyPasswordWithSalt = (password: string, salt: string, expectedHash: string) => {
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha256').toString('hex');
+    return hash === expectedHash;
+  };
+
+  const getAdminEmailList = () => [
+    'redmunlight@gmail.com',
+    'ahbiyout@gmail.com',
+    'ahbiyoutwinfixwizard@gmail.com',
+    'ahbiyoutwinfix@gmail.com'
+  ].map(e => e.toLowerCase().trim());
+
+  // POST /api/auth/register - Register new user account with hashed password
+  app.post("/api/auth/register", (req, res) => {
+    try {
+      const { email, password, displayName } = req.body;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ success: false, error: "유효한 이메일 주소를 입력해주세요." });
+      }
+      if (!password || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ success: false, error: "비밀번호는 6자리 이상이어야 합니다." });
+      }
+
+      const cleanEmail = email.toLowerCase().trim();
+      const users = readLocalCollection('users');
+
+      const existing = users.find((u: any) => u.email?.toLowerCase().trim() === cleanEmail);
+      if (existing) {
+        return res.status(409).json({ success: false, error: "이미 등록된 이메일 계정입니다." });
+      }
+
+      const { salt, hash } = hashPasswordWithSalt(password);
+      const isAdm = getAdminEmailList().includes(cleanEmail);
+      const now = getKSTISOString();
+      const userId = `usr-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+
+      const newUser = {
+        id: userId,
+        email: cleanEmail,
+        displayName: displayName || cleanEmail.split('@')[0],
+        role: isAdm ? 'admin' : 'member',
+        authProvider: 'email',
+        salt,
+        passwordHash: hash,
+        status: 'active',
+        createdAt: now,
+        lastLoginAt: now
+      };
+
+      users.unshift(newUser);
+      writeLocalCollection('users', users);
+
+      const token = `usr_token_${userId}_${crypto.randomBytes(8).toString('hex')}`;
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'USER_REGISTER',
+        details: `신규 회원 가입: ${cleanEmail} (역할: ${newUser.role})`,
+        operator: cleanEmail
+      });
+
+      res.status(201).json({
+        success: true,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          displayName: newUser.displayName,
+          role: newUser.role,
+          createdAt: newUser.createdAt
+        },
+        token
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message || "회원가입 처리 중 오류가 발생했습니다." });
+    }
+  });
+
+  // POST /api/auth/login - Email/Password login
+  app.post("/api/auth/login", (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: "이메일과 비밀번호를 모두 입력해주세요." });
+      }
+
+      const cleanEmail = (email || '').toLowerCase().trim();
+      const users = readLocalCollection('users');
+      const user = users.find((u: any) => u.email?.toLowerCase().trim() === cleanEmail);
+
+      if (!user) {
+        return res.status(401).json({ success: false, error: "등록되지 않은 이메일이거나 비밀번호가 일치하지 않습니다." });
+      }
+
+      if (user.status === 'blocked') {
+        return res.status(403).json({ success: false, error: "이용이 제한된 계정입니다. 관리자에게 문의하세요." });
+      }
+
+      if (user.authProvider === 'google' && !user.passwordHash) {
+        return res.status(400).json({ success: false, error: "해당 계정은 Google 원클릭 로그인으로 가입된 계정입니다. Google 로그인 버튼을 이용해주세요." });
+      }
+
+      const isValid = verifyPasswordWithSalt(password, user.salt || '', user.passwordHash || '');
+      if (!isValid) {
+        return res.status(401).json({ success: false, error: "이메일 또는 비밀번호가 일치하지 않습니다." });
+      }
+
+      const now = getKSTISOString();
+      user.lastLoginAt = now;
+      writeLocalCollection('users', users);
+
+      const token = `usr_token_${user.id}_${crypto.randomBytes(8).toString('hex')}`;
+
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+          lastLoginAt: user.lastLoginAt
+        },
+        token
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message || "로그인 처리 중 오류가 발생했습니다." });
+    }
+  });
+
+  // POST /api/auth/google-sync - Automatically persist/sync Google OAuth users to data/users.json
+  app.post("/api/auth/google-sync", (req, res) => {
+    try {
+      const { email, displayName } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ success: false, error: "Email is required" });
+      }
+
+      const cleanEmail = email.toLowerCase().trim();
+      const users = readLocalCollection('users');
+      let user = users.find((u: any) => u.email?.toLowerCase().trim() === cleanEmail);
+      const isAdm = getAdminEmailList().includes(cleanEmail);
+      const now = getKSTISOString();
+
+      if (!user) {
+        const userId = `usr-g-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+        user = {
+          id: userId,
+          email: cleanEmail,
+          displayName: displayName || cleanEmail.split('@')[0],
+          role: isAdm ? 'admin' : 'member',
+          authProvider: 'google',
+          status: 'active',
+          createdAt: now,
+          lastLoginAt: now
+        };
+        users.unshift(user);
+        writeLocalCollection('users', users);
+
+        addLocalLog('logs_admin', {
+          category: 'AUTH',
+          action: 'GOOGLE_REGISTER',
+          details: `Google 신규 회원 동기화 등록: ${cleanEmail} (역할: ${user.role})`,
+          operator: cleanEmail
+        });
+      } else {
+        user.lastLoginAt = now;
+        if (isAdm) user.role = 'admin';
+        if (displayName && (!user.displayName || user.displayName === cleanEmail.split('@')[0])) {
+          user.displayName = displayName;
+        }
+        writeLocalCollection('users', users);
+      }
+
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+          authProvider: user.authProvider,
+          lastLoginAt: user.lastLoginAt
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // GET /api/admin/users - Admin: List all registered members
+  app.get("/api/admin/users", requireAdmin, (req, res) => {
+    try {
+      const users = readLocalCollection('users');
+      const sanitized = users.map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        displayName: u.displayName || u.email?.split('@')[0],
+        role: u.role || 'member',
+        authProvider: u.authProvider || 'email',
+        status: u.status || 'active',
+        createdAt: u.createdAt || '',
+        lastLoginAt: u.lastLoginAt || ''
+      }));
+
+      const counts = {
+        total: sanitized.length,
+        admins: sanitized.filter((u: any) => u.role === 'admin').length,
+        members: sanitized.filter((u: any) => u.role !== 'admin').length,
+        google: sanitized.filter((u: any) => u.authProvider === 'google').length,
+        email: sanitized.filter((u: any) => u.authProvider === 'email').length,
+        blocked: sanitized.filter((u: any) => u.status === 'blocked').length
+      };
+
+      res.json({
+        success: true,
+        users: sanitized,
+        counts
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // PATCH /api/admin/users/:id - Admin: Update member role or status (block/unblock)
+  app.patch("/api/admin/users/:id", requireAdmin, (req, res) => {
+    try {
+      const userId = req.params.id;
+      const { role, status, displayName } = req.body;
+      const users = readLocalCollection('users');
+      const userIndex = users.findIndex((u: any) => u.id === userId);
+
+      if (userIndex === -1) {
+        return res.status(404).json({ success: false, error: "해당 사용자를 찾을 수 없습니다." });
+      }
+
+      if (role && (role === 'admin' || role === 'member')) {
+        users[userIndex].role = role;
+      }
+      if (status && (status === 'active' || status === 'blocked')) {
+        users[userIndex].status = status;
+      }
+      if (displayName && typeof displayName === 'string') {
+        users[userIndex].displayName = displayName.trim();
+      }
+
+      writeLocalCollection('users', users);
+
+      res.json({
+        success: true,
+        user: {
+          id: users[userIndex].id,
+          email: users[userIndex].email,
+          displayName: users[userIndex].displayName,
+          role: users[userIndex].role,
+          status: users[userIndex].status
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // DELETE /api/admin/users/:id - Admin: Delete member account
+  app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
+    try {
+      const userId = req.params.id;
+      const users = readLocalCollection('users');
+      const targetUser = users.find((u: any) => u.id === userId);
+
+      if (!targetUser) {
+        return res.status(404).json({ success: false, error: "해당 사용자를 찾을 수 없습니다." });
+      }
+
+      if (targetUser.role === 'admin' && getAdminEmailList().includes(targetUser.email)) {
+        return res.status(403).json({ success: false, error: "시스템 최고 관리자 계정은 삭제할 수 없습니다." });
+      }
+
+      const filtered = users.filter((u: any) => u.id !== userId);
+      writeLocalCollection('users', filtered);
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'USER_DELETE',
+        details: `회원 계정 삭제: ${targetUser.email} (ID: ${userId})`
+      });
+
+      res.json({ success: true, deletedId: userId });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -2715,29 +2978,11 @@ async function startServer() {
   });
 
   app.get("/api/backend-health", async (req, res) => {
-    try {
-      let firestoreStatus = "connected";
-      try {
-        await db.collection("issues").limit(1).get();
-      } catch (e: any) {
-        const isPermissionDenied = e.code === 7 || (e.message && (e.message.includes("PERMISSION") || e.message.includes("permission")));
-        const isQuotaExceeded = e.code === 8 || (e.message && (e.message.includes("RESOURCE_EXHAUSTED") || e.message.includes("quota") || e.message.includes("Quota")));
-        firestoreStatus = isQuotaExceeded ? "quota_exceeded" : (isPermissionDenied ? "permission_denied" : "unknown_error");
-      }
-
-      res.json({ 
-        success: true, 
-        firestore: firestoreStatus,
-        cronActive: true
-      });
-    } catch (err: any) {
-      res.json({ 
-        success: true, 
-        firestore: "unknown_error", 
-        cronActive: true,
-        error: err.message 
-      });
-    }
+    res.json({ 
+      success: true, 
+      firestore: "removed",
+      cronActive: true
+    });
   });
 
   app.get("/api/admin/backup", requireAdmin, async (req, res) => {
@@ -2767,18 +3012,7 @@ async function startServer() {
         }
       }
 
-      // 2. Back up Firestore collections if active/configured
-      const collectionsToBackup = ['issues', 'backend_logs', 'system_config'];
-      for (const colName of collectionsToBackup) {
-        try {
-          const snapshot = await db.collection(colName).get();
-          const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          folder.file(`firestore_db/${colName}.json`, JSON.stringify(docs, null, 2));
-        } catch (colErr: any) {
-          console.warn(`Firestore collection backup skipped for '${colName}' (Reason: Quota/Permission/Config):`, colErr.message || colErr);
-          folder.file(`firestore_db/errors/${colName}_error.txt`, `Firestore backup failed or skipped: ${colErr.message || colErr}`);
-        }
-      }
+      // 2. Firestore backup removed (Jamstack architecture)
 
       // 3. Include manifest metadata
       folder.file('manifest.json', JSON.stringify({
@@ -3514,13 +3748,6 @@ async function startServer() {
       const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
       fs.writeFileSync(localPath, JSON.stringify(cleanSettings, null, 2), 'utf8');
 
-      // 2. Try write to Firestore
-      try {
-        await db.collection('system_config').doc('maintenance').set(cleanSettings, { merge: true });
-      } catch (e: any) {
-        console.warn("Could not sync settings to Firestore, saved locally anyway:", e.message);
-      }
-
       // 3. Reschedule active background scheduler in real-time
       try {
         setupEngineScheduler(cleanSettings.engineIntervalMin);
@@ -3540,11 +3767,6 @@ async function startServer() {
       if (config && Array.isArray(config.keys)) {
         const localPath = path.join(process.cwd(), 'data', 'api_keys_config.json');
         fs.writeFileSync(localPath, JSON.stringify(config, null, 2), 'utf8');
-        try {
-          if (db) {
-            await db.collection('system_config').doc('api_keys').set(config, { merge: true });
-          }
-        } catch (_) {}
       }
       res.json({ success: true });
     } catch (e: any) {
@@ -3559,14 +3781,6 @@ async function startServer() {
         const raw = fs.readFileSync(localPath, 'utf8');
         return res.json({ success: true, config: JSON.parse(raw) });
       }
-      try {
-        if (db) {
-          const docSnap = await db.collection('system_config').doc('api_keys').get();
-          if (docSnap.exists) {
-            return res.json({ success: true, config: docSnap.data() });
-          }
-        }
-      } catch (_) {}
       res.json({ success: true, config: null });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });

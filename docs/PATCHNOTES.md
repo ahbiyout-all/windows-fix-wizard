@@ -1,6 +1,19 @@
-# Patch Note - System Update (v3.85.0)
+# Patch Note - System Update (v3.86.0)
 
 This document is synchronized with `/docs/PATCH_NOTE.md`.
+
+---
+
+## [v3.86.0] - 2026-11-06
+
+### 🛡️ 백엔드 Cloud Firestore 로직 및 의존성 완전 제거
+- **백엔드 Firestore 로직 제거 (`server.ts`)**:
+  - 서버 측에 남아있던 모든 Cloud Firestore 미러링, 상태 체크 및 2차 백업 로직을 완전히 삭제했습니다.
+  - 기존 `db.` (Firebase Admin) 호출을 가상(mock) 처리하고, 모든 관리 로직이 로컬 파일 DB(`data/`)만을 참조하도록 단순화했습니다.
+  - `package.json`에서 `firebase-admin` 의존성을 제거했습니다.
+- **시스템 안정성 및 최적화**:
+  - 백그라운드 설정 동기화 과정에서 발생하던 Firestore "NOT_FOUND" 잔류 오류를 해결했습니다.
+  - 서버 시작 시 로컬 데이터셋 존재 여부를 우선 확인하도록 부팅 시퀀스를 최적화했습니다.
 
 ---
 

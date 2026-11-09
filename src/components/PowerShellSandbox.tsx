@@ -108,6 +108,44 @@ interface TerminalLine {
 // Built-in presets for quick testing
 const SANDBOX_PRESETS = [
   {
+    id: 'quick-system-scan',
+    nameKo: '⚡ 시스템 빠른 건강 진단 (SFC, DISM, 네트워크, 디펜더 점검)',
+    nameEn: '⚡ Quick System Health & Integrity Audit (SFC, DISM, Defender)',
+    category: 'Diagnostic',
+    code: `# Windows Fix Wizard - Quick System Health & Integrity Scan
+#Requires -RunAsAdministrator
+
+Write-Host "==========================================================================" -ForegroundColor Cyan
+Write-Host " [+] Windows Fix Wizard - Quick System Health & Integrity Scan" -ForegroundColor Green
+Write-Host "     Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | Host: $env:COMPUTERNAME" -ForegroundColor Gray
+Write-Host "==========================================================================" -ForegroundColor Cyan
+
+# [1/5] System File Integrity (SFC & DISM Check)
+Write-Host "[1/5] Checking System File Integrity & Component Store..." -ForegroundColor Cyan
+dism.exe /Online /Cleanup-Image /CheckHealth
+sfc.exe /verifyonly
+
+# [2/5] Windows Update & Core Services Audit
+Write-Host "[2/5] Auditing Windows Update Services (wuauserv, BITS, CryptSvc)..." -ForegroundColor Cyan
+Get-Service -Name wuauserv, bits, cryptsvc, TrustedInstaller | Select-Object Name, Status, StartType
+
+# [3/5] Network Stack & Gateway Check
+Write-Host "[3/5] Testing Network Gateway & DNS Resolver..." -ForegroundColor Cyan
+Test-Connection -ComputerName "1.1.1.1" -Count 1 -Quiet
+
+# [4/5] Storage Partition & Temp Cache Audit
+Write-Host "[4/5] Auditing System Partition (C:) & Temp Space..." -ForegroundColor Cyan
+Get-Volume -DriveLetter C
+
+# [5/5] Windows Defender & Security Health Audit
+Write-Host "[5/5] Verifying Windows Defender Security Platform..." -ForegroundColor Cyan
+Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusSignatureAge
+
+Write-Host "==========================================================================" -ForegroundColor Cyan
+Write-Host " [✓] Quick System Health Scan Completed Successfully!" -ForegroundColor Green
+Write-Host "==========================================================================" -ForegroundColor Cyan`
+  },
+  {
     id: 'update-reset',
     nameKo: '윈도우 업데이트 캐시 초기화 및 서비스 재기동',
     nameEn: 'Windows Update Cache & Services Reset',

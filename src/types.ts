@@ -11,7 +11,7 @@ export enum Type {
 }
 
 /**
- * Common Operation Types for Firestore Error Handling
+ * Common Operation Types for Database Error Handling
  */
 export enum OperationType {
   CREATE = 'create',
@@ -23,7 +23,7 @@ export enum OperationType {
 }
 
 /**
- * Standardized Error Info for Firestore Operations
+ * Standardized Error Info for Database Operations
  */
 export interface FirestoreErrorInfo {
   error: string;
@@ -51,7 +51,7 @@ export interface TroubleshootingResult {
 }
 
 /**
- * Definition for Known Windows Issues in Firestore
+ * Definition for Known Windows Issues in Database
  */
 export interface KnownIssue {
   id: string;

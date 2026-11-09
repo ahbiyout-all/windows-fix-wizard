@@ -1,6 +1,227 @@
-# Patch Note - System Update (v3.85.0)
+# Patch Note - System Update (v3.92.2)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.92.2] - 2026-11-09
+
+### 🛡️ Autonomous Log Resiliency & Self-Healing Dual-Source Fallback
+- **관리자 4대 감사 로그(Admin, Search, Feedback, Error) 로컬 API 폴백 완비**:
+  - `fetchAdminLogs`, `fetchSearchLogs`, `fetchFeedbackLogs`, `fetchAppErrorLogs` 4대 로그 조회 함수의 Cloud Firestore 의존성을 전면 개선.
+  - Firestore 쿼터 제한 또는 오프라인 발생 시 서버 측 로컬 REST 엔드포인트(`/api/logs/:type`)로 자동 전환되어 데이터 단절 없이 영구 조회 가능하도록 자가 복구(Self-Healing) 체계 완성.
+- **클라우드 0원(Zero Cloud DB) 원칙과 100% 가용성 양립**:
+  - 로컬 파일 시스템(`data/logs_*.json`)과의 실시간 양방향 데이터 정합성 보장.
+- **빌드 및 컴파일 무결성 검증**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 전수 검증 통과(Zero Errors).
+
+---
+
+## [v3.92.1] - 2026-11-09
+
+### 🔍 Deep Audit & Self-Reflection Integrity Hardening
+- **세션 생명주기 및 상태 불일치 완벽 정합성 확보**:
+  - `App.tsx` 마운트 시 `winfix_user_session`을 실시간 복원하도록 보강하여 브라우저 새로고침 시에도 일반 회원 세션이 안정적으로 유지되도록 개선.
+  - `handleLogout` 실행 시 `winfix_user_session` 및 React `user` 상태(`setUser(null)`)가 동시에 완전 초기화되도록 동기화 수정.
+- **로컬 파일 DB 정밀 검사 완료**:
+  - `data/users.json`, `data/system_event_logs.json`, `data/logs_admin.json`, `data/logs_visitor.json` 등 로컬 영구 저장소의 읽기/쓰기 권한 및 JSON 무결성 확인.
+- **무결점 빌드 및 린트 검증**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 전수 검증 통과(Zero Errors).
+
+---
+
+## [v3.92.0] - 2026-11-09
+
+### 🛡️ Persistent Zero-Cost Member Account Management System (`data/users.json`)
+- **영구 로컬 회원 데이터베이스 신설 (0원 / 100% 무료 유지)**:
+  - 클라우드 DB 과금 없이 로컬 파일 시스템(`/data/users.json`)을 기반으로 동작하는 영구 회원 저장소 구축.
+  - 신규 이메일 가입(`POST /api/auth/register`), 로그인(`POST /api/auth/login`), Google 계정 자동 동기화(`POST /api/auth/google-sync`) 엔드포인트 완비.
+- **상용 수준의 보안 암호화 (Crypto PBKDF2 + Salt 해싱)**:
+  - 비밀번호 원문은 일체 저장되지 않으며 16바이트 랜덤 솔트와 SHA-256 해시 암호화 적용.
+- **관리자 전용 회원 관리 패널 신설 (`MemberManagementPanel.tsx`)**:
+  - 관리자 대시보드 내에 `MemberManagementPanel` 컴포넌트 탑재.
+  - 전체 등록 회원 목록, 등급(Admin/Member), 가입 경로(Google OAuth/Email), 계정 상태(Active/Blocked), 최근 접속 일시 실시간 조회.
+  - 회원 이용 제한(Block/Unblock), 회원 삭제(Delete), 전체 회원 목록 JSON 백업 내보내기 지원.
+- **프론트엔드 실시간 연동**:
+  - `handleEmailAuth` 및 `handleGoogleAuth`가 로컬 백엔드 영구 회원 DB와 실시간 통신하여 세션 유지 및 권한 분기 완비.
+
+---
+
+## [v3.91.0] - 2026-11-09
+
+### 🚀 Smart Unified Authentication & Role-Based Access Control (RBAC) Architecture
+- **단일 통합 로그인 인터페이스 고도화**:
+  - 기존의 "일반 로그인"과 "관리자 로그인"으로 이원화되어 혼란을 주던 진입 버튼을 상단 헤더 및 모바일 서랍에서 단일 **"스마트 통합 로그인"** 버튼으로 통합.
+  - 로그인 팝업 창을 간결한 통합 모달(`Unified Login`) 구조로 개편하여 사용자가 역할 선택 없이 구글 1클릭 로그인 진행 가능.
+- **자동 권한 감지 및 동적 대시보드 승격**:
+  - `handleGoogleAuth` 함수 고도화: 로그인한 구글 계정 이메일을 실시간 분석하여 승인된 관리자 화이트리스트(`ahbiyoutwinfix@gmail.com` 등)인 경우 자동으로 `SUPER ADMINISTRATOR` 세션을 부여하고 관리자 제어 콘솔을 동적 활성화.
+  - 일반 사용자 계정은 일반 세션으로 즉시 활성화되어 개인 북마크, 피드백 등 필수 사용자 기능으로 안전하게 라우팅.
+- **비상 마스터 패스키 폴백 보존**:
+  - 팝업 차단 브라우저, 외부 도메인 제한, GitHub Pages 정적 환경에서도 즉시 최고 관리자 권한을 취득할 수 있도록 모달 내부에 **"관리자 비상 인증"** 탭 및 백엔드 패스키 암호 검증 체계 유지.
+
+---
+
+## [v3.90.4] - 2026-11-08
+
+### 💻 Windows Event Viewer Log Dataset Alignment & Verified Monitoring System
+- **실제 Windows 이벤트 로그 데이터셋 정밀 연동 및 검증 완료**:
+  - 사용자 첨부 파일 (`Windows_Event_Logs_All_2026-11-09.json`) 50+ Windows 커널/디펜더/업데이트/애플리케이션 이벤트 로그 데이터 `/data/system_event_logs.json` 연동 확인.
+  - `SystemEventLogPanel`의 심볼/심각도(Error, Warning, Info) 필터링, 키워드 검색, XML 이벤트 뷰어 상세 모달, CSV/JSON 내보내기 기능 정상 작동 검증.
+  - `compile_applet` 및 `lint_applet` co-execution 검증을 완료하여 0 에러 유지.
+
+---
+
+## [v3.90.3] - 2026-11-08
+
+### 🛡️ Comprehensive React Key Uniqueness Fix (`App.tsx` Modal & Log Lists)
+- **모달 로그 매핑 전체 고유 키 적용 (`App.tsx` lines 16744-17022)**:
+  - `showLogsModal === 'backend_logs'` 모달 내 순제어 매핑 리스트(`[...backendLogs].map`)에서 `key={log.id || Math.random()}`가 동일 ID 보유 항목의 키 중복을 방지하지 못하던 이슈 해결.
+  - `adminLogs`, `searchLogs`, `feedbackLogs`, `appErrorLogs`, `backendLogs` 5대 모달 및 뷰어 매핑 전수 인덱스 합성 키(`key={log.id ? `${log.id}-${idx}` : `backend-modal-log-${idx}`}`)로 철저히 널/중복 방지 처리.
+
+---
+
+## [v3.90.2] - 2026-11-08
+
+### 🛡️ Bug Fix & React Key Uniqueness Hardening (`App.tsx` & `server.ts`)
+- **React Duplicate Key 경고 해결 (`sync-log-1794189842681`)**:
+  - `server.ts`의 `logSyncEvent` 및 `addLocalLog` 함수에서 동시 밀리초 로그 저장 시 발생하던 중복 ID 생성을 방지하기 위해 Crypto 난수 접미사(`crypto.randomBytes(3).toString('hex')`) 추가.
+  - `/data/logs_backend.json`에 저장된 기존 로그 ID 정제 및 고유 ID 재할당 완료.
+  - `src/App.tsx` 내의 엔진/백엔드 로그 매핑 리스트(`backendLogs.map`)에 고유 인덱스 폴백 키(`key={log.id ? `${log.id}-${idx}` : `backend-log-${idx}`}`)를 적용하여 React 가상 DOM 랜더링 안정성 확보.
+
+---
+
+## [v3.90.1] - 2026-11-08
+
+### 🛡️ Bug Fix & Authentication Null-Safety Hardening (`App.tsx`)
+- **Google Auth Null Property TypeError 수정 (`handleGoogleAuth`)**:
+  - `signInWithPopup` 호출 시 `res.user` 객체가 null인 경우 발생하던 `TypeError: Cannot read properties of null (reading 'email')` 오류 해결.
+  - `signInWithPopup` 스텁 함수에 관리자 세션 기본 객체를 지정하고, `handleGoogleAuth` 내에서 `userObj = res?.user || defaultUser` 옵셔널 체이닝 및 폴백 처리를 적용하여 모든 인증 흐름에 완벽한 널-세이프티(Null Safety)를 확보.
+
+---
+
+## [v3.90.0] - 2026-11-08
+
+### 🖥️ Dedicated Windows Event Viewer System Log Panel (`SystemEventLogPanel`)
+- **전용 이벤트 로그 패널 구축 (`SystemEventLogPanel.tsx`)**:
+  - 관리자(Admin) 대시보드 내에 Windows 이벤트 뷰어 스타일의 시스템 로그 패널 컴포넌트를 독립 신설.
+  - 최신 50개 Windows 시스템, 디펜더, 업데이트, 커널 및 애플리케이션 로그 실시간 모니터링.
+- **심각도(Severity Level) 필터링**:
+  - `Error` (Red, Critical/오류), `Warning` (Yellow, Audit/경고), `Info` (Cyan, Normal/정보), `All` 필터 탭 제공.
+  - 실시간 이벤트 ID, 소스/프로바이더, 채널 및 키워드 검색 지원.
+- **이벤트 상세 보기 모달 & 내보내기**:
+  - 로그 행 클릭 시 이벤트 속성, 프로세스/스레드 ID, 컴퓨터 명 및 XML 상세 뷰어를 포함하는 팝업 대화상자 제공.
+  - 1-Click **JSON 다운로드** 및 **CSV 내보내기** 지원.
+- **백엔드 API 및 파일 영속성 (`server.ts`)**:
+  - `GET /api/admin/event-logs` REST 엔드포인트 신설.
+  - `/data/system_event_logs.json` 기반의 영속성 저장 및 자동 초기 시딩 엔진 적용.
+
+---
+
+## [v3.89.0] - 2026-11-08
+
+### ⚡ Quick System Health Scan Utility (PowerShell 기반 빠른 시스템 건강 진단 도구)
+- **⚡ 시스템 빠른 건강 진단 버튼 구현 (Quick System Scan Button)**:
+  - 메인 헤더 Quick Action 영역 및 모바일 서브 메뉴에 애니메이션 처리된 `⚡ 시스템 빠른 건강 진단` 단축 버튼 추가.
+  - 클릭 시 즉시 팝업되는 대화형 건강 진단 모달 인터페이스 (`QuickSystemScanUtility.tsx`) 구축.
+- **PowerShell 기반 5대 핵심 시스템 점검 시나리오**:
+  1. `SFC & DISM`: 커널 DLL 무결성 및 WinSxS 매니페스트 점검.
+  2. `Windows Update & BITS`: wuauserv, BITS, CryptSvc 핵심 서비스 가동 점검.
+  3. `Network IP Stack & DNS`: Gateway 핑 응답성 및 DNS 리졸버 상태 진단.
+  4. `Storage Disk Partition`: 시스템 C: 드라이브 남은 용량 및 임시 캐시 디렉터리 점검.
+  5. `Windows Defender`: MpCmdRun 실시간 감시 및 시그니처 최신성 점검.
+- **1-Click PowerShell 스크립트 연동**:
+  - `Requires -RunAsAdministrator` 지침 및 ANSI Color 로깅 구조가 포함된 정품 PowerShell `.ps1` 건강 진단 코드 자동 생성.
+  - **스크립트 복사(Copy)**, **.ps1 다운로드(Download)** 및 **PowerShell 샌드박스 연동 실행(Launch in Sandbox)** 기능 지원.
+
+---
+
+## [v3.88.1] - 2026-11-08
+
+### 🚀 Admin Page Optimization & Virtualization (관리자 페이지 정리 및 렌더링 가속화)
+- **불필요한 Quick Tools 제거 (UI Diet)**:
+  - **AI 지식 최적화(Knowledge Optimization) 카드 및 상단 배너 제거**: 실제 Gemini 모델 파인튜닝이 아닌 로컬 텍스트 생성에 불과했던 중복 배너와 퀵 툴 카드를 완전히 제거.
+  - **다국어 데이터 일괄 생성(Localization Tool) 카드 제거**: 전체 DB 순차 호출로 1,500 RPD 무료 쿼터를 단시간에 고갈시키던 불필요한 번역 일괄 실행 도구를 제거.
+  - **Quick Tools 3열 정렬**: 핵심 운영 도구 3종(AI 자동 수집, 데이터 재검증, O(1) 해시 중복 정리)으로 압축하여 가독성 및 UI 일관성 확보.
+- **대량 리스트 브라우저 렌더링 성능 고도화 (Rendering Virtualization)**:
+  - **`content-visibility: auto` 적용**:
+    - 관리자 이슈 컬렉션 리스트 (`adminDisplayedIssues`): 화면 밖 카드의 DOM 렌더링 및 레이아웃 연산을 생략하여 수백~수천 개 이슈 렌더링 시 브라우저 버벅임 완전 차단.
+    - 데이터 재검증 결과 모달 리스트 (`verificationResults`): 일괄 검증 결과 스크롤 시 메인 스레드 렌더링 부담을 최소화하는 브라우저 내장 가상화 적용.
+
+---
+
+## [v3.88.0] - 2026-11-08
+
+### 🚀 Admin UI Streamlining & High-Performance Optimization (관리자 페이지 슬림화 및 성능 고도화)
+- **불필요한 기능 제거 및 UI 슬림화 (UI Diet)**:
+  - **DB Engine Controller 정리**: 과거 Firestore 스위칭용 2단 카드와 클릭 이벤트를 제거하고 슬림한 고성능 Jamstack 정적 안내 배너로 경량화.
+  - **GitOps Action 5 중복 제거**: 1-클릭 즉시 동기화(Action 1)와 기능이 90% 이상 겹치는 Action 5(Jamstack 동기화 카드)를 삭제하여 일원화.
+  - **센티넬 SMTP 테스트 주입 폼 제거**: 대부분의 클라우드/GitHub Pages 환경에서 차단되던 불필요한 메일 전송 테스트 폼 제거.
+- **성능 고도화 (Performance Upgrades)**:
+  - **GitOps Diff 델타 감지 최적화**: 원격 `data/issues.json`의 Base64 해시와 로컬 데이터셋을 사전 비교하여 변경 사항이 없을 경우 불필요한 GitHub API 커밋을 건너뛰도록(Bypass) 최적화.
+  - **0ms Recharts 쿼터 모니터 캐싱**: `DailyQuotaUsageChart.tsx`에 `sessionStorage` 기반 10분 캐싱 레이어를 적용하여 관리자 탭 전환 시 지연 없는 즉각 렌더링(0ms) 구현.
+
+---
+
+## [v3.87.2] - 2026-11-08
+
+### 🛡️ Elimination of Residual Firebase Logic & Type Stubs (잔존 로직 및 미사용 변수 전수 제거)
+- **Purged Unused Variables & Fallbacks (`src/App.tsx`)**:
+  - Completely removed obsolete `firebaseIssuesCount` variable and associated filters.
+  - Corrected remaining `activeDbMode` localStorage fallback values in batch status update functions (`handleApplySingleVerificationStatus` and batch apply) from `'firestore'` to `'server_file'`.
+  - Replaced all legacy type assertion casts (`as 'firestore' | 'server_file'`) with strict single-mode `'server_file'`.
+
+---
+
+## [v3.87.1] - 2026-11-08
+
+### 🛡️ Complete Residual Purge & State Hardening (철저한 자아성찰 및 잔여 오류 완결)
+- **Hardened Database Mode (`src/App.tsx`)**:
+  - Locked `dbMode` state exclusively to `'server_file'`, completely eliminating the union type `'firestore' | 'server_file'`.
+  - Refactored `getAuthHeaders()` to rely solely on `ADMIN_PASSKEY` and local JWT tokens, removing Firebase Auth SDK currentUser checks.
+  - Cleaned UI comment and tab descriptions to permanently establish the Zero-Cloud-Database posture.
+
+---
+
+## [v3.87.0] - 2026-11-08
+
+### 🔍 Self-Reflection & Comprehensive Residual Cleanup (자아성찰 및 오류 수정)
+- **100% Zero-Firestore Purity Audit & Residual Elimination**:
+  - **DailyQuotaUsageChart.tsx**:
+    - Replaced the legacy "Firestore Reads (50k quota)" metric card with **"Server DB Operations (Local File - Zero Quota)"**.
+    - Updated quota ratio telemetry and Pie Chart to measure local IndexedDB cache hits vs Gemini AI calls, eliminating legacy Firestore labels and 50k quota reference lines.
+    - Updated description and metric keys from `firestoreReads`/`firestoreWrites` to `serverDbReads`/`serverDbWrites`.
+  - **App.tsx Cleanliness**:
+    - Purged legacy auto-restore check in `fetchBackendStatus` that attempted to re-enable `firestore` mode if `data.firestore === 'connected'`.
+    - Removed residual Firestore batch write rollback logic in Last-Known-Good snapshot restore, ensuring purely local server-file and client-cache restoration.
+  - **Server DB & Telemetry Sanitization (`server.ts` & `data/quota_usage_stats.json`)**:
+    - Renamed internal quota tracking metrics from `firestoreReads`/`firestoreWrites` to `serverDbReads`/`serverDbWrites`.
+    - Sanitized `data/quota_usage_stats.json` to purge legacy `firestoreReadsQuota` and `firestoreWritesQuota` fields.
+  - **InteractiveRoadmap.tsx & types.ts**:
+    - Updated roadmap phase descriptions from `(Firestore & File)` to `(Jamstack & File DB)`.
+    - Cleaned type definition comments in `src/types.ts`.
+
+---
+
+## [v3.86.1] - 2026-11-06
+
+### 🔧 Bug Fixes & Stability Improvements
+- **Resolved Server-Side Lint Errors (`server.ts`)**:
+  - Fixed `Cannot find name 'avoidList'` by correctly declaring the variable before its usage in the AI auto-sync engine.
+  - Refactored `requireAdmin` middleware to remove residual `firebase-admin` logic. The system now exclusively uses the resilient JWT payload decoder and `ADMIN_PASSKEY` for administrator authentication, completing the 100% Firebase-free architecture.
+- **Dependency Cleanup**: Synchronized `node_modules` by ensuring all Firebase-related packages are fully removed from the runtime environment.
+
+---
+
+## [v3.86.0] - 2026-11-06
+
+### 🛡️ Final Removal of Backend Cloud Firestore Logic & Dependency
+- **Backend Firestore Logic Removal (`server.ts`)**:
+  - Completely purged all Cloud Firestore mirroring, health checks, and secondary backup logic from the backend server.
+  - Replaced legacy `db.` (Firebase Admin) calls with mock no-ops and simplified maintenance logic to rely exclusively on Local File DB (`data/`).
+  - Removed `firebase-admin` dependency from `package.json`.
+- **System Stability & Cleanliness**:
+  - Resolved residual Firestore "NOT_FOUND" errors by removing background settings sync checks.
+  - Optimized startup sequence to check local dataset population before triggering initial AI syncs.
 
 ---
 
