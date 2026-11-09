@@ -622,6 +622,22 @@ const formatCollectionDate = (rawDate: any): string => {
   return String(rawDate);
 };
 
+const formatLogTimestamp = (rawDate: any): string => {
+  if (!rawDate) return '';
+  if (typeof rawDate?.toDate === 'function') {
+    try {
+      return rawDate.toDate().toLocaleString();
+    } catch (_) {}
+  }
+  try {
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleString();
+    }
+  } catch (_) {}
+  return String(rawDate);
+};
+
 const generateDefaultPowerShellScript = (code: string = '', category: string = '', title: string = ''): string => {
   const codeUpper = (code || '').toUpperCase();
   const cat = (category || '').trim();
@@ -3401,6 +3417,23 @@ export default function App() {
       }
     }
 
+    if (!logsLoaded) {
+      try {
+        const staticResp = await fetch('./data/logs_admin.json');
+        if (staticResp.ok) {
+          const logs = await staticResp.json();
+          if (Array.isArray(logs)) {
+            const startIdx = page * 50;
+            const sliced = logs.slice(startIdx, startIdx + 50);
+            setAdminLogs(sliced);
+            setLogHasMore(prev => ({ ...prev, admin: logs.length > startIdx + 50 }));
+            setLogPages(prev => ({ ...prev, admin: page }));
+            logsLoaded = true;
+          }
+        }
+      } catch (_) {}
+    }
+
     setLoadingLogs(false);
     setShowLogsModal('admin');
   };
@@ -3506,13 +3539,26 @@ export default function App() {
         if (data.success) {
           setVisitorLogs(data.logs || []);
           if (data.stats) setVisitorStats(data.stats);
+          setLoadingLogs(false);
+          return;
         }
-      } else {
-        const q = firestoreQuery(collection(db, 'visitor_logs'), limit(100));
-        const snap = await getDocs(q);
-        const list: VisitorLog[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as VisitorLog));
-        setVisitorLogs(list);
       }
+      try {
+        const staticResp = await fetch('./data/logs_visitor.json');
+        if (staticResp.ok) {
+          const logs = await staticResp.json();
+          if (Array.isArray(logs)) {
+            setVisitorLogs(logs);
+            setLoadingLogs(false);
+            return;
+          }
+        }
+      } catch (_) {}
+
+      const q = firestoreQuery(collection(db, 'visitor_logs'), limit(100));
+      const snap = await getDocs(q);
+      const list: VisitorLog[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as VisitorLog));
+      setVisitorLogs(list);
     } catch (err) {
       console.warn("Failed to fetch visitor logs:", err);
     } finally {
@@ -3771,6 +3817,24 @@ export default function App() {
       }
     }
 
+    if (!logsLoaded) {
+      try {
+        const staticResp = await fetch('./data/system_event_logs.json');
+        if (staticResp.ok) {
+          const logs = await staticResp.json();
+          if (Array.isArray(logs)) {
+            const searchFiltered = logs.filter((l: any) => l.query || l.category === 'SEARCH');
+            const startIdx = page * 50;
+            const sliced = searchFiltered.slice(startIdx, startIdx + 50);
+            setSearchLogs(sliced);
+            setLogHasMore(prev => ({ ...prev, search: searchFiltered.length > startIdx + 50 }));
+            setLogPages(prev => ({ ...prev, search: page }));
+            logsLoaded = true;
+          }
+        }
+      } catch (_) {}
+    }
+
     setLoadingLogs(false);
     setShowLogsModal('search');
   };
@@ -3833,6 +3897,24 @@ export default function App() {
       } catch (localErr) {
         console.warn("Local feedback logs fallback failed:", localErr);
       }
+    }
+
+    if (!logsLoaded) {
+      try {
+        const staticResp = await fetch('./data/system_event_logs.json');
+        if (staticResp.ok) {
+          const logs = await staticResp.json();
+          if (Array.isArray(logs)) {
+            const feedbackFiltered = logs.filter((l: any) => l.issueId || l.category === 'FEEDBACK');
+            const startIdx = page * 50;
+            const sliced = feedbackFiltered.slice(startIdx, startIdx + 50);
+            setFeedbackLogs(sliced);
+            setLogHasMore(prev => ({ ...prev, feedback: feedbackFiltered.length > startIdx + 50 }));
+            setLogPages(prev => ({ ...prev, feedback: page }));
+            logsLoaded = true;
+          }
+        }
+      } catch (_) {}
     }
 
     setLoadingLogs(false);
@@ -4138,6 +4220,24 @@ export default function App() {
       }
     }
 
+    if (!logsLoaded) {
+      try {
+        const staticResp = await fetch('./data/system_event_logs.json');
+        if (staticResp.ok) {
+          const logs = await staticResp.json();
+          if (Array.isArray(logs)) {
+            const errorFiltered = logs.filter((l: any) => l.severity || l.category === 'ERROR');
+            const startIdx = page * 50;
+            const sliced = errorFiltered.slice(startIdx, startIdx + 50);
+            setAppErrorLogs(sliced);
+            setLogHasMore(prev => ({ ...prev, error: errorFiltered.length > startIdx + 50 }));
+            setLogPages(prev => ({ ...prev, error: page }));
+            logsLoaded = true;
+          }
+        }
+      } catch (_) {}
+    }
+
     setLoadingLogs(false);
     setShowLogsModal('error');
   };
@@ -4204,7 +4304,7 @@ export default function App() {
         const logs = snap.docs.map(d => ({ 
           id: d.id, 
           ...d.data(),
-          timestamp: d.data().timestamp?.toDate ? d.data().timestamp.toDate() : new Date(d.data().timestamp)
+          timestamp: typeof d.data().timestamp?.toDate === 'function' ? d.data().timestamp.toDate() : new Date(d.data().timestamp)
         } as BackendLog));
         setBackendLogs(logs);
         logsLoaded = true;
@@ -5077,7 +5177,7 @@ export default function App() {
         const text = data.content;
         setAiOptimizedKnowledge(text);
         if (data.updatedAt) {
-          setAiOptimizedAt(data.updatedAt instanceof Date ? data.updatedAt : data.updatedAt.toDate());
+          setAiOptimizedAt(data.updatedAt instanceof Date ? data.updatedAt : typeof data.updatedAt?.toDate === 'function' ? data.updatedAt.toDate() : new Date(data.updatedAt));
         }
         localStorage.setItem('ai_knowledge_cache', text);
         localStorage.setItem('ai_knowledge_cache_time', Date.now().toString());
@@ -16913,7 +17013,7 @@ export default function App() {
                             </span>
                           </div>
                           <span className="text-slate-400 text-[10px] whitespace-nowrap bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded tabular-nums border border-slate-100 dark:border-slate-700">
-                            {log.timestamp?.toDate().toLocaleString()}
+                            {formatLogTimestamp(log.timestamp)}
                           </span>
                         </div>
                         <p className="text-slate-900 dark:text-slate-100 font-medium mb-2 leading-relaxed">{log.details}</p>
@@ -16960,7 +17060,7 @@ export default function App() {
                       <div key={log.id ? `${log.id}-${idx}` : `search-log-${idx}`} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-sm">
                         <div className="flex justify-between mb-2">
                           <span className="font-bold text-blue-600 dark:text-blue-400">OS: {log.version}</span>
-                          <span className="text-slate-400 text-[10px]">{log.timestamp?.toDate().toLocaleString()}</span>
+                          <span className="text-slate-400 text-[10px]">{formatLogTimestamp(log.timestamp)}</span>
                         </div>
                         <p className="text-slate-900 dark:text-slate-100 font-medium mb-1">"{log.query}"</p>
                         <p className="text-slate-500 dark:text-slate-400 text-xs">User ID: {log.userId}</p>
@@ -16975,7 +17075,7 @@ export default function App() {
                           }`}>
                             {log.isSolved ? 'SOLVED' : 'NOT SOLVED'}
                           </span>
-                          <span className="text-slate-400 text-[10px]">{log.timestamp?.toDate().toLocaleString()}</span>
+                          <span className="text-slate-400 text-[10px]">{formatLogTimestamp(log.timestamp)}</span>
                         </div>
                         <div className="mb-2">
                           <p className="text-slate-900 dark:text-slate-100 font-bold">{log.issueTitle || 'Unknown Issue'}</p>
@@ -17063,7 +17163,7 @@ export default function App() {
                               )}
                             </div>
                             <span className="text-slate-400 text-[10px] font-mono shrink-0 ml-2">
-                              {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : String(log.timestamp || '')}
+                              {formatLogTimestamp(log.timestamp)}
                             </span>
                           </div>
                           <div className="mb-2">

@@ -41,7 +41,6 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci || npm install
 
-
       - name: 🏗️ Build Web Application for GitHub Pages
         run: |
           npm run build:pages

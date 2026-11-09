@@ -1,6 +1,32 @@
-# Patch Note - System Update (v3.92.4)
+# Patch Note - System Update (v3.93.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.93.0] - 2026-11-09
+
+### 🚀 Jamstack GitOps 100% Serverless Architecture Alignment
+- **단일 원천 데이터 중심성 (Single Source of Truth) 정립**:
+  - 클라우드 DB 과금 비용 0원 유지 및 GitHub Pages 정적 배포 호환을 위해 GitHub Repository의 `data/issues.json`, `data/github-feed.json`, `data/system_event_logs.json`을 단일 원천 데이터로 구조화.
+- **정적 배포 환경(GitHub Pages) 404 폴백 완전 구동 체계 구축**:
+  - `fetchAdminLogs`, `fetchVisitorLogs`, `fetchSearchLogs`, `fetchFeedbackLogs`, `fetchAppErrorLogs` 전 관리자 감사/시스템 로그 기능에 Jamstack 정적 JSON(`./data/*.json`) 폴백 경로 내장.
+  - 백엔드 노드 서버가 없는 GitHub Pages 환경에서도 모든 감사 데이터 및 시스템 로그를 오류 없이 서빙 가능.
+- **GitHub Actions 자율 수집 파이프라인(`windows-fix-collector.yml`) 연동 최적화**:
+  - Gemini AI 기반 윈도우 문제 자동 수집 및 커밋 후 `deploy-pages.yml` 자동 트리거 연동 완비.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.92.5] - 2026-11-09
+
+### 🔧 Log Timestamp Parsing Hardening (`log.timestamp?.toDate is not a function` Fix)
+- **방어적 타임스탬프 파싱 헬퍼 (`formatLogTimestamp`) 도입**:
+  - Cloud Firestore `Timestamp` 객체뿐만 아니라 REST API/로컬 JSON 파일 DB에서 전달되는 ISO 날짜 문자열(`string`), 타임스탬프 숫자(`number`), JavaScript `Date` 객체를 안전하게 구분 처리하는 `formatLogTimestamp` 유틸리티 적용.
+  - 관리자 감사 로그, 검색 로그, 피드백 로그, 앱 에러 로그 모달 뷰에서 발생하던 `TypeError: log.timestamp?.toDate is not a function` 런타임 크래시 완벽 차단.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 
