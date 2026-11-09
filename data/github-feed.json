@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-09T04:50:09.216Z",
-  "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "오디오/사운드",
+  "lastCollectedAt": "2026-11-09T15:19:14.408Z",
+  "modelUsed": "gemini-3.1-flash-lite",
+  "targetCategory": "정품인증",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 120,
+  "totalIssuesCount": 122,
   "newIssues": [
     {
-      "id": "gh-code-10--audio-controller--mw8s8p1d",
-      "code": "Code 10 (Audio Controller)",
-      "title": "Windows 10/11 High Definition Audio 컨트롤러 '이 장치를 시작할 수 없습니다 (코드 10)' 오류 해결 방법",
-      "category": "오디오/사운드"
+      "id": "gh-0x803f8001-mw9eppew",
+      "code": "0x803F8001",
+      "title": "Windows 정품 인증 시 발생하는 0x803F8001 오류 해결 방법",
+      "category": "정품인증"
     },
     {
-      "id": "gh-0x800706ba-mw8s8p1d",
-      "code": "0x800706BA",
-      "title": "Windows 10/11 오디오 서비스 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 오류 해결 방법",
-      "category": "오디오/사운드"
+      "id": "gh-0x80072f8f-mw9eppew",
+      "code": "0x80072F8F",
+      "title": "네트워크 설정으로 인한 정품 인증 오류 0x80072F8F 수정",
+      "category": "정품인증"
     }
   ]
 }

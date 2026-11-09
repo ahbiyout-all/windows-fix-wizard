@@ -5432,5 +5432,95 @@
     "updatedAt": "2026-11-09T04:50:09.216Z",
     "verifiedAt": "2026-11-09T04:50:09.216Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803f8001-mw9eppew",
+    "category": "정품인증",
+    "code": "0x803F8001",
+    "title": "Windows 정품 인증 시 발생하는 0x803F8001 오류 해결 방법",
+    "title_en": "Fixing Windows Activation Error 0x803F8001",
+    "symptoms": "Windows 업데이트 이후 라이선스 서버와의 통신 실패로 인해 '이 장치에서 Windows를 정품 인증할 수 없습니다'라는 메시지가 나타나며 정품 인증이 거부됨.",
+    "symptoms_en": "After a Windows update, the system fails to communicate with the license server, resulting in 'Unable to activate Windows on this device' despite having a valid digital license.",
+    "script": "slmgr /ato; slmgr /dlv",
+    "manualSteps": [
+      "설정 > 업데이트 및 보안(또는 시스템) > 정품 인증 메뉴로 이동합니다.",
+      "문제 해결사 단추를 클릭하여 Windows가 자동으로 라이선스를 다시 확인하도록 합니다.",
+      "명령 프롬프트(관리자 권한)에서 'slmgr /rearm' 명령을 실행하여 인증 상태를 초기화합니다.",
+      "시스템을 재부팅하고 다시 인증을 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Settings > Update & Security (or System) > Activation.",
+      "Click the Troubleshoot button to allow Windows to re-verify the digital license automatically.",
+      "Open Command Prompt as Administrator and run 'slmgr /rearm' to reset the activation state.",
+      "Restart the system and attempt activation again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d8fb64-6768-485a-0a70-34446c1e5505"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 11 정품인증 오류",
+      "0x803F8001 해결",
+      "Windows 10 라이선스 오류",
+      "Activation error 0x803F8001",
+      "Fix Windows activation"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T15:19:14.408Z",
+    "updatedAt": "2026-11-09T15:19:14.408Z",
+    "verifiedAt": "2026-11-09T15:19:14.408Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072f8f-mw9eppew",
+    "category": "정품인증",
+    "code": "0x80072F8F",
+    "title": "네트워크 설정으로 인한 정품 인증 오류 0x80072F8F 수정",
+    "title_en": "Fixing Activation Error 0x80072F8F Caused by Network/Date Settings",
+    "symptoms": "시스템 시간 불일치 또는 TLS 통신 오류로 인해 Microsoft 인증 서버와 연결할 수 없어 발생하는 오류.",
+    "symptoms_en": "An error that occurs when the system time is incorrect or TLS communication fails, preventing connection to Microsoft activation servers.",
+    "script": "w32tm /resync; netsh winsock reset",
+    "manualSteps": [
+      "설정 > 시간 및 언어 > 날짜 및 시간으로 이동하여 '자동으로 시간 설정'을 켭니다.",
+      "인터넷 연결이 정상인지 확인하고 프록시 서버 설정을 확인합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'sfc /scannow'를 입력하여 시스템 파일을 복구합니다.",
+      "시스템을 다시 시작한 후 설정에서 제품 키를 다시 입력합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Settings > Time & Language > Date & Time, and ensure 'Set time automatically' is turned on.",
+      "Verify your internet connection and check for any active proxy server settings.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to repair potential system file corruption.",
+      "Restart your computer and re-enter the product key in Settings."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/deployment/error-0x80072f8f-activation-fails"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072F8F 해결",
+      "Windows 정품인증 실패",
+      "날짜 오류 인증",
+      "Activation error 0x80072F8F",
+      "Windows activation date error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T15:19:14.408Z",
+    "updatedAt": "2026-11-09T15:19:14.408Z",
+    "verifiedAt": "2026-11-09T15:19:14.408Z",
+    "verificationStatus": "verified"
   }
 ]
