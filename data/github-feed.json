@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-08T21:43:41.478Z",
+  "lastCollectedAt": "2026-11-09T04:50:09.216Z",
   "modelUsed": "gemini-3.5-flash",
-  "targetCategory": "보안/백신",
+  "targetCategory": "오디오/사운드",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 118,
+  "totalIssuesCount": 120,
   "newIssues": [
     {
-      "id": "gh-0x800704ec-mw8d09eu",
-      "code": "0x800704ec",
-      "title": "Windows 10/11 Windows Defender 실행 차단 오류 0x800704ec 해결 방법",
-      "category": "보안/백신"
+      "id": "gh-code-10--audio-controller--mw8s8p1d",
+      "code": "Code 10 (Audio Controller)",
+      "title": "Windows 10/11 High Definition Audio 컨트롤러 '이 장치를 시작할 수 없습니다 (코드 10)' 오류 해결 방법",
+      "category": "오디오/사운드"
     },
     {
-      "id": "gh-0x80070424-mw8d09ev",
-      "code": "0x80070424",
-      "title": "Windows 10/11 보안 센터 및 Defender 서비스 오류 0x80070424 해결 방법",
-      "category": "보안/백신"
+      "id": "gh-0x800706ba-mw8s8p1d",
+      "code": "0x800706BA",
+      "title": "Windows 10/11 오디오 서비스 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 오류 해결 방법",
+      "category": "오디오/사운드"
     }
   ]
 }

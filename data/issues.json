@@ -5334,5 +5334,103 @@
     "updatedAt": "2026-11-08T21:43:41.478Z",
     "verifiedAt": "2026-11-08T21:43:41.478Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-10--audio-controller--mw8s8p1d",
+    "category": "오디오/사운드",
+    "code": "Code 10 (Audio Controller)",
+    "title": "Windows 10/11 High Definition Audio 컨트롤러 '이 장치를 시작할 수 없습니다 (코드 10)' 오류 해결 방법",
+    "title_en": "How to Fix High Definition Audio Controller 'This device cannot start (Code 10)' Error in Windows 10/11",
+    "symptoms": "최신 Windows 10/11 누적 업데이트(23H2/24H2) 적용 후 시스템 오디오가 완전히 중단되며, 디바이스 관리자의 'High Definition Audio 컨트롤러' 또는 'Intel Smart Sound Technology(Intel SST)' 항목에 노란색 경고 표시와 함께 '이 장치를 시작할 수 없습니다. (코드 10)' 오류가 발생합니다.",
+    "symptoms_en": "After installing recent Windows 10/11 cumulative updates (23H2/24H2), system audio stops working completely. Device Manager displays a yellow exclamation mark on 'High Definition Audio Controller' or 'Intel Smart Sound Technology (Intel SST)' with the error 'This device cannot start. (Code 10)'.",
+    "script": "# Audio Services and Driver Hardware Re-enumeration Script\nWrite-Host 'Restarting Windows Audio Services...' -ForegroundColor Green\nGet-Service -Name Audiosrv, AudioEndpointBuilder | Set-Service -StartupType Automatic\nGet-Service -Name Audiosrv, AudioEndpointBuilder | Restart-Service -Force -ErrorAction SilentlyContinue\n\nWrite-Host 'Rescanning Audio Devices and Bus Encoders...' -ForegroundColor Green\npnputil /scan-devices\n\nWrite-Host 'Listing Audio Devices with Warning Status...' -ForegroundColor Yellow\nGet-PnpDevice -Class MEDIA, System | Where-Object { $_.Status -ne 'OK' } | Select-Object FriendlyName, InstanceId, Status | Format-Table -AutoSize",
+    "manualSteps": [
+      "장치 관리자(devmgmt.msc)를 실행하고 '사운드, 비디오 및 게임 컨트롤러' 및 '시스템 장치' 항목을 확장합니다.",
+      "오류가 표시된 'High Definition Audio 컨트롤러' 또는 'Intel Smart Sound Technology' 드라이버를 마우스 오른쪽 버튼으로 클릭 후 [드라이버 업데이트]를 선택합니다.",
+      "[내 컴퓨터에서 드라이버 찾기] -> [컴퓨터의 사용 가능한 드라이버 목록에서 직접 선택]을 클릭합니다.",
+      "호환 가능한 하드웨어 목록에서 기본 Microsoft 드라이버인 'High Definition Audio 장치'를 선택하여 설치합니다.",
+      "시스템을 재부팅하여 오디오 장치 인식을 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager (devmgmt.msc) and expand 'Sound, video and game controllers' as well as 'System devices'.",
+      "Right-click the problematic 'High Definition Audio Controller' or 'Intel Smart Sound Technology' entry and select 'Update driver'.",
+      "Click 'Browse my computer for drivers' -> 'Let me pick from a list of available drivers on my computer'.",
+      "Select the generic Microsoft driver 'High Definition Audio Device' from the compatible hardware list and complete the installation.",
+      "Restart the system and check if sound output is restored."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-7302370e-854e-4e22-a73a-79f019407640",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "High Definition Audio Code 10",
+      "오디오 코드 10",
+      "이 장치를 시작할 수 없습니다 코드 10",
+      "Intel SST Code 10 fix",
+      "Windows 11 사운드 드라이버 오류",
+      "Audio Controller Code 10"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T04:50:09.216Z",
+    "updatedAt": "2026-11-09T04:50:09.216Z",
+    "verifiedAt": "2026-11-09T04:50:09.216Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800706ba-mw8s8p1d",
+    "category": "오디오/사운드",
+    "code": "0x800706BA",
+    "title": "Windows 10/11 오디오 서비스 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 오류 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Audio Service 'RPC Server is Unavailable (0x800706BA)' Error",
+    "symptoms": "작업 표시줄 오디오 아이콘에 빨간색 X 표시가 나타나며 사운드가 출력되지 않습니다. 오디오 문제 해결사를 실행하거나 음량을 조절할 때 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 메시지가 출력되며 Windows Audio (Audiosrv) 서비스가 강제 종료되는 현상입니다.",
+    "symptoms_en": "A red 'X' mark appears on the taskbar audio icon, preventing any sound playback. Running the Audio Troubleshooter or adjusting volume displays 'The RPC server is unavailable (0x800706BA)' and causes the Windows Audio (Audiosrv) service to terminate.",
+    "script": "# Windows Audio RPC Dependent Services Recovery Script\n$audioServices = @('RpcSs', 'DcomLaunch', 'AudioEndpointBuilder', 'Audiosrv')\n\nforeach ($svcName in $audioServices) {\n    $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue\n    if ($svc) {\n        Set-Service -Name $svcName -StartupType Automatic\n        if ($svc.Status -ne 'Running') {\n            Start-Service -Name $svcName -ErrorAction SilentlyContinue\n            Write-Host \"Started service: $svcName\" -ForegroundColor Green\n        } else {\n            Write-Host \"Service $svcName is already running.\" -ForegroundColor Cyan\n        }\n    }\n}\n\n# Restart AudioEndpointBuilder and Audiosrv to re-establish RPC binding\nRestart-Service -Name AudioEndpointBuilder -Force -ErrorAction SilentlyContinue\nRestart-Service -Name Audiosrv -Force -ErrorAction SilentlyContinue\nWrite-Host 'Audio Services RPC bindings refreshed successfully.' -ForegroundColor Green",
+    "manualSteps": [
+      "Win + R 키를 누르고 'services.msc'를 입력하여 서비스 관리자를 열어줍니다.",
+      "'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', 'Windows Audio' 서비스의 상태가 모두 '실행 중'인지 확인합니다.",
+      "해당 서비스들의 시작 유형을 마우스 우클릭 -> 속성에서 [자동]으로 변경합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 `netsh winsock reset` 명령을 입력하여 오디오 통신 소켓을 초기화합니다.",
+      "PC를 다시 시작한 후 오디오 출력이 정상 작동하는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'services.msc', and press Enter to open Services management.",
+      "Verify that 'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', and 'Windows Audio' services are all showing 'Running' status.",
+      "Right-click each service, select Properties, and set their Startup type to 'Automatic'.",
+      "Open Command Prompt as Administrator and run `netsh winsock reset` to clear audio network sockets.",
+      "Reboot your computer and confirm that audio playback is restored."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-7302370e-854e-4e22-a73a-79f019407640",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/rpc-errors-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "오디오 0x800706BA",
+      "RPC 서버를 사용할 수 없습니다 오디오",
+      "Audio RPC server unavailable 0x800706BA",
+      "Windows Audio service 0x800706BA",
+      "Audiosrv RPC error",
+      "사운드 RPC 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T04:50:09.216Z",
+    "updatedAt": "2026-11-09T04:50:09.216Z",
+    "verifiedAt": "2026-11-09T04:50:09.216Z",
+    "verificationStatus": "verified"
   }
 ]
