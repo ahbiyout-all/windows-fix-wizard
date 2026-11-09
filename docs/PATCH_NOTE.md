@@ -1,6 +1,18 @@
-# Patch Note - System Update (v3.92.3)
+# Patch Note - System Update (v3.92.4)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.92.4] - 2026-11-09
+
+### 🌐 GitHub Sync & Static Data Deployment Optimization
+- **`.gitignore` 데이터 화이트리스트 확장**:
+  - Google AI Studio에서 GitHub으로 싱크할 때 필수 데이터가 누락되지 않도록 `data/system_event_logs.json`, `data/system_config.json`, `data/users.json`을 예외 목록(`!`)으로 등록.
+- **GitHub Pages 빌드 파이프라인 산출물 복사 개선 (`deploy-pages.yml`)**:
+  - `data/issues.json`만 정적 폴더(`dist/data/`)로 복사되던 문제를 개선하여 `data/*.json` 전체가 복사되도록 확장, 정적 배포 환경에서도 모든 이벤트 로그 및 설정 데이터를 404 없이 조회 가능하도록 완비.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 

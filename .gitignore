@@ -83,6 +83,10 @@ data/*.cache
 # Whitelist essential GitOps and seed datasets:
 !data/issues.json
 !data/github-feed.json
+!data/system_event_logs.json
+!data/system_config.json
+!data/users.json
+
 
 # --- 7. Cache & Compilers ---
 coverage/
