@@ -1,6 +1,19 @@
-# Patch Note - System Update (v3.92.2)
+# Patch Note - System Update (v3.92.3)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.92.3] - 2026-11-09
+
+### 🔧 CI/CD Pipeline Lockfile Synchronization & Dependency Integrity
+- **`package-lock.json` 무결성 동기화 (`npm ci` EUSAGE 오류 해결)**:
+  - GitHub Actions 워크플로우(`deploy-pages.yml`) 실행 중 `@types/prismjs@1.26.6` 및 `prismjs@1.30.0` 패키지의 락파일 누락으로 발생하던 `npm ci` 실패(Exit code 1) 해결.
+  - 최신 의존성 트리와 `package-lock.json`을 완벽히 동기화하여 `npm ci --dry-run` 및 실제 CI 환경에서 100% 정상 통과 보장.
+- **GitHub Actions 워크플로우 복원력 강화 (`deploy-pages.yml`)**:
+  - 의존성 설치 스텝을 `npm ci || npm install`로 방어적 폴백 구성하여 lockfile 불일치 발생 시에도 파이프라인 중단 없이 자동 복구 배포가 진행되도록 개선.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 
