@@ -1,6 +1,172 @@
-# Patch Note - System Update (v3.93.0)
+# Patch Note - System Update (v3.97.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.0] - 2026-11-10
+
+### 🗂️ Admin Console 4-Tier Importance Re-ordering & Section Header Banners
+- **관리자 메뉴 4단계 중요도/필요성 계층 재배치 및 시각적 헤더 뱃지 적용**:
+  - 사용자 요구사항에 따라 관리자 제어판(`activeTab === 'admin'`) 내 모든 관리 메뉴 및 모듈의 순서를 4등급 구조로 완벽히 재정렬:
+    - **[1등급] 핵심 필수 관리 기능 (Daily Check & Core Operations)**:
+      1. 독립형 Jamstack & GitOps 무과금 데이터 엔진
+      2. AI 데이터 수집 및 관리 센터 (Jamstack 데이터 보호, API 사용량 추적, GitHub Actions & GitOps 자율 데이터 수집 센터, Instant Sync, 대량 데이터 수집 & Staging Queue)
+      3. 일일 Jamstack & API 사용량 추적 모니터 (`DailyQuotaUsageChart`)
+    - **[2등급] 성능 모니터링 & 트러블슈팅 (System Monitoring)**:
+      4. GitHub 배포 성능 및 워크플로 성공률 대시보드 (`DashboardWidget`)
+      5. AI 엔진 모니터링 센티넬 경고 대시보드 (`AI Engine Sentinel`)
+      6. 백엔드 자율 엔진 활동 로그 & 통합 시스템 로그 파일 점검 및 관리 센터 (`Integrated Log Files Audit Center`)
+    - **[3등급] 환경 설정 & 보조 관리 (Settings & Maintenance)**:
+      7. Gemini API 키 상태 진단 및 보조 무료 AI 키 제어 패널 (Groq & OpenRouter API 키 연동)
+      8. 서버 자동 유지보수 설정 (스케줄러 고도화, Real SMTP Gateway, Google AdSense Monetization)
+      9. 회원 및 방문자 계정 관리 패널 (`MemberManagementPanel`)
+      10. 중복 데이터 정리 & 데이터 백업 및 복원 고도화 엔진
+    - **[4등급] 나의 실험실 이전 메뉴 (User Lab Transferred)**:
+      11. Windows 이벤트 뷰어 및 내 PC 실시간 사양 실험실 이전 안내 카드 (`My Lab` 탭 링크)
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.96.2] - 2026-11-10
+
+### 📊 AI Engine Intelligence Dashboard Telemetry Fix & Provider Mapping
+- **AI 엔진 가동 품질 및 인텔리전스 분석원 차트 렌더링 정상화**:
+  - `DashboardWidget` 내 API 키 분석 차트에 최근 추가된 **Groq Llama 3.3** 및 **OpenRouter Free** 제공자 레이블 매핑을 추가하고, 초기 텔레메트리 세션 시 차트가 빈 화면으로 나타나는 현상을 방지하도록 안전한 폴백 시각화 파이프라인 탑재.
+  - 실시간 원격 측정(Live Telemetry) 라우트 데이터와 차트 데이터 결합 무결성 확보.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.96.1] - 2026-11-10
+
+### 🔧 Server Maintenance Settings Description Precision & GitHub Actions Real Integration
+- **서버 유지보수 설정 설명 문구 정밀화 및 GitHub Actions 스크립트 실제 연동**:
+  - 관리자 제어판의 "백엔드 자율 엔진 모집 개수 설정(`engineBatchSize`)"이 GitHub Actions 무인 수집 스크립트(`scripts/github-collector.ts`)의 `data/system_config.json`과 실시간 연동되도록 파이프라인 고도화.
+  - 관리자가 수집 개수(1~10개) 및 수집 주기를 설정 후 저장하면 저장소의 `system_config.json`에 저장되어 GitHub Actions 크론 스케줄 가동 시 지정된 개수만큼 이슈가 자동 생성·동기화되도록 완전 실시간 반영 연동.
+  - 설명 문구를 "로컬 개발 서버 및 GitHub Actions GitOps 스케줄러와 연동 반영됨"으로 정밀 명시.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.96.0] - 2026-11-10
+
+### 🔍 Windows Event Viewer Error Code Display & Guidebook 1-Click Search Integration
+- **이벤트 뷰어 테이블 내 Windows 16진수 오류 코드(Error Code) 컬럼 신설**:
+  - 각 이벤트 로그 항목에 대해 16진수 표준 오류 코드(`0x80240020`, `0x80070422`, `0xC0000005`, `0x8050800C`, `0x800704CF`, `0x80070005` 등)를 자동 감지/매핑하여 전용 뱃지 컬럼으로 시각화.
+  - 상단 검색창에서 이벤트 ID뿐만 아니라 `0x80...` 형태의 오류 코드로도 실시간 필터링 지원.
+- **오류 가이드북 즉시 검색 (1-Click Guidebook Search) 파이프라인 구축**:
+  - 이벤트 목록 각 행마다 **[가이드북 검색]** 액션 버튼 추가.
+  - 클릭 시 자동으로 [알려진 문제 가이드북] 탭으로 전환되며, 해당 오류 코드가 검색창에 즉시 입력되어 검증된 해결책과 복구 가이드로 연결.
+- **이벤트 상세 보기 모달 내 가이드북 해결책 연동 배너 추가**:
+  - 로그 행 클릭 시 나타나는 상세 팝업에 오류 코드와 **[오류 가이드북에서 해결책 찾기]** 버튼을 탑재하여 원스톱 문제 해결 경험 제공.
+- **JSON 및 CSV 내보내기에 ErrorCode 필드 포함**:
+  - 로그 파일 다운로드 시 오류 코드 컬럼이 함께 포함되어 보고서 분석 지원.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.95.1] - 2026-11-10
+
+### 🧹 UI/UX De-cluttering & Streamlined [My Lab] Workspace
+- **[나의 실험실] 탭 내 거대 Recharts 카테고리/진단 빈도 분석 차트 전면 제거**:
+  - 일반 개인 사용자에게 불필요한 인지 부하와 스크롤 불편을 주던 `LibraryAnalyticsChart`(8대 오류 카테고리별 검색/진단 빈도 누적형·분리형 막대그래프)를 전격 제거.
+  - 불필요한 차트 렌더링 부하를 없애고 [나의 실험실] 진입 시 **북마크된 해결법(저장 목록)**, **최근 활동 내역**, **실시간 PC 사양 및 이벤트 뷰어**가 시원하게 바로 노출되도록 동선 극대화.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.95.0] - 2026-11-10
+
+### 🚀 Relocation to My Lab & Live Host Computer Hardware Diagnostics
+- **Windows 이벤트 뷰어 시스템 로그 모니터를 [나의 실험실] 탭으로 전격 이전**:
+  - 기존 관리자 전용 영역에 있던 `SystemEventLogPanel`을 사용자 맞춤형 워크스페이스인 **[나의 실험실 (My Lab)]** 탭으로 이전.
+  - 일반 사용자도 자신의 브라우저와 PC 환경에서 직접 시스템 로그 및 오류 기록을 시각적으로 모니터링할 수 있도록 접근성 대폭 개선.
+- **사용자 컴퓨터 실시간 하드웨어 & 운영체제 환경 감지 카드 신설**:
+  - `detectSystemInfo` Web API를 연동하여 접속 중인 단말의 **운영체제(Windows 11/10 64비트), CPU 논리 코어 수, RAM 용량, WebGL 가속 GPU 모델명, 화면 해상도 및 DPI, 네트워크 온라인 상태**를 실시간 감지하여 대시보드 상단에 시각화.
+  - **1-Click 내 PC 사양 복사**: 클립보드에 전체 PC 사양 텍스트 포맷 복사 지원.
+  - **1-Click 내 PC 맞춤 진단**: 감지된 OS 및 환경에 기반하여 원클릭으로 마법사(Wizard) 진단 연동.
+- **내 PC 실제 이벤트 뷰어 로그 1-Click 추출 및 가져오기(Import) 파이프라인**:
+  - **PowerShell 1-Click 추출 명령어 복사**: 사용자 Windows PC에서 `Get-WinEvent`를 실행하여 50건의 시스템/앱 로그를 바탕화면 JSON으로 추출하는 명령어 지원.
+  - **내 PC 로그(.json) 직접 불러오기**: 사용자가 로컬에서 추출한 실제 Windows 이벤트 로그 JSON 파일을 업로드하여 뷰어에서 즉시 심각도 필터링 및 XML 상세 분석 가능.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.94.3] - 2026-11-10
+
+### 📈 UI/UX Terminology Alignment & GitOps Serverless Architecture Precision
+- **Jamstack 100% 서버리스 아키텍처 용어 정합성 개선**:
+  - 관리자 화면의 "클라우드 백엔드 서비스 가동 중" 문구를 100% 무료 서버리스 GitOps 아키텍처에 부합하도록 "GitOps 자율 수집 엔진 가동 중: 10분 간격으로 최신 Windows 오류 트렌드를 자동 수집하여 Jamstack 정적 데이터셋에 동기화합니다"로 정밀 수정.
+  - 대기열 수집(Staging) 버튼 명칭을 "클라우드로 모두 동기화"에서 "저장소(GitOps)로 모두 동기화"로 변경하여 GitHub Pages Jamstack 정적 배포 파이프라인과의 직관적 일관성 확보.
+- **GitHub Actions 배포 파이프라인 무결성 검증**:
+  - 워크플로 `#79`(배포), `#78`(배포), `#65`(자율 수집) 전수 통과(Passed) 확인 및 역사적 누적 지표(56.0%)에 대한 해석 가이드 제공.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.94.2] - 2026-11-10
+
+### 🎨 Clean UI/UX & Header De-cluttering (Public API Status Indicator Removal)
+- **일반 사용자 화면 상단 헤더의 API 상태 뱃지 제거**:
+  - 일반 방문자에게 혼란과 불안감을 줄 수 있는 상단 헤더의 `API: 정상`, `API: 쿨다운`, `API: 키 점검` 진단 뱃지(데스크톱 및 모바일)를 전면 제거하여 깔끔하고 신뢰성 높은 프로덕션 UI로 정비.
+  - 내부 시스템 텔레메트리 및 API 키 진단 기능은 **관리자 콘솔(Admin Mode)** 내부로 일원화하여 관리자만 안전하게 접근하도록 권한 분리 강화.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.94.1] - 2026-11-10
+
+### 🔧 Secondary AI Key Server Persistence & Config API Synchronization
+- **`/api/system_config` 및 `/api/system_config/update` REST 엔드포인트 완비**:
+  - 관리자 설정에서 Groq 및 OpenRouter 보조 API 키를 저장할 때 로컬 서버 파일 DB(`data/system_config.json`)에 영구 저장될 수 있도록 백엔드 라우트 구축.
+  - 앱 마운트 시 브라우저 IndexedDB뿐만 아니라 서버 영구 설정 파일에서도 보조 API 키를 자동 로드하여 브라우저 재접속 시에도 즉시 동기화 유지.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.94.0] - 2026-11-09
+
+### 🚀 Multi-Provider Free AI Automatic Failover Engine (Groq & OpenRouter Integration)
+- **무료 AI 다중화 우회 엔진 (`callSecondaryFreeAiApi`) 신설**:
+  - Google Gemini API 무료 티어 할당량 초과(429/Resource Exhausted)나 네트워크 지연 발생 시, 무제한/초고속 무료 AI 제공자인 **Groq API** (`llama-3.3-70b-versatile`, `mixtral-8x7b-32768`) 및 **OpenRouter API** (`deepseek/deepseek-chat`, `llama-3.3-70b-instruct:free`)로 실시간 자동 전환되는 멀티 엔진 우회 파이프라인 구축.
+- **서버 수집 엔진 및 GitHub Actions 스케줄러 동시 우회 보장**:
+  - `server.ts` 수집 및 검색 엔진, `scripts/github-collector.ts` 6시간 무인 자동 수집 스크립트 모두에 3단계 폴백 체계(Gemini ➔ Groq ➔ OpenRouter ➔ Local GitOps Cache) 완비.
+- **관리자 제어 콘솔 보조 AI 키 등록 및 검증 패널 추가 (`App.tsx`)**:
+  - 관리자 설정 내에 `Groq API Key` 및 `OpenRouter Free API Key` 등록, 실시간 API 검증(`POST /api/keys/test-secondary`), 발급 링크 안내 패널을 탑재.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.93.2] - 2026-11-09
+
+### 🔧 Gemini AI Model Endpoint Alignment & Engine Sync Recovery
+- **Google Gemini SDK 정규 모델 ID 규격화 (`gemini-3.8-flash` fetch failed 오류 해결)**:
+  - 서버 수집 엔진(`server.ts`) 및 깃허브 수집 스크립트(`scripts/github-collector.ts`) 내에 포함되어 있던 미지원 모델 식별자(`gemini-3.8-flash` 등)를 Google 공식 지원 정규 모델 ID인 `gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-2.5-pro`로 일괄 교체.
+  - 백엔드 AI 수집 엔진 실행 시 발생하던 `fetch failed` 및 모델 엔드포인트 404 오류를 완벽히 해결하여 원활한 AI 수집 및 API 키 검증이 진행되도록 복원.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.93.1] - 2026-11-09
+
+### 🌐 UI/UX Text Alignment for Jamstack GitOps Staging Sync
+- **관리자 대시보드 용어 명확화 ("로컬 수집 후 클라우드 동기화" ➔ "로컬 대기열 수집 ➔ GitOps 동기화")**:
+  - 기존 구버전 용어인 "클라우드 동기화" 표기를 **Jamstack GitOps 100% 서버리스 아키텍처**에 맞게 "로컬 대기열 수집 ➔ GitOps 동기화" 및 "GitOps 라이브 동기화"로 직관적으로 정비.
+  - 브라우저 스테이징 대기열(Staging Queue)에 데이터를 모은 후 `1-Click GitOps`로 GitHub 저장소 및 웹사이트에 일괄 배포 반영하는 동작 원리를 명확하게 설명 가이드 갱신.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 

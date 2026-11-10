@@ -87,6 +87,21 @@ async function runCollector() {
   const avoidCodes = new Set(existingIssues.map(i => (i.code || '').trim().toLowerCase()).filter(Boolean));
   const avoidTitles = existingIssues.slice(-25).map(i => i.title).join(', ');
 
+  // Load system config if present
+  const sysConfigPath = path.join(dataDir, 'system_config.json');
+  let configEngineBatchSize: number | undefined;
+  if (fs.existsSync(sysConfigPath)) {
+    try {
+      const cfgRaw = fs.readFileSync(sysConfigPath, 'utf-8');
+      const cfg = JSON.parse(cfgRaw);
+      if (cfg.engineBatchSize && typeof cfg.engineBatchSize === 'number') {
+        configEngineBatchSize = cfg.engineBatchSize;
+      }
+    } catch (e: any) {
+      console.warn(`⚠️ Could not read system_config.json:`, e.message);
+    }
+  }
+
   // Select target category
   const targetCategory = process.env.INPUT_TOPIC && process.env.INPUT_TOPIC !== 'all'
     ? process.env.INPUT_TOPIC
@@ -94,7 +109,8 @@ async function runCollector() {
 
   console.log(`🎯 Target Category: [${targetCategory}]`);
 
-  const batchSize = Math.min(Math.max(parseInt(process.env.BATCH_SIZE || '2', 10), 1), 4);
+  const rawBatchSize = process.env.BATCH_SIZE || (configEngineBatchSize ? String(configEngineBatchSize) : '2');
+  const batchSize = Math.min(Math.max(parseInt(rawBatchSize, 10), 1), 10);
   console.log(`📦 Batch Size: ${batchSize}`);
 
   const ai = new GoogleGenAI({ apiKey });
@@ -102,9 +118,7 @@ async function runCollector() {
     'gemini-2.5-flash',
     'gemini-2.0-flash',
     'gemini-1.5-flash',
-    'gemini-3.5-flash',
-    'gemini-3.1-flash-lite',
-    'gemini-2.5-flash-lite'
+    'gemini-2.5-pro'
   ];
 
 function generateDefaultPowerShellScript(code: string = '', category: string = '', title: string = ''): string {
@@ -203,6 +217,76 @@ JSON Schema:
       }
     } catch (modelErr: any) {
       console.warn(`⚠️ Model ${model} failed: ${modelErr.message || modelErr}`);
+    }
+  }
+
+  if (!generatedText && process.env.GROQ_API_KEY) {
+    console.log('🔄 Attempting Groq API secondary failover in collector...');
+    const groqKey = process.env.GROQ_API_KEY.trim();
+    const groqModels = ['llama-3.3-70b-versatile', 'llama3-8b-8192', 'mixtral-8x7b-32768'];
+    for (const gModel of groqModels) {
+      try {
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: gModel,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3
+          })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const text = data?.choices?.[0]?.message?.content || '';
+          if (text.trim()) {
+            generatedText = text;
+            successfulModel = `Groq (${gModel})`;
+            console.log(`✅ Successfully generated response via Groq API (${gModel})!`);
+            break;
+          }
+        }
+      } catch (gErr: any) {
+        console.warn(`⚠️ Groq ${gModel} failed:`, gErr.message || gErr);
+      }
+    }
+  }
+
+  if (!generatedText && process.env.OPENROUTER_API_KEY) {
+    console.log('🔄 Attempting OpenRouter API secondary failover in collector...');
+    const openrouterKey = process.env.OPENROUTER_API_KEY.trim();
+    const openrouterModels = ['deepseek/deepseek-chat', 'meta-llama/llama-3.3-70b-instruct:free'];
+    for (const oModel of openrouterModels) {
+      try {
+        const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openrouterKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://windows-fix-wizard.github.io',
+            'X-Title': 'Windows Fix Wizard'
+          },
+          body: JSON.stringify({
+            model: oModel,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3
+          })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const text = data?.choices?.[0]?.message?.content || '';
+          if (text.trim()) {
+            generatedText = text;
+            successfulModel = `OpenRouter (${oModel})`;
+            console.log(`✅ Successfully generated response via OpenRouter API (${oModel})!`);
+            break;
+          }
+        }
+      } catch (oErr: any) {
+        console.warn(`⚠️ OpenRouter ${oModel} failed:`, oErr.message || oErr);
+      }
     }
   }
 

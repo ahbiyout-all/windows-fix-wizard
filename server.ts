@@ -790,11 +790,11 @@ async function executeServerGeminiCall(
   }
 
   const candidateModels = [
-    options.model || "gemini-3.8-flash",
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-flash"
+    options.model || "gemini-2.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-2.5-pro"
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   let lastError: any = null;
@@ -877,6 +877,17 @@ async function executeServerGeminiCall(
     }
   }
 
+  // Secondary free AI provider failover (Groq / OpenRouter)
+  const promptString = typeof contents === 'string' ? contents : (Array.isArray(contents) ? contents.map((c: any) => typeof c === 'string' ? c : c.text || JSON.stringify(c)).join(' ') : JSON.stringify(contents));
+  const secondaryRes = await callSecondaryFreeAiApi(promptString, {
+    groqKey: options.customApiKey,
+    openrouterKey: options.customApiKey
+  });
+
+  if (secondaryRes) {
+    return { text: secondaryRes.text, modelUsed: secondaryRes.modelUsed, keyUsed: secondaryRes.keyUsed };
+  }
+
   if (lastError) {
     const cleanMsg = getCleanErrorMessage(lastError);
     const lower = cleanMsg.toLowerCase();
@@ -887,6 +898,91 @@ async function executeServerGeminiCall(
   }
 
   throw new Error("Gemini API 키가 설정되지 않았거나 이용할 수 없습니다. AI Studio의 Settings > Secrets 메뉴에서 GEMINI_API_KEY를 등록해 주세요.");
+}
+
+async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey?: string; openrouterKey?: string }) {
+  try {
+    const configs = readLocalCollection('system_config');
+    const config = (configs && configs[0]) || {};
+    const groqKey = customKeys?.groqKey || process.env.GROQ_API_KEY || config.groqApiKey || "";
+    const openrouterKey = customKeys?.openrouterKey || process.env.OPENROUTER_API_KEY || config.openrouterApiKey || "";
+
+    // 1. Try Groq API
+    if (groqKey && groqKey.trim() && !groqKey.includes("PLACEHOLDER")) {
+      const groqModels = ["llama-3.3-70b-versatile", "llama3-8b-8192", "mixtral-8x7b-32768"];
+      for (const model of groqModels) {
+        try {
+          console.log(`[Secondary AI Failover] Attempting Groq API (${model})...`);
+          const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${groqKey.trim()}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: "user", content: promptText }],
+              temperature: 0.3
+            })
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            const text = data?.choices?.[0]?.message?.content || "";
+            if (text.trim()) {
+              console.log(`[Secondary AI Failover] Groq API (${model}) success!`);
+              return { text, modelUsed: `Groq (${model})`, keyUsed: "GROQ_API_KEY", provider: "groq" };
+            }
+          } else {
+            const errText = await resp.text();
+            console.warn(`[Secondary AI Failover] Groq (${model}) HTTP ${resp.status}:`, errText.substring(0, 100));
+          }
+        } catch (err: any) {
+          console.warn(`[Secondary AI Failover] Groq (${model}) error:`, err.message || err);
+        }
+      }
+    }
+
+    // 2. Try OpenRouter API
+    if (openrouterKey && openrouterKey.trim() && !openrouterKey.includes("PLACEHOLDER")) {
+      const openrouterModels = ["deepseek/deepseek-chat", "meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free"];
+      for (const model of openrouterModels) {
+        try {
+          console.log(`[Secondary AI Failover] Attempting OpenRouter API (${model})...`);
+          const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${openrouterKey.trim()}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "https://windows-fix-wizard.github.io",
+              "X-Title": "Windows Fix Wizard"
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: "user", content: promptText }],
+              temperature: 0.3
+            })
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            const text = data?.choices?.[0]?.message?.content || "";
+            if (text.trim()) {
+              console.log(`[Secondary AI Failover] OpenRouter API (${model}) success!`);
+              return { text, modelUsed: `OpenRouter (${model})`, keyUsed: "OPENROUTER_API_KEY", provider: "openrouter" };
+            }
+          } else {
+            const errText = await resp.text();
+            console.warn(`[Secondary AI Failover] OpenRouter (${model}) HTTP ${resp.status}:`, errText.substring(0, 100));
+          }
+        } catch (err: any) {
+          console.warn(`[Secondary AI Failover] OpenRouter (${model}) error:`, err.message || err);
+        }
+      }
+    }
+  } catch (outerErr: any) {
+    console.warn("[Secondary AI Failover] Error in secondary failover execution:", outerErr.message || outerErr);
+  }
+
+  return null;
 }
 
 
@@ -1204,10 +1300,9 @@ async function runAiSyncInternal(): Promise<any> {
 
   const modelsToTry = [
     "gemini-2.5-flash",
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-3.1-flash-lite",
-    "gemini-3.5-flash"
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-2.5-pro"
   ];
 
   let success = false;
@@ -1311,6 +1406,33 @@ async function runAiSyncInternal(): Promise<any> {
   }
 
   if (!success || !syncDetails) {
+    console.log(`[Engine Sync] Primary Gemini attempt standby (${lastFailureReason || 'All models busy'}). Attempting Secondary Free AI Failover (Groq/OpenRouter)...`);
+    const secResult = await callSecondaryFreeAiApi(fullPrompt);
+    if (secResult && secResult.text) {
+      try {
+        const parsedData = parseAiJson(secResult.text);
+        const issues = Array.isArray(parsedData) ? parsedData : (parsedData && Array.isArray((parsedData as any).issues) ? (parsedData as any).issues : []);
+        if (Array.isArray(issues) && issues.length > 0) {
+          const saveRes = await saveIssuesToServer(issues);
+          await logSyncEvent({ 
+            type: 'success', 
+            source: 'runAiSync', 
+            message: `자동 폴백 동기화 성공 (${secResult.keyUsed} / ${secResult.modelUsed}): ${saveRes.added}건 신규, ${saveRes.updated}건 갱신` 
+          });
+          return {
+            id: "run-" + Date.now(),
+            timestamp: getKSTISOString(),
+            durationMs: Date.now() - now,
+            syncedItemsCount: saveRes.added + saveRes.updated,
+            success: true,
+            keySourceUsed: `${secResult.keyUsed} (${secResult.modelUsed})`
+          };
+        }
+      } catch (parseErr: any) {
+        console.warn(`[Engine Sync] Secondary failover JSON parse issue:`, parseErr.message);
+      }
+    }
+
     console.log(`[Engine Sync] Synchronization standby: ${lastFailureReason || 'All models busy or awaiting valid keys'}`);
     return {
       success: false,
@@ -2059,7 +2181,7 @@ async function startServer() {
           httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
         });
         await testAi.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: 'test',
           config: { maxOutputTokens: 2 }
         });
@@ -2087,6 +2209,60 @@ async function startServer() {
           reason: cleanMsg 
         });
       }
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post("/api/keys/test-secondary", requireAdmin, async (req, res) => {
+    try {
+      const { provider, key } = req.body;
+      if (!key || typeof key !== 'string' || !key.trim()) {
+        return res.json({ success: true, isValid: false, reason: "키가 입력되지 않았습니다." });
+      }
+      const trimmed = key.trim();
+      if (provider === 'groq') {
+        const testRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${trimmed}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 2
+          })
+        });
+        if (testRes.ok) {
+          return res.json({ success: true, isValid: true, provider: 'groq', message: 'Groq API 키가 성공적으로 검증되었습니다.' });
+        } else {
+          const errText = await testRes.text();
+          return res.json({ success: true, isValid: false, provider: 'groq', reason: `Groq HTTP ${testRes.status}: ${errText.substring(0, 100)}` });
+        }
+      } else if (provider === 'openrouter') {
+        const testRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${trimmed}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://windows-fix-wizard.github.io",
+            "X-Title": "Windows Fix Wizard"
+          },
+          body: JSON.stringify({
+            model: "deepseek/deepseek-chat",
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 2
+          })
+        });
+        if (testRes.ok) {
+          return res.json({ success: true, isValid: true, provider: 'openrouter', message: 'OpenRouter API 키가 성공적으로 검증되었습니다.' });
+        } else {
+          const errText = await testRes.text();
+          return res.json({ success: true, isValid: false, provider: 'openrouter', reason: `OpenRouter HTTP ${testRes.status}: ${errText.substring(0, 100)}` });
+        }
+      }
+      return res.status(400).json({ success: false, error: "알 수 없는 제공자입니다." });
     } catch (e: any) {
       return res.status(500).json({ success: false, error: e.message });
     }
@@ -3782,6 +3958,28 @@ async function startServer() {
         return res.json({ success: true, config: JSON.parse(raw) });
       }
       res.json({ success: true, config: null });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get("/api/system_config", requireAdmin, async (req, res) => {
+    try {
+      const configs = readLocalCollection('system_config');
+      res.json({ success: true, config: (configs && configs[0]) || {} });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post("/api/system_config/update", requireAdmin, async (req, res) => {
+    try {
+      const updates = req.body || {};
+      const configs = readLocalCollection('system_config');
+      const currentConfig = (configs && configs[0]) || {};
+      const newConfig = { ...currentConfig, ...updates, updatedAt: getKSTISOString() };
+      writeLocalCollection('system_config', [newConfig]);
+      res.json({ success: true, config: newConfig });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }

@@ -79,7 +79,6 @@ import { validateKnownIssuesData, ValidationResult } from './utils/validateKnown
 import { idbGet, idbSet, idbRemove } from './utils/idbStorage';
 import { HiddenLogArchiveModal } from './components/HiddenLogArchiveModal';
 import { compressLogsToHiddenZip, getHiddenArchiveList } from './utils/logArchiveManager';
-import { LibraryAnalyticsChart } from './components/LibraryAnalyticsChart';
 
 interface AppErrorLog {
   id?: string;
@@ -1392,6 +1391,11 @@ export default function App() {
 
   const [apiKeyConfig, setApiKeyConfigState] = useState<ApiKeyConfig>(getApiKeyConfig());
   const [newKeyInput, setNewKeyInput] = useState('');
+  const [groqKeyInput, setGroqKeyInput] = useState(localStorage.getItem('winfix_groq_api_key') || '');
+  const [openrouterKeyInput, setOpenrouterKeyInput] = useState(localStorage.getItem('winfix_openrouter_api_key') || '');
+  const [testingSecondaryProvider, setTestingSecondaryProvider] = useState<string | null>(null);
+  const [secondaryTestResult, setSecondaryTestResult] = useState<{ provider?: string; isValid?: boolean; message?: string } | null>(null);
+
   const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatusInfo | null>(null);
   const [isCheckingKeyStatus, setIsCheckingKeyStatus] = useState(false);
   const [showKeyStatusModal, setShowKeyStatusModal] = useState(false);
@@ -1450,6 +1454,25 @@ export default function App() {
             if (data.success && data.config && Array.isArray(data.config.keys) && data.config.keys.length > 0) {
               loadedConfig = data.config;
               detectedSource = '로컬 서버 파일 (data/api_keys.json)';
+            }
+          }
+        } catch (_) {}
+
+        // Load secondary keys (Groq & OpenRouter) from server system_config if available
+        try {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch('/api/system_config', { headers: { ...authHeaders } });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.success && data.config) {
+              if (data.config.groqApiKey && !localStorage.getItem('winfix_groq_api_key')) {
+                setGroqKeyInput(data.config.groqApiKey);
+                localStorage.setItem('winfix_groq_api_key', data.config.groqApiKey);
+              }
+              if (data.config.openrouterApiKey && !localStorage.getItem('winfix_openrouter_api_key')) {
+                setOpenrouterKeyInput(data.config.openrouterApiKey);
+                localStorage.setItem('winfix_openrouter_api_key', data.config.openrouterApiKey);
+              }
             }
           }
         } catch (_) {}
@@ -1804,6 +1827,77 @@ export default function App() {
       }));
     } finally {
       setTestingKeyIndex(null);
+    }
+  };
+
+  const handleSaveGroqKey = async () => {
+    const trimmed = groqKeyInput.trim();
+    localStorage.setItem('winfix_groq_api_key', trimmed);
+    if (!IS_GITHUB_PAGES) {
+      try {
+        const authHeaders = await getAuthHeaders();
+        await fetch('/api/system_config/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ groqApiKey: trimmed })
+        });
+      } catch (_) {}
+    }
+    customAlert(language === 'en' ? "Groq API Key saved successfully!" : "Groq API 키가 성공적으로 저장되었습니다!");
+  };
+
+  const handleSaveOpenRouterKey = async () => {
+    const trimmed = openrouterKeyInput.trim();
+    localStorage.setItem('winfix_openrouter_api_key', trimmed);
+    if (!IS_GITHUB_PAGES) {
+      try {
+        const authHeaders = await getAuthHeaders();
+        await fetch('/api/system_config/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ openrouterApiKey: trimmed })
+        });
+      } catch (_) {}
+    }
+    customAlert(language === 'en' ? "OpenRouter API Key saved successfully!" : "OpenRouter API 키가 성공적으로 저장되었습니다!");
+  };
+
+  const handleTestSecondaryKey = async (provider: 'groq' | 'openrouter', keyToTest: string) => {
+    if (!keyToTest.trim()) {
+      customAlert(language === 'en' ? "Please enter an API Key to test." : "검증할 API 키를 입력해 주세요.");
+      return;
+    }
+    setTestingSecondaryProvider(provider);
+    setSecondaryTestResult(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/keys/test-secondary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ provider, key: keyToTest.trim() })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setSecondaryTestResult({
+          provider,
+          isValid: data.isValid,
+          message: data.message || data.reason
+        });
+      } else {
+        setSecondaryTestResult({
+          provider,
+          isValid: false,
+          message: `HTTP error ${resp.status}`
+        });
+      }
+    } catch (err: any) {
+      setSecondaryTestResult({
+        provider,
+        isValid: false,
+        message: err.message || "Network request failed"
+      });
+    } finally {
+      setTestingSecondaryProvider(null);
     }
   };
 
@@ -6743,7 +6837,7 @@ export default function App() {
         }
       }
       
-      await logAdminAction('system', 'sync', `로컬 데이터 클라우드 동기화 완료: ${added} 추가, ${updated} 업데이트`, 'success', 'DATABASE');
+      await logAdminAction('system', 'sync', language === 'en' ? `Local Staging GitOps Sync Completed: ${added} added, ${updated} updated` : `로컬 데이터 GitOps 라이브 동기화 완료: ${added}개 추가, ${updated}개 업데이트`, 'success', 'DATABASE');
       setStagedIssues([]);
       alert(language === 'en' ? `Sync Complete: ${added} added, ${updated} updated.` : `동기화 완료: ${added}개 추가, ${updated}개 업데이트되었습니다.`);
       fetchCategoryCounts(true);
@@ -9612,50 +9706,6 @@ export default function App() {
               <span>Gemini & MS Docs</span>
             </div>
 
-            {/* Gemini API Key Status Indicator */}
-            <button
-              type="button"
-              onClick={() => setShowKeyStatusModal(true)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer shadow-2xs hover:scale-102 active:scale-98 ${
-                apiKeyStatus?.status === 'active'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
-                  : apiKeyStatus?.status === 'throttled'
-                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60 hover:bg-amber-100'
-                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60 hover:bg-rose-100'
-              }`}
-              title={
-                apiKeyStatus?.status === 'active'
-                  ? (language === 'en' ? 'Gemini API: Active (Click to inspect status)' : 'Gemini API: 정상 작동 (클릭하여 상태 확인)')
-                  : apiKeyStatus?.status === 'throttled'
-                    ? (language === 'en' ? 'Gemini API: Throttled / Quota Cooldown (Click to inspect)' : 'Gemini API: 할당량 초과 / 쿨다운 (클릭하여 상태 확인)')
-                    : (language === 'en' ? 'Gemini API: Invalid / Key Required (Click to configure)' : 'Gemini API: 키 미설정 또는 오류 (클릭하여 설정하기)')
-              }
-            >
-              <span className="relative flex h-2 w-2">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  apiKeyStatus?.status === 'active'
-                    ? 'bg-emerald-400'
-                    : apiKeyStatus?.status === 'throttled'
-                      ? 'bg-amber-400'
-                      : 'bg-rose-400'
-                }`}></span>
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                  apiKeyStatus?.status === 'active'
-                    ? 'bg-emerald-500'
-                    : apiKeyStatus?.status === 'throttled'
-                      ? 'bg-amber-500'
-                      : 'bg-rose-500'
-                }`}></span>
-              </span>
-              <span className="font-bold">
-                {apiKeyStatus?.status === 'active'
-                  ? (language === 'en' ? 'API: Active' : 'API: 정상')
-                  : apiKeyStatus?.status === 'throttled'
-                    ? (language === 'en' ? 'API: Throttled' : 'API: 쿨다운')
-                    : (language === 'en' ? 'API: Invalid' : 'API: 키 점검')}
-              </span>
-            </button>
-
             <button
               onClick={() => setLanguage(lang => lang === 'ko' ? 'en' : 'ko')}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-slate-700"
@@ -9755,29 +9805,6 @@ export default function App() {
 
           {/* Mobile Quick Controls (visible only on mobile) */}
           <div className="flex md:hidden items-center gap-1.5 shrink-0">
-            {/* Mobile API Status Indicator */}
-            <button
-              type="button"
-              onClick={() => setShowKeyStatusModal(true)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
-                apiKeyStatus?.status === 'active'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                  : apiKeyStatus?.status === 'throttled'
-                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-              }`}
-              title="Gemini API Key Status"
-            >
-              <span className={`inline-block w-2 h-2 rounded-full ${
-                apiKeyStatus?.status === 'active'
-                  ? 'bg-emerald-500'
-                  : apiKeyStatus?.status === 'throttled'
-                    ? 'bg-amber-500 animate-pulse'
-                    : 'bg-rose-500'
-              }`} />
-              <span>AI</span>
-            </button>
-
             <button
               onClick={() => setLanguage(lang => lang === 'ko' ? 'en' : 'ko')}
               className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
@@ -11633,20 +11660,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Recharts Bar Chart: User Query Categories & Diagnostic Frequencies */}
-            <LibraryAnalyticsChart
-              userActivity={userActivity}
-              dbIssues={dbIssues}
-              language={language}
-              onSelectCategory={(category) => {
-                setSelectedCategory(category);
-                setActiveTab('guidebook');
-              }}
-              onRunDiagnosis={(diagQuery) => {
-                setQuery(diagQuery);
-                setActiveTab('wizard');
-              }}
-            />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Left Side: Bookmarks */}
@@ -12039,6 +12052,24 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Windows Event Viewer System Log Panel & Live PC Spec Diagnostics */}
+            <SystemEventLogPanel 
+              language={language} 
+              limit={50} 
+              onNavigateToWizard={(queryStr) => {
+                setQuery(queryStr);
+                setActiveTab('wizard');
+              }}
+              onNavigateToGuidebook={(code) => {
+                setSelectedCategory('전체');
+                setSelectedVersionFilter('전체');
+                setSelectedHardwareFilter('all');
+                setGuidebookQuery(code);
+                setActiveTab('guidebook');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
           </motion.div>
         )}
 
@@ -12050,6 +12081,17 @@ export default function App() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
+            {/* [1등급] 핵심 필수 관리 기능 (Daily Check & Core Operations) */}
+            <div className="flex items-center gap-2.5 pt-2 pb-2 border-b-2 border-emerald-500/40 dark:border-emerald-500/30 mb-6">
+              <span className="px-3 py-1 text-xs font-black rounded-xl bg-emerald-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+                {language === 'en' ? '[Tier 1] Core Operations' : '[1등급] 핵심 필수 관리'}
+              </span>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                {language === 'en' ? 'Daily Check & Core Operations' : '일일 필수 점검 및 AI 자율 데이터 수집 엔진'}
+              </h3>
+            </div>
+
             {/* DATABASE ENGINE CONTROL CENTER (100% Jamstack & GitOps Architecture) */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -12086,11 +12128,16 @@ export default function App() {
             {/* Daily API Quota & Usage Monitor (Jamstack & Gemini) */}
             <DailyQuotaUsageChart language={language} />
 
-            {/* Windows Event Viewer System Log Panel */}
-            <SystemEventLogPanel language={language} limit={50} />
-
-            {/* Member & User Account Management Panel (Zero Cloud DB) */}
-            <MemberManagementPanel language={language} />
+            {/* [2등급] 성능 모니터링 & 트러블슈팅 (System Monitoring) */}
+            <div className="flex items-center gap-2.5 pt-6 pb-2 border-b-2 border-blue-500/40 dark:border-blue-500/30 mb-6">
+              <span className="px-3 py-1 text-xs font-black rounded-xl bg-blue-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+                <Activity className="w-4 h-4" />
+                {language === 'en' ? '[Tier 2] System Monitoring' : '[2등급] 성능 모니터링 & 트러블슈팅'}
+              </span>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                {language === 'en' ? 'Performance Telemetry & Diagnostic Logs Audit' : 'GitHub 배포 성과, AI 가동 인텔리전스 및 통합 로그 감사'}
+              </h3>
+            </div>
 
             <DashboardWidget engineStatus={engineStatus} language={language} />
 
@@ -12107,8 +12154,8 @@ export default function App() {
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
                  {language === 'en' 
-                  ? 'Cloud Background Service: Active. Automatically monitoring Windows error trends via server-side engine (10m intervals).' 
-                  : '클라우드 백엔드 서비스 가동 중: 서버 측 엔진이 10분 간격으로 새로운 Windows 오류 트렌드를 자동 수집합니다.'}
+                  ? 'GitOps Autonomous Engine: Active. Automatically monitoring Windows error trends and syncing static feeds (10m intervals).' 
+                  : 'GitOps 자율 수집 엔진 가동 중: 10분 간격으로 최신 Windows 오류 트렌드를 자동 수집하여 Jamstack 정적 데이터셋에 동기화합니다.'}
               </p>
               
 
@@ -13748,8 +13795,19 @@ export default function App() {
                 </div>
               </div>
 
-              {/* API Key Management */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
+            {/* [3등급] 환경 설정 & 보조 관리 (Settings & Maintenance) */}
+            <div className="flex items-center gap-2.5 pt-6 pb-2 border-b-2 border-purple-500/40 dark:border-purple-500/30 mb-6">
+              <span className="px-3 py-1 text-xs font-black rounded-xl bg-purple-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+                <Settings className="w-4 h-4" />
+                {language === 'en' ? '[Tier 3] Settings & Maintenance' : '[3등급] 환경 설정 & 보조 관리'}
+              </span>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                {language === 'en' ? 'API Key Management, Server Maintenance & Member Accounts' : '보조 AI 키 제어, 서버 자동 유지보수 및 계정 관리'}
+              </h3>
+            </div>
+
+            {/* API Key Management */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
                 <div className="flex items-center justify-between gap-3 mb-6">
                   <div className="flex items-center gap-3">
                     <div className="bg-indigo-100 dark:bg-indigo-900/40 p-2 rounded-lg">
@@ -14055,6 +14113,132 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Secondary Free AI Providers Failover Setup (Groq & OpenRouter) */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
+                <div className="flex items-center justify-between gap-3 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg">
+                      <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <span>{language === 'en' ? 'Secondary Free AI Providers (Groq / OpenRouter)' : '보조 무료 AI API 키 설정 (Groq / OpenRouter 자동 우회)'}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                          {language === 'en' ? 'Failover Ready' : '자동 우회 폴백'}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {language === 'en'
+                          ? 'Gemini API free tier quota exhausted (429)? Failover automatically to Groq or OpenRouter.'
+                          : 'Gemini API 429 쿨다운 시 자동으로 Groq / OpenRouter 무료 API로 즉시 전환되어 무중단 수집합니다.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Secondary Key Status Notification */}
+                {secondaryTestResult && (
+                  <div className={`p-3 rounded-lg text-xs mb-4 border flex items-center gap-2 ${
+                    secondaryTestResult.isValid
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                  }`}>
+                    {secondaryTestResult.isValid ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                    )}
+                    <span>[{secondaryTestResult.provider?.toUpperCase()}] {secondaryTestResult.message}</span>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  {/* Groq API Key Input */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100">Groq API Key (Free Tier)</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-mono">
+                          Llama-3.3-70B
+                        </span>
+                      </div>
+                      <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-[11px] text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 font-medium">
+                        <span>{language === 'en' ? 'Get Free Groq Key' : 'Groq 무료 키 발급'}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="password"
+                        value={groqKeyInput}
+                        onChange={(e) => setGroqKeyInput(e.target.value)}
+                        placeholder="gsk_..."
+                        className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3.5 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleTestSecondaryKey('groq', groqKeyInput)}
+                        disabled={testingSecondaryProvider === 'groq'}
+                        className="px-3 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Activity className={`w-3.5 h-3.5 ${testingSecondaryProvider === 'groq' ? 'animate-spin text-purple-500' : ''}`} />
+                        <span>{testingSecondaryProvider === 'groq' ? '검증...' : '검증'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveGroqKey}
+                        className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Save Groq Key' : 'Groq 키 저장'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* OpenRouter API Key Input */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100">OpenRouter Free API Key</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono">
+                          DeepSeek / Llama Free
+                        </span>
+                      </div>
+                      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium">
+                        <span>{language === 'en' ? 'Get Free OpenRouter Key' : 'OpenRouter 무료 키 발급'}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="password"
+                        value={openrouterKeyInput}
+                        onChange={(e) => setOpenrouterKeyInput(e.target.value)}
+                        placeholder="sk-or-v1-..."
+                        className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3.5 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleTestSecondaryKey('openrouter', openrouterKeyInput)}
+                        disabled={testingSecondaryProvider === 'openrouter'}
+                        className="px-3 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Activity className={`w-3.5 h-3.5 ${testingSecondaryProvider === 'openrouter' ? 'animate-spin text-blue-500' : ''}`} />
+                        <span>{testingSecondaryProvider === 'openrouter' ? '검증...' : '검증'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveOpenRouterKey}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Save OpenRouter Key' : 'OpenRouter 키 저장'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-xl p-6 mb-8">
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
@@ -14146,7 +14330,7 @@ export default function App() {
                   <div className="bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
                     <div className="flex items-center gap-2 mb-3">
                       <Clock className="w-4 h-4 text-emerald-500" />
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{language === 'en' ? 'AI Engine Sync Interval' : '백엔드 자율 엔진 수집 주기 설정'}</span>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{language === 'en' ? 'AI Engine Sync Interval' : '백엔드 자율 수집 엔진 주기 설정'}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <input 
@@ -14155,15 +14339,15 @@ export default function App() {
                         max={10080}
                         value={maintenanceSettings.engineIntervalMin || 60}
                         onChange={(e) => setMaintenanceSettings(prev => ({ ...prev, engineIntervalMin: Math.max(1, parseInt(e.target.value) || 60) }))}
-                        className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                       />
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                         {language === 'en' ? 'minutes' : '분 주기'}
                       </span>
                       <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
                         {language === 'en' ? 
-                          `Runs auto-collection every ${(maintenanceSettings.engineIntervalMin || 60)} min(s).` : 
-                          `매 ${(maintenanceSettings.engineIntervalMin || 60)}분마다 크론 스케줄이 실시간 작동합니다.`
+                          `Local server runs every ${maintenanceSettings.engineIntervalMin || 60} min(s) & GitHub Actions scheduled runs.` : 
+                          `로컬 개발 서버 ${maintenanceSettings.engineIntervalMin || 60}분 주기 및 GitHub Actions 스케줄러와 연동 반영됩니다.`
                         }
                       </span>
                     </div>
@@ -14173,7 +14357,7 @@ export default function App() {
                   <div className="bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
                     <div className="flex items-center gap-2 mb-3">
                       <Layers className="w-4 h-4 text-purple-500" />
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{language === 'en' ? 'AI Engine Collection Count' : '백엔드 자율 엔진 모집 개수 설정'}</span>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{language === 'en' ? 'AI Engine Collection Count' : 'GitOps 수집 이슈 모집 개수 설정'}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <input 
@@ -14182,15 +14366,15 @@ export default function App() {
                         max={10}
                         value={maintenanceSettings.engineBatchSize || 4}
                         onChange={(e) => setMaintenanceSettings(prev => ({ ...prev, engineBatchSize: Math.max(1, Math.min(10, parseInt(e.target.value) || 4)) }))}
-                        className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                       />
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                         {language === 'en' ? 'issues' : '개 이슈'}
                       </span>
                       <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
                         {language === 'en' ? 
-                          `Collects ${(maintenanceSettings.engineBatchSize || 4)} issue(s) per run.` : 
-                          `1회 가동마다 약 ${(maintenanceSettings.engineBatchSize || 4)}개 이슈를 자동 수집합니다.`
+                          `GitHub Actions & local server will collect ${maintenanceSettings.engineBatchSize || 4} issue(s) per run into Git repository.` : 
+                          `GitHub Actions GitOps 수집 스크립트 가동 시 1회당 약 ${maintenanceSettings.engineBatchSize || 4}개 이슈를 자동 생성합니다.`
                         }
                       </span>
                     </div>
@@ -14201,14 +14385,14 @@ export default function App() {
                   <div className="flex items-center gap-1">
                     <RefreshCw className="w-3 h-3 text-blue-500" />
                     <span>
-                      {language === 'en' ? 'Next maintenance:' : '다음 유지보수 예정:'} {' '}
+                      {language === 'en' ? 'Next maintenance:' : '다음 유지보수 점검 예정:'} {' '}
                       <span className="text-blue-600 dark:text-blue-400 font-bold">
                         {maintenanceSettings.lastMaintenanceAt ? new Date(new Date(maintenanceSettings.lastMaintenanceAt).getTime() + 24 * 60 * 60 * 1000).toLocaleString() : (language === 'en' ? 'At Midnight' : '오늘 자정')}
                       </span>
                     </span>
                   </div>
                   <span className="font-medium text-slate-500">
-                    {language === 'en' ? '* Run daily at 00:00 KST' : '* 매일 한국시간 00:00에 실행됩니다.'}
+                    {language === 'en' ? '* Saved to data/system_config.json & synced to GitHub repository' : '* 설정 저장 시 data/system_config.json 저장 및 깃허브 GitOps 수집 엔진에 자동 반영됩니다.'}
                   </span>
                 </div>
               </div>
@@ -14984,10 +15168,12 @@ export default function App() {
                     <div>
                       <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                         <Flame className="w-5 h-5 text-orange-500" />
-                        {language === 'en' ? 'Local Staging & Cloud Sync' : '로컬 수집 후 클라우드 동기화'}
+                        {language === 'en' ? 'Local Staging & GitOps Sync' : '로컬 대기열 수집 ➔ GitOps 동기화'}
                       </h4>
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        {language === 'en' ? 'Collect items to your computer first, then upload them to the server all at once.' : '데이터를 먼저 내 컴퓨터에 수집한 뒤, 나중에 한꺼번에 서버로 전송합니다. (할당량 관리 효율적)'}
+                        {language === 'en' 
+                          ? 'Collect items to local browser queue first, then push to GitHub repository for instant live deployment.' 
+                          : '데이터를 내 브라우저 대기열(Staging Queue)에 수집한 뒤, 1-Click GitOps로 GitHub 저장소 및 웹사이트에 라이브 반영합니다.'}
                       </p>
                     </div>
                     
@@ -14999,7 +15185,9 @@ export default function App() {
                         className="sr-only peer" 
                       />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none dark:bg-slate-700 peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:width-5 after:transition-all peer-checked:bg-orange-500"></div>
-                      <span className="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'Use Local Staging' : '로컬 수집 모드 사용'}</span>
+                      <span className="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                        {language === 'en' ? 'Use Local Staging Queue' : '로컬 대기열(스테이징) 수집 모드'}
+                      </span>
                     </label>
                   </div>
 
@@ -15040,8 +15228,8 @@ export default function App() {
                               </>
                             ) : (
                               <>
-                                <Cloud className="w-4 h-4" />
-                                {language === 'en' ? 'Sync All to Cloud' : '클라우드로 모두 동기화'}
+                                <GitBranch className="w-4 h-4" />
+                                {language === 'en' ? 'Sync All to GitOps Repository' : '저장소(GitOps)로 모두 동기화'}
                               </>
                             )}
                           </button>
@@ -15067,6 +15255,46 @@ export default function App() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Member & User Account Management Panel (Zero Cloud DB) */}
+              <MemberManagementPanel language={language} />
+
+              {/* [4등급] 나의 실험실 이전 기능 (User Lab Transferred) */}
+              <div className="flex items-center gap-2.5 pt-6 pb-2 border-b-2 border-slate-400/40 dark:border-slate-600/30 mb-6">
+                <span className="px-3 py-1 text-xs font-black rounded-xl bg-slate-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+                  <Terminal className="w-4 h-4" />
+                  {language === 'en' ? '[Tier 4] Transferred Lab Utilities' : '[4등급] 실험실 이전 기능'}
+                </span>
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                  {language === 'en' ? 'Windows Event Viewer & PC Specs Laboratory' : 'Windows 이벤트 뷰어 및 내 PC 실시간 사양 실험실'}
+                </h3>
+              </div>
+
+              {/* Quick Link to My Lab Event Viewer */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-750 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl">
+                    <Terminal className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      {language === 'en' ? 'Windows Event Viewer & PC Specs Laboratory' : 'Windows 이벤트 뷰어 및 내 PC 실시간 사양 실험실'}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {language === 'en' 
+                        ? 'Moved to [My Lab] for personalized user computer diagnostics and live Event Viewer log monitoring.' 
+                        : '사용자 맞춤형 실시간 PC 사양 진단 및 이벤트 뷰어 로그 모니터링을 위해 [나의 실험실] 탭으로 이전되었습니다.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab('library')}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer shadow-sm"
+                >
+                  <span>{language === 'en' ? 'Open in My Lab' : '나의 실험실에서 열기'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
 
               {/* Issue Management - Added List to Admin Tab */}
