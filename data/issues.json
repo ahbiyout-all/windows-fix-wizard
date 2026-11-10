@@ -5522,5 +5522,97 @@
     "updatedAt": "2026-11-09T15:19:14.408Z",
     "verifiedAt": "2026-11-09T15:19:14.408Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--0x00000116--mw9zxtkw",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (0x00000116)",
+    "title": "그래픽 드라이버 응답 중지 및 복구 오류",
+    "title_en": "Video TDR Failure (Timeout Detection and Recovery)",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 후 그래픽 드라이버가 응답을 멈추고 시스템이 멈추거나 블루스크린이 발생함.",
+    "symptoms_en": "Graphics driver stops responding and system hangs or crashes with BSOD after Windows 11 23H2/24H2 updates.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-PnpDevice -Class Display | Where-Object {$_.Status -eq 'Error'} | Enable-PnpDevice -Confirm:$false",
+    "manualSteps": [
+      "제어판에서 그래픽 드라이버를 완전히 제거합니다.",
+      "제조사(NVIDIA/AMD) 공식 홈페이지에서 최신 드라이버를 다운로드하여 다시 설치합니다.",
+      "Windows 설정에서 '하드웨어 가속 GPU 일정 예약' 기능을 끕니다.",
+      "장치 관리자에서 디스플레이 어댑터를 마우스 오른쪽 버튼으로 클릭하여 '디바이스 제거' 후 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Uninstall the current graphics driver completely via Control Panel.",
+      "Download and install the latest driver from the official manufacturer (NVIDIA/AMD) website.",
+      "Disable 'Hardware-accelerated GPU scheduling' in Windows Settings.",
+      "Right-click the display adapter in Device Manager, select 'Uninstall device', and restart your PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/display/timeout-detection-and-recovery",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-screen-flickering-in-windows-3ac80b08-464c-0b89-a3b0-647d781b0ebf"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE",
+      "그래픽 오류",
+      "0x00000116",
+      "Display driver timeout",
+      "GPU Crash"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-10T01:13:24.992Z",
+    "updatedAt": "2026-11-10T01:13:24.992Z",
+    "verifiedAt": "2026-11-10T01:13:24.992Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-d3d-device-lost-mw9zxtkw",
+    "category": "디스플레이/그래픽",
+    "code": "D3D_DEVICE_LOST",
+    "title": "DirectX 그래픽 장치 연결 끊김 오류",
+    "title_en": "D3D Device Lost Error",
+    "symptoms": "최신 Windows 빌드에서 고사양 게임 또는 앱 실행 시 다이렉트X 그래픽 자원이 예기치 않게 손실되어 프로그램이 강제 종료됨.",
+    "symptoms_en": "DirectX graphical resources are unexpectedly lost when running high-performance games or apps on recent Windows builds, causing programs to crash.",
+    "script": "dism /online /cleanup-image /startcomponentcleanup; dxdiag /t %temp%\\dxdiag.txt; Add-AppxPackage -Register -Path 'C:\\Windows\\SystemApps\\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy\\AppxManifest.xml' -DisableDevelopmentMode",
+    "manualSteps": [
+      "Windows 키 + R을 누르고 'dxdiag'를 입력하여 DirectX 진단 도구를 실행해 오류를 확인합니다.",
+      "DirectX End-User Runtime 웹 설치 관리자를 실행하여 누락된 구성 요소를 복구합니다.",
+      "설정 > 시스템 > 디스플레이 > 그래픽에서 해당 앱의 그래픽 성능 기본 설정을 '고성능'으로 변경합니다.",
+      "전원 관리 옵션을 '고성능' 모드로 변경하여 그래픽 카드 전원 부족을 방지합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type 'dxdiag', and run the tool to check for diagnostic errors.",
+      "Run the DirectX End-User Runtime Web Installer to repair missing components.",
+      "Go to Settings > System > Display > Graphics and set the app's performance preference to 'High performance'.",
+      "Change Power Plan to 'High Performance' mode to prevent power drops to the GPU."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/win32/direct3d11/d3d11-graphics-reference-d3d11-core-enums",
+      "https://support.microsoft.com/en-us/windows/update-drivers-manually-in-windows-ec62f46c-ff14-c91d-eead-d7126dc1b7b6"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "D3D_DEVICE_LOST",
+      "DirectX 오류",
+      "다이렉트X",
+      "Graphics card crash",
+      "DXGI_ERROR_DEVICE_REMOVED"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-10T01:13:24.992Z",
+    "updatedAt": "2026-11-10T01:13:24.992Z",
+    "verifiedAt": "2026-11-10T01:13:24.992Z",
+    "verificationStatus": "verified"
   }
 ]

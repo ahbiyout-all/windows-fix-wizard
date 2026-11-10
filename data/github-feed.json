@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-09T15:19:14.408Z",
+  "lastCollectedAt": "2026-11-10T01:13:24.992Z",
   "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "정품인증",
+  "targetCategory": "디스플레이/그래픽",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 122,
+  "totalIssuesCount": 124,
   "newIssues": [
     {
-      "id": "gh-0x803f8001-mw9eppew",
-      "code": "0x803F8001",
-      "title": "Windows 정품 인증 시 발생하는 0x803F8001 오류 해결 방법",
-      "category": "정품인증"
+      "id": "gh-video-tdr-failure--0x00000116--mw9zxtkw",
+      "code": "VIDEO_TDR_FAILURE (0x00000116)",
+      "title": "그래픽 드라이버 응답 중지 및 복구 오류",
+      "category": "디스플레이/그래픽"
     },
     {
-      "id": "gh-0x80072f8f-mw9eppew",
-      "code": "0x80072F8F",
-      "title": "네트워크 설정으로 인한 정품 인증 오류 0x80072F8F 수정",
-      "category": "정품인증"
+      "id": "gh-d3d-device-lost-mw9zxtkw",
+      "code": "D3D_DEVICE_LOST",
+      "title": "DirectX 그래픽 장치 연결 끊김 오류",
+      "category": "디스플레이/그래픽"
     }
   ]
 }
