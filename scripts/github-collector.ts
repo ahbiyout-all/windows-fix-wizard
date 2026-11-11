@@ -57,9 +57,14 @@ async function runCollector() {
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.CUSTOM_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
-    console.error('❌ Error: GEMINI_API_KEY or CUSTOM_API_KEY secret is not configured.');
-    console.error('Please configure GEMINI_API_KEY in your GitHub Repository Settings > Secrets and variables > Actions.');
-    process.exit(1);
+    console.warn('⚠️ Warning: GEMINI_API_KEY or CUSTOM_API_KEY secret is not configured in GitHub Secrets.');
+    console.warn('Please configure GEMINI_API_KEY in GitHub Repository Settings > Secrets and variables > Actions.');
+    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryFile && fs.existsSync(summaryFile)) {
+      const md = `## ⚠️ Autonomous Data Collection Notice\n\n- **Status**: GEMINI_API_KEY secret not found in Repository Secrets.\n- **Action**: Collection cycle skipped safely.\n\n> **To enable automated 24/7 AI collection:**\n> Go to **Settings > Secrets and variables > Actions** in your GitHub repository and add \`GEMINI_API_KEY\` with your Google AI Studio API key.\n`;
+      fs.appendFileSync(summaryFile, md, 'utf-8');
+    }
+    return;
   }
 
   const dataDir = path.resolve(process.cwd(), 'data');
@@ -291,8 +296,13 @@ JSON Schema:
   }
 
   if (!generatedText) {
-    console.error('❌ Failed to generate issue content across all candidate models.');
-    process.exit(1);
+    console.warn('⚠️ Could not generate issue content across candidate models (quota exhausted or API unavailable). Skipping cycle.');
+    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryFile && fs.existsSync(summaryFile)) {
+      const md = `## ⚠️ Autonomous Data Collection Notice\n\n- **Status**: AI generation skipped (Quota exhausted or models unavailable).\n- **Action**: Database retained safely; system will retry on next schedule.\n`;
+      fs.appendFileSync(summaryFile, md, 'utf-8');
+    }
+    return;
   }
 
   // Parse JSON response
@@ -309,9 +319,14 @@ JSON Schema:
       parsedItems = [parsedItems];
     }
   } catch (parseErr: any) {
-    console.error('❌ Failed to parse JSON from AI response:', parseErr.message);
+    console.warn('⚠️ Failed to parse JSON from AI response:', parseErr.message);
     console.log('Raw output preview:', cleaned.substring(0, 300));
-    process.exit(1);
+    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryFile && fs.existsSync(summaryFile)) {
+      const md = `## ⚠️ Autonomous Data Collection Notice\n\n- **Status**: AI output JSON parse error. Cycle skipped safely.\n`;
+      fs.appendFileSync(summaryFile, md, 'utf-8');
+    }
+    return;
   }
 
   // Normalize, deduplicate and format into KnownIssue

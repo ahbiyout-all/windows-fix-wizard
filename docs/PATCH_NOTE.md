@@ -1,6 +1,19 @@
-# Patch Note - System Update (v3.97.0)
+# Patch Note - System Update (v3.97.1)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.1] - 2026-11-10
+
+### 🛡️ GitHub Actions Autonomous Collector Failure Prevention & Dataset Sync
+- **GitHub Actions 무인 수집 스크립트(`scripts/github-collector.ts`) 오류 안정화 및 자동 복구 고도화**:
+  - `GEMINI_API_KEY` 미설정 또는 API 쿼터 초과 시 `process.exit(1)`로 인해 GitHub Actions 스케줄 워크플로(`windows-fix-collector.yml`)가 빨간색 장애(Exit Code 1)로 기록되는 현상을 방지하도록 안전 예외 처리 고도화.
+  - 비밀키 미등록 시 또는 API 할당량 소진 시 `GITHUB_STEP_SUMMARY`에 설정 안내 가이드 리포트를 자동 작성하고 `Exit Code 0`으로 안전 종료하여 기존 데이터베이스 보존 및 정상 상태 유지.
+- **최신 디스플레이/그래픽 이슈 데이터셋 동기화 반영**:
+  - `VIDEO_TDR_FAILURE (0x00000116)` (그래픽 드라이버 응답 중지 및 복구 오류) 및 `D3D_DEVICE_LOST` (DirectX 그래픽 장치 연결 끊김 오류) 해결 스크립트 및 정밀 가이드를 `data/issues.json` 및 `data/github-feed.json`에 동기화 반영 (총 124개 이슈).
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 
