@@ -790,11 +790,11 @@ async function executeServerGeminiCall(
   }
 
   const candidateModels = [
-    options.model || "gemini-2.5-flash",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-2.5-pro"
+    options.model || "gemini-3.8-flash",
+    "gemini-3.8-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-flash-latest"
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   let lastError: any = null;
@@ -1299,10 +1299,10 @@ async function runAiSyncInternal(): Promise<any> {
   ]`;
 
   const modelsToTry = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-2.5-pro"
+    "gemini-3.8-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-flash-latest"
   ];
 
   let success = false;
@@ -2023,7 +2023,7 @@ async function startServer() {
     try {
       if (targetPrompt) {
         const result = await executeServerGeminiCall(targetPrompt, {
-          model: model || "gemini-2.5-flash",
+          model: model || "gemini-3.8-flash",
           enableSearch: true
         });
         if (result && result.text) {
@@ -2044,7 +2044,7 @@ async function startServer() {
       const { issue, prompt } = req.body;
       const targetPrompt = prompt || `Review this Windows issue and verify its technical accuracy:\n${JSON.stringify(issue, null, 2)}`;
       const result = await executeServerGeminiCall(targetPrompt, {
-        model: "gemini-2.5-flash"
+        model: "gemini-3.8-flash"
       });
       res.json({ success: true, text: result.text });
     } catch (err: any) {
@@ -2065,7 +2065,7 @@ async function startServer() {
       const { issuesChunk, prompt } = req.body;
       const targetPrompt = prompt || `Reclassify the following Windows troubleshooting issues with accuracy into standard categories and hardware component tags:\n${JSON.stringify(issuesChunk, null, 2)}`;
       const result = await executeServerGeminiCall(targetPrompt, {
-        model: "gemini-2.5-flash"
+        model: "gemini-3.8-flash"
       });
       res.json({ success: true, text: result.text });
     } catch (err: any) {
@@ -2078,7 +2078,7 @@ async function startServer() {
     try {
       const { prompt } = req.body;
       const result = await executeServerGeminiCall(prompt, {
-        model: "gemini-2.5-flash"
+        model: "gemini-3.8-flash"
       });
       res.json({ success: true, text: result.text });
     } catch (err: any) {
@@ -2096,7 +2096,7 @@ async function startServer() {
       const { prompt, batchSize } = req.body;
       const targetPrompt = prompt || `Search for ${batchSize || 3} recent Windows 10/11 troubleshooting guides and issues. Return raw JSON array.`;
       const result = await executeServerGeminiCall(targetPrompt, {
-        model: "gemini-2.5-flash",
+        model: "gemini-3.8-flash",
         enableSearch: true
       });
       res.json({ success: true, text: result.text });
@@ -2181,7 +2181,7 @@ async function startServer() {
           httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
         });
         await testAi.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: 'test',
           config: { maxOutputTokens: 2 }
         });

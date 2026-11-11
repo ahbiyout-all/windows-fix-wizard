@@ -1,6 +1,20 @@
-# Patch Note - System Update (v3.97.1)
+# Patch Note - System Update (v3.97.2)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.2] - 2026-11-11
+
+### 🤖 Gemini API Model Upgrades & GitHub Actions Collector Deprecation Fix
+- **Google GenAI 폐기 모델 교체 및 최신 모델 라인업 전면 전환**:
+  - Google Gemini API에서 404 NOT_FOUND로 비활성화된 구형 모델(`gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-2.5-pro`)을 완전히 제거.
+  - 최신 공식 권장 모델인 **`gemini-3.8-flash`**, **`gemini-3.1-flash-lite`**, **`gemini-3.1-pro-preview`**, **`gemini-flash-latest`**로 전면 전환.
+- **수집 스크립트(`scripts/github-collector.ts`) & 백엔드 서버(`server.ts`) 동기화**:
+  - GitHub Actions 수집 스크립트의 모델 후보군 업데이트 완료.
+  - 백엔드 서버 AI 진단(`/api/ai/diagnose`), 이슈 검증(`/api/ai/verify-issue`), 카테고리 재분류(`/api/ai/reclassify-chunk`), 지식 최적화(`/api/ai/optimize-knowledge`), 실시간 트렌드 검색(`/api/ai/search-trends`), 키 테스트(`/api/ai/test-key`)의 모델을 `gemini-3.8-flash`로 통일.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 
