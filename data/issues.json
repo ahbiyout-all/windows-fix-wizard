@@ -5614,5 +5614,101 @@
     "updatedAt": "2026-11-10T01:13:24.992Z",
     "verifiedAt": "2026-11-10T01:13:24.992Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mwc27fme",
+    "category": "네트워크",
+    "code": "0x800704CF",
+    "title": "Windows 10/11 네트워크 위치 연결 실패 및 0x800704CF 오류 해결",
+    "title_en": "Resolving Windows 10/11 Network Location Unreachable Error 0x800704CF",
+    "symptoms": "인터넷 브라우징은 정상 작동하지만 Microsoft 계정 로그인, Microsoft Store 앱 동기화 또는 LAN/SMB 네트워크 공유 폴더 접속 시 '오류 0x800704CF: 네트워크 위치에 연결할 수 없습니다' 메시지가 발생합니다. 최신 Windows 10/11 업데이트 이후 네트워크 어댑터 바인딩 손상, TCP/IP 스택 충돌 또는 잔류 프록시 설정으로 인해 발생합니다.",
+    "symptoms_en": "Occurs when attempting to sign in to a Microsoft Account, synchronize Store apps, or access local network shares, displaying 'Error 0x800704CF: The network location cannot be reached' despite active internet connectivity. This is triggered by TCP/IP stack corruption, disabled Client for Microsoft Networks adapter bindings, or stale proxy configurations following recent Windows updates.",
+    "script": "Write-Output '=== Windows Network Stack & Adapter Binding Diagnostics ==='\n\n# 1. Reset WinHTTP proxy configuration\nWrite-Output 'Resetting WinHTTP proxy to direct connection...'\nnetsh winhttp reset proxy\n\n# 2. Reset Winsock catalog and TCP/IP stack\nWrite-Output 'Resetting Winsock and IP stack...'\nnetsh winsock reset | Out-Null\nnetsh int ip reset | Out-Null\n\n# 3. Flush and register DNS\nWrite-Output 'Flushing and refreshing DNS cache...'\nClear-DnsClientCache\nRegister-DnsClient\n\n# 4. Check Client for Microsoft Networks binding on active network adapters\nWrite-Output 'Checking network adapter client bindings...'\n$activeAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }\nforeach ($adapter in $activeAdapters) {\n    $binding = Get-NetAdapterBinding -Name $adapter.Name -ComponentID 'ms_msclient' -ErrorAction SilentlyContinue\n    if ($binding -and -not $binding.Enabled) {\n        Write-Output \"Enabling Client for Microsoft Networks on adapter: $($adapter.Name)\"\n        Enable-NetAdapterBinding -Name $adapter.Name -ComponentID 'ms_msclient'\n    } else {\n        Write-Output \"Adapter $($adapter.Name): Client binding is active or verified.\"\n    }\n}\n\nWrite-Output 'Network remediation completed. Please restart your PC to finalize changes.'",
+    "manualSteps": [
+      "네트워크 어댑터 설정 열기: 'Win + R' 키를 누른 뒤 'ncpa.cpl'을 입력하고 확인을 클릭합니다.",
+      "현재 사용 중인 네트워크 어댑터(이더넷 또는 Wi-Fi)를 우클릭하고 '속성'을 선택합니다.",
+      "'Microsoft 네트워크용 클라이언트' 항목이 체크되어 있는지 확인하고, 해제되어 있다면 체크 후 확인을 누릅니다.",
+      "Windows 설정 > 네트워크 및 인터넷 > 프록시로 이동하여 '프록시 서버 사용'이 켜져 있는 경우 비활성화합니다.",
+      "시스템을 재부팅한 후 Microsoft 계정 로그인 및 네트워크 공유 리소스 접속을 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Open Network Connections by pressing 'Win + R', typing 'ncpa.cpl', and pressing Enter.",
+      "Right-click your active network adapter (Ethernet or Wi-Fi) and select 'Properties'.",
+      "Ensure 'Client for Microsoft Networks' is checked. If it is unchecked, enable it and click OK.",
+      "Navigate to Windows Settings > Network & internet > Proxy, and verify that 'Use a proxy server' is toggled Off.",
+      "Restart the system and test Microsoft Account authentication or shared folder connectivity."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/tcpip-troubleshooting-overview",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-166580f4-2792-7104-e576-92d95e0c0307"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704CF",
+      "네트워크 위치에 연결할 수 없습니다",
+      "network location unreachable",
+      "Microsoft 계정 네트워크 오류",
+      "winsock reset 0x800704cf",
+      "Client for Microsoft Networks"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T11:52:25.045Z",
+    "updatedAt": "2026-11-11T11:52:25.045Z",
+    "verifiedAt": "2026-11-11T11:52:25.045Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee7-mwc27fme",
+    "category": "네트워크",
+    "code": "0x80072EE7",
+    "title": "Windows 10/11 서버 이름 및 주소 확인 실패 오류 0x80072EE7 해결",
+    "title_en": "Resolving Windows 10/11 Server Name Resolution Error 0x80072EE7",
+    "symptoms": "Windows 업데이트 검색 중단, Microsoft Store 앱 다운로드 오류 또는 특정 도메인 서비스 접근 시 '0x80072EE7: 서버 이름 또는 주소를 확인할 수 없습니다(ERROR_INTERNET_NAME_NOT_RESOLVED)' 오류가 발생합니다. DNS 캐시 손상, 비정상적인 hosts 파일 리디렉션 항목, 또는 IPv6 DNS 확인 우선순위 충돌이 주원인입니다.",
+    "symptoms_en": "Windows Update fails to search for patches, Microsoft Store throws download errors, or enterprise domain connections fail with error 0x80072EE7 (ERROR_INTERNET_NAME_NOT_RESOLVED). This is caused by corrupted DNS resolver cache, malicious or stale hosts file mappings, or faulty IPv6 DNS name resolution fallback on Windows 10 and 11.",
+    "script": "Write-Output '=== Diagnostics & Repair for Error 0x80072EE7 (DNS Name Resolution) ==='\n\n# 1. Clear DNS Client Cache\nWrite-Output 'Flushing local DNS cache...'\nClear-DnsClientCache\n\n# 2. Inspect Windows hosts file for interfering Microsoft/Update endpoints\n$hostsPath = \"$env:SystemRoot\\System32\\drivers\\etc\\hosts\"\nif (Test-Path $hostsPath) {\n    $hostsContent = Get-Content -Path $hostsPath\n    $blockedDomains = $hostsContent | Where-Object { $_ -match 'microsoft|windowsupdate|msftconnecttest' -and $_ -notmatch '^\\s*#' }\n    if ($blockedDomains) {\n        Write-Warning \"Potentially blocking entries found in hosts file:\"\n        $blockedDomains | ForEach-Object { Write-Warning \" - $_\" }\n        Write-Output \"Note: Please inspect C:\\Windows\\System32\\drivers\\etc\\hosts to remove unauthorized overrides.\"\n    } else {\n        Write-Output 'Hosts file clean: No conflicting Microsoft update entries detected.'\n    }\n}\n\n# 3. Renew IP configuration\nWrite-Output 'Renewing DHCP leases...'\nipconfig /renew | Out-Null\n\n# 4. Test DNS resolution for core Windows Update endpoints\n$testDomains = @('slscr.update.microsoft.com', 'fe3.delivery.mp.microsoft.com')\nforeach ($domain in $testDomains) {\n    try {\n        $result = Resolve-DnsName -Name $domain -ErrorAction Stop\n        Write-Output \"[PASS] Successfully resolved: $domain (IP: $($result.IPAddress | Select-Object -First 1))\"\n    } catch {\n        Write-Warning \"[FAIL] Could not resolve: $domain. Consider configuring public DNS (e.g., 1.1.1.1 / 8.8.8.8).\"\n    }\n}\n\nWrite-Output 'Diagnostic routine completed.'",
+    "manualSteps": [
+      "hosts 파일 검사: '메모장'을 관리자 권한으로 실행한 후 'C:\\Windows\\System32\\drivers\\etc\\hosts' 파일을 열어 Microsoft 또는 Windows Update 관련 도메인이 리디렉션되어 있는지 확인하고 해당 행을 제거 후 저장합니다.",
+      "DNS 서버 수동 변경: Windows 설정 > 네트워크 및 인터넷 > 어댑터 속성(IPv4)에서 기본 설정 DNS를 '1.1.1.1' 또는 '8.8.8.8', 보조 DNS를 '1.0.0.1' 또는 '8.8.4.4'로 지정합니다.",
+      "관리자 권한 PowerShell에서 'ipconfig /flushdns' 명령어를 실행하여 오래된 캐시 레코드를 제거합니다.",
+      "보안 소프트웨어 또는 VPN 프로그램의 DNS 리디렉션 필터링 기능을 일시 비활성화한 후 Windows 업데이트 또는 Store 다운로드를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Inspect the hosts file: Open Notepad as Administrator, load 'C:\\Windows\\System32\\drivers\\etc\\hosts', and verify there are no entries redirecting Microsoft or Windows Update domains; remove them if present.",
+      "Configure Public DNS: In Settings > Network & internet > Hardware properties, edit IPv4 DNS settings to use Cloudflare (1.1.1.1 / 1.0.0.1) or Google (8.8.8.8 / 8.8.4.4).",
+      "Run 'ipconfig /flushdns' in an elevated PowerShell or Command Prompt to purge corrupt DNS records.",
+      "Temporarily disable third-party VPNs, firewalls, or secure DNS interception tools, then retry Windows Update or Microsoft Store operations."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/troubleshoot-dns-client",
+      "https://support.microsoft.com/en-us/windows/windows-update-troubleshooter-19bc41eb-249c-7d9c-d086-a30c7705c96f"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE7",
+      "ERROR_INTERNET_NAME_NOT_RESOLVED",
+      "DNS 확인 실패",
+      "서버 이름 또는 주소를 확인할 수 없습니다",
+      "Windows update 0x80072ee7",
+      "Clear-DnsClientCache"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T11:52:25.045Z",
+    "updatedAt": "2026-11-11T11:52:25.045Z",
+    "verifiedAt": "2026-11-11T11:52:25.045Z",
+    "verificationStatus": "verified"
   }
 ]

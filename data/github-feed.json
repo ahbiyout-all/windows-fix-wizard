@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-10T01:13:24.992Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "디스플레이/그래픽",
+  "lastCollectedAt": "2026-11-11T11:52:25.045Z",
+  "modelUsed": "gemini-3.8-flash",
+  "targetCategory": "네트워크",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 124,
+  "totalIssuesCount": 126,
   "newIssues": [
     {
-      "id": "gh-video-tdr-failure--0x00000116--mw9zxtkw",
-      "code": "VIDEO_TDR_FAILURE (0x00000116)",
-      "title": "그래픽 드라이버 응답 중지 및 복구 오류",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x800704cf-mwc27fme",
+      "code": "0x800704CF",
+      "title": "Windows 10/11 네트워크 위치 연결 실패 및 0x800704CF 오류 해결",
+      "category": "네트워크"
     },
     {
-      "id": "gh-d3d-device-lost-mw9zxtkw",
-      "code": "D3D_DEVICE_LOST",
-      "title": "DirectX 그래픽 장치 연결 끊김 오류",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x80072ee7-mwc27fme",
+      "code": "0x80072EE7",
+      "title": "Windows 10/11 서버 이름 및 주소 확인 실패 오류 0x80072EE7 해결",
+      "category": "네트워크"
     }
   ]
 }
