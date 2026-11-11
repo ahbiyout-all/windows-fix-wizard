@@ -1,6 +1,24 @@
-# Patch Note - System Update (v3.97.2)
+# Patch Note - System Update (v3.97.3)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.3] - 2026-11-11
+
+### 📱 Mobile Device Adaptive Strategy (모바일 장치 접속 대비책 및 반응형 터치 UX 고도화)
+- **모바일 접속 자동 감지 및 응급 지원 컴패니언 모드(Mobile Companion Mode)**:
+  - 스마트폰(Android, iOS) 및 모바일 브라우저로 접속 시 이를 즉각 식별하여 **"📱 모바일 응급 지원 모드 활성화"** 안내 배너 및 전용 뱃지 표시.
+  - PC가 블루스크린(BSOD) 또는 부팅 불가, 네트워크 단절 상태여도 모바일 기기에서 모든 Windows 오류 코드(0x...) 해결 가이드와 1클릭 복구 솔루션을 즉시 열람 가능.
+- **가상 Windows 11 표준 참조 사양 스위처(Virtual Win11 Reference Switcher)**:
+  - 모바일 기기 접속 시 모바일 하드웨어(Android/ARM/Apple GPU) 스펙뿐만 아니라, **[가상 Windows 11 사양 보기] / [내 모바일 실시간 사양]** 1초 전환 토글을 제공하여 표준 윈도우 환경과 비교 진단 지원.
+- **PowerShell 명령어 모바일 원격 공유 파이프라인(Web Share & Clipboard to PC)**:
+  - 모바일에서 실행 불가능한 PowerShell 명령어의 한계를 극복하기 위해 **[PC로 명령어 전송 (카카오톡/이메일/메모장)]** Web Share API 및 스마트 클립보드 복구 연동 지원.
+- **모바일 전용 반응형 터치 카드 뷰 (Mobile Card View) 탑재**:
+  - 기존 8열 테이블의 모바일 가로 스크롤 불편을 해소하기 위해 화면 너비 768px 미만에서는 모바일 터치 친화적 카드 뷰(`block md:hidden`) 자동 전환.
+  - 레벨 뱃지(Error/Warning/Info), Event ID, 오류 코드, 소스, 2줄 요약 및 [가이드북 바로 해결] 큰 버튼을 제공하여 스마트폰에서도 한 손으로 쾌적하게 조작 가능.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 

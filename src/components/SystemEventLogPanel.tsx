@@ -31,7 +31,10 @@ import {
   Play,
   ShieldCheck,
   Zap,
-  BookOpen
+  BookOpen,
+  Smartphone,
+  Share2,
+  ArrowRightLeft
 } from 'lucide-react';
 import { detectSystemInfo, SystemInfoData } from './SystemInfoWidget';
 
@@ -136,7 +139,9 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
   const [systemInfo, setSystemInfo] = useState<SystemInfoData | null>(null);
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false);
   const [copiedPsScript, setCopiedPsScript] = useState<boolean>(false);
+  const [copiedShareLink, setCopiedShareLink] = useState<boolean>(false);
   const [importedStatus, setImportedStatus] = useState<string | null>(null);
+  const [specViewMode, setSpecViewMode] = useState<'device' | 'virtual_win11'>('device');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -145,7 +150,27 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
       .catch(err => console.warn('System info detection fallback:', err));
   }, []);
 
+  const isMobileDevice = useMemo(() => {
+    if (!systemInfo) return false;
+    return systemInfo.osName === 'Android' || systemInfo.osName === 'iOS' || (systemInfo.isTouchDevice && typeof window !== 'undefined' && window.innerWidth < 768);
+  }, [systemInfo]);
+
   const handleCopySpecs = () => {
+    if (specViewMode === 'virtual_win11') {
+      const win11Spec = `[Windows 11 Pro 표준 참조 사양]
+• 운영체제: Windows 11 Pro 24H2 (64-bit)
+• 프로세서(CPU): 16 논리 코어 (Intel Core i7-13700H / AMD Ryzen 7)
+• 메모리(RAM): 16 GB DDR5
+• 그래픽스(GPU): NVIDIA GeForce RTX 4060 Laptop GPU
+• 화면 해상도: 1920 x 1080 (DPI 1.25x, 24-bit)
+• 네트워크 상태: 온라인 정상 연결
+• 모드: 가상 참조 시뮬레이션`;
+      navigator.clipboard.writeText(win11Spec);
+      setCopiedSpec(true);
+      setTimeout(() => setCopiedSpec(false), 2000);
+      return;
+    }
+
     if (!systemInfo) return;
     const specText = `[사용자 컴퓨터 실시간 하드웨어 & 시스템 정보]
 • 운영체제: ${systemInfo.osName} ${systemInfo.osVersion} (${systemInfo.matchedVersionFilter})
@@ -166,6 +191,24 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
     navigator.clipboard.writeText(psCmd);
     setCopiedPsScript(true);
     setTimeout(() => setCopiedPsScript(false), 2500);
+  };
+
+  const handleSharePowerShellCommand = async () => {
+    const psCmd = `Get-WinEvent -LogName System,Application -MaxEvents 50 | Select-Object TimeCreated, Id, LevelDisplayName, ProviderName, Message | ConvertTo-Json -Depth 2 | Out-File -FilePath "$HOME\\Desktop\\MyWindowsLogs.json" -Encoding utf8; Write-Host "내 PC 이벤트 로그 50건이 바탕화면 MyWindowsLogs.json 파일로 저장되었습니다!" -ForegroundColor Green`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Windows Fix Wizard - 이벤트 로그 추출 스크립트',
+          text: `[Windows Fix Wizard 이벤트 로그 추출 명령어]\n대상 PC의 PowerShell(관리자)에 붙여넣고 실행하면 바탕화면에 MyWindowsLogs.json이 생성됩니다:\n\n${psCmd}`
+        });
+        return;
+      } catch (e) {
+        // user cancelled or share failed, fallback to copy
+      }
+    }
+    navigator.clipboard.writeText(psCmd);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 3000);
   };
 
   const handleImportJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -376,25 +419,81 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
       
       {/* Live Host Computer Hardware & OS Specification Card */}
       <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 sm:p-6 border border-indigo-900/50 shadow-md relative overflow-hidden">
+        
+        {/* Mobile Device Adaptive Notice Banner */}
+        {isMobileDevice && (
+          <div className="mb-4 p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <div className="p-1.5 bg-amber-500/20 text-amber-300 rounded-lg shrink-0">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold text-amber-300">
+                  {isEn ? 'Mobile Companion Mode Active' : '📱 모바일 응급 지원 모드 활성화'}
+                </span>
+                <p className="text-amber-200/80 text-[11px] mt-0.5">
+                  {isEn
+                    ? 'Connected via smartphone/tablet. PC unbootable? You can browse Windows error solutions or share extraction commands to your PC.'
+                    : '현재 스마트폰/태블릿으로 접속하셨습니다. PC가 켜지지 않을 때도 스마트폰에서 모든 Windows 오류 해결법을 조회하고 복구 명령어를 PC로 전송할 수 있습니다.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => setSpecViewMode(specViewMode === 'device' ? 'virtual_win11' : 'device')}
+                className="px-2.5 py-1.5 bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 border border-amber-500/40 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>
+                  {specViewMode === 'device'
+                    ? (isEn ? 'Switch to Windows 11 Ref' : '가상 Windows 11 사양 보기')
+                    : (isEn ? 'Switch to My Device' : '내 모바일 실시간 사양')}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5 relative z-10">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/30">
-              <Laptop className="w-6 h-6" />
+              {specViewMode === 'virtual_win11' ? (
+                <Monitor className="w-6 h-6 text-cyan-400" />
+              ) : isMobileDevice ? (
+                <Smartphone className="w-6 h-6 text-amber-400" />
+              ) : (
+                <Laptop className="w-6 h-6" />
+              )}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                  {isEn ? 'Live Computer Hardware & OS Environment' : '내 컴퓨터 실시간 하드웨어 & 시스템 정보'}
+                  {specViewMode === 'virtual_win11'
+                    ? (isEn ? 'Windows 11 Pro Standard Reference Environment' : 'Windows 11 Pro 표준 참조 가상 환경')
+                    : isMobileDevice
+                    ? (isEn ? 'Current Mobile Device Live Hardware Specs' : '현재 접속 모바일 기기 실시간 사양')
+                    : (isEn ? 'Live Computer Hardware & OS Environment' : '내 컴퓨터 실시간 하드웨어 & 시스템 정보')}
                 </h4>
-                <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-[10px] font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  {isEn ? 'Live Detected' : '실시간 감지 완료'}
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border ${
+                  specViewMode === 'virtual_win11'
+                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                    specViewMode === 'virtual_win11' ? 'bg-blue-400' : 'bg-emerald-400'
+                  }`} />
+                  {specViewMode === 'virtual_win11'
+                    ? (isEn ? 'Reference Sim' : '표준 시뮬레이션')
+                    : (isEn ? 'Live Detected' : '실시간 감지 완료')}
                 </span>
               </div>
               <p className="text-xs text-indigo-200/80 mt-0.5">
-                {isEn 
-                  ? 'Hardware specifications and OS environment read directly from your browser and system APIs.' 
-                  : '브라우저 및 시스템 API를 통해 사용자 컴퓨터의 하드웨어와 운영체제 환경을 실시간 감지하여 맞춤 진단을 지원합니다.'}
+                {specViewMode === 'virtual_win11'
+                  ? (isEn ? 'Standard Windows 11 hardware reference baseline for comparative diagnostics.' : 'Windows 11 권장 하드웨어 기준 스펙을 시뮬레이션하여 비교 진단을 지원합니다.')
+                  : isEn 
+                  ? 'Hardware specifications read in real-time directly from your device browser APIs.' 
+                  : '브라우저 및 시스템 API를 통해 사용자 기기의 하드웨어와 운영체제 환경을 실시간 감지하여 맞춤 진단을 지원합니다.'}
               </p>
             </div>
           </div>
@@ -405,16 +504,16 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
               className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border border-white/15 cursor-pointer"
             >
               {copiedSpec ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedSpec ? (isEn ? 'Copied!' : '복사됨!') : (isEn ? 'Copy PC Specs' : '사양 복사')}</span>
+              <span>{copiedSpec ? (isEn ? 'Copied!' : '복사됨!') : (isEn ? 'Copy Specs' : '사양 복사')}</span>
             </button>
 
             {onNavigateToWizard && (
               <button
-                onClick={() => onNavigateToWizard(`${systemInfo?.matchedVersionFilter || 'Windows 11'} 시스템 오류 점검 및 최적화`)}
+                onClick={() => onNavigateToWizard(specViewMode === 'virtual_win11' ? 'Windows 11 시스템 오류 점검 및 최적화' : `${systemInfo?.matchedVersionFilter || 'Windows 11'} 시스템 오류 점검 및 최적화`)}
                 className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>{isEn ? 'Diagnose My PC' : '내 PC 맞춤 진단'}</span>
+                <span>{isEn ? 'Diagnose System' : '맞춤 진단 시작'}</span>
               </button>
             )}
           </div>
@@ -428,11 +527,13 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
               <Monitor className="w-3.5 h-3.5" />
               <span>{isEn ? 'OS & Platform' : '운영체제'}</span>
             </div>
-            <div className="text-xs sm:text-sm font-bold text-white truncate" title={`${systemInfo?.osName} ${systemInfo?.osVersion}`}>
-              {systemInfo ? `${systemInfo.osName} ${systemInfo.osVersion}` : 'Windows 11/10'}
+            <div className="text-xs sm:text-sm font-bold text-white truncate" title={specViewMode === 'virtual_win11' ? 'Windows 11 Pro 24H2' : `${systemInfo?.osName} ${systemInfo?.osVersion}`}>
+              {specViewMode === 'virtual_win11' 
+                ? 'Windows 11 Pro' 
+                : systemInfo ? `${systemInfo.osName} ${systemInfo.osVersion}` : 'Windows 11/10'}
             </div>
             <div className="text-[10px] text-white/50 truncate mt-0.5">
-              {systemInfo?.matchedVersionFilter || '64-bit'}
+              {specViewMode === 'virtual_win11' ? '24H2 (64-bit)' : systemInfo?.matchedVersionFilter || '64-bit'}
             </div>
           </div>
 
@@ -443,10 +544,12 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
               <span>{isEn ? 'CPU Cores' : '프로세서'}</span>
             </div>
             <div className="text-xs sm:text-sm font-bold text-white font-mono">
-              {systemInfo?.cpuCores ? `${systemInfo.cpuCores} 코어` : '8 논리 코어'}
+              {specViewMode === 'virtual_win11'
+                ? '16 코어'
+                : systemInfo?.cpuCores ? `${systemInfo.cpuCores} 코어` : '8 논리 코어'}
             </div>
             <div className="text-[10px] text-white/50 mt-0.5">
-              {isEn ? 'Logical Threads' : '논리 스레드'}
+              {specViewMode === 'virtual_win11' ? 'i7 / Ryzen 7' : isEn ? 'Logical Threads' : '논리 스레드'}
             </div>
           </div>
 
@@ -457,10 +560,12 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
               <span>{isEn ? 'Memory (RAM)' : '메모리'}</span>
             </div>
             <div className="text-xs sm:text-sm font-bold text-white font-mono">
-              {systemInfo?.deviceMemory && systemInfo.deviceMemory !== 'N/A' ? systemInfo.deviceMemory : '8GB+ 추정'}
+              {specViewMode === 'virtual_win11'
+                ? '16 GB'
+                : systemInfo?.deviceMemory && systemInfo.deviceMemory !== 'N/A' ? systemInfo.deviceMemory : '8GB+ 추정'}
             </div>
             <div className="text-[10px] text-white/50 mt-0.5">
-              {isEn ? 'System RAM' : '시스템 메모리'}
+              {specViewMode === 'virtual_win11' ? 'DDR5 권장' : isEn ? 'System RAM' : '시스템 메모리'}
             </div>
           </div>
 
@@ -470,13 +575,15 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
               <Zap className="w-3.5 h-3.5" />
               <span>{isEn ? 'GPU Renderer' : '그래픽스'}</span>
             </div>
-            <div className="text-xs font-bold text-white truncate" title={systemInfo?.gpuRenderer || 'WebGL 3D GPU'}>
-              {systemInfo?.gpuRenderer && systemInfo.gpuRenderer !== 'N/A' 
+            <div className="text-xs font-bold text-white truncate" title={specViewMode === 'virtual_win11' ? 'NVIDIA GeForce RTX 4060' : systemInfo?.gpuRenderer || 'WebGL 3D GPU'}>
+              {specViewMode === 'virtual_win11'
+                ? 'RTX 4060'
+                : systemInfo?.gpuRenderer && systemInfo.gpuRenderer !== 'N/A' 
                 ? systemInfo.gpuRenderer.split('/')[0].replace('ANGLE (', '').replace(')', '')
                 : 'GPU 하드웨어 가속'}
             </div>
             <div className="text-[10px] text-white/50 truncate mt-0.5">
-              {isEn ? 'Hardware Accel' : '하드웨어 가속'}
+              {specViewMode === 'virtual_win11' ? 'DirectX 12 Ultimate' : isEn ? 'Hardware Accel' : '하드웨어 가속'}
             </div>
           </div>
 
@@ -487,10 +594,10 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
               <span>{isEn ? 'Display' : '디스플레이'}</span>
             </div>
             <div className="text-xs sm:text-sm font-bold text-white font-mono truncate">
-              {systemInfo?.screenResolution || '1920 x 1080'}
+              {specViewMode === 'virtual_win11' ? '1920 x 1080' : systemInfo?.screenResolution || '1920 x 1080'}
             </div>
             <div className="text-[10px] text-white/50 mt-0.5">
-              DPI {systemInfo?.devicePixelRatio || 1}x ({systemInfo?.colorDepth || 24}-bit)
+              {specViewMode === 'virtual_win11' ? 'FHD (60Hz+)' : `DPI ${systemInfo?.devicePixelRatio || 1}x (${systemInfo?.colorDepth || 24}-bit)`}
             </div>
           </div>
 
@@ -505,7 +612,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
               {systemInfo?.isOnline ? (isEn ? 'Online' : '정상 연결') : (isEn ? 'Offline' : '오프라인')}
             </div>
             <div className="text-[10px] text-white/50 truncate mt-0.5">
-              {systemInfo?.browserName || 'Chrome/Edge'}
+              {specViewMode === 'virtual_win11' ? 'Edge / Chrome' : systemInfo?.browserName || 'Chrome/Edge'}
             </div>
           </div>
         </div>
@@ -522,6 +629,17 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {isMobileDevice && (
+              <button
+                onClick={handleSharePowerShellCommand}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title={isEn ? 'Share PowerShell script to PC via KakaoTalk/Email' : 'PowerShell 명령어를 PC(카카오톡/이메일)로 전송하기'}
+              >
+                {copiedShareLink ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Share2 className="w-3.5 h-3.5" />}
+                <span>{copiedShareLink ? (isEn ? 'Shared/Copied!' : '전송/복사 완료!') : (isEn ? 'Share to PC' : 'PC로 명령어 전송')}</span>
+              </button>
+            )}
+
             <button
               onClick={handleCopyPowerShellCommand}
               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -544,6 +662,17 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
             </label>
           </div>
         </div>
+
+        {copiedShareLink && (
+          <div className="mt-3 p-2.5 bg-blue-500/20 border border-blue-500/30 rounded-xl text-blue-200 text-xs font-medium flex items-center gap-2 animate-fade-in">
+            <Share2 className="w-4 h-4 text-blue-400 shrink-0" />
+            <span>
+              {isEn
+                ? 'PowerShell extraction command copied! Send it via KakaoTalk/Email to your PC and run it in an Administrator PowerShell window.'
+                : 'PowerShell 추출 명령어가 복사되었습니다! 카카오톡(나와의 채팅)이나 이메일로 PC에 전달 후, Windows 관리자 권한 PowerShell에 붙여넣어 실행하세요.'}
+            </span>
+          </div>
+        )}
 
         {importedStatus && (
           <div className="mt-3 p-2.5 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-200 text-xs font-semibold flex items-center gap-2">
@@ -681,9 +810,96 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
         </div>
       </div>
 
-      {/* Event Logs Table View */}
+      {/* Event Logs View (Desktop Table + Mobile Cards) */}
       <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto max-h-[480px] custom-scrollbar">
+        {/* Mobile View: Responsive Touch Cards (< 768px) */}
+        <div className="block md:hidden space-y-2.5 max-h-[520px] overflow-y-auto custom-scrollbar p-2 bg-slate-50/50 dark:bg-slate-900/50">
+          {isLoading ? (
+            <div className="py-12 text-center text-slate-400">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
+              {isEn ? "Fetching Windows Event Viewer logs..." : "Windows 이벤트 뷰어 로그를 가져오는 중입니다..."}
+            </div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <ShieldAlert className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+              {isEn ? "No event logs match the current filter criteria." : "현재 필터 조건에 부합하는 이벤트 로그가 없습니다."}
+            </div>
+          ) : (
+            filteredLogs.map((log) => {
+              const errorCode = getEventErrorCode(log);
+              return (
+                <div
+                  key={`mob-${log.id}`}
+                  onClick={() => setSelectedLog(log)}
+                  className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-3.5 shadow-2xs hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer active:scale-[0.99]"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                      log.level === 'Error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300' :
+                      log.level === 'Warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300' :
+                      'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/80 dark:text-cyan-300'
+                    }`}>
+                      {log.level === 'Error' ? <XCircle className="w-3 h-3 text-rose-500" /> :
+                       log.level === 'Warning' ? <AlertTriangle className="w-3 h-3 text-amber-500" /> :
+                       <Info className="w-3 h-3 text-cyan-500" />}
+                      {log.level}
+                    </span>
+
+                    <span className="font-mono text-[10px] text-slate-400">
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                    <span className="font-mono font-bold text-sm text-slate-900 dark:text-slate-100">
+                      Event {log.eventId}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded font-mono font-bold text-xs ${
+                      log.level === 'Error' 
+                        ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40' 
+                        : log.level === 'Warning' 
+                        ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40' 
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600'
+                    }`}>
+                      {errorCode}
+                    </span>
+                  </div>
+
+                  <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 truncate">
+                    {log.provider} <span className="text-[10px] text-slate-400 font-normal">({log.channel})</span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 mb-3">
+                    {log.message}
+                  </p>
+
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
+                      {isEn ? 'View Details' : '상세 XML 보기'}
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+
+                    {onNavigateToGuidebook && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNavigateToGuidebook(errorCode);
+                        }}
+                        className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1 shadow-2xs hover:bg-blue-500 cursor-pointer"
+                      >
+                        <BookOpen className="w-3 h-3" />
+                        <span>{isEn ? 'Guidebook' : '가이드북 해결법'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table View (>= 768px) */}
+        <div className="hidden md:block overflow-x-auto max-h-[480px] custom-scrollbar">
           <table className="w-full text-left border-collapse text-xs">
             <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
               <tr>

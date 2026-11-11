@@ -3924,6 +3924,10 @@ async function startServer() {
       const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
       fs.writeFileSync(localPath, JSON.stringify(cleanSettings, null, 2), 'utf8');
 
+      // 2. Also save to system_config.json for GitHub Actions GitOps collector synchronization
+      const sysConfigPath = path.join(process.cwd(), 'data', 'system_config.json');
+      fs.writeFileSync(sysConfigPath, JSON.stringify(cleanSettings, null, 2), 'utf8');
+
       // 3. Reschedule active background scheduler in real-time
       try {
         setupEngineScheduler(cleanSettings.engineIntervalMin);

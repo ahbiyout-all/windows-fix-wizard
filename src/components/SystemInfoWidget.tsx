@@ -239,13 +239,25 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
       <div className={`flex items-center justify-between ${isMinimized ? 'mb-0' : 'mb-3'}`}>
         <div className="flex items-center gap-2 min-w-0">
           <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
-            <Monitor className="w-4 h-4" />
+            {sysInfo.osName === 'Android' || sysInfo.osName === 'iOS' ? (
+              <Smartphone className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Monitor className="w-4 h-4" />
+            )}
           </div>
           <div className="min-w-0">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              {language === 'en' ? 'System Info Context Auto-Detected' : '사용자 시스템 환경 자동 감지'}
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" />
-            </h4>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                {language === 'en' ? 'System Info Context' : '사용자 시스템 환경 자동 감지'}
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" />
+              </h4>
+              {(sysInfo.osName === 'Android' || sysInfo.osName === 'iOS') && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
+                  <Smartphone className="w-2.5 h-2.5" />
+                  <span>{language === 'en' ? 'Mobile Device' : '모바일 접속'}</span>
+                </span>
+              )}
+            </div>
             {isMinimized && (
               <p className="text-xs text-slate-400 truncate mt-0.5 font-mono">
                 {sysInfo.osName} {sysInfo.osVersion} · {sysInfo.browserName} · {sysInfo.screenResolution}
@@ -276,6 +288,19 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
 
       {!isMinimized && (
         <>
+          {/* Mobile Companion Mode Notice */}
+          {(sysInfo.osName === 'Android' || sysInfo.osName === 'iOS') && (
+            <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-200 text-xs flex items-start gap-2">
+              <Smartphone className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">{language === 'en' ? 'Mobile Companion Mode Active:' : '📱 모바일 긴급 지원 모드:'}</span>{' '}
+                {language === 'en'
+                  ? 'Accessing from a mobile device. You can diagnose Windows issues, browse error codes, or copy PowerShell commands to send to your PC.'
+                  : '스마트폰으로 접속하셨습니다. PC 부팅 불가나 네트워크 단절 시에도 모바일에서 윈도우 오류 코드(0x...) 해결법을 즉시 검색하고 가이드북 스크립트를 열람하실 수 있습니다.'}
+              </div>
+            </div>
+          )}
+
           {/* Main Detected Specs Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
             {/* OS Badge */}
