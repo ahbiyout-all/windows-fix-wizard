@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-11T11:52:25.045Z",
-  "modelUsed": "gemini-3.8-flash",
-  "targetCategory": "네트워크",
+  "lastCollectedAt": "2026-11-11T13:38:30.589Z",
+  "modelUsed": "gemini-3.1-flash-lite",
+  "targetCategory": "디스플레이/그래픽",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 126,
+  "totalIssuesCount": 128,
   "newIssues": [
     {
-      "id": "gh-0x800704cf-mwc27fme",
-      "code": "0x800704CF",
-      "title": "Windows 10/11 네트워크 위치 연결 실패 및 0x800704CF 오류 해결",
-      "category": "네트워크"
+      "id": "gh-0x80070103-mwc5zvb2",
+      "code": "0x80070103",
+      "title": "Windows Update를 통한 디스플레이 드라이버 설치 실패",
+      "category": "디스플레이/그래픽"
     },
     {
-      "id": "gh-0x80072ee7-mwc27fme",
-      "code": "0x80072EE7",
-      "title": "Windows 10/11 서버 이름 및 주소 확인 실패 오류 0x80072EE7 해결",
-      "category": "네트워크"
+      "id": "gh-dwm-exe-crash-mwc5zvb2",
+      "code": "DWM.EXE_CRASH",
+      "title": "데스크톱 창 관리자(DWM) 비정상 종료 및 화면 깜빡임",
+      "category": "디스플레이/그래픽"
     }
   ]
 }

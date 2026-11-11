@@ -5710,5 +5710,92 @@
     "updatedAt": "2026-11-11T11:52:25.045Z",
     "verifiedAt": "2026-11-11T11:52:25.045Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070103-mwc5zvb2",
+    "category": "디스플레이/그래픽",
+    "code": "0x80070103",
+    "title": "Windows Update를 통한 디스플레이 드라이버 설치 실패",
+    "title_en": "Display Driver Installation Failure via Windows Update",
+    "symptoms": "Windows 업데이트 시 이미 설치된 디스플레이 드라이버가 최신 버전임에도 불구하고 오류가 발생하며 그래픽 드라이버 업데이트가 루프에 빠지거나 실패함.",
+    "symptoms_en": "Windows Update reports an error code 0x80070103 when trying to install a driver that is already present or older than the one installed, causing update loops.",
+    "script": "Get-WindowsUpdateLog; wuauclt /resetauthorization /detectnow; DISM.exe /Online /Cleanup-Image /RestoreHealth",
+    "manualSteps": [
+      "제어판에서 '장치 설치 설정'을 검색하여 '아니요(장치를 수동으로 선택할 수 있음)'를 선택합니다.",
+      "장치 관리자를 열고 디스플레이 어댑터를 우클릭하여 '드라이버 업데이트'를 클릭합니다.",
+      "제조사 공식 웹사이트에서 제공하는 최신 그래픽 드라이버를 직접 다운로드하여 설치합니다.",
+      "Windows 업데이트 문제 해결사를 실행하여 보류 중인 업데이트 캐시를 지웁니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'Device installation settings' in Control Panel and select 'No (your device might not work as expected)'.",
+      "Open Device Manager, right-click the display adapter, and select 'Update driver'.",
+      "Download and install the latest graphics driver directly from the manufacturer's official website.",
+      "Run the Windows Update Troubleshooter to clear the pending update cache."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c8b0f-1095-d323-e65a-31bbe49f755e"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070103 해결",
+      "그래픽 드라이버 업데이트 실패",
+      "Windows Update Error 0x80070103",
+      "Display Driver Update Failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T13:38:30.589Z",
+    "updatedAt": "2026-11-11T13:38:30.589Z",
+    "verifiedAt": "2026-11-11T13:38:30.589Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-dwm-exe-crash-mwc5zvb2",
+    "category": "디스플레이/그래픽",
+    "code": "DWM.EXE_CRASH",
+    "title": "데스크톱 창 관리자(DWM) 비정상 종료 및 화면 깜빡임",
+    "title_en": "Desktop Window Manager (DWM) Crash and Screen Flickering",
+    "symptoms": "최신 24H2 업데이트 환경에서 다중 모니터 사용 시 DWM.exe가 비정상적으로 종료되어 화면이 검게 변하거나 깜빡이는 현상.",
+    "symptoms_en": "DWM.exe crashes intermittently in the 24H2 update environment when using multiple monitors, leading to screen flickering or black screens.",
+    "script": "sfc /scannow; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자(Ctrl+Shift+Esc)를 열고 '데스크톱 창 관리자' 프로세스를 찾아 '작업 끝내기'를 수행하여 프로세스를 재시작합니다.",
+      "제어판 > 시스템 > 고급 시스템 설정 > 성능 설정에서 '시각 효과'를 '최적 성능으로 조정'으로 변경합니다.",
+      "Windows 설정에서 '고대비 모드'나 '테마'를 기본값으로 재설정합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 'sfc /scannow'를 수행하여 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager (Ctrl+Shift+Esc), find 'Desktop Window Manager', and select 'End task' to restart the process.",
+      "Go to Control Panel > System > Advanced system settings > Performance settings and change 'Visual Effects' to 'Adjust for best performance'.",
+      "Reset 'High contrast' or 'Themes' to default in Windows Settings.",
+      "Run Command Prompt as Administrator and execute 'sfc /scannow' to repair system files."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/client-management/troubleshoot-dwm-crashes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "DWM.exe 오류",
+      "화면 깜빡임",
+      "Desktop Window Manager Crash",
+      "Screen Flickering Windows 11"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T13:38:30.589Z",
+    "updatedAt": "2026-11-11T13:38:30.589Z",
+    "verifiedAt": "2026-11-11T13:38:30.589Z",
+    "verificationStatus": "verified"
   }
 ]
