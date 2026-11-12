@@ -5983,5 +5983,93 @@
     "updatedAt": "2026-11-12T14:42:10.953Z",
     "verifiedAt": "2026-11-12T14:42:10.953Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf9-mwe67gvt",
+    "category": "스토어/앱",
+    "code": "0x80073CF9",
+    "title": "Microsoft Store 앱 설치 실패 및 패키지 설치 오류",
+    "title_en": "Microsoft Store App Installation Failure and Package Install Error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 이후 특정 앱을 설치하거나 업데이트할 때 발생하는 '패키지를 설치할 수 없습니다' 오류로, 주로 앱 설치 경로의 권한 문제나 캐시 손상으로 인해 발생합니다.",
+    "symptoms_en": "Occurs after Windows 11 23H2/24H2 updates when attempting to install or update apps, showing 'Package could not be installed'. Usually caused by app installation directory permission issues or cache corruption.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}; Get-AppXPackage | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 엽니다.",
+      "C:\\Windows 디렉토리 내에 'AUInstallAgent' 폴더가 없는 경우 새로 생성합니다.",
+      "설정 > 앱 > 설치된 앱에서 Microsoft Store를 찾아 '고급 옵션'의 '초기화'를 실행합니다.",
+      "시스템을 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Navigate to C:\\Windows and create a folder named 'AUInstallAgent' if it does not exist.",
+      "Go to Settings > Apps > Installed Apps, find Microsoft Store, select Advanced options, and click 'Reset'.",
+      "Restart the system."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3df6-6a78-3370b1fd0259"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "스토어 오류",
+      "0x80073CF9",
+      "앱 설치 불가",
+      "Microsoft Store error",
+      "App install failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T23:19:57.496Z",
+    "updatedAt": "2026-11-12T23:19:57.496Z",
+    "verifiedAt": "2026-11-12T23:19:57.496Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070005-mwe67gvt",
+    "category": "스토어/앱",
+    "code": "0x80070005",
+    "title": "Windows 스토어 앱 업데이트 시 액세스 거부 오류",
+    "title_en": "Access Denied Error during Windows Store App Update",
+    "symptoms": "최신 윈도우 빌드에서 스토어 앱이 업데이트되거나 동기화될 때 '액세스 거부됨' 메시지가 나타나며, 사용자 계정의 앱 폴더 읽기/쓰기 권한이 보안 정책에 의해 차단될 때 발생합니다.",
+    "symptoms_en": "Appears in recent Windows builds when Store apps attempt to update or sync, triggering an 'Access Denied' message, often caused by security policies blocking read/write access to user AppData folders.",
+    "script": "sfc /scannow; DISM /Online /Cleanup-Image /RestoreHealth; wsreset.exe",
+    "manualSteps": [
+      "키보드의 Win + R 키를 누르고 'wsreset.exe'를 입력하여 캐시를 초기화합니다.",
+      "설정 > 개인 정보 및 보안 > Windows 보안에서 '앱 및 브라우저 제어' 설정을 확인합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 'Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}' 명령어를 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'wsreset.exe', and run to clear the Store cache.",
+      "Check 'App & browser control' settings under Settings > Privacy & security > Windows Security.",
+      "Run PowerShell as Administrator and execute 'Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}'."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/access-is-denied-error-when-installing-apps"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "액세스 거부",
+      "0x80070005",
+      "스토어 업데이트 오류",
+      "Access Denied",
+      "Store Update error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T23:19:57.496Z",
+    "updatedAt": "2026-11-12T23:19:57.496Z",
+    "verifiedAt": "2026-11-12T23:19:57.496Z",
+    "verificationStatus": "verified"
   }
 ]

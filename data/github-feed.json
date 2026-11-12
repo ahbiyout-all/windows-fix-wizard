@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-12T14:42:10.953Z",
+  "lastCollectedAt": "2026-11-12T23:19:57.496Z",
   "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "업데이트",
+  "targetCategory": "스토어/앱",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 132,
+  "totalIssuesCount": 134,
   "newIssues": [
     {
-      "id": "gh-0x800f0922-mwdnpls9",
-      "code": "0x800f0922",
-      "title": "Windows 업데이트 서비스 패키지 설치 실패 (0x800f0922)",
-      "category": "업데이트"
+      "id": "gh-0x80073cf9-mwe67gvt",
+      "code": "0x80073CF9",
+      "title": "Microsoft Store 앱 설치 실패 및 패키지 설치 오류",
+      "category": "스토어/앱"
     },
     {
-      "id": "gh-0x80073701-mwdnpls9",
-      "code": "0x80073701",
-      "title": "Windows 업데이트 모듈 누락 및 파일 오류 (0x80073701)",
-      "category": "업데이트"
+      "id": "gh-0x80070005-mwe67gvt",
+      "code": "0x80070005",
+      "title": "Windows 스토어 앱 업데이트 시 액세스 거부 오류",
+      "category": "스토어/앱"
     }
   ]
 }
