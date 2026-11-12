@@ -1,6 +1,38 @@
-# Patch Note - System Update (v3.97.3)
+# Patch Note - System Update (v3.97.5)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.5] - 2026-11-12
+
+### 📦 Static Fallback Dataset Synchronization & 124 Issues Full Hydration (22개 제한 완화 및 124개 전체 데이터 동기화)
+- **정적 시드 데이터셋(`src/data/knownIssues.ts`) 전면 업데이트 (22개 → 124개 동기화)**:
+  - 기존 구형 시드 데이터 파일에 22개 항목만 작성되어 있어 네트워크 미연결, 로컬 캐시 초기화, 오프라인 모드 시 22개만 노출되던 현상을 완전히 해결.
+  - `data/issues.json`에 축적된 124개 전체 윈도우 오류 해결책 데이터셋을 `KNOWN_ISSUES` 시드에 100% 동기화 반영.
+- **클라이언트 상태 초기화 및 캐시 유효성 가드 고도화 (`App.tsx`)**:
+  - `dbIssues` 및 `categoryCounts` 초기 상태에서 구형 캐시(22개)가 감지되면 즉시 124개 전체 최신 데이터셋으로 우회(Bypass) 및 자동 갱신하도록 처리.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
+
+---
+
+## [v3.97.4] - 2026-11-11
+
+### 📅 Error Guidebook Date-Based View & Timeline Controls (오류 가이드북 날짜별 보기 및 타임라인 컨트롤)
+- **오류 가이드북 날짜별 보기 및 정렬 툴바 신설 (`Date & Timeline Controls`)**:
+  - 사용자 요구사항에 따라 알려진 오류 가이드북 상단에 직관적인 날짜별 필터링, 정렬, 묶어보기 컨트롤 툴바 탑재.
+- **최신 등록순 / 과거 등록순 정렬 옵션 (`dateSortOrder`)**:
+  - `[최신순 ⬇️]`: 가장 최근 수집 및 업데이트된 오류와 솔루션부터 정렬.
+  - `[오래된순 ⬆️]`: 초기 등록된 기본 시스템 오류부터 역순 정렬.
+- **기간별 퀵 필터 칩 & 월별 탐색**:
+  - `전체 기간` / `최근 7일` / `최근 30일` / `최근 3개월` 빠른 기간 선택 칩 제공 (각 버튼별 해당 건수 실시간 연동 카운트).
+  - 데이터셋에 실제로 존재하는 연/월(`2026년 11월`, `2026년 10월`, `2026년 9월` 등)을 동적 분석하여 원클릭 월별 아카이브 필터 제공.
+- **일자별 타임라인 묶어보기 모드 (`Timeline Group View`)**:
+  - `[📅 일자별 묶어보기]` 토글 활성화 시 날짜별 스티키 헤더(예: `2026-11-10 (2건)`, `2026-11-09 (4건)...`)와 함께 타임라인 섹션 형태로 구조화하여 렌더링.
+  - 일반 리스트 모드와 타임라인 묶어보기 모드 간 끊김 없는 실시간 전환 지원.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 

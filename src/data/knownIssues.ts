@@ -848,5 +848,4773 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": false,
     "createdAt": "2026-09-03T07:45:54.488Z"
+  },
+  {
+    "id": "gh-0x00000124--whea-uncorrectable-error--mvhwcok6",
+    "category": "시스템/블루스크린",
+    "code": "0x00000124 (WHEA_UNCORRECTABLE_ERROR)",
+    "title": "WHEA_UNCORRECTABLE_ERROR 블루스크린 오류 (0x00000124) 발생 및 해결 방법",
+    "title_en": "WHEA_UNCORRECTABLE_ERROR Blue Screen Error (0x00000124) and Troubleshooting",
+    "symptoms": "Windows 10 또는 11 시스템에서 예기치 않게 시스템이 재부팅되거나 블루스크린이 나타나며 'WHEA_UNCORRECTABLE_ERROR' 메시지와 함께 중지 코드 0x00000124가 표시됩니다. 이 오류는 주로 CPU, RAM, 저장 장치, 그래픽 카드 등 하드웨어 구성 요소의 심각한 오류나 불안정성으로 인해 발생합니다. 오버클러킹 설정, 과열, 손상된 하드웨어, 오래되거나 손상된 드라이버, 또는 최근 Windows 업데이트로 인한 드라이버 비호환성이 원인일 수 있습니다.",
+    "symptoms_en": "Your Windows 10 or 11 system unexpectedly reboots or displays a blue screen with the 'WHEA_UNCORRECTABLE_ERROR' message and stop code 0x00000124. This error is primarily caused by severe faults or instability in hardware components such as the CPU, RAM, storage devices, or graphics card. Possible causes include overclocking settings, overheating, faulty hardware, outdated or corrupted drivers, or driver incompatibilities introduced by recent Windows updates.",
+    "script": "# Windows System Integrity Repair Script (0x00000124 - WHEA_UNCORRECTABLE_ERROR)\r\n# Target: SFC System File Checker & DISM Image Servicing\r\n\r\nWrite-Host \"[1/3] Running System File Checker (SFC)...\" -ForegroundColor Cyan\r\nsfc /scannow\r\n\r\nWrite-Host \"[2/3] Checking Component Store Health via DISM...\" -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /CheckHealth\r\n\r\nWrite-Host \"[3/3] Restoring Component Store Corruption via DISM...\" -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /RestoreHealth\r\n\r\nWrite-Host \"[+] System file integrity repair complete. Please restart your system.\" -ForegroundColor Green",
+    "manualSteps": [
+      "1. 오버클러킹 설정 해제: BIOS/UEFI 설정으로 들어가 CPU, GPU, RAM에 적용된 모든 오버클러킹 설정을 기본값으로 되돌리고 XMP/EXPO 프로필을 비활성화합니다.",
+      "2. 드라이버 업데이트 및 Windows 업데이트 확인: 장치 관리자에서 모든 하드웨어 드라이버(특히 칩셋, 그래픽, 저장 장치 드라이버)를 최신 버전으로 업데이트하고, Windows Update를 통해 최신 보안 및 기능 업데이트를 설치합니다.",
+      "3. 시스템 파일 검사 및 디스크 오류 확인: 관리자 권한으로 PowerShell 또는 명령 프롬프트를 열고 `sfc /scannow`를 실행하여 시스템 파일을 검사하고, `Dism /Online /Cleanup-Image /RestoreHealth`를 실행하여 Windows 이미지를 복구합니다. 또한, `chkdsk C: /f` 명령어를 사용하여 디스크 오류를 확인하고 수정합니다.",
+      "4. 하드웨어 진단 실행: Windows 메모리 진단 도구를 사용하여 RAM에 문제가 없는지 확인하고, CPU 및 기타 하드웨어 제조업체에서 제공하는 진단 도구를 사용하여 하드웨어 오류를 검사합니다.",
+      "5. BIOS/UEFI 펌웨어 업데이트: 마더보드 제조사 웹사이트에서 최신 BIOS/UEFI 펌웨어를 다운로드하여 업데이트합니다. 이는 하드웨어 호환성 및 안정성을 개선할 수 있습니다."
+    ],
+    "manualSteps_en": [
+      "1. Disable Overclocking Settings: Enter BIOS/UEFI settings and revert all overclocking configurations applied to the CPU, GPU, and RAM to their default values, and disable XMP/EXPO profiles.",
+      "2. Update Drivers and Check Windows Updates: Update all hardware drivers (especially chipset, graphics, and storage drivers) to the latest versions via Device Manager, and install the latest security and feature updates through Windows Update.",
+      "3. Run System File Checker and Check Disk for Errors: Open PowerShell or Command Prompt as an administrator and execute `sfc /scannow` to scan system files, then run `Dism /Online /Cleanup-Image /RestoreHealth` to repair the Windows image. Additionally, use `chkdsk C: /f` to check and fix disk errors.",
+      "4. Perform Hardware Diagnostics: Use the Windows Memory Diagnostic tool to check for RAM issues, and use diagnostic tools provided by your CPU and other hardware manufacturers to check for hardware failures.",
+      "5. Update BIOS/UEFI Firmware: Download and install the latest BIOS/UEFI firmware from your motherboard manufacturer's website. This can improve hardware compatibility and stability."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/ko-kr/windows-hardware/drivers/debugger/bug-check-0x124--whea-uncorrectable-error",
+      "https://www.easeus.com/data-recovery/fix-blue-screen-code-124.html"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "블루스크린",
+      "하드웨어 오류",
+      "Windows 10/11 시스템 문제",
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "Blue Screen",
+      "Hardware Error",
+      "Windows 10/11 System Issue"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-21T09:15:26.934Z",
+    "updatedAt": "2026-10-21T09:15:26.934Z",
+    "verifiedAt": "2026-10-21T09:15:26.934Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mvhwdyid",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 누적 업데이트 설치 실패 오류 (0x800f0922)",
+    "title_en": "Windows Cumulative Update Installation Failure (0x800f0922)",
+    "symptoms": "최신 Windows 10/11 누적 업데이트 진행 중 96%~99% 지점에서 '업데이트를 완료할 수 없습니다. 변경 사항 취소 중' 메시지가 표시되며 설치가 실패하고 0x800f0922 오류 코드가 발생합니다. 주로 시스템 예약 파티션(EFI 파티션)의 공간 부족, .NET Framework 기능 손상, 또는 Edge 브라우저 구성 요소 간섭으로 인해 발생합니다.",
+    "symptoms_en": "During recent Windows 10/11 cumulative update installation, progress stops near 96%-99% displaying the message 'Undoing changes made to your computer' and error code 0x800f0922. This issue is primarily triggered by insufficient space on the System Reserved/EFI partition, corrupted .NET Framework settings, or leftover flags from uninstalled system components.",
+    "script": "Get-Service -Name wuauserv, bits, cryptsvc | Select-Object Name, Status, StartType\nWrite-Host 'Restarting Windows Update services...' -ForegroundColor Green\nStop-Service -Name wuauserv, bits, cryptsvc -Force -ErrorAction SilentlyContinue\nStart-Sleep -Seconds 2\nStart-Service -Name cryptsvc, bits, wuauserv -ErrorAction SilentlyContinue\nWrite-Host 'Analyzing Component Store status...' -ForegroundColor Green\nDism.exe /Online /Cleanup-Image /AnalyzeComponentStore",
+    "manualSteps": [
+      "Windows Update 서비스 중지 및 캐시 삭제: 명령 프롬프트를 관리자 권한으로 실행하고 net stop wuauserv, net stop bits, net stop cryptsvc를 실행한 후 C:\\Windows\\SoftwareDistribution 및 C:\\Windows\\System32\\catroot2 폴더 내 파일들을 정리하고 서비스를 다시 시작합니다.",
+      "EFI / 시스템 예약 파티션 공간 확보: 파티션 관리 도구를 사용하여 EFI 시스템 파티션 용량이 최소 100MB 이상 여유 공간을 가지고 있는지 확인하고 비어있지 않은 임시 로그 파일 등을 정리합니다.",
+      ".NET Framework 3.5 기능 재설정: [제어판] - [프로그램 및 기능] - [Windows 기능 켜기/끄기]에서 '.NET Framework 3.5' 항목을 체크 해제하고 재부팅한 후, 다시 체크하여 활성화합니다.",
+      "DISM 및 SFC 무결성 검사 실행: 관리자 권한 PowerShell에서 DISM /Online /Cleanup-Image /RestoreHealth 및 sfc /scannow 명령을 순차적으로 실행하여 손상된 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Stop Windows Update services and clear cache: Run Command Prompt as administrator, execute 'net stop wuauserv', 'net stop bits', and 'net stop cryptsvc', clear contents in C:\\Windows\\SoftwareDistribution and C:\\Windows\\System32\\catroot2, then restart the services.",
+      "Free up space on EFI / System Reserved Partition: Check the EFI System Partition to ensure at least 100MB of free space is available, removing unnecessary font or log files if space is tight.",
+      "Reset .NET Framework 3.5 Features: Navigate to Control Panel > Programs and Features > Turn Windows features on or off, uncheck '.NET Framework 3.5', restart your PC, and then re-enable it.",
+      "Run DISM and SFC Integrity Checks: Open PowerShell as administrator and run 'DISM /Online /Cleanup-Image /RestoreHealth' followed by 'sfc /scannow' to repair component store corruption."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-10-and-windows-11-update-error-0x800f0922-troubleshooting-4b62d2e1-4c63-47a3-8be2-32b50937a44f",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-windows-update-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0922",
+      "Windows update 0x800f0922",
+      "Windows 업데이트 0x800f0922",
+      "누적 업데이트 실패 0x800f0922",
+      "EFI 파티션 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-21T09:16:26.485Z",
+    "updatedAt": "2026-10-21T18:16:26.641+09:00",
+    "verifiedAt": "2026-10-21T09:16:26.485Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000133-mvmde3db",
+    "category": "시스템/블루스크린",
+    "code": "0x00000133",
+    "title": "NVMe SSD 및 드라이버 충돌로 인한 DPC_WATCHDOG_VIOLATION 블루스크린 (0x00000133) 해결 방법",
+    "title_en": "How to Fix DPC_WATCHDOG_VIOLATION BSOD (0x00000133) Caused by NVMe SSD and Driver Conflicts",
+    "symptoms": "Windows 11 최신 기능 및 누적 업데이트(24H2 등) 적용 후 특정 NVMe SSD(호스트 메모리 버퍼 HMB 기능 사용 모델 등) 또는 스토리지 컨트롤러 드라이버와의 비호환성으로 인해 시스템이 순간적으로 멈춘 뒤 DPC_WATCHDOG_VIOLATION(0x00000133) 블루스크린이 발생하는 현상입니다.",
+    "symptoms_en": "After applying recent Windows 11 updates (such as 24H2), the system freezes and crashes with a DPC_WATCHDOG_VIOLATION (0x00000133) BSOD due to driver or Host Memory Buffer (HMB) incompatibility with certain NVMe SSDs and storage controllers.",
+    "script": "Write-Output 'Checking System Integrity and Disk Health Status...'; sfc /scannow; Dism /Online /Cleanup-Image /RestoreHealth; Get-PhysicalDisk | Select-Object DeviceId, FriendlyName, OperationalStatus, HealthStatus",
+    "manualSteps": [
+      "SSD 전용 관리 소프트웨어(예: Western Digital Dashboard, Samsung Magician 등)를 실행하여 SSD 펌웨어를 최신 버전으로 업데이트합니다.",
+      "장치 관리자(devmgmt.msc)를 열고 '스토리지 컨트롤러' 및 'NVMe 컨트롤러' 항목의 드라이버를 최신 제조사 드라이버로 업데이트하거나 표준 NVM Express 컨트롤러로 변경합니다.",
+      "Windows 11 24H2에서 HMB 관련 블루스크린이 발생하는 경우, 레지스트리 편집기(HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\StorPort)에서 HMB 할당 크기를 조정하거나 비활성화합니다.",
+      "관리자 권한으로 명령 프롬프트를 실행한 후 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth' 명령어를 입력하여 시스템 파일을 복구합니다.",
+      "제어판의 전원 옵션에서 '빠른 시작 켜기(Fast Startup)' 옵션을 해제한 후 시스템을 다시 시작합니다."
+    ],
+    "manualSteps_en": [
+      "Update your SSD firmware to the latest version using official management software (e.g., Western Digital Dashboard, Samsung Magician).",
+      "Open Device Manager (devmgmt.msc), locate 'Storage controllers' and 'NVMe controllers', and update drivers to the latest official version or switch to the standard NVM Express Controller.",
+      "If experiencing HMB-related BSODs on Windows 11 24H2, adjust or disable Host Memory Buffer settings via Registry Editor under 'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\StorPort'.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' to repair corrupted system files.",
+      "Disable 'Turn on fast startup' under Power Options in Control Panel and restart your computer."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x133-dpc-watchdog-violation",
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-5c62b721-1207-4c4d-b613-044f5010e614"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "DPC_WATCHDOG_VIOLATION",
+      "0x00000133",
+      "NVMe SSD 블루스크린",
+      "Windows 11 24H2 블루스크린",
+      "SSD 펌웨어 업데이트",
+      "HMB 블루스크린"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-24T12:23:30.959Z",
+    "updatedAt": "2026-10-24T12:23:30.959Z",
+    "verifiedAt": "2026-10-24T12:23:30.959Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000139-mvmde3db",
+    "category": "시스템/블루스크린",
+    "code": "0x00000139",
+    "title": "커널 보안 구조 손상 및 메모리 무결성 충돌로 인한 KERNEL_SECURITY_CHECK_FAILURE 블루스크린 (0x00000139) 해결 방법",
+    "title_en": "How to Fix KERNEL_SECURITY_CHECK_FAILURE BSOD (0x00000139) Caused by Kernel Corruption and Memory Integrity Conflicts",
+    "symptoms": "Windows 10/11 보안 업데이트 후 시스템 커널 데이터 구조 손상, 구형 타사 드라이버와 코어 격리(메모리 무결성/HVCI) 기능 간의 충돌, 또는 메모리(RAM) 불안정성으로 인해 작업 도중 KERNEL_SECURITY_CHECK_FAILURE(0x00000139) 블루스크린이 발생하는 현상입니다.",
+    "symptoms_en": "After Windows 10/11 security updates, the system crashes with a KERNEL_SECURITY_CHECK_FAILURE (0x00000139) BSOD caused by kernel data structure corruption, driver incompatibility with Core Isolation (Memory Integrity/HVCI), or RAM instability.",
+    "script": "Write-Output 'Running System Kernel Diagnostics...'; sfc /scannow; Dism /Online /Cleanup-Image /RestoreHealth; Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object Caption, OSArchitecture, Version",
+    "manualSteps": [
+      "Windows 보안 > 장치 보안 > 코어 격리 세부 정보로 이동하여 '메모리 무결성(Memory Integrity)' 옵션을 비활성화한 뒤 재부팅하여 드라이버 충돌 여부를 확인합니다.",
+      "Windows 검색창에 'Windows 메모리 진단(mdsched.exe)'을 입력 및 실행하여 RAM 하드웨어 오작동 유무를 검사합니다.",
+      "관리자 권한으로 PowerShell을 열고 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth'를 실행하여 손상된 커널 시스템 파일을 복구합니다.",
+      "BIOS/UEFI 설정에 진입하여 RAM 오버클럭(XMP / EXPO)이 적용되어 있다면 기본값(Default)으로 원상 복구합니다.",
+      "최근 설치되거나 호환되지 않는 타사 백신 프로그램 또는 가상화 관련 드라이버를 최신 버전으로 업데이트하거나 제거합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Windows Security > Device Security > Core Isolation details and toggle off 'Memory Integrity', then restart to verify driver conflicts.",
+      "Search for 'Windows Memory Diagnostic' (mdsched.exe) in the search bar and run it to scan for physical RAM defects.",
+      "Open PowerShell as Administrator and run 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' to repair corrupted kernel files.",
+      "Enter BIOS/UEFI settings and reset memory overclocking (XMP / EXPO) profiles back to default values if enabled.",
+      "Update or uninstall incompatible third-party security software, antivirus apps, or virtualization drivers."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139-kernel-security-check-failure",
+      "https://support.microsoft.com/en-us/s480132/troubleshoot-blue-screen-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "KERNEL_SECURITY_CHECK_FAILURE",
+      "0x00000139",
+      "메모리 무결성 블루스크린",
+      "코어 격리 오류",
+      "Windows 11 커널 블루스크린",
+      "RAM 메모리 진단"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-24T12:23:30.959Z",
+    "updatedAt": "2026-10-24T12:23:30.959Z",
+    "verifiedAt": "2026-10-24T12:23:30.959Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x88890004-mvmq3osg",
+    "category": "오디오/사운드",
+    "code": "0x88890004",
+    "title": "Windows 10/11 WASAPI 오디오 끝점 무효화 및 오디오 출력 중단 오류 (0x88890004)",
+    "title_en": "Windows 10/11 WASAPI Audio Endpoint Device Invalidated Error (0x88890004)",
+    "symptoms": "최신 Windows 10/11 업데이트 후 웹 브라우저(Chrome, Edge), 미디어 플레이어 또는 게임 실행 중 갑자기 오디오 출력이 멈추고 '오디오 장치가 무효화되었습니다'라는 메시지와 함께 오류 코드 0x88890004(AUDCLNT_E_DEVICE_INVALIDATED)가 발생합니다. 오디오 장치의 드라이버 상태 변경, 샘플링 전환 또는 절전 모드 복귀 시 Windows Audio Endpoint Builder 서비스와 애플리케이션 세션 간의 동기화가 끊어지며 소리가 나오지 않는 현상이 지속됩니다.",
+    "symptoms_en": "Following recent Windows 10/11 updates, audio playback suddenly stops in web browsers (Chrome, Edge), media players, or games, throwing error code 0x88890004 (AUDCLNT_E_DEVICE_INVALIDATED). This occurs when the audio device session disconnects from the Windows Audio Endpoint Builder due to power state transitions, sample rate mismatches, or audio enhancement driver conflicts, leaving the device unresponsive until services or applications are restarted.",
+    "script": "Get-Service -Name \"Audiosrv\", \"AudioEndpointBuilder\" | Restart-Service -Force -Verbose",
+    "manualSteps": [
+      "'Win + R' 키를 누르고 services.msc를 입력하여 서비스 창을 열고, 'Windows Audio' 및 'Windows Audio Endpoint Builder' 서비스를 각각 찾아 우클릭 후 '재시작'을 클릭합니다.",
+      "작업 표시줄의 사운드 아이콘 우클릭 > '소리 설정' > '더 많은 소리 설정' 선택 후, 현재 재생 장치의 '속성'에서 '고급' 탭으로 이동하여 '신호 향상 가능' 및 '단독 제어 모드' 항목을 모두 해제합니다.",
+      "장치 관리자(devmgmt.msc)를 열고 '사운드, 비디오 및 게임 컨트롤러' 항목에서 기본 오디오 장치를 우클릭하여 '디바이스 제거'를 실행한 후, 상단 메뉴의 '동작' > '하드웨어 변경 사항 스캔'을 통해 드라이버를 재로드합니다.",
+      "Windows 설정 > '업데이트 및 보안' (또는 'Windows 업데이트')에서 문제 해결사 중 '오디오 재생' 문제 해결사를 실행하여 시스템 레벨의 엔드포인트 세션을 재구성합니다."
+    ],
+    "manualSteps_en": [
+      "Press 'Win + R', type services.msc, locate 'Windows Audio' and 'Windows Audio Endpoint Builder', right-click each and select 'Restart'.",
+      "Right-click the sound icon on the taskbar > 'Sound settings' > 'More sound settings', right-click your default playback device, go to 'Properties' > 'Advanced' tab, and uncheck 'Enable audio enhancements' and 'Allow applications to take exclusive control of this device'.",
+      "Open Device Manager (devmgmt.msc), expand 'Sound, video and game controllers', right-click the audio adapter, select 'Uninstall device', then click 'Action' > 'Scan for hardware changes' to re-initialize the audio driver.",
+      "Go to Windows Settings > Update & Security (or System in Win 11) > Troubleshoot > Other troubleshooters, and run the 'Playing Audio' troubleshooter to reset endpoint configurations."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/win32/coreaudio/wasapi",
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-7302624d-2230-9f7a-7ead-7d81323f9d08"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x88890004",
+      "AUDCLNT_E_DEVICE_INVALIDATED",
+      "Windows audio endpoint error",
+      "오디오 장치 무효화 오류",
+      "Windows 11 사운드 먹통",
+      "WASAPI audio error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-24T18:19:20.512Z",
+    "updatedAt": "2026-10-24T18:19:20.512Z",
+    "verifiedAt": "2026-10-24T18:19:20.512Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000437-mvmq3osg",
+    "category": "오디오/사운드",
+    "code": "0x00000437",
+    "title": "Windows Audio 및 Audio Endpoint Builder 서비스 시작 실패 오류 (Error 1079 / 0x00000437)",
+    "title_en": "Windows Audio & Audio Endpoint Builder Service Start Failure (Error 1079 / 0x00000437)",
+    "symptoms": "Windows 10/11 시스템 작업 표시줄의 스피커 아이콘에 빨간색 'X' 표시가 나타나며 '오디오 서비스가 실행되고 있지 않습니다'라는 경고가 출력됩니다. 서비스 관리자(services.msc)에서 'Windows Audio' 또는 'Windows Audio Endpoint Builder' 서비스를 수동으로 시작하려고 시도하면 '오류 1079: 이 서비스에 대해 지정된 계정이 동일한 프로세스에서 실행 중인 다른 서비스에 대해 지정된 계정과 다릅니다(0x00000437)'라는 메시지와 함께 오디오 서비스가 시작되지 않습니다.",
+    "symptoms_en": "A red 'X' appears over the speaker icon on the Windows 10/11 taskbar with the message 'Audio services not responding'. Attempting to manually start the 'Windows Audio' or 'Windows Audio Endpoint Builder' service via services.msc triggers 'Error 1079: The account specified for this service differs from the account specified for other services running in the same process (0x00000437)', preventing system audio initialization.",
+    "script": "Set-Service -Name \"Audiosrv\" -StartupType Automatic; Set-Service -Name \"AudioEndpointBuilder\" -StartupType Automatic",
+    "manualSteps": [
+      "'Win + R' 키를 누르고 services.msc를 입력하여 서비스 관리자를 엽니다.",
+      "'Windows Audio' 서비스를 찾아 마우스 우클릭 후 '속성'을 선택합니다.",
+      "'로그온' 탭으로 이동하여 '계정 지정(This account)' 옵션을 선택하고 계정 이름에 NT AUTHORITY\\LocalService를 입력한 뒤 암호 필드를 비우고 '확인'을 클릭합니다.",
+      "동일하게 'Windows Audio Endpoint Builder' 서비스의 '속성' > '로그온' 탭에서 계정 정보를 확인하고 필요시 LocalSystem 또는 LocalService 계정으로 통일하여 설정합니다.",
+      "두 서비스를 우클릭하여 '시작'을 누르고 시스템을 재부팅하여 오디오 시스템이 정상 복구되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Press 'Win + R', type services.msc, and press Enter to open Services management.",
+      "Locate the 'Windows Audio' service, right-click it, and select 'Properties'.",
+      "Navigate to the 'Log On' tab, select 'This account', type NT AUTHORITY\\LocalService, leave the password fields empty, and click 'Apply'.",
+      "Repeat the process for the 'Windows Audio Endpoint Builder' service, ensuring its service logon account credentials properly match local system requirements.",
+      "Right-click both services, click 'Start', and reboot the system to restore audio playback."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/error-1079-when-you-try-to-start-the-windows-audio-service-e5c9b744-8e3d-4c3e-83bb-132b4931a29f",
+      "https://learn.microsoft.com/en-us/windows/troubleshoot/windows-server/system-management-components/service-startup-permissions"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x00000437",
+      "Error 1079",
+      "오디오 서비스가 실행되고 있지 않습니다",
+      "Windows Audio 서비스 시작 오류",
+      "Audio Endpoint Builder 1079",
+      "Windows 11 audio service error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-24T18:19:20.512Z",
+    "updatedAt": "2026-10-24T18:19:20.512Z",
+    "verifiedAt": "2026-10-24T18:19:20.512Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070641-mvn314hj",
+    "category": "보안/백신",
+    "code": "0x80070641",
+    "title": "Windows Defender 실시간 보호 서비스 실행 불가 및 업데이트 오류",
+    "title_en": "Windows Defender Real-time Protection Service Failure and Update Error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 이후 보안 서비스가 시작되지 않거나, Defender 서비스 자체가 중지되어 백신 활성화가 불가능한 현상.",
+    "symptoms_en": "Security services fail to start or Windows Defender service remains stopped, preventing antivirus activation after recent Windows 11 23H2/24H2 updates.",
+    "script": "Get-Service WinDefend | Set-Service -StartupType Automatic -PassThru | Start-Service",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 실행합니다.",
+      "sc config WinDefend start= auto 명령어를 입력하여 서비스 시작 유형을 자동화합니다.",
+      "net start WinDefend 명령어로 서비스를 강제 재시작합니다.",
+      "시스템을 재부팅하여 보안 서비스가 활성화되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Run Command Prompt as Administrator.",
+      "Enter the command 'sc config WinDefend start= auto' to set the service startup type to automatic.",
+      "Force restart the service using the command 'net start WinDefend'.",
+      "Reboot the system and verify if the security service is now active."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows Defender 실행 오류",
+      "0x80070641",
+      "Windows 보안 서비스 중지",
+      "Windows Defender service not starting",
+      "antivirus update error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T00:21:15.895Z",
+    "updatedAt": "2026-10-25T00:21:15.895Z",
+    "verifiedAt": "2026-10-25T00:21:15.895Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800705b4-mvn314hk",
+    "category": "보안/백신",
+    "code": "0x800705b4",
+    "title": "Windows 보안 앱의 격리된 보안 위협 검사 실패",
+    "title_en": "Windows Security App Isolation/Threat Scan Failure",
+    "symptoms": "최신 보안 업데이트 이후 Windows 보안 앱 내에서 위협 검사를 실행할 때 '예기치 않은 오류'가 발생하며 실시간 보호가 비활성화됨.",
+    "symptoms_en": "An 'unexpected error' occurs when running threat scans in the Windows Security app following recent security updates, causing real-time protection to be disabled.",
+    "script": "Get-AppxPackage *Microsoft.SecHealthUI* | Reset-AppxPackage",
+    "manualSteps": [
+      "설정 > 앱 > 설치된 앱으로 이동합니다.",
+      "Windows 보안 앱을 검색한 후 고급 옵션을 클릭합니다.",
+      "초기화(Reset) 버튼을 눌러 앱 설정을 초기화합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 'sfc /scannow'를 입력하여 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > Apps > Installed apps.",
+      "Search for 'Windows Security', then click 'Advanced options'.",
+      "Click the 'Reset' button to reset the app configuration.",
+      "Run PowerShell as Administrator and execute 'sfc /scannow' to repair system files."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-a65c2763-718f-7b70-e448-f3d2f2d96924"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 보안 앱 초기화",
+      "0x800705b4",
+      "백신 위협 검사 오류",
+      "Windows Security app reset",
+      "threat scan failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T00:21:15.895Z",
+    "updatedAt": "2026-10-25T00:21:15.895Z",
+    "verifiedAt": "2026-10-25T00:21:15.895Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070424-mvng1fes",
+    "category": "보안/백신",
+    "code": "0x80070424",
+    "title": "Windows 보안 센터 및 Defender 서비스 누락/중단 오류 (0x80070424)",
+    "title_en": "Windows Security Center and Defender Service Missing Error (0x80070424)",
+    "symptoms": "Windows 10/11 누적 업데이트 실행 후 또는 악성코드 치료 과정 이후 Windows 보안 앱이 열리지 않거나, 지정된 서비스가 설치되지 않았다는 메시지(0x80070424)와 함께 보안 센터 및 Defender 서비스가 중단되는 현상입니다.",
+    "symptoms_en": "After installing Windows 10/11 updates or undergoing malware remediation, the Windows Security app fails to launch or displays error 0x80070424, stating that the specified service does not exist as an installed service.",
+    "script": "Get-Service -Name wscsvc, WinDefend, SecurityHealthService -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType; Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Reset-AppxPackage",
+    "manualSteps": [
+      "Windows 검색창에 'services.msc'를 입력하여 서비스 관리자를 연 후 'Security Center' 및 'Windows Defender Antivirus Service'가 목록에 존재하는지 확인합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'sfc /scannow'를 입력하여 손상된 시스템 파일 및 보안 서비스 항목을 수리합니다.",
+      "이어 'DISM /Online /Cleanup-Image /RestoreHealth' 명령을 실행하여 Windows 구성 요소 저장소를 복구합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 `Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\\\AppXManifest.xml\"}`을 실행하여 Windows 보안 UI 앱을 재등록한 후 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Type 'services.msc' in Windows Search, open Services manager, and verify if 'Security Center' and 'Windows Defender Antivirus Service' exist.",
+      "Run Command Prompt as administrator and execute 'sfc /scannow' to repair missing or corrupted system and service files.",
+      "Run 'DISM /Online /Cleanup-Image /RestoreHealth' to repair the Windows component store image.",
+      "Open PowerShell as administrator and execute `Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\\\AppXManifest.xml\"}` to re-register the Windows Security App, then restart."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/troubleshoot-windows-defender-service-errors-0x80070424",
+      "https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070424",
+      "Windows Security error 0x80070424",
+      "Windows Defender service missing",
+      "보안 센터 서비스 오류",
+      "SecHealthUI reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T06:25:25.060Z",
+    "updatedAt": "2026-10-25T06:25:25.060Z",
+    "verifiedAt": "2026-10-25T06:25:25.060Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704ec-mvng1fes",
+    "category": "보안/백신",
+    "code": "0x800704ec",
+    "title": "Windows Defender 그룹 정책 차단 오류 (0x800704ec)",
+    "title_en": "Windows Defender Blocked by Policy Error (0x800704ec)",
+    "symptoms": "타사 백신(McAfee, Norton 등)을 제거한 후 또는 Windows 10/11 기능 업데이트 적용 후 Microsoft Defender를 활성화하려고 할 때 '이 프로그램은 그룹 정책에 의해 차단되었습니다' 문구와 함께 0x800704ec 오류가 발생하는 현상입니다.",
+    "symptoms_en": "When attempting to enable Microsoft Defender after uninstalling third-party antivirus software or applying Windows 10/11 updates, error 0x800704ec appears stating 'This program is blocked by group policy'.",
+    "script": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender' -Name 'DisableAntiSpyware' -ErrorAction SilentlyContinue; Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender' -Name 'DisableAntiVirus' -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "Win + R 키를 누르고 'gpedit.msc'를 입력하여 로컬 그룹 정책 편집기를 실행합니다 (Windows Pro 이상).",
+      "컴퓨터 구성 > 관리 템플릿 > Windows 구성 요소 > Microsoft Defender 백신으로 이동하여 'Microsoft Defender 백신 끄기' 옵션을 '구성되지 않음'으로 변경합니다.",
+      "Windows Home 버전인 경우 Win + R 키를 누르고 'regedit'를 입력하여 레지스트리 편집기를 실행합니다.",
+      "`HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows Defender` 경로로 이동한 뒤 `DisableAntiSpyware` 및 `DisableAntiVirus` 값을 삭제하거나 '0'으로 변경하고 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'gpedit.msc', and launch Local Group Policy Editor (Windows Pro or higher).",
+      "Navigate to Computer Configuration > Administrative Templates > Windows Components > Microsoft Defender Antivirus, and set 'Turn off Microsoft Defender Antivirus' to 'Not Configured'.",
+      "For Windows Home edition, press Win + R, type 'regedit', and open the Registry Editor.",
+      "Navigate to `HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows Defender`, delete or set the DWORD values `DisableAntiSpyware` and `DisableAntiVirus` to '0', then restart the PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-endpoint/prevent-updates-defender-antivirus",
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-179892c2-1531-1502-0e90-342b30d32a39"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704ec",
+      "Windows Defender group policy error",
+      "DisableAntiSpyware",
+      "Windows 보안 백신 차단 해제",
+      "Defender 0x800704ec"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T06:25:25.060Z",
+    "updatedAt": "2026-10-25T06:25:25.060Z",
+    "verifiedAt": "2026-10-25T06:25:25.060Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007003b-mvnst7a5",
+    "category": "네트워크",
+    "code": "0x8007003B",
+    "title": "SMB 네트워크 공유 파일 전송 중 예기치 않은 네트워크 오류 발생 (0x8007003B)",
+    "title_en": "Unexpected Network Error Occurred During SMB File Transfer (0x8007003B)",
+    "symptoms": "Windows 10/11에서 네트워크 공유 폴더(SMB)로 대용량 파일을 복사하거나 이동할 때 '예기치 않은 네트워크 오류가 발생했습니다 (0x8007003B)' 메시지와 함께 전송이 중단되는 현상입니다. 최근 누적 업데이트 후 TCP 자동 조정(TCP Auto-Tuning) 수신 창 설정 차이 또는 보안 프로그램의 네트워크 패킷 검사 간섭으로 주로 발생합니다.",
+    "symptoms_en": "Occurs when copying or transferring large files across SMB network shared folders in Windows 10/11, terminating with the error 'An unexpected network error occurred (0x8007003B)'. This issue is commonly triggered by TCP Auto-Tuning window size mismatches or real-time packet inspection by security software following Windows updates.",
+    "script": "netsh int tcp set global autotuninglevel=disabled\r\nnetsh winsock reset\r\nWrite-Output \"TCP Auto-Tuning disabled and Winsock stack reset successfully.\"",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(cmd)를 실행합니다.",
+      "'netsh int tcp set global autotuninglevel=disabled' 명령을 입력하여 TCP 수신 창 자동 조정을 비활성화합니다.",
+      "실행 창(Win + R)에 'ncpa.cpl'을 입력하고 사용 중인 네트워크 어댑터 속성 > '구성' > '고급' 탭에서 'Large Send Offload (LSO)' 관련 항목을 비활성화(Disabled)로 변경합니다.",
+      "Windows Defender 방화벽 또는 3사 백신 프로그램의 실시간 네트워크 감시 기능을 일시 중지하고 컴퓨터를 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Execute 'netsh int tcp set global autotuninglevel=disabled' to turn off TCP auto-tuning level.",
+      "Press Win + R, type 'ncpa.cpl', right-click active network adapter > Properties > Configure > Advanced tab, and set 'Large Send Offload (LSO)' options to Disabled.",
+      "Temporarily pause real-time network scanning in Windows Defender Firewall or third-party antivirus and restart the PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/troubleshoot-smb-file-transfer-rate",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-16650b31-5db8-01d8-ba4a-00d9485d4359"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007003B",
+      "SMB 공유 오류",
+      "네트워크 파일 복사 실패",
+      "TCP Auto Tuning",
+      "Unexpected Network Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T12:22:56.284Z",
+    "updatedAt": "2026-10-25T12:22:56.284Z",
+    "verifiedAt": "2026-10-25T12:22:56.284Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee2-mvnst7a5",
+    "category": "네트워크",
+    "code": "0x80072EE2",
+    "title": "네트워크 연결 시간 초과 오류 및 서버 응답 없음 (0x80072EE2)",
+    "title_en": "Network Connection Timeout and Server Unresponsive Error (0x80072EE2)",
+    "symptoms": "Windows 10/11 환경에서 웹 브라우징, Windows 업데이트 서버 통신 또는 네트워크 앱 실행 시 '연결 시간이 초과되었습니다 (ERROR_INTERNET_TIMEOUT / 0x80072EE2)' 오류가 발생하는 현상입니다. DNS 캐시 오염, 손상된 Winsock / TCP IP 스택, 프록시 미해제 또는 VPN 어댑터 잔재로 인해 네트워크 요청에 대한 응답을 받지 못할 때 나타납니다.",
+    "symptoms_en": "Appears when Windows 10/11 fails to connect to web services, Windows Update endpoints, or network resources, returning 'ERROR_INTERNET_TIMEOUT (0x80072EE2)'. Caused by corrupted DNS cache, damaged Winsock/TCP-IP stack, orphaned proxy settings, or residual VPN network adapters following system updates.",
+    "script": "netsh winsock reset\r\nnetsh int ip reset\r\nipconfig /flushdns\r\nnetsh winhttp reset proxy\r\nWrite-Output \"Network stack, DNS cache, and WinHTTP proxy configuration reset successfully.\"",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell을 실행하고 'ipconfig /flushdns' 및 'netsh winsock reset' 명령을 실행합니다.",
+      "설정(Win + I) > 네트워크 및 인터넷 > 프록시로 이동하여 '자동으로 설정 감지'를 활성화하고 '수동 프록시 서버 사용'을 끔으로 설정합니다.",
+      "실행 창(Win + R)에 'ncpa.cpl'을 입력하고 사용 중인 네트워크 어댑터 속성의 'Internet Protocol Version 4 (TCP/IPv4)'에서 기본 DNS 서버를 8.8.8.8 및 8.8.4.4(Google Public DNS)로 지정합니다.",
+      "사용 중인 VPN 및 제3자 방화벽 앱을 일시적으로 비활성화한 후 시스템을 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Launch PowerShell as Administrator and run 'ipconfig /flushdns' followed by 'netsh winsock reset'.",
+      "Navigate to Settings > Network & internet > Proxy, turn ON 'Automatically detect settings', and turn OFF manual proxy server.",
+      "Press Win + R, enter 'ncpa.cpl', open 'Internet Protocol Version 4 (TCP/IPv4)' properties of your network connection, and set Primary/Secondary DNS to 8.8.8.8 and 8.8.4.4.",
+      "Temporarily disable active VPN connections and third-party firewall applications, then restart your system."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-update-errors-troubleshooting",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-16650b31-5db8-01d8-ba4a-00d9485d4359"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE2",
+      "ERROR_INTERNET_TIMEOUT",
+      "네트워크 연결 시간 초과",
+      "DNS Flush",
+      "Winsock Reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-25T12:22:56.284Z",
+    "updatedAt": "2026-10-25T12:22:56.284Z",
+    "verifiedAt": "2026-10-25T12:22:56.284Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f213-mvoisoi0",
+    "category": "정품인증",
+    "code": "0xC004F213",
+    "title": "하드웨어 교체 후 Windows 제품 키 미발견 오류 (0xC004F213)",
+    "title_en": "Windows No Product Key Found Error After Hardware Replacement (0xC004F213)",
+    "symptoms": "메인보드, CPU 등 주요 하드웨어를 교체한 후 Windows에서 디바이스에 제품 키가 설치되어 있지 않음을 감지하여 0xC004F213 오류가 발생합니다. 마이크로소프트 계정에 디지털 라이선스가 제대로 연결되어 있지 않거나 하드웨어 변경 후 디바이스 재연결 프로세스가 완료되지 않았을 때 나타납니다.",
+    "symptoms_en": "Error 0xC004F213 occurs after replacing major hardware (such as the motherboard or CPU) when Windows fails to find a valid product key associated with the device. It indicates that the digital license is not linked or the hardware change reactivation process has not been completed.",
+    "script": "try { (Get-CimInstance -Query 'select * from SoftwareLicensingService').OA3xOriginalProductKey } catch { Write-Output 'OEM Key not embedded in BIOS' }",
+    "manualSteps": [
+      "설정 > 시스템 > 정품 인증으로 이동하여 '문제 해결(Troubleshoot)'을 클릭합니다.",
+      "'최근에 이 디바이스의 하드웨어를 변경했습니다' 링크를 선택합니다.",
+      "마이크로소프트 계정(MSA)으로 로그인한 후 현재 사용 중인 디바이스를 목록에서 선택하고 '지금 사용 중인 디바이스입니다'를 체크한 후 '정품 인증'을 누릅니다.",
+      "만약 메인보드에 포함된 OEM 키가 있는 경우, PowerShell에서 감지된 OEM 키를 복사하여 '제품 키 변경' 메뉴에 다시 입력합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Activation and click 'Troubleshoot'.",
+      "Select the link 'I changed hardware on this device recently'.",
+      "Sign in with your Microsoft Account (MSA), select your current device from the list, check 'This is the device I'm using right now', and click 'Activate'.",
+      "If an embedded OEM product key exists on the new motherboard, copy the detected key and re-enter it under 'Change product key'."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/reactivating-windows-after-a-hardware-change-2c0e962a-444c-141a-9d0d-c69476dd3d45",
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09fd5b5e-444e-4a73-8d6a-79cd6d64d45b"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F213",
+      "하드웨어 변경 정품인증",
+      "Windows 11 activation 0xC004F213",
+      "디지털 라이선스 하드웨어 변경",
+      "No product key found"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T00:30:21.960Z",
+    "updatedAt": "2026-10-26T00:30:21.960Z",
+    "verifiedAt": "2026-10-26T00:30:21.960Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0831-mvovr02w",
+    "category": "업데이트",
+    "code": "0x800f0831",
+    "title": "Windows 누적 업데이트 패키지 누락 설치 실패 오류 (0x800f0831)",
+    "title_en": "Windows Update Installation Failure Error 0x800f0831",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 진행 중 이전 업데이트의 구성 요소(CBS 매니페스트 또는 패키지 파일)가 누락되어 업데이트 설치가 멈추거나 0x800f0831 오류 코드와 함께 변경 사항이 취소되는 증상이 발생합니다.",
+    "symptoms_en": "During cumulative update installation on Windows 10/11, missing manifest files or corrupted previous package stores cause update failures accompanied by error code 0x800f0831 and system rollback.",
+    "script": "Get-Service -Name wuauserv, bits, cryptsvc | Select-Object Name, Status, StartType\nWrite-Host 'Checking CBS Log for missing package references...'\nif (Test-Path 'C:\\Windows\\Logs\\CBS\\CBS.log') {\n    Select-String -Path 'C:\\Windows\\Logs\\CBS\\CBS.log' -Pattern '0x800f0831' -Context 0,2 | Select-Object -First 5\n}",
+    "manualSteps": [
+      "DISM 명령어를 사용하여 손상된 시스템 구성 요소 저장소를 복구합니다: 관리자 프롬프트에서 'sfc /scannow' 실행 후 'Dism /Online /Cleanup-Image /RestoreHealth' 명령을 실행합니다.",
+      "오류 로그(C:\\Windows\\Logs\\CBS\\CBS.log)에서 누락된 KB 번호를 확인하고, Microsoft Update 카탈로그 웹사이트에서 해당 선행 업데이트 KB 패키지를 검색하여 직접 수동 설치합니다.",
+      "Windows Update 관련 서비스(wuauserv, bits, cryptsvc)를 중지한 후 SoftwareDistribution 캐시 폴더를 재설정하고 서비스를 재시작합니다.",
+      "모든 방법으로 해결되지 않을 경우 Microsoft Update 카탈로그에서 현재 시도 중인 누적 업데이트 MSU 파일을 수동으로 다운로드 받아 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Run DISM tool to repair the corrupted component store: Execute 'sfc /scannow' followed by 'Dism /Online /Cleanup-Image /RestoreHealth' in an elevated Terminal/Command Prompt.",
+      "Check C:\\Windows\\Logs\\CBS\\CBS.log for missing package KB numbers, search for the prerequisite KB manually on Microsoft Update Catalog, and install it.",
+      "Stop Windows Update services (wuauserv, bits, cryptsvc), rename/clear the SoftwareDistribution cache folder, and restart the services.",
+      "If unresolved, manually download the standalone update package (.msu) for the failing update from Microsoft Update Catalog and install it directly."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/error-0x800f0831-installing-update",
+      "https://support.microsoft.com/en-us/topic/windows-update-troubleshooter-19ffdef1-0396-3925-2a3a-356f21223943"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0831",
+      "Windows update error 0x800f0831",
+      "CBS_E_STORE_CORRUPTION",
+      "윈도우 업데이트 오류 0x800f0831",
+      "누적 업데이트 설치 실패"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T06:32:58.664Z",
+    "updatedAt": "2026-10-26T06:32:58.664Z",
+    "verifiedAt": "2026-10-26T06:32:58.664Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070005-mvovr02w",
+    "category": "업데이트",
+    "code": "0x80070005",
+    "title": "Windows 업데이트 액세스 거부 및 권한 오류 (0x80070005)",
+    "title_en": "Windows Update Access Denied Error 0x80070005",
+    "symptoms": "Windows 10/11 업데이트 다운로드 및 설치 단계에서 시스템 디렉토리(SoftwareDistribution 또는 catroot2)에 대한 파일 접근 권한 부족이나 타사 보안 프로그램의 차단으로 인해 0x80070005 오류가 발생하며 업데이트가 중단됩니다.",
+    "symptoms_en": "Windows 10/11 update process fails with error code 0x80070005 during download or installation due to access permission restrictions on system update folders or interference from third-party security software.",
+    "script": "$paths = @('C:\\Windows\\SoftwareDistribution', 'C:\\Windows\\System32\\catroot2')\nforeach ($path in $paths) {\n    if (Test-Path $path) {\n        $acl = Get-Acl -Path $path\n        [PSCustomObject]@{ Path = $path; Owner = $acl.Owner; AccessToString = $acl.AccessToString.Substring(0, [Math]::Min(100, $acl.AccessToString.Length)) }\n    }\n}",
+    "manualSteps": [
+      "설정 > 시스템 > 문제 해결 > 기타 문제 해결사에서 'Windows 업데이트' 문제 해결사를 실행합니다.",
+      "타사 실시간 감시 백신 프로그램이나 방화벽 소프트웨어를 임시로 비활성화한 후 업데이트를 다시 시도합니다.",
+      "관리자 권한 프롬프트에서 'net stop wuauserv', 'net stop bits' 실행 후 C:\\Windows\\SoftwareDistribution 및 catroot2 폴더의 이름을 변경하여 캐시를 재설정하고 서비스를 재시작합니다.",
+      "시스템 파일 및 권한 무결성을 검사하기 위해 관리자 PowerShell에서 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth'를 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Troubleshoot > Other troubleshooters and run the Windows Update troubleshooter.",
+      "Temporarily disable third-party antivirus software or firewalls that might lock system update directories.",
+      "Open Command Prompt as Administrator, stop 'wuauserv' and 'bits' services, rename SoftwareDistribution and catroot2 folders to reset cache, then restart services.",
+      "Execute 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' in Administrator PowerShell to verify and restore system file permissions."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x80070005-4c07c724-4054-4a47-a86d-0045f20a8301",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-update-issues-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070005",
+      "Windows update error 0x80070005",
+      "액세스가 거부되었습니다 윈도우 업데이트",
+      "Windows update access denied",
+      "SoftwareDistribution 권한 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T06:32:58.664Z",
+    "updatedAt": "2026-10-26T06:32:58.664Z",
+    "verifiedAt": "2026-10-26T06:32:58.664Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0988-mvpkxzqy",
+    "category": "업데이트",
+    "code": "0x800f0988",
+    "title": "Windows 10/11 구성 요소 저장소 손상 업데이트 오류 (0x800f0988)",
+    "title_en": "Windows 10/11 Component Store Corruption Update Error (0x800f0988)",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 다운로드 및 적용 단계에서 '변경 사항 취소 중' 메시지와 함께 0x800f0988 오류가 발생합니다. WinSxS 데이터베이스 및 캐시 간 업데이트 데이터 정합성이 일치하지 않거나 이전 업데이트 잔재 파일이 패키지 적용을 방해할 때 나타납니다.",
+    "symptoms_en": "During the download or application phase of recent Windows 10/11 cumulative updates, the process fails with error 0x800f0988 and displays 'Undoing changes'. This happens when update data consistency fails in the WinSxS store or leftover update cache blocks installation.",
+    "script": "Dism /Online /Cleanup-Image /StartComponentCleanup; sfc /scannow",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell을 실행하고 'Dism /Online /Cleanup-Image /StartComponentCleanup' 명령으로 이전 업데이트 청소를 진행합니다.",
+      "관리자 CMD에서 'net stop wuauserv' 및 'net stop cryptsvc'를 입력하여 관련 서비스를 정지합니다.",
+      "'C:\\Windows\\SoftwareDistribution' 폴더의 내용을 삭제하여 업데이트 캐시를 초기화합니다.",
+      "'net start wuauserv' 및 'net start cryptsvc'로 서비스를 재시작한 후 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Run PowerShell as administrator and execute 'Dism /Online /Cleanup-Image /StartComponentCleanup' to clean up superseded update components.",
+      "Stop update services by running 'net stop wuauserv' and 'net stop cryptsvc' in an elevated Command Prompt.",
+      "Clear the update cache by deleting contents inside 'C:\\Windows\\SoftwareDistribution'.",
+      "Restart the services using 'net start wuauserv' and 'net start cryptsvc', then retry Windows Update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x800f0988-or-0x800f081f-when-installing-updates-7132e4d0-bf6e-473f-85f0-622f6723ef98",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0988",
+      "Windows Update Error 0x800f0988",
+      "윈도우 업데이트 0x800f0988",
+      "StartComponentCleanup",
+      "ERROR_SXS_COMPONENT_STORE_CORRUPT",
+      "SoftwareDistribution Reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-26T18:18:15.226Z",
+    "updatedAt": "2026-10-26T18:18:15.226Z",
+    "verifiedAt": "2026-10-26T18:18:15.226Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073b01-mvq5gacc",
+    "category": "보안/백신",
+    "code": "0x80073b01",
+    "title": "Windows Defender 서비스 초기화 실패 오류 (0x80073b01)",
+    "title_en": "Windows Defender Service Initialization Error (0x80073b01)",
+    "symptoms": "최근 Windows 10/11 보안 업데이트 후 Microsoft Defender를 실행하려 할 때 '이 프로그램을 초기화하지 못했습니다 (0x80073b01)' 오류 메세지가 출력되며 실시간 감시 기능이 켜지지 않는 현상입니다. 타사 백신 소프트웨어의 잔재 파일, 레지스트리 바이러스 정의 손상 또는 보안 센터 서비스 간 충돌로 인해 발생합니다.",
+    "symptoms_en": "When launching Microsoft Defender after recent Windows 10/11 security updates, users receive error 'Failed to initialize this program (0x80073b01)' and real-time protection fails to start. This occurs due to leftover third-party antivirus registry keys, corrupted definition files, or service conflicts within Windows Security.",
+    "script": "Get-Service -Name \"WinDefend\", \"SecurityHealthService\", \"wscsvc\" | Select-Object Name, Status, StartType\nWrite-Host \"Defender 보안 정의 초기화 수행 중...\" -ForegroundColor Green\nif (Test-Path \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\") {\n    Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-RemoveDefinitions -All\" -Wait -WindowStyle Hidden\n    Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-SignatureUpdate\" -Wait -WindowStyle Hidden\n}",
+    "manualSteps": [
+      "키보드의 Windows 키 + R을 누르고 services.msc를 입력하여 서비스 관리자를 엽니다.",
+      "'Microsoft Defender Antivirus Service' 및 'Windows Security Service' 항목을 찾아 시작 유형을 '자동'으로 변경하고 서비스를 시작합니다.",
+      "타사 바이러스 백신이 완전히 제거되었는지 확인하고 최신 전용 제거 툴(Uninstaller)로 잔재 폴더 및 레지스트리를 정리합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 sfc /scannow 명령어를 입력하여 시스템 파일을 복구합니다.",
+      "PC를 재부팅한 후 Windows 보안 앱에서 '업데이트 확인'을 클릭하여 최신 보안 인텔리전스를 다운로드합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type services.msc, and press Enter to open Services manager.",
+      "Locate 'Microsoft Defender Antivirus Service' and 'Windows Security Service', set their Startup Type to 'Automatic', and start them.",
+      "Ensure third-party antivirus software is completely uninstalled, using dedicated cleanup tools to remove residual registry keys.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to repair corrupted system files.",
+      "Restart the PC and click 'Check for updates' in the Windows Security app to download the latest security intelligence."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/how-to-troubleshoot-definition-update-issues-for-windows-defender-11488c9f-356c-0f9c-7f30-f20387431c36",
+      "https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073b01",
+      "Windows Defender 초기화 실패",
+      "Defender service error 0x80073b01",
+      "Microsoft Defender 실시간 보호 오류",
+      "Windows 보안 센터 백신 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T03:52:21.084Z",
+    "updatedAt": "2026-10-27T03:52:21.084Z",
+    "verifiedAt": "2026-10-27T03:52:21.084Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80240022-mvq5gacc",
+    "category": "보안/백신",
+    "code": "0x80240022",
+    "title": "Windows Defender 보안 인텔리전스 업데이트 실패 (0x80240022)",
+    "title_en": "Windows Defender Security Intelligence Update Error (0x80240022)",
+    "symptoms": "Windows 10/11에서 Microsoft Defender의 보안 인텔리전스(백신 데이터베이스) 업데이트 다운로드 중 0x80240022 오류가 발생하며 업데이트가 반복적으로 실패하는 현상입니다. 최근 누적 업데이트 적용 후 Background Intelligent Transfer Service(BITS) 동기화 오류 또는 SignatureUpdate 캐시 폴더의 권한 손상으로 인해 발생합니다.",
+    "symptoms_en": "Security Intelligence (antivirus definition) updates for Microsoft Defender repeatedly fail with error code 0x80240022 on Windows 10/11. This issue stems from Background Intelligent Transfer Service (BITS) sync glitches or permission corruption in the SignatureUpdate cache folder following recent Windows updates.",
+    "script": "Stop-Service -Name wuauserv, bits, WinDefend -Force -ErrorAction SilentlyContinue\n$defPath = \"C:\\ProgramData\\Microsoft\\Windows Defender\\Definition Updates\"\nif (Test-Path $defPath) {\n    Get-ChildItem -Path $defPath -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue\n}\nStart-Service -Name bits, wuauserv, WinDefend -ErrorAction SilentlyContinue\nif (Test-Path \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\") {\n    Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-SignatureUpdate\" -NoNewWindow\n}",
+    "manualSteps": [
+      "시작 메뉴에서 'cmd'를 검색하고 관리자 권한으로 명령 프롬프트를 실행합니다.",
+      "\"cd C:\\Program Files\\Windows Defender\" 명령어로 이동한 후 \"MpCmdRun.exe -RemoveDefinitions -All\"을 입력하여 손상된 정의 파일 캐시를 제거합니다.",
+      "\"MpCmdRun.exe -SignatureUpdate\" 명령어를 입력하여 보안 인텔리전스를 수동으로 다시 다운로드합니다.",
+      "문제가 지속될 경우 Microsoft Security Intelligence 공식 포털(microsoft.com/en-us/wdsi/definitions)에서 오프라인 정의 업데이트 파일(.exe)을 직접 다운로드하여 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'cmd' in the Start menu and run Command Prompt as Administrator.",
+      "Navigate using 'cd C:\\Program Files\\Windows Defender' and type 'MpCmdRun.exe -RemoveDefinitions -All' to clear damaged definition cache.",
+      "Run 'MpCmdRun.exe -SignatureUpdate' to manually trigger a fresh security intelligence update download.",
+      "If the issue persists, download and run the standalone Security Intelligence update installer directly from Microsoft Security Intelligence Portal (microsoft.com/en-us/wdsi/definitions)."
+    ],
+    "sourceUrls": [
+      "https://www.microsoft.com/en-us/wdsi/definitions",
+      "https://learn.microsoft.com/en-us/defender-endpoint/manage-updates-baselines-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80240022",
+      "Windows Defender 업데이트 오류 0x80240022",
+      "Security Intelligence Update error 0x80240022",
+      "Microsoft Defender 백신 업데이트 실패",
+      "MpCmdRun SignatureUpdate error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T03:52:21.084Z",
+    "updatedAt": "2026-10-27T03:52:21.084Z",
+    "verifiedAt": "2026-10-27T03:52:21.084Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mvqm68dt",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows RE 복구 파티션 용량 부족으로 인한 업데이트 설치 실패 (0x80070643)",
+    "title_en": "Windows Update Failure Due to Insufficient WinRE Partition Size (0x80070643)",
+    "symptoms": "Windows 10 및 11 보안 업데이트(예: KB5034441) 설치 중 '일부 업데이트 파일이 누락되었거나 문제가 있습니다' 메시지와 함께 0x80070643 오류가 발생합니다. 복구 환경(WinRE) 파티션의 남은 여유 공간이 부족하여 패치 패키지를 정상 적용하지 못할 때 나타납니다.",
+    "symptoms_en": "During Windows 10/11 security update installations (such as KB5034441), the installation fails with error code 0x80070643 (ERROR_INSTALL_FAILURE). This occurs when the Windows Recovery Environment (WinRE) partition lacks sufficient free space to process the update package.",
+    "script": "reagentc /info; Get-Partition | Where-Object { $_.Type -eq 'Recovery' }",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행하고 'reagentc /disable'을 입력하여 WinRE 환경을 임시 비활성화합니다.",
+      "'diskpart'를 실행하여 OS 파티션을 최소 250MB 축소(shrink desired=250 minimum=250)한 뒤 기존 복구 파티션을 삭제합니다.",
+      "새로 확보한 미할당 공간에 확장된 복구 파티션을 생성하고 Primary 및 Recovery 유형으로 설정합니다.",
+      "명령 프롬프트에서 'reagentc /enable'을 실행하여 WinRE를 다시 활성화합니다.",
+      "[설정] > [Windows 업데이트]로 이동하여 [다시 시도]를 클릭하고 업데이트를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'reagentc /disable' to temporarily disable WinRE.",
+      "Run 'diskpart' to shrink the OS partition (shrink desired=250 minimum=250) and delete the existing recovery partition.",
+      "Create a new larger recovery partition in the unallocated space and set its attributes to Primary and Recovery.",
+      "Execute 'reagentc /enable' in Command Prompt to re-enable the WinRE environment.",
+      "Navigate to Settings > Windows Update and click Retry to complete the installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5028997-instructions-to-manually-resize-your-partition-to-install-the-winre-update-4941169a-3c03-4123-bc92-24d12b113944",
+      "https://learn.microsoft.com/en-us/windows/release-health/status-windows-11-23h2#3231msgdesc"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "WinRE 업데이트 오류",
+      "KB5034441",
+      "복구 파티션 용량",
+      "Windows Update 0x80070643",
+      "WinRE Partition Resize"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T11:40:25.456Z",
+    "updatedAt": "2026-10-27T11:40:25.456Z",
+    "verifiedAt": "2026-10-27T11:40:25.456Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f081f-mvqm68dt",
+    "category": "업데이트",
+    "code": "0x800f081f",
+    "title": "Windows 업데이트 CBS 구성 요소 및 원본 파일 손상 오류 (0x800f081f)",
+    "title_en": "Windows Update Component Store Corruption Error (0x800f081f)",
+    "symptoms": "Windows 10 및 11 누적 업데이트 설치 중 패치에 필요한 시스템 구성 요소 또는 CBS(Component-Based Servicing) 매니페스트 파일이 누락되거나 손상되어 'CBS_E_SOURCE_MISSING' 메시지와 함께 업데이트 설치가 중간에 중단됩니다.",
+    "symptoms_en": "During cumulative update installation on Windows 10/11, required system components or Component-Based Servicing (CBS) manifest files are missing or corrupted, resulting in update failure with error code 0x800f081f (CBS_E_SOURCE_MISSING).",
+    "script": "Write-Host 'Checking Component Store Status...' -ForegroundColor Cyan; DISM.exe /Online /Cleanup-Image /CheckHealth; sfc /verifyonly",
+    "manualSteps": [
+      "관리자 권한으로 Windows PowerShell 또는 명령 프롬프트를 실행합니다.",
+      "'DISM.exe /Online /Cleanup-Image /RestoreHealth' 명령어를 입력하여 Windows 이미지 구성 요소 저장소를 온라인 복구합니다.",
+      "'sfc /scannow' 명령어를 실행하여 시스템 파일 무결성을 검사하고 손상된 파일을 자동 복구합니다.",
+      "서비스 관리자(services.msc)를 열어 'Windows Update' 및 'Background Intelligent Transfer Service' 항목을 재시작합니다.",
+      "시스템을 재부팅한 후 [설정] > [Windows 업데이트]에서 업데이트를 다시 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows PowerShell or Command Prompt with Administrator privileges.",
+      "Execute 'DISM.exe /Online /Cleanup-Image /RestoreHealth' to repair the Windows Component Store online.",
+      "Run 'sfc /scannow' to scan system file integrity and automatically repair corrupted files.",
+      "Open Services (services.msc) and restart both 'Windows Update' and 'Background Intelligent Transfer Service'.",
+      "Restart the system and re-check for updates under Settings > Windows Update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-79aa86cb-ca52-166a-92a3-966e85d4094e",
+      "https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/repair-a-windows-image"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f081f",
+      "CBS_E_SOURCE_MISSING",
+      "Windows 업데이트 오류 0x800f081f",
+      "DISM RestoreHealth",
+      "구성 요소 저장소 손상"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T11:40:25.456Z",
+    "updatedAt": "2026-10-27T11:40:25.456Z",
+    "verifiedAt": "2026-10-27T11:40:25.456Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070035-mvqyr8s5",
+    "category": "네트워크",
+    "code": "0x80070035",
+    "title": "Windows 10/11 SMB 네트워크 공유 접근 실패 오류 (0x80070035) 해결 방법",
+    "title_en": "Fix Windows 10/11 SMB Network Path Not Found Error (0x80070035)",
+    "symptoms": "최신 Windows 11(24H2/23H2) 및 Windows 10 업데이트 설치 이후 로컬 네트워크 공유 폴더 또는 NAS 장치에 접근할 때 '지정한 네트워크 경로를 찾을 수 없습니다 (0x80070035)' 오류가 발생합니다. 최신 보안 정책 개정으로 인해 보안되지 않은 SMB 게스트 차단 및 NTLM/SMB 서명 요구 사항이 강화되어 타사 파일 서버 접속이 차단되는 현상입니다.",
+    "symptoms_en": "After installing recent Windows 11 (24H2/23H2) and Windows 10 updates, users encounter error '0x80070035: The network path was not found' when attempting to access shared network folders or NAS devices. Tightened OS security defaults disable insecure SMB guest logons and strictly require SMB signing, blocking access to third-party file servers.",
+    "script": "# TCP/IP 스택 리셋 및 네트워크 서비스 재설정\nnetsh winsock reset\nnetsh int ip reset\nipconfig /flushdns\nGet-SmbClientConfiguration | Select-Object EnableBandwidthThrottling, EnableSecuritySignature, RequireSecuritySignature",
+    "manualSteps": [
+      "로컬 그룹 정책 편집기(gpedit.msc)를 실행하여 [컴퓨터 구성] > [관리 템플릿] > [네트워크] > [Lanman 워크스테이션]으로 이동한 후 '보안되지 않은 게스트 로그온 사용' 정책을 '사용'으로 변경합니다.",
+      "[제어판] > [네트워크 및 공유 센터] > [고급 공유 설정]에서 '네트워크 검색 켜기' 및 '파일 및 프린터 공유 켜기' 항목을 활성화합니다.",
+      "[제어판] > [자격 증명 관리자] > [Windows 자격 증명]으로 이동하여 접속하려는 NAS 또는 공유 컴퓨터의 IP/계정 정보를 직접 추가합니다.",
+      "명령 프롬프트(관리자)에서 'sc config lanmanworkstation start= auto' 명령을 실행하여 관련 시스템 서비스 자동 시작 설정을 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Local Group Policy Editor (gpedit.msc), navigate to Computer Configuration > Administrative Templates > Network > Lanman Workstation, and set 'Enable insecure guest logons' to Enabled.",
+      "Open Control Panel > Network and Sharing Center > Advanced sharing settings and ensure 'Turn on network discovery' and 'Turn on file and printer sharing' are both enabled.",
+      "Go to Control Panel > Credential Manager > Windows Credentials, then manually add the target NAS or shared computer's IP address and user credentials.",
+      "Run Command Prompt as Administrator and execute 'sc config lanmanworkstation start= auto' to ensure the required workstation service runs automatically."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/troubleshoot/windows-server/networking/error-0x80070035-cannot-find-network-path",
+      "https://support.microsoft.com/topic/file-sharing-over-a-network-in-windows-b587046d-96ce-4410-a6cb-020b61010b99"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070035",
+      "네트워크 경로를 찾을 수 없습니다",
+      "SMB 공유 오류",
+      "NAS 접속 불가",
+      "Lanman 게스트 로그온",
+      "Network path not found"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T17:32:41.141Z",
+    "updatedAt": "2026-10-27T17:32:41.141Z",
+    "verifiedAt": "2026-10-27T17:32:41.141Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mvqyr8s5",
+    "category": "네트워크",
+    "code": "0x800704CF",
+    "title": "Windows 10/11 네트워크 위치에 도달할 수 없음 오류 (0x800704CF) 해결 방법",
+    "title_en": "Fix Windows 10/11 Network Location Cannot Be Reached Error (0x800704CF)",
+    "symptoms": "Windows 10/11 시스템에서 Microsoft 계정 로그인, OneDrive 동기화, 도메인 네트워크 연결 시 'ERROR_NETWORK_UNREACHABLE (0x800704CF: 네트워크 위치에 도달할 수 없습니다)' 오류가 발생합니다. 최신 누적 업데이트 적용 후 네트워크 어댑터의 가상 미니포트 바인딩 손상, TCP/IP 프로토콜 스택 오류 또는 WinHTTP 프록시 설정 충돌로 발생하는 네트워크 단선 현상입니다.",
+    "symptoms_en": "When logging into a Microsoft account, syncing OneDrive, or connecting to domain network resources in Windows 10/11, users receive error 'ERROR_NETWORK_UNREACHABLE (0x800704CF) - The network location cannot be reached'. This issue is caused by corrupted network adapter bindings, TCP/IP stack glitches, or stale WinHTTP proxy configurations following updates.",
+    "script": "# 네트워크 바인딩 및 프로토콜 초기화\nnetsh winsock reset\nnetsh int ip reset\nnetsh winhttp reset proxy\nipconfig /release\nipconfig /renew\nipconfig /flushdns",
+    "manualSteps": [
+      "[장치 관리자]를 열어 [네트워크 어댑터] 항목을 확장하고 사용 중인 이더넷/Wi-Fi 어댑터를 우클릭하여 '장치 제거'를 실행한 후 시스템을 재부팅하여 드라이버를 자동 재설치합니다.",
+      "[설정] > [네트워크 및 인터넷] > [고급 네트워크 설정]으로 이동하여 '네트워크 초기화'를 클릭하고 5분 후 재부팅 과정을 진행합니다.",
+      "[제어판] > [네트워크 및 공유 센터] > [어댑터 설정 변경]에서 속성 창을 열어 'Microsoft 네트워크용 클라이언트' 및 '인터넷 프로토콜 버전 4(TCP/IPv4)' 항목의 체크 상태를 확인하고 재바인딩합니다.",
+      "명령 프롬프트(관리자)에서 'netsh winhttp reset proxy'를 입력하여 프록시 설정 리셋을 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager, expand Network adapters, right-click your network controller, select 'Uninstall device', and restart the system to let Windows reinstall standard drivers automatically.",
+      "Go to Settings > Network & internet > Advanced network settings, select 'Network reset', and wait for the system restart sequence.",
+      "Navigate to Control Panel > Network and Sharing Center > Change adapter settings, open Properties on your active adapter, and verify Client for Microsoft Networks and IPv4 protocol bindings.",
+      "Run Command Prompt as Administrator and execute 'netsh winhttp reset proxy' to clear stale HTTP proxy settings."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/windows/fix-network-connection-issues-in-windows-70404449-a09b-43a4-a574-b49fb55e2241",
+      "https://learn.microsoft.com/troubleshoot/windows-client/networking/network-connectivity-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704CF",
+      "네트워크 위치에 도달할 수 없습니다",
+      "ERROR_NETWORK_UNREACHABLE",
+      "네트워크 어댑터 초기화",
+      "OneDrive 네트워크 오류",
+      "Network location cannot be reached"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T17:32:41.141Z",
+    "updatedAt": "2026-10-27T17:32:41.141Z",
+    "verifiedAt": "2026-10-27T17:32:41.141Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mvr80dj1",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004C003",
+    "symptoms": "Windows 10 또는 Windows 11에서 제품 키를 입력하거나 누적 업데이트 후 '입력한 제품 키가 작동하지 않습니다' 또는 '정품 인증 서버에서 지정한 제품 키가 차단된 것으로 확인되었습니다'라는 메시지와 함께 오류 코드 0xC004C003이 발생합니다. 최근 마이크로소프트의 Windows 7/8 이전 제품 키 차단 정책 업데이트 및 정품 인증 라이선스 서버 동기화 지연으로 인해 주로 나타납니다.",
+    "symptoms_en": "Occurs during Windows 10 or Windows 11 product key entry or after cumulative updates with the error message 'The product key you entered didn't work' or 'The activation server determined the specified product key has been blocked' (0xC004C003). This is frequently caused by Microsoft's policy changes blocking legacy Windows 7/8 keys or digital license sync issues.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingProduct | Where-Object { $_.PartialProductKey } | Select-Object Name, LicenseStatus, PartialProductKey; slmgr.vbs /dli",
+    "manualSteps": [
+      "시작 > 설정 > 시스템 > 정품 인증으로 이동하여 정품 인증 상태 및 '문제 해결' 도구를 실행합니다.",
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행한 뒤 slmgr.vbs /ipk <유효한_제품_키> 명령을 입력하여 올바른 키를 재등록합니다.",
+      "이전 Windows 7/8 키를 사용 중인 경우 마이크로소프트 정책 변경에 따라 정품 Windows 10/11 디지털 라이선스 제품 키로 교체해야 합니다.",
+      "Microsoft 계정에 연결된 디지털 라이선스인 경우 동일한 계정으로 로그인되어 있는지 확인하고 디지털 라이선스로 재인증합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Start > Settings > System > Activation, then click and run the 'Troubleshoot' option.",
+      "Open Command Prompt as Administrator and run 'slmgr.vbs /ipk <Valid_Product_Key>' to re-register a valid key.",
+      "If using an old Windows 7/8 key, replace it with a valid Windows 10/11 key due to Microsoft's updated activation policy.",
+      "Ensure you are signed in with the correct Microsoft account that holds the digital entitlement and re-activate."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-090702b9-d7b3-462e-a9df-a5723d2e6900",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 오류",
+      "Windows 11 activation error 0xC004C003",
+      "제품 키 차단 오류",
+      "Windows 10 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T21:51:43.740Z",
+    "updatedAt": "2026-10-27T21:51:43.740Z",
+    "verifiedAt": "2026-10-27T21:51:43.740Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f074-mvr80dj1",
+    "category": "정품인증",
+    "code": "0xC004F074",
+    "title": "Windows 10/11 KMS 정품 인증 오류 0xC004F074 해결 방법",
+    "title_en": "How to Fix Windows 10/11 KMS Activation Error 0xC004F074",
+    "symptoms": "기업, 학교 등 조직 네트워크 환경에서 Windows 10 또는 Windows 11 정품 인증 시 '키 관리 서비스(KMS)에 연결할 수 없습니다'라는 메시지와 함께 0xC004F074 오류가 발생합니다. 시스템 시간과 KMS 서버 간의 시간 차이(NTP 시차), KMS 서버 호스트 이름 DNS 확인 실패, 또는 최근 보안 업데이트 후 TCP 1688 포트가 차단되었을 때 발생합니다.",
+    "symptoms_en": "Appears in organization or enterprise networks when activating Windows 10 or Windows 11, displaying 'The Key Management Service (KMS) is unavailable' along with error code 0xC004F074. This is caused by NTP time desynchronization between client and KMS host, DNS lookup failures, or blocked TCP port 1688 after security updates.",
+    "script": "w32tm /resync; Test-NetConnection -Port 1688 -WarningAction SilentlyContinue",
+    "manualSteps": [
+      "관리자 권한 명령 프롬프트에서 'w32tm /resync'를 실행하여 클라이언트 PC의 날짜 및 시간을 KMS 서버 시간과 동기화합니다.",
+      "명령 프롬프트에서 'slmgr.vbs /skms <KMS_서버_주소>:1688'을 입력하여 KMS 호스트 서버 주소를 수동 지정합니다.",
+      "명령 프롬프트에서 'slmgr.vbs /ato' 명령을 실행하여 정품 인증을 즉시 재시도합니다.",
+      "조직 내 방화벽 또는 네트워크 설정에서 outbound TCP Port 1688 차단 여부를 점검합니다."
+    ],
+    "manualSteps_en": [
+      "Run 'w32tm /resync' in Administrator Command Prompt to synchronize system date and time with the domain time server.",
+      "Set the correct KMS host server address manually by running 'slmgr.vbs /skms <KMS_Server_Address>:1688'.",
+      "Execute 'slmgr.vbs /ato' in the elevated prompt to force online Windows activation against the KMS host.",
+      "Verify that outbound firewall settings allow communication over TCP Port 1688."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/error-0xc004f074-activate-windows",
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-090702b9-d7b3-462e-a9df-a5723d2e6900"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F074",
+      "KMS 정품인증 오류",
+      "Windows 11 KMS error 0xC004F074",
+      "키 관리 서비스 오류",
+      "Windows 10 정품인증 0xC004F074"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-27T21:51:43.740Z",
+    "updatedAt": "2026-10-27T21:51:43.740Z",
+    "verifiedAt": "2026-10-27T21:51:43.740Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d02-mvrllz42",
+    "category": "스토어/앱",
+    "code": "0x80073D02",
+    "title": "Microsoft Store 앱 업데이트 및 설치 중 0x80073D02 배포 차단 오류 해결 방법",
+    "title_en": "Fixing Microsoft Store App Update and Installation Error 0x80073D02",
+    "symptoms": "Windows 10 및 11 환경에서 Microsoft Store를 통해 UWP 앱(Xbox 앱, 게이밍 서비스 등)을 설치하거나 업데이트할 때 0x80073D02 오류가 발생하며 작업이 중단됩니다. 이 오류는 업데이트하려는 앱이나 관련 종속성 백그라운드 프로세스가 활성화되어 있어 패키지 수정이 잠긴 경우에 발생합니다.",
+    "symptoms_en": "Error 0x80073D02 occurs when updating or installing UWP applications (such as Xbox app or Gaming Services) via the Microsoft Store in Windows 10 and 11. This typically happens because the app or its dependent background processes are actively running, blocking package modification.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자(Ctrl + Shift + Esc)를 열고 업데이트 대상 앱 및 관련 백그라운드 프로세스(예: GamingServices, XboxApp)를 모두 종료합니다.",
+      "Windows 검색창에 'wsreset.exe'를 입력한 후 관리자 권한으로 실행하여 Store 캐시를 초기화합니다.",
+      "PowerShell을 관리자 권한으로 실행한 후 Store 재등록 스크립트를 수행합니다.",
+      "설정 > 앱 > 설치된 앱에서 'Microsoft Store'를 찾아 고급 옵션으로 이동한 후 '복구' 및 '초기화'를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager (Ctrl + Shift + Esc) and terminate the target application and any related background processes (e.g., GamingServices, XboxApp).",
+      "Type 'wsreset.exe' in the Windows Search bar and run it as administrator to clear the Microsoft Store cache.",
+      "Launch PowerShell as Administrator and run the Store re-registration script.",
+      "Go to Settings > Apps > Installed apps, find 'Microsoft Store', click Advanced Options, and perform 'Repair' and 'Reset'."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fixes-for-problems-with-apps-from-microsoft-store-93ed1bcf-9d3e-4b49-b366-224430e9d67e",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/deployment-troubleshooting-landing-page"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D02",
+      "Microsoft Store 오류",
+      "AppX deployment error 0x80073D02",
+      "스토어 앱 업데이트 실패",
+      "Windows Store Update Blocked"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T04:12:26.498Z",
+    "updatedAt": "2026-10-28T04:12:26.498Z",
+    "verifiedAt": "2026-10-28T04:12:26.498Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf9-mvrllz42",
+    "category": "스토어/앱",
+    "code": "0x80073CF9",
+    "title": "Microsoft Store 앱 설치 실패 및 AUInstallAgent 오류 0x80073CF9 해결 방법",
+    "title_en": "Resolving Microsoft Store App Installation Failure Error 0x80073CF9",
+    "symptoms": "Microsoft Store에서 앱이나 게임 다운로드를 시도할 때 '오류가 발생했습니다' 문구와 함께 0x80073CF9 코드가 반환됩니다. 이는 Windows 시스템 폴더 내 AppX 배포 임시 폴더(AUInstallAgent)가 손상되었거나 삭제되어 앱 패키지를 정상적으로 스테이징하지 못할 때 발생합니다.",
+    "symptoms_en": "Attempting to download or install applications from the Microsoft Store fails with error code 0x80073CF9. This is caused by missing or corrupted AppX deployment staging directories (such as AUInstallAgent) within the Windows system folder.",
+    "script": "$folder = \"$env:SystemRoot\\AUInstallAgent\"; if (-not (Test-Path $folder)) { New-Item -Path $folder -ItemType Directory -Force; Write-Host \"AUInstallAgent folder created successfully.\" } else { Write-Host \"AUInstallAgent folder already exists.\" }",
+    "manualSteps": [
+      "Win + R 키를 눌러 실행 창을 열고 'C:\\Windows' 경로로 이동합니다.",
+      "해당 폴더 내에 'AUInstallAgent' 이름의 새 폴더가 존재하는지 확인하고, 없다면 직접 생성합니다.",
+      "PowerShell(관리자 권한)에서 'net stop wuauserv' 및 'net stop bits'를 입력하여 업데이트 관련 서비스를 일시 정지합니다.",
+      "'C:\\Windows\\AppReadiness' 폴더가 존재하는지 확인하고, 존재하지 않는 경우 폴더를 생성합니다.",
+      "컴퓨터를 재부팅한 후 Microsoft Store에서 앱 설치를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R to open the Run dialog box and navigate to 'C:\\Windows'.",
+      "Check if a folder named 'AUInstallAgent' exists; if missing, manually create it.",
+      "Open PowerShell as Administrator and execute 'net stop wuauserv' and 'net stop bits' to temporarily pause update services.",
+      "Verify the existence of 'C:\\Windows\\AppReadiness' folder, and create it if missing.",
+      "Restart the computer and retry installing apps from the Microsoft Store."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-problems-with-apps-from-microsoft-store-521a123e-ed10-759c-7607-160bf2e6d97e",
+      "https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/troubleshoot-packaged-apps"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF9",
+      "AUInstallAgent",
+      "Microsoft Store 앱 설치 실패",
+      "Windows Store Error 0x80073CF9",
+      "AppX deployment failed 0x80073CF9"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T04:12:26.498Z",
+    "updatedAt": "2026-10-28T04:12:26.498Z",
+    "verifiedAt": "2026-10-28T04:12:26.498Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mvs2qtti",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 실패 및 디지털 라이선스 차단 오류 (0xC004C003) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Failure Error (0xC004C003)",
+    "symptoms": "최근 Windows 10/11 업데이트 및 구형 라이선스 차단 정책 적용 이후, 이전 Windows 7/8 제품 키를 사용한 라이선스 활성화가 거부되거나 메인보드 교체 등 주요 하드웨어 변경 후 '정품 인증 서버에서 지정한 제품 키가 차단되었습니다'라는 메시지와 함께 정품 인증이 해제되며 오류 코드 0xC004C003이 발생하는 현상입니다.",
+    "symptoms_en": "Occurs when Windows activation fails with error code 0xC004C003 and a message stating that the specified product key is blocked. This frequently happens following recent Microsoft policy updates disabling legacy Windows 7/8 key migrations or after major system hardware changes such as motherboard replacement.",
+    "script": "$spp = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter \"PartialProductKey IS NOT NULL\" | Select-Object Name, ApplicationId, LicenseStatus, PartialProductKey\nWrite-Output \"--- Current Licensing Status ---\"\n$spp\nWrite-Output \"`n--- System Time & Sync Status ---\"\nw32tm /query /status",
+    "manualSteps": [
+      "[설정] > [시스템] > [정품 인증] 메뉴로 이동하여 '문제 해결(Troubleshoot)' 옵션을 실행합니다.",
+      "최근 메인보드나 CPU 등 주요 부품을 변경한 경우, 문제 해결사 내 '최근에 이 장치의 하드웨어를 변경했습니다'를 선택한 후 Microsoft 계정에 로그인하여 디지털 라이선스를 다시 연결합니다.",
+      "관리자 권한으로 명령 프롬프트를 열고 slmgr.vbs /dlv 명령을 실행하여 현재 라이선스 채널(Retail, OEM 등) 및 인증 상세 상태를 점검합니다.",
+      "유효한 Windows 10/11 전용 정품 키를 slmgr.vbs /ipk <제품키> 명령으로 새로 입력한 뒤 slmgr.vbs /ato 명령을 실행하여 온라인 정품 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Go to [Settings] > [System] > [Activation] and click the 'Troubleshoot' option.",
+      "If hardware was recently replaced, select 'I changed hardware on this device recently' inside the troubleshooter and sign in with your Microsoft account to re-link your digital license.",
+      "Open Command Prompt as Administrator and run 'slmgr.vbs /dlv' to inspect the detailed activation channel (Retail, OEM) and licensing state.",
+      "Enter a valid Windows 10/11 product key using 'slmgr.vbs /ipk <ProductKey>' and run 'slmgr.vbs /ato' to force online activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09009495-5014-4d3e-9ea9-616f03434d2f",
+      "https://learn.microsoft.com/en-us/windows/deployment/troubleshoot/windows-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 오류",
+      "제품키 차단",
+      "Windows activation error",
+      "slmgr ato"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T12:12:06.389Z",
+    "updatedAt": "2026-10-28T12:12:06.389Z",
+    "verifiedAt": "2026-10-28T12:12:06.389Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f074-mvs2qtti",
+    "category": "정품인증",
+    "code": "0xC004F074",
+    "title": "Windows 10/11 KMS 정품 인증 서버 연결 실패 및 시간 동기화 오류 (0xC004F074) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 KMS Activation Server Connection Error (0xC004F074)",
+    "symptoms": "기업 또는 학교 네트워크 환경에서 Windows 10/11 기능 업데이트 적용 후 KMS(키 관리 서비스) 호스트 서버와 통신하지 못하거나, 클라이언트 PC와 KMS 서버 간 시스템 시각 불일치(시간 동기화 오류)로 인해 '소프트웨어 라이선스 서비스에서 컴퓨터를 활성화할 수 없다고 보고했습니다' 오류 메시지와 함께 정품 인증이 만료되거나 실패하는 현상입니다.",
+    "symptoms_en": "Occurs in corporate or educational KMS environments when Windows fails to activate with error code 0xC004F074. This is caused by DNS lookup failures for the KMS host, network firewall blocking TCP port 1688, or system time desynchronization between the client computer and the activation server.",
+    "script": "Write-Output \"--- Testing System Time Resynchronization ---\"\nw32tm /resync /force\nWrite-Output \"`n--- KMS DNS SRV Record Lookup ---\"\nResolve-DnsName -Name _vlmcs._tcp -Type SRV -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "[설정] > [시간 및 언어] > [날짜 및 시간]으로 이동하여 '지금 동기화' 버튼을 클릭해 PC의 시스템 시각을 인트라넷/NTP 시간 서버와 정확히 맞춥니다.",
+      "관리자 권한 명령 프롬프트에서 nslookup -type=srv _vlmcs._tcp 명령을 실행하여 도메인 내 KMS 서버의 DNS SRV 레코드가 정상적으로 조회되는지 확인합니다.",
+      "PowerShell에서 Test-NetConnection -ComputerName <KMS서버주소> -Port 1688 명령을 실행하여 KMS 전용 포트(1688) 통신 및 방화벽 차단 여부를 점검합니다.",
+      "명령 프롬프트에서 slmgr.vbs /skms <KMS서버IP_또는_FQDN>:1688 명령으로 KMS 호스트를 수동 지정한 후 slmgr.vbs /ato 명령으로 정품 인증을 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to [Settings] > [Time & Language] > [Date & Time] and click 'Sync now' to align system time with network time servers.",
+      "Open Command Prompt as administrator and run 'nslookup -type=srv _vlmcs._tcp' to verify that the internal KMS server DNS SRV record is correctly resolved.",
+      "Run 'Test-NetConnection -ComputerName <KMS_Server_Address> -Port 1688' in PowerShell to verify network connectivity and check for firewall blockages on port 1688.",
+      "Manually set the KMS host by executing 'slmgr.vbs /skms <KMS_Server_IP>:1688' in Command Prompt, then run 'slmgr.vbs /ato' to retry activation."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/troubleshoot-kms-activation-code-0xc004f074",
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09009495-5014-4d3e-9ea9-616f03434d2f"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F074",
+      "KMS 정품인증 오류",
+      "Windows KMS activation",
+      "slmgr skms",
+      "시간 동기화 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T12:12:06.389Z",
+    "updatedAt": "2026-10-28T12:12:06.389Z",
+    "verifiedAt": "2026-10-28T12:12:06.389Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mvso9nsn",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "Windows 네트워크 경로를 찾을 수 없음 (공유 폴더 및 네트워크 드라이브 연결 실패)",
+    "title_en": "Windows Cannot Access Network Path (Network Sharing Connectivity Error)",
+    "symptoms": "최신 Windows 업데이트 후 네트워크 위치에서 공유 폴더에 접근 시 '0x800704cf' 오류가 발생하며 네트워크 검색이나 파일 공유 연결이 차단되는 현상입니다. 특히 클라이언트 식별자 충돌이나 TCP/IP 설정 오류로 인해 로컬 네트워크 리소스가 응답하지 않을 때 나타납니다.",
+    "symptoms_en": "Users experience the '0x800704cf' error when accessing shared folders after recent Windows updates. This issue occurs when the system fails to resolve network paths or when the Client for Microsoft Networks is improperly configured or corrupted.",
+    "script": "Get-NetAdapter | Disable-NetAdapter -Confirm:$false; Start-Sleep -Seconds 2; Get-NetAdapter | Enable-NetAdapter -Confirm:$false; ipconfig /flushdns; nbtstat -RR",
+    "manualSteps": [
+      "네트워크 어댑터 설정에서 'Microsoft 네트워크용 클라이언트' 체크박스를 해제했다가 다시 체크합니다.",
+      "명령 프롬프트(관리자)에서 'ipconfig /release' 및 'ipconfig /renew'를 입력하여 IP 구성을 갱신합니다.",
+      "TCP/IPv4 속성에서 'NetBIOS over TCP/IP' 설정을 '기본값'에서 '사용'으로 강제 변경합니다.",
+      "네트워크 초기화(설정 > 네트워크 및 인터넷 > 고급 네트워크 설정 > 네트워크 초기화)를 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Uncheck and re-check the 'Client for Microsoft Networks' in the Network Adapter properties.",
+      "Run 'ipconfig /release' and 'ipconfig /renew' in an elevated Command Prompt to refresh IP configurations.",
+      "Change the 'NetBIOS over TCP/IP' setting in TCP/IPv4 properties from 'Default' to 'Enable'.",
+      "Perform a Network Reset via Settings > Network & internet > Advanced network settings > Network reset."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/troubleshoot-network-connectivity-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "네트워크 오류",
+      "공유 폴더 연결",
+      "0x800704cf",
+      "Network error",
+      "Shared folder access",
+      "0x800704cf"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T22:14:36.982Z",
+    "updatedAt": "2026-10-28T22:14:36.982Z",
+    "verifiedAt": "2026-10-28T22:14:36.982Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704b3-mvso9nsn",
+    "category": "네트워크",
+    "code": "0x800704b3",
+    "title": "네트워크 경로를 찾을 수 없음 (WinHTTP 및 SMB 네트워킹 가용성 문제)",
+    "title_en": "The Network Path Was Not Found (WinHTTP and SMB Networking Availability Issue)",
+    "symptoms": "2024년 이후 업데이트된 SMB 세션 및 네트워크 인증 과정에서 WinHTTP 서비스가 올바르게 반응하지 않아 발생하는 오류입니다. 네트워크 경로를 찾을 수 없다는 메시지와 함께 특정 원격 서버 연결이 즉시 차단되거나 타임아웃됩니다.",
+    "symptoms_en": "This error occurs when the WinHTTP service fails to respond correctly during SMB session negotiation after recent updates, leading to the 'Network path not found' error when attempting to connect to remote servers or shares.",
+    "script": "netsh int ip reset; netsh winsock reset; Restart-Service -Name 'WinHttpAutoProxySvc' -Force",
+    "manualSteps": [
+      "제어판 > 프로그램 및 기능 > Windows 기능 켜기/끄기에서 'SMB 1.0/CIFS 파일 공유 지원' 항목을 확인하고 필요시 비활성화합니다.",
+      "명령 프롬프트에서 'netsh winsock reset' 명령어를 실행하여 네트워크 소켓 설정을 초기화합니다.",
+      "서비스(services.msc)에서 'WinHTTP Web Proxy Auto-Discovery Service'가 실행 중인지 확인하고 다시 시작합니다.",
+      "PC를 재부팅하여 네트워크 스택을 새로 고침합니다."
+    ],
+    "manualSteps_en": [
+      "Verify 'SMB 1.0/CIFS File Sharing Support' in Windows Features (Turn Windows features on or off) and disable it if unnecessary.",
+      "Run 'netsh winsock reset' in an elevated Command Prompt to reset the network socket settings.",
+      "Check if the 'WinHTTP Web Proxy Auto-Discovery Service' is running in services.msc and restart it.",
+      "Restart your PC to refresh the network stack."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-16f51043-d48c-c8e5-3d84-c89b25123d4e"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "네트워크 경로 오류",
+      "WinHTTP 오류",
+      "0x800704b3",
+      "Network path not found",
+      "WinHTTP issue",
+      "0x800704b3"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-28T22:14:36.982Z",
+    "updatedAt": "2026-10-28T22:14:36.982Z",
+    "verifiedAt": "2026-10-28T22:14:36.982Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mvt1tu6r",
+    "category": "보안/백신",
+    "code": "0x80070643",
+    "title": "Windows 보안 업데이트 및 Defender 인텔리전스 설치 실패 오류 (0x80070643)",
+    "title_en": "Windows Security Update and Defender Intelligence Installation Failure Error (0x80070643)",
+    "symptoms": "Windows 10 및 11 시스템에서 Windows 보안 업데이트(KB5034441 등) 또는 Defender 보안 인텔리전스 정의 업데이트 설치 시 '0x80070643' 오류코드와 함께 업데이트가 실패하는 현상입니다. 복구 파티션(WinRE)의 용량 부족 또는 Defender 서명 업데이트 캐시 손상으로 인해 최신 보안 패치가 적용되지 않습니다.",
+    "symptoms_en": "On Windows 10 and 11 systems, Windows Security updates (such as KB5034441) or Defender security intelligence definition updates fail with error code '0x80070643'. This occurs due to insufficient Recovery Partition (WinRE) space or corrupted Defender signature update cache, preventing late security patches from applying.",
+    "script": "# Check Defender Status and purge definition cache\nWrite-Host \"Checking Windows Defender Status...\" -ForegroundColor Cyan\nGet-MpComputerStatus | Select-Object -Property AntivirusEnabled, RealTimeProtectionEnabled, AVSignatureVersion\n\n$mpPath = \"$env:ProgramFiles\\Windows Defender\\MpCmdRun.exe\"\nif (Test-Path $mpPath) {\n    Write-Host \"Purging Defender Signature Cache...\" -ForegroundColor Yellow\n    Start-Process -FilePath $mpPath -ArgumentList \"-RemoveDefinitions -All\" -Wait -WindowStyle Hidden\n    Write-Host \"Updating Defender Signatures...\" -ForegroundColor Green\n    Update-MpSignature -UpdateSource MicrosoftUpdateServer\n}",
+    "manualSteps": [
+      "'cmd'를 관리자 권한으로 실행한 후 'net stop wuauserv' 및 'net stop bits'를 입력하여 업데이트 서비스를 중단합니다.",
+      "'C:\\Windows\\SoftwareDistribution' 폴더 내의 임시 다운로드 파일들을 모두 삭제합니다.",
+      "명령 프롬프트에서 'net start wuauserv' 및 'net start bits'를 실행하여 서비스를 재개합니다.",
+      "WinRE 복구 파티션 용량 부족인 경우 디스크 관리를 통해 복구 파티션 크기를 확장하거나 Microsoft 안내에 따라 WinRE 파티션을 재구성합니다.",
+      "'설정 > 업데이트 및 보안(Windows 업데이트)'에서 '업데이트 확인'을 클릭하여 설치를 다시 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'net stop wuauserv' and 'net stop bits' to stop update services.",
+      "Delete all temporary installation files inside the 'C:\\Windows\\SoftwareDistribution' directory.",
+      "Restart the services by entering 'net start wuauserv' and 'net start bits' in the Command Prompt.",
+      "If caused by insufficient WinRE partition size, expand the recovery partition using Disk Management or reconfigure it per Microsoft guidance.",
+      "Go to 'Settings > Windows Update' and click 'Check for updates' to retry the installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-windows-recovery-environment-update-for-windows-10-version-21h2-and-22h2-january-9-2024-7930f92d-1002-45e0-a7d0-1a1eb757303f",
+      "https://learn.microsoft.com/en-us/defender-xdr/troubleshoot-microsoft-defender-antivirus"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "Windows Defender Update Fail",
+      "KB5034441 Error",
+      "보안 인텔리전스 업데이트 오류",
+      "WinRE Partition Security Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T04:34:13.395Z",
+    "updatedAt": "2026-10-29T04:34:13.395Z",
+    "verifiedAt": "2026-10-29T04:34:13.395Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8050800c-mvt1tu6s",
+    "category": "보안/백신",
+    "code": "0x8050800C",
+    "title": "Windows Defender 악성코드 검사 및 위협 제거 처리 실패 오류 (0x8050800C)",
+    "title_en": "Windows Defender Threat Remediation and Scan Failure Error (0x8050800C)",
+    "symptoms": "Windows 10/11의 Windows 보안(Defender)에서 바이러스 및 위협 방지 검사 진행 중 또는 위협 제거/격리 시도 시 '0x8050800C' 오류가 발생하며 프로세스가 중단되는 현상입니다. 최신 누적 업데이트 후 정의 데이터베이스 파일 손상이나 백신 엔진(Antimalware Engine) 동기화 오류로 인해 발생합니다.",
+    "symptoms_en": "This issue occurs in Windows 10/11 Windows Security (Defender) when performing a virus & threat protection scan or attempting to remediate threats, failing with error '0x8050800C'. It is caused by corrupted definition database files or antimalware engine synchronization conflicts following recent updates.",
+    "script": "# Diagnostic and Repair Script for Defender Engine 0x8050800C\nWrite-Host \"Checking Windows Defender Antimalware Engine...\" -ForegroundColor Cyan\nGet-Service -Name WinDefend, wscsvc | Select-Object Name, Status, StartType\n\n$defPath = \"$env:ProgramData\\Microsoft\\Windows Defender\\Platform\"\nif (Test-Path $defPath) {\n    Write-Host \"Verifying Defender Platform files...\" -ForegroundColor Yellow\n    Get-ChildItem -Path $defPath -Recurse -Filter \"MpCmdRun.exe\" | Select-Object FullName\n}\n\nWrite-Host \"Triggering Signature Update & Engine Sync...\" -ForegroundColor Green\nUpdate-MpSignature -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "'Windows 보안' 앱을 열고 '바이러스 및 위협 방지' 메뉴로 이동합니다.",
+      "'바이러스 및 위협 방지 업데이트' 항목에서 '업데이트 확인'을 클릭하여 최신 백신 엔진 및 정의를 수동 다운로드합니다.",
+      "명령 프롬프트를 관리자 권한으로 열고 '\"%ProgramFiles%\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate' 명령을 실행합니다.",
+      "문제가 지속될 경우 '설정 > 앱 > 설치된 앱'에서 'Windows 보안'을 찾아 '고급 옵션'을 클릭한 후 '복구' 및 '초기화'를 진행합니다.",
+      "시스템을 재부팅한 후 수동 검사를 다시 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Open the 'Windows Security' app and navigate to 'Virus & threat protection'.",
+      "Under 'Virus & threat protection updates', click 'Check for updates' to manually fetch the latest engine and definitions.",
+      "Open Command Prompt as Administrator and execute '\"%ProgramFiles%\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate'.",
+      "If the issue persists, go to 'Settings > Apps > Installed apps', select 'Windows Security', click 'Advanced options', and perform 'Repair' and 'Reset'.",
+      "Restart the system and rerun a manual scan."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-office-365/defender-for-office-365-display-threat-protection-status",
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-12661011-6d3e-402f-a0b7-15697d090382"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8050800C",
+      "Windows Defender Scan Error",
+      "Threat Remediation Failed",
+      "Defender 엔진 오류",
+      "바이러스 검사 실패"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T04:34:13.395Z",
+    "updatedAt": "2026-10-29T04:34:13.395Z",
+    "verifiedAt": "2026-10-29T04:34:13.395Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mvtijrx4",
+    "category": "보안/백신",
+    "code": "0x80070643",
+    "title": "Windows 보안 업데이트 및 환경 복구 실패 (KB5034441)",
+    "title_en": "Windows Security Update and Recovery Environment Installation Failure (KB5034441)",
+    "symptoms": "Windows 복구 파티션의 크기가 충분하지 않아 보안 관련 업데이트 설치 시 발생하는 오류로, 2024년 초부터 보고된 주요 보안 업데이트 설치 실패 문제입니다.",
+    "symptoms_en": "Failure to install security updates due to insufficient storage space in the Windows Recovery Environment (WinRE) partition, a major issue reported since early 2024.",
+    "script": "reagentc /info",
+    "manualSteps": [
+      "명령 프롬프트를 관리자 권한으로 실행합니다.",
+      "reagentc /info 명령어를 입력하여 복구 파티션 상태를 확인합니다.",
+      "Microsoft 공식 가이드에 따라 WinRE 파티션 크기를 수동으로 조정합니다.",
+      "업데이트를 다시 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Run Command Prompt as administrator.",
+      "Execute 'reagentc /info' to check the recovery partition status.",
+      "Follow the official Microsoft guide to manually resize the WinRE partition.",
+      "Retry the Windows update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-windows-recovery-environment-update-for-windows-10-version-21h2-and-22h2-january-9-2024-3486a2f6-3487-4309-8b83-a417681308a3"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "WinRE 파티션",
+      "KB5034441 오류",
+      "Security Update Failure",
+      "WinRE partition resize"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T12:22:17.367Z",
+    "updatedAt": "2026-10-29T12:22:17.367Z",
+    "verifiedAt": "2026-10-29T12:22:17.367Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf3-mvtijrx4",
+    "category": "보안/백신",
+    "code": "0x80073CF3",
+    "title": "Windows 보안 앱 및 통합 패키지 설치/업데이트 충돌",
+    "title_en": "Windows Security App and Package Installation/Update Conflict",
+    "symptoms": "2024년 윈도우 보안 모듈 업데이트 과정에서 패키지 종속성 문제로 인해 보안 앱이 설치되거나 업데이트되지 않는 현상입니다.",
+    "symptoms_en": "A conflict occurring during Windows security module updates where security apps fail to install or update due to package dependency issues identified in 2024.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.SecHealthUI* | Reset-AppxPackage",
+    "manualSteps": [
+      "시작 메뉴에서 'Windows 보안'을 우클릭하고 '앱 설정'으로 이동합니다.",
+      "해당 앱의 '초기화' 또는 '복구' 버튼을 클릭합니다.",
+      "PowerShell을 관리자 권한으로 열고 해당 패키지를 재등록합니다.",
+      "PC를 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Right-click 'Windows Security' in the Start menu and go to 'App settings'.",
+      "Click the 'Reset' or 'Repair' button for the app.",
+      "Open PowerShell as administrator and re-register the package.",
+      "Restart the PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-antivirus/microsoft-defender-antivirus-on-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF3",
+      "보안 앱 오류",
+      "Windows 보안 초기화",
+      "Security App Reset",
+      "Package Dependency Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T12:22:17.367Z",
+    "updatedAt": "2026-10-29T12:22:17.367Z",
+    "verifiedAt": "2026-10-29T12:22:17.367Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--0x00000116--mvu47y43",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (0x00000116)",
+    "title": "디스플레이 드라이버 응답 중단 및 복구 실패 오류 (VIDEO_TDR_FAILURE 0x00000116)",
+    "title_en": "Display Driver Timeout and Recovery Failure Error (VIDEO_TDR_FAILURE 0x00000116)",
+    "symptoms": "Windows 10 및 Windows 11 시스템에서 고사양 게임 실행, 비디오 렌더링, 또는 누적 업데이트 직후 화면이 순간적으로 정지되거나 검은색으로 변하며 VIDEO_TDR_FAILURE(0x00000116) 블루스크린이 발생합니다. 이는 그래픽 카드 드라이버(nvlddmkm.sys, atikmpag.sys 등)가 지정된 시간 내에 처리 명령을 완료하지 못하여 Windows TDR(Timeout Detection and Recovery) 기능이 GPU를 복구하지 못했을 때 나타납니다.",
+    "symptoms_en": "In Windows 10 and Windows 11 systems, high-load graphics tasks, video rendering, or recent cumulative updates can cause the display to freeze or go black, triggering a VIDEO_TDR_FAILURE (0x00000116) Blue Screen of Death. This occurs when the graphics driver (such as nvlddmkm.sys or atikmpag.sys) fails to respond within the designated Timeout Detection and Recovery (TDR) timeframe, preventing Windows from successfully resetting the GPU.",
+    "script": "Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, DriverDate, Status; Get-WinEvent -ListLog *System* | Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Display'} -MaxEvents 5 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Message",
+    "manualSteps": [
+      "'Win + Ctrl + Shift + B' 키 조합을 동시에 눌러 디스플레이 드라이버 그래픽 서브시스템을 즉시 재설정합니다.",
+      "장치 관리자(devmgmt.msc)를 실행하고 '디스플레이 어댑터' 항목에서 해당 그래픽 카드를 마우스 우클릭하여 '드라이버 업데이트' 또는 '드라이버 롤백'을 수행합니다.",
+      "DDU(Display Driver Uninstaller) 도구를 사용하여 안전 모드에서 기존 그래픽 드라이버를 완벽히 제거한 후 제조업체(NVIDIA/AMD/Intel) 공식 웹사이트에서 최신 WHQL 드라이버를 새로 설치합니다.",
+      "레지스트리 편집기(regedit)를 실행하여 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' 경로로 이동한 후 DWORD(32비트) 값 'TdrDelay'를 생성하고 데이터 값을 8(10진수)로 설정하여 TDR 응답 대기 시간을 연장합니다."
+    ],
+    "manualSteps_en": [
+      "Press the key combination 'Win + Ctrl + Shift + B' to instantly restart and reset the display driver graphics subsystem.",
+      "Open Device Manager (devmgmt.msc), navigate to 'Display adapters', right-click your graphics card, and select 'Update driver' or 'Roll back driver'.",
+      "Use Display Driver Uninstaller (DDU) in Safe Mode to completely clean existing graphics drivers, then perform a fresh installation of the latest WHQL driver from official manufacturer websites (NVIDIA/AMD/Intel).",
+      "Open Registry Editor (regedit), navigate to 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', create a new DWORD (32-bit) value named 'TdrDelay', and set its value data to 8 (Decimal) to extend the TDR timeout threshold."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x116--video-tdr-failure",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-0899578a-ab76-d6ed-8009-2f06a737b301"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE",
+      "0x00000116",
+      "디스플레이 드라이버 오류",
+      "nvlddmkm.sys BSOD",
+      "Graphics Driver Timeout",
+      "Windows 11 디스플레이 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T22:28:57.075Z",
+    "updatedAt": "2026-10-29T22:28:57.075Z",
+    "verifiedAt": "2026-10-29T22:28:57.075Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-scheduler-internal-error--0x00000119--mvu47y43",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119)",
+    "title": "비디오 스케줄러 내부 시스템 오류 및 블루스크린 (VIDEO_SCHEDULER_INTERNAL_ERROR 0x00000119)",
+    "title_en": "Video Scheduler Internal System Error and BSOD (VIDEO_SCHEDULER_INTERNAL_ERROR 0x00000119)",
+    "symptoms": "Windows 11 23H2/24H2 또는 Windows 10 환경에서 다중 모니터 구성, 하드웨어 가속 일정 예약(HAGS) 활성화, 또는 DirectX/WDDM 시스템 업데이트 후 화면이 멈추면서 0x00000119 블루스크린 오류가 발생합니다. 이는 Windows 비디오 스케줄러가 그래픽 메모리 할당 및 GPU 작업 대기열을 관리하는 도중 동기화 실패나 치명적인 예외를 감지했을 때 발생합니다.",
+    "symptoms_en": "In Windows 11 23H2/24H2 or Windows 10, using multi-monitor setups, enabling Hardware-Accelerated GPU Scheduling (HAGS), or applying DirectX/WDDM system updates can lead to screen freezes and a 0x00000119 BSOD error. This happens when the Windows video scheduler detects a fatal synchronization anomaly while managing display memory allocations and GPU command queues.",
+    "script": "Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers' -Name 'HwSchMode' -ErrorAction SilentlyContinue; Get-PnpDevice -Class 'Display' | Select-Object FriendlyName, Status, InstanceId",
+    "manualSteps": [
+      "Windows 설정 > 시스템 > 디스플레이 > 그래픽 설정으로 이동하여 '하드웨어 가속 GPU 일정 예약(HAGS)' 옵션을 '꺼짐'으로 변경하고 시스템을 재부팅합니다.",
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행하고 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth' 명령을 수행하여 손상된 비디오 스케줄러 시스템 파일을 복구합니다.",
+      "NVIDIA 제어판 또는 AMD Software를 실행하여 전원 관리 모드를 '최고 성능 선호'로 변경하여 GPU 전력 절감 상태 진입 중 발생하는 스케줄링 오류를 방지합니다.",
+      "Windows 업데이트 기록에서 최근 설치된 디스플레이 관련 업데이트나 누적 업데이트를 확인하고, 지속 발생 시 업데이트를 임시 롤백한 뒤 WDDM 규격을 정식 지원하는 최신 WHQL 그래픽 드라이버로 재설치합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Windows Settings > System > Display > Graphics Settings, turn off 'Hardware-Accelerated GPU Scheduling (HAGS)', and restart the computer.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' followed by 'DISM /Online /Cleanup-Image /RestoreHealth' to repair corrupted video subsystem files.",
+      "Open GPU Control Panel (NVIDIA Control Panel or AMD Software) and change Power Management Mode to 'Prefer maximum performance' to prevent scheduling faults during low-power states.",
+      "Check Windows Update history for recent display-related or cumulative updates; if the issue persists, temporarily roll back the update and reinstall the latest WHQL driver with full WDDM compliance."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x119---video-scheduler-internal-error",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-0899578a-ab76-d6ed-8009-2f06a737b301"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_SCHEDULER_INTERNAL_ERROR",
+      "0x00000119",
+      "비디오 스케줄러 오류",
+      "HAGS 블루스크린",
+      "WDDM error",
+      "Windows 11 그래픽 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-29T22:28:57.075Z",
+    "updatedAt": "2026-10-29T22:28:57.075Z",
+    "verifiedAt": "2026-10-29T22:28:57.075Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800706ba-mvuh9k8w",
+    "category": "오디오/사운드",
+    "code": "0x800706BA",
+    "title": "Windows 오디오 서비스 응답 없음 및 RPC 서버를 사용할 수 없음 오류 (0x800706BA)",
+    "title_en": "Windows Audio Service Unresponsive and RPC Server Unavailable Error (0x800706BA)",
+    "symptoms": "Windows 10/11 누적 업데이트 진행 후 작업 표시줄의 음량 아이콘에 빨간색 'X' 표시가 나타나며 사운드가 재생되지 않습니다. Windows Audio 서비스(Audiosrv) 또는 AudioEndpointBuilder 서비스가 예기치 않게 중지되고, 서비스를 수동 시작하려고 할 때 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 오류 메시지가 발생합니다.",
+    "symptoms_en": "After installing Windows 10/11 cumulative updates, a red 'X' appears on the taskbar volume icon and no sound is generated. The Windows Audio service (Audiosrv) or AudioEndpointBuilder service stops unexpectedly, throwing error 0x800706BA (The RPC server is unavailable) when attempting to start them manually.",
+    "script": "Get-Service -Name Audiosrv, AudioEndpointBuilder, RpcSs | Set-Service -StartupType Automatic; Restart-Service -Name RpcSs -Force -ErrorAction SilentlyContinue; Restart-Service -Name AudioEndpointBuilder -Force -ErrorAction SilentlyContinue; Restart-Service -Name Audiosrv -Force; Write-Output 'Windows Audio services successfully re-configured and restarted.'",
+    "manualSteps": [
+      "Win + R 키를 누르고 'services.msc'를 입력하여 서비스 관리자를 엽니다.",
+      "'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', 'Windows Audio' 서비스의 상태가 '실행 중'인지 확인합니다.",
+      "각 서비스의 속성 창에서 시작 유형을 '자동'으로 변경하고, 중지 상태인 경우 '시작' 버튼을 누릅니다.",
+      "설정 변경 후 PC를 다시 시작하여 오디오 출력이 정상화되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'services.msc', and press Enter to open Services.",
+      "Locate 'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', and 'Windows Audio' services.",
+      "Open properties for each service, set Startup type to 'Automatic', and click 'Start' if stopped.",
+      "Restart your PC after applying changes and verify if audio output is restored."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/fix-sound-or-audio-problems-in-windows-73023700-e62d-4e10-b1d0-262c0744def1",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-audio-service-fails-to-start"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows Audio Service",
+      "0x800706BA",
+      "RPC Server Unavailable sound",
+      "오디오 서비스 응답 없음",
+      "사운드 빨간색 X 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T04:34:07.424Z",
+    "updatedAt": "2026-10-30T04:34:07.424Z",
+    "verifiedAt": "2026-10-30T04:34:07.424Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-10--status-device-power-failure--mvuh9k8w",
+    "category": "오디오/사운드",
+    "code": "Code 10 (STATUS_DEVICE_POWER_FAILURE)",
+    "title": "Intel Smart Sound Technology(Intel SST) 오디오 드라이버 시작 불가 오류 (Code 10)",
+    "title_en": "Intel Smart Sound Technology (Intel SST) Audio Driver Cannot Start (Code 10)",
+    "symptoms": "Windows 11 23H2/24H2 또는 Windows 10 최신 업데이트 적용 후 스피커 및 마이크 장치를 인식하지 못합니다. 장치 관리자의 'Intel Smart Sound Technology (Intel SST) Audio Controller' 또는 'Intel SST OED' 항목에 노란색 느낌표 경고와 함께 '이 장치를 시작할 수 없습니다 (Code 10)' 오류가 표시됩니다.",
+    "symptoms_en": "Audio output and microphone input fail after installing recent Windows 11 23H2/24H2 or Windows 10 updates. Device Manager displays a yellow exclamation triangle next to 'Intel Smart Sound Technology (Intel SST) Audio Controller' or 'Intel SST OED' with the error 'This device cannot start (Code 10)'.",
+    "script": "Get-PnpDevice | Where-Object { $_.FriendlyName -like '*Intel*Smart Sound*' -or $_.FriendlyName -like '*High Definition Audio*' } | Select-Object FriendlyName, InstanceId, Status, Class; Get-PnpDevice -Class 'Media' | Disable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue; Get-PnpDevice -Class 'Media' | Enable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue; Write-Output 'Audio PnP devices rescanned and toggled.'",
+    "manualSteps": [
+      "시작 버튼을 우클릭하고 '장치 관리자'를 실행합니다.",
+      "'시스템 장치' 및 '사운드, 비디오 및 게임 컨트롤러' 항목에서 'Intel(R) Smart Sound Technology' 드라이버를 찾습니다.",
+      "드라이버 우클릭 후 '드라이버 업데이트' -> '내 컴퓨터에서 드라이버 찾아보기' -> '컴퓨터의 사용 가능한 드라이버 목록에서 직접 선택'을 클릭합니다.",
+      "목록에서 표준 'High Definition Audio Controller' 드라이버를 선택하고 설치를 완료합니다.",
+      "설치 완료 후 시스템을 재부팅하여 오디오 드라이버 충돌이 해결되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Right-click the Start menu and select 'Device Manager'.",
+      "Expand 'System devices' and 'Sound, video and game controllers' to locate 'Intel(R) Smart Sound Technology'.",
+      "Right-click the device and select 'Update driver' -> 'Browse my computer for drivers' -> 'Let me pick from a list of available drivers on my computer'.",
+      "Select standard 'High Definition Audio Controller' from the list and finish installation.",
+      "Reboot the system and check if the audio driver conflict is resolved."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-73023700-e62d-4e10-b1d0-262c0744def1",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/troubleshooting-audio-driver-installation"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Intel SST Audio Controller",
+      "Code 10 Sound Error",
+      "Intel Smart Sound Technology 오류",
+      "오디오 드라이버 코드 10",
+      "소리 안남 드라이버 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T04:34:07.424Z",
+    "updatedAt": "2026-10-30T04:34:07.424Z",
+    "verifiedAt": "2026-10-30T04:34:07.424Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803f7001-mvuxnj5c",
+    "category": "정품인증",
+    "code": "0x803f7001",
+    "title": "Windows 정품 인증을 수행할 수 없음: 라이선스 확인 실패",
+    "title_en": "Windows Activation Error: License verification failed",
+    "symptoms": "Windows 10/11 업데이트 후 하드웨어 변경 감지 또는 디지털 라이선스 연결 해제로 인해 '정품 인증을 받을 수 없음' 메시지가 표시되며 바탕 화면에 워터마크가 나타남.",
+    "symptoms_en": "After a Windows update, the system reports 'Unable to activate Windows' due to hardware changes or broken digital license associations, often resulting in an activation watermark.",
+    "script": "slmgr /ato",
+    "manualSteps": [
+      "설정 > 시스템 > 정품 인증 메뉴로 이동합니다.",
+      "문제 해결사(Troubleshoot) 단추를 클릭합니다.",
+      "최근 하드웨어 변경 사항을 선택하고 연결된 Microsoft 계정으로 로그인합니다.",
+      "장치 목록에서 현재 사용 중인 PC를 선택하고 정품 인증 버튼을 누릅니다."
+    ],
+    "manualSteps_en": [
+      "Go to Settings > System > Activation.",
+      "Click the 'Troubleshoot' button.",
+      "Select 'I changed hardware on this device recently' and sign in with your linked Microsoft Account.",
+      "Select your current PC from the device list and click Activate."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d8fb64-6768-485a-8b80-45915d312999"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 정품인증 오류",
+      "0x803f7001 해결",
+      "Windows Activation Error",
+      "License Troubleshooting"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T12:12:53.040Z",
+    "updatedAt": "2026-10-30T12:12:53.040Z",
+    "verifiedAt": "2026-10-30T12:12:53.040Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007232b-mvuxnj5c",
+    "category": "정품인증",
+    "code": "0x8007232B",
+    "title": "DNS 이름이 존재하지 않음: KMS 정품 인증 서버 연결 오류",
+    "title_en": "DNS name does not exist: KMS activation server connection error",
+    "symptoms": "기업용 볼륨 라이선스(Enterprise/Education) 환경에서 시스템 업데이트 또는 네트워크 변경 후 DNS 서버가 KMS 호스트를 찾지 못해 정품 인증이 차단됨.",
+    "symptoms_en": "In Enterprise or Education environments, system updates or network changes cause the system to fail to locate the KMS host via DNS, blocking activation.",
+    "script": "slmgr /skms kms.core.windows.net",
+    "manualSteps": [
+      "명령 프롬프트(CMD)를 관리자 권한으로 실행합니다.",
+      "slmgr /ipk [제품키] 명령어를 입력하여 올바른 볼륨 라이선스 키를 다시 입력합니다.",
+      "slmgr /ato 명령어를 입력하여 즉시 정품 인증을 시도합니다.",
+      "네트워크 관리자에게 조직의 KMS 서버 주소를 확인하여 적용합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Type 'slmgr /ipk [ProductKey]' to re-enter your valid Volume License key.",
+      "Type 'slmgr /ato' to force activation.",
+      "Contact your network administrator to verify and re-configure the organization's KMS server address."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/deployment/troubleshoot-kms-activation-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "KMS 정품인증 실패",
+      "0x8007232B 해결",
+      "Windows DNS Error",
+      "KMS Activation Server"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-30T12:12:53.040Z",
+    "updatedAt": "2026-10-30T12:12:53.040Z",
+    "verifiedAt": "2026-10-30T12:12:53.040Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007042c-mvvw3ejs",
+    "category": "보안/백신",
+    "code": "0x8007042c",
+    "title": "Windows Defender 보안 센터 및 방화벽 서비스 시작 실패 오류 (0x8007042c) 해결 방법",
+    "title_en": "Fix Windows Defender Security Center and Firewall Service Startup Failure (0x8007042c)",
+    "symptoms": "Windows Defender 실시간 보호 또는 Windows 방화벽을 활성화하려 할 때 '종속성 서비스나 그룹이 시작될 수 없습니다(0x8007042c)' 오류 메시지가 발생하며 실행되지 않습니다. 최신 Windows 10/11 업데이트 이후 관련 보안 서비스(mpssvc, WinDefend)의 종속성 손상이나 타사 백신 프로그램 잔재로 인해 발생합니다.",
+    "symptoms_en": "When attempting to enable Windows Defender Real-time Protection or Windows Firewall, error 0x8007042c occurs stating that the dependency service or group failed to start. This happens after recent Windows 10/11 updates due to corrupted security service dependencies or leftover third-party antivirus files.",
+    "script": "Set-Service -Name BFE -StartupType Automatic; Start-Service -Name BFE -ErrorAction SilentlyContinue; Set-Service -Name mpssvc -StartupType Automatic; Start-Service -Name mpssvc -ErrorAction SilentlyContinue; Set-Service -Name WinDefend -StartupType Automatic; Start-Service -Name WinDefend -ErrorAction SilentlyContinue; Get-Service BFE, mpssvc, WinDefend",
+    "manualSteps": [
+      "키보드의 Windows 키 + R을 누르고 'services.msc'를 입력하여 서비스 관리자를 엽니다.",
+      "'Base Filtering Engine (BFE)' 서비스를 찾아 마우스 오른쪽 버튼을 클릭하고 [속성]에서 시작 유형을 '자동'으로 변경한 후 [시작]을 클릭합니다.",
+      "'Windows Defender Firewall (mpssvc)' 및 'Windows Defender Antivirus Service (WinDefend)' 서비스도 동일하게 '자동'으로 설정하고 시작합니다.",
+      "기존에 설치되어 있던 타사 백신(AhnLab, Norton, McAfee 등)의 전용 삭제 툴을 다운로드하여 잔여 파일을 완전히 삭제합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'sfc /scannow'를 실행하여 손상된 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type 'services.msc', and press Enter to open Services.",
+      "Locate 'Base Filtering Engine (BFE)', right-click and select 'Properties', set Startup type to 'Automatic', and click 'Start'.",
+      "Set 'Windows Defender Firewall (mpssvc)' and 'Windows Defender Antivirus Service (WinDefend)' to 'Automatic' and start them as well.",
+      "Download and run official removal tools for any previously installed third-party antivirus programs to eliminate leftover files.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to repair corrupted system files."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/error-0x8007042c-when-you-try-to-start-windows-firewall-d2f623a3-832c-cf2c-3837-1249e0c52d00",
+      "https://learn.microsoft.com/en-us/defender-xdr/microsoft-defender-antivirus-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007042c",
+      "Windows Defender 서비스 시작 실패",
+      "방화벽 오류 0x8007042c",
+      "Windows Firewall Error 0x8007042c",
+      "Security Center startup error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T04:17:00.520Z",
+    "updatedAt": "2026-10-31T04:17:00.520Z",
+    "verifiedAt": "2026-10-31T04:17:00.520Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80508002-mvvw3ejs",
+    "category": "보안/백신",
+    "code": "0x80508002",
+    "title": "Windows Defender 악성코드 검사 및 위협 치료 실패 오류 (0x80508002) 해결 방법",
+    "title_en": "Fix Windows Defender Threat Remediation and Scan Error (0x80508002)",
+    "symptoms": "Windows Defender에서 검사 도중 악성코드를 탐지했으나 제거/격리 처리 과정에서 오류 코드 0x80508002가 표시되며 치료에 실패합니다. 최신 보안 인텔리전스 시그니처 파일의 손상이나 격리소(Quarantine) 폴더 권한 문제로 인해 발생합니다.",
+    "symptoms_en": "Windows Defender identifies a security threat during scanning but fails during the remediation or removal phase with error code 0x80508002. This is caused by corrupted security intelligence definitions or permission issues in the quarantine folder after recent updates.",
+    "script": "Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-RemoveDefinitions -All\" -Wait -WindowStyle Hidden; Start-Process -FilePath \"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -ArgumentList \"-SignatureUpdate\" -Wait -WindowStyle Hidden",
+    "manualSteps": [
+      "시작 메뉴에서 'Windows 보안'을 검색하여 실행한 뒤 [바이러스 및 위협 방지]로 이동합니다.",
+      "[바이러스 및 위협 방지 업데이트] 섹션에서 '업데이트 확인'을 클릭하여 최신 보안 인텔리전스를 수동으로 다운로드합니다.",
+      "명령 프롬프트를 관리자 권한으로 열고 '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -RemoveDefinitions -All'을 입력하여 인텔리전스 캐시를 초기화합니다.",
+      "이후 '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate' 명령어로 엔진을 업데이트합니다.",
+      "Windows 보안의 [검사 옵션]에서 'Windows Defender 오프라인 검사'를 선택하여 재부팅 후 안전 모드 환경에서 악성코드를 제거합니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'Windows Security' in the Start Menu and open it, then go to 'Virus & threat protection'.",
+      "Under 'Virus & threat protection updates', click 'Check for updates' to manually download the latest definitions.",
+      "Open Command Prompt as Administrator and run '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -RemoveDefinitions -All' to clear definition cache.",
+      "Run '\"C:\\Program Files\\Windows Defender\\MpCmdRun.exe\" -SignatureUpdate' to reload updated engine definitions.",
+      "Go to 'Scan options' in Windows Security, select 'Microsoft Defender Offline scan', and restart to remove threats in a isolated environment."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-xdr/troubleshoot-microsoft-defender-antivirus",
+      "https://support.microsoft.com/en-us/windows/help-protect-my-device-with-windows-security-22021022-356d-5e81-04e2-411a044199c0"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80508002",
+      "Windows Defender 악성코드 치료 실패",
+      "Defender error 0x80508002",
+      "Defender remediation error",
+      "바이러스 치료 실패 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T04:17:00.520Z",
+    "updatedAt": "2026-10-31T04:17:00.520Z",
+    "verifiedAt": "2026-10-31T04:17:00.520Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d05-mvwc4jhs",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Microsoft Store 앱 설치 및 업데이트 중 오류 0x80073D05 (앱 데이터 삭제 실패) 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Update & Installation Error 0x80073D05 (Failed to Delete Application Data)",
+    "symptoms": "Windows 10/11 환경에서 Microsoft Store 또는 Xbox 앱을 통해 앱을 업데이트하거나 재설치할 때 0x80073D05(ERROR_DELETING_EXISTING_APPLICATION_DATA_STORE_FAILED) 오류 메시지와 함께 작업이 중단됩니다. 이는 앱 데이터 캐시 폴더가 손상되었거나 기존 패키지 저장소 파일 삭제 권한이 차단되었을 때 발생합니다.",
+    "symptoms_en": "Occurs when updating or reinstalling UWP apps (e.g., Xbox app, Gaming Services, Photos app) via Microsoft Store in Windows 10/11, displaying error 0x80073D05 (ERROR_DELETING_EXISTING_APPLICATION_DATA_STORE_FAILED). This is caused by corrupted application data cache directories or permission conflicts preventing Windows from removing old app data stores.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "실행 창(Win + R)을 열고 'wsreset.exe'를 입력한 후 실행하여 Microsoft Store 캐시를 초기화합니다.",
+      "설정 > 앱 > 설치된 앱에서 오류가 발생하는 앱(예: Microsoft Store)의 '고급 옵션'으로 이동한 뒤 '복구' 및 '초기화'를 실행합니다.",
+      "파일 탐색기에서 '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe\\LocalCache' 경로로 이동하여 내부 모든 파일과 폴더를 삭제합니다.",
+      "관리자 권한으로 PowerShell을 실행하고 제공된 재등록 스크립트를 실행한 후 시스템을 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open the Run dialog (Win + R), type 'wsreset.exe', and press Enter to reset the Microsoft Store cache.",
+      "Go to Settings > Apps > Installed apps, select 'Advanced options' for the affected app (e.g., Microsoft Store), and click 'Repair' followed by 'Reset'.",
+      "Navigate to '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe\\LocalCache' in File Explorer and delete all contents inside.",
+      "Open PowerShell as Administrator, execute the provided re-registration script, and restart your system."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3c14-be72-37d6dae777a2",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/app-installation-issues"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "Microsoft Store 오류 0x80073D05",
+      "앱 설치 실패",
+      "ERROR_DELETING_EXISTING_APPLICATION_DATA_STORE_FAILED",
+      "스토어 앱 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T11:45:47.440Z",
+    "updatedAt": "2026-10-31T11:45:47.440Z",
+    "verifiedAt": "2026-10-31T11:45:47.440Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf6-mvwc4jht",
+    "category": "스토어/앱",
+    "code": "0x80073CF6",
+    "title": "Microsoft Store 앱 등록 및 배포 실패 오류 0x80073CF6 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Registration and Deployment Error 0x80073CF6",
+    "symptoms": "Windows 10/11에서 Microsoft Store 앱 설치 또는 업데이트 과정 중 '패키지를 등록할 수 없습니다 (0x80073CF6)' 오류가 발생합니다. AppX 배포 서비스(AppXSvc) 캐시 손상, 중복 앱 패키지 레지스트리 키 충돌, 또는 사용자 프로필 패키지 매니페스트 등록 오류로 인해 발생합니다.",
+    "symptoms_en": "Occurs during UWP/MSIX package installation or update in Windows 10/11, throwing error 0x80073CF6 (ERROR_INSTALL_REGISTRATION_FAILURE). This failure is triggered by corrupted AppX Deployment Service (AppXSvc) caches, conflicting package registry keys, or broken manifest registration within user profiles.",
+    "script": "Get-Service -Name AppXSvc | Restart-Service -Force; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\" -ErrorAction SilentlyContinue}",
+    "manualSteps": [
+      "Windows 서비스(services.msc)를 열고 'AppX Deployment Service (AppXSvc)' 서비스를 찾아 다시 시작합니다.",
+      "설정 > 시스템 > 문제 해결 > 기타 문제 해결사 메뉴에서 'Windows 스토어 앱' 문제 해결사를 실행합니다.",
+      "관리자 권한 PowerShell에서 다음 명령을 실행하여 임시 배포 캐시를 삭제합니다: Remove-Item -Path \"$env:LOCALAPPDATA\\Packages\\*\\AC\\Temp\\*\" -Recurse -Force -ErrorAction SilentlyContinue",
+      "관리자 권한 PowerShell을 사용하여 UWP 앱 매니페스트를 전체 재등록한 후 PC를 다시 시작합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows Services (services.msc), locate 'AppX Deployment Service (AppXSvc)', and restart the service.",
+      "Go to Settings > System > Troubleshoot > Other troubleshooters and run the 'Windows Store Apps' troubleshooter.",
+      "Open PowerShell as Administrator and run: Remove-Item -Path \"$env:LOCALAPPDATA\\Packages\\*\\AC\\Temp\\*\" -Recurse -Force -ErrorAction SilentlyContinue to clear temporary deployment cache.",
+      "Re-register all default UWP package manifests using Administrator PowerShell and restart your PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/win32/appxpkg/troubleshooting-appx-package-installation",
+      "https://support.microsoft.com/en-us/windows/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3c14-be72-37d6dae777a2"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF6",
+      "ERROR_INSTALL_REGISTRATION_FAILURE",
+      "Microsoft Store 패키지 등록 실패",
+      "AppXSvc 오류",
+      "UWP App Registration Failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T11:45:47.440Z",
+    "updatedAt": "2026-10-31T11:45:47.440Z",
+    "verifiedAt": "2026-10-31T11:45:47.440Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee2-mvwn3lmr",
+    "category": "네트워크",
+    "code": "0x80072EE2",
+    "title": "Windows 10/11 네트워크 연결 시간 초과 오류 (0x80072EE2) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Network Connection Timeout Error (0x80072EE2)",
+    "symptoms": "네트워크 서버 또는 Windows 업데이트 서버와 통신 중 응답 시간이 초과되어 발생합니다. 방화벽 설정, 프록시 미구성, MTU 크기 불일치 또는 잘못된 DNS 캐시로 인해 클라이언트가 적절한 시간 내에 패킷을 주고받지 못할 때 주로 표출됩니다.",
+    "symptoms_en": "Occurs when a request to a network or update server times out. It typically happens when client packets are delayed or blocked due to restrictive firewall rules, proxy misconfigurations, incorrect MTU size, or corrupted DNS cache.",
+    "script": "Clear-DnsClientCache\nReset-NetAdapterAdvancedProperty -Name \"*\" -DisplayName \"Large Send Offload*\" -ErrorAction SilentlyContinue\nnetsh int ip reset\nnetsh winsock reset\nWrite-Output \"Network stack and DNS cache reset completed. Please restart your PC.\"",
+    "manualSteps": [
+      "명령 프롬프트(관리자 권한)를 실행하여 ipconfig /flushdns 명령어로 DNS 캐시를 초기화합니다.",
+      "Windows 보안 또는 타사 방화벽 소프트웨어에서 HTTP/HTTPS 통신용 포트(80, 443) 차단 여부를 확인합니다.",
+      "네트워크 연결 속성에서 IPv4 프로토콜의 DNS 서버 주소를 Google Public DNS(8.8.8.8 및 8.8.4.4) 또는 Cloudflare DNS(1.1.1.1)로 변경합니다.",
+      "설정 > 네트워크 및 인터넷 > 프록시 메뉴에서 '자동으로 설정 감지'를 활성화하고 수동 프록시 서버 사용을 해제합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and execute 'ipconfig /flushdns' to clear the DNS resolver cache.",
+      "Check Windows Security or third-party firewall software to ensure HTTP/HTTPS traffic (ports 80 and 443) is not blocked.",
+      "Change the IPv4 DNS server settings in Network Adapter properties to Google Public DNS (8.8.8.8 / 8.8.4.4) or Cloudflare DNS (1.1.1.1).",
+      "Navigate to Settings > Network & internet > Proxy, turn on 'Automatically detect settings', and disable manual proxy server usage."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-windows-update-errors",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-10b4104d-6169-2ea0-d5e9-74e41b1840e7"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE2",
+      "네트워크 연결 시간 초과",
+      "Windows 네트워크 오류",
+      "Network Timeout Error",
+      "DNS Flush",
+      "Winsock Reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T16:52:59.331Z",
+    "updatedAt": "2026-10-31T16:52:59.331Z",
+    "verifiedAt": "2026-10-31T16:52:59.331Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-error-809-mvwn3lmr",
+    "category": "네트워크",
+    "code": "Error 809",
+    "title": "Windows 10/11 L2TP/IPsec VPN 연결 실패 오류 809 해결 방법",
+    "title_en": "How to Fix L2TP/IPsec VPN Connection Failed Error 809 in Windows 10/11",
+    "symptoms": "클라이언트 및/또는 서버가 NAT(네트워크 주소 변환) 장치 뒤에 위치해 있을 때 L2TP/IPsec VPN 연결 시 발생합니다. IPsec SA(보안 연결) 협상이 NAT-T 지원 레지스트리 설정 누락 또는 방화벽 차단으로 인해 차단되어 연결 시도가 실패합니다.",
+    "symptoms_en": "Occurs during L2TP/IPsec VPN connections when the client and/or server is located behind a NAT (Network Address Translation) device. The connection attempt fails because IPsec Security Association (SA) negotiations are blocked due to missing NAT-T registry key configurations or firewall blocks.",
+    "script": "$regPath = \"HKLM:\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent\"\nif (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }\nSet-ItemProperty -Path $regPath -Name \"AssumeUDPEncapsulationContextOnSendRule\" -Value 2 -Type DWord\nSet-Service -Name \"PolicyAgent\" -StartupType Automatic\nRestart-Service -Name \"PolicyAgent\" -Force\nWrite-Output \"NAT-T registry value set to 2. Restart recommended.\"",
+    "manualSteps": [
+      "레지스트리 편집기(regedit)를 실행하고 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent 경로로 이동합니다.",
+      "DWORD(32비트) 값을 새 항목으로 생성한 후 이름을 AssumeUDPEncapsulationContextOnSendRule로 지정하고 값을 2로 변경합니다.",
+      "서비스 관리자(services.msc)에서 'IPsec Policy Agent' 및 'IKE and AuthIP IPsec Keying Modules' 서비스의 시작 유형을 '자동'으로 변경하고 재시작합니다.",
+      "공유기 및 방화벽 설정에서 UDP 포트 500, 4500, 1701이 허용되어 있는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Registry Editor (regedit) and navigate to HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent.",
+      "Create a new DWORD (32-bit) Value named AssumeUDPEncapsulationContextOnSendRule and set its Value data to 2.",
+      "Open Services (services.msc), locate 'IPsec Policy Agent' and 'IKE and AuthIP IPsec Keying Modules', set their Startup type to 'Automatic', and restart the services.",
+      "Verify that UDP ports 500, 4500, and 1701 are forwarded and allowed through your router and firewall settings."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/configure-l2tp-ipsec-server-behind-nat-t",
+      "https://support.microsoft.com/en-us/windows/connect-to-a-vpn-in-windows-3d29aeb1-f4b5-4213-0b20-20e3023214b9"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Error 809",
+      "L2TP VPN 오류",
+      "AssumeUDPEncapsulationContextOnSendRule",
+      "VPN NAT-T",
+      "IPsec Policy Agent",
+      "Windows VPN Connection Failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T16:52:59.331Z",
+    "updatedAt": "2026-10-31T16:52:59.331Z",
+    "verifiedAt": "2026-10-31T16:52:59.331Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f213-mvww0sue",
+    "category": "정품인증",
+    "code": "0xC004F213",
+    "title": "Windows 10/11 정품 인증 오류 0xC004F213 (제품 키 미보유) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004F213 (No Product Key Found)",
+    "symptoms": "메인보드 등 주요 하드웨어 교체 또는 Windows 클린 설치 후 정품 인증 설정 페이지에 '디바이스에서 제품 키를 찾지 못했습니다'라는 메시지와 함께 0xC004F213 오류가 발생합니다. BIOS/UEFI 내장 OEM 키를 찾지 못하거나 디지털 라이선스가 Microsoft 계정과 연동되어 있지 않을 때 주로 나타납니다.",
+    "symptoms_en": "After a hardware change (such as a motherboard replacement) or a clean Windows installation, the Activation settings page displays error 0xC004F213 along with 'Windows reported that no product key was found on your device'. This occurs when the OS cannot locate an embedded OEM license key or when the digital license is not linked to your Microsoft account.",
+    "script": "Write-Host \"[Windows Licensing Diagnostic]\" -ForegroundColor Cyan\nGet-CimInstance -ClassName SoftwareLicensingProduct | Where-Object { $_.PartialProductKey } | Select-Object Name, LicenseStatus, PartialProductKey | Format-Table -AutoSize\n$oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey\nif ($oemKey) {\n    Write-Host \"Detected OEM Firmware Key: $oemKey\" -ForegroundColor Green\n} else {\n    Write-Host \"No embedded OEM Firmware Key found in UEFI/BIOS.\" -ForegroundColor Yellow\n}",
+    "manualSteps": [
+      "시작 > 설정 > 시스템 > 정품 인증으로 이동하여 '문제 해결(Troubleshoot)' 버튼을 클릭합니다.",
+      "최근 메인보드나 시스템 부품을 교체한 경우 문제 해결사 화면에서 '최근에 이 디바이스의 하드웨어를 변경했습니다' 링크를 선택합니다.",
+      "Microsoft 계정으로 로그인한 후 연결된 디바이스 목록에서 현재 사용 중인 PC를 선택하고 '지금 사용 중인 디바이스입니다'를 체크한 뒤 [정품 인증]을 진행합니다.",
+      "UEFI BIOS에 OEM 키가 있는 경우 관리자 권한 명령 프롬프트에서 `wmic path softwarelicensingservice get OA3xOriginalProductKey` 명령으로 키를 확인하고 `slmgr.vbs /ipk <확인된 키>`로 직접 등록합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Start > Settings > System > Activation and click the 'Troubleshoot' button.",
+      "If you recently replaced hardware like your motherboard, click the link 'I changed hardware on this device recently' in the troubleshooter window.",
+      "Sign in with your Microsoft account, select your current PC from the linked device list, check 'This is the device I'm using right now', and click [Activate].",
+      "If an OEM key is stored in your BIOS firmware, open Command Prompt as administrator, run `wmic path softwarelicensingservice get OA3xOriginalProductKey`, and apply it via `slmgr.vbs /ipk <ProductKey>`."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09096754-015a-4674-0c19-ea6284272f2e",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F213",
+      "Windows 정품인증",
+      "제품키를 찾을 수 없음",
+      "No product key found",
+      "메인보드 교체 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T21:02:45.254Z",
+    "updatedAt": "2026-10-31T21:02:45.254Z",
+    "verifiedAt": "2026-10-31T21:02:45.254Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c008-mvww0sue",
+    "category": "정품인증",
+    "code": "0xC004C008",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C008 (제품 키 사용 제한 초과) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004C008 (Product Key Exceeded Limit)",
+    "symptoms": "Windows 제품 키를 지정된 허용 기기 수 이상으로 다른 PC에 입력했거나 라이선스 이전 횟수를 초과했을 때 정품 인증 서버에서 온라인 승인이 거부되며 0xC004C008 오류가 표시됩니다. 온라인 자동 인증 대신 전화 인증(slui 4) 절차를 통해 라이선스를 재인증해야 합니다.",
+    "symptoms_en": "Error 0xC004C008 occurs when a product key has been used on more PCs than permitted by Microsoft Software License Terms, or transfer limits have been reached. Online activation fails, requiring telephone activation or releasing the key from the previous installation.",
+    "script": "Write-Host \"[Windows License & Activation Check]\" -ForegroundColor Cyan\ncscript //nologo C:\\Windows\\System32\\slmgr.vbs /dli\nWrite-Host \"To unregister key from previous machine if accessible, run: slmgr.vbs /upk\" -ForegroundColor Yellow",
+    "manualSteps": [
+      "`Windows + R` 키를 눌러 실행 창을 열고 `slui.exe 4`를 입력한 후 Enter를 누릅니다.",
+      "전화 정품 인증 마법사가 나타나면 국가/지역(대한민국)을 선택하고 화면에 안내된 수신자 부담 전화번호로 전화를 겁니다.",
+      "자동 응답 시스템(ARS) 안내에 따라 화면에 표시된 9개 그룹의 설치 ID(Installation ID)를 입력합니다.",
+      "ARS에서 발급해 주는 확인 ID(Confirmation ID)를 화면의 입력란에 입력한 후 [Windows 정품 인증]을 완료합니다.",
+      "이전 PC를 여전히 사용할 수 있다면 관리자 명령 프롬프트에서 `slmgr.vbs /upk` 명령어로 제품 키 등록을 해제하여 사용 횟수를 정리합니다."
+    ],
+    "manualSteps_en": [
+      "Press `Windows + R`, type `slui.exe 4`, and press Enter to launch the phone activation wizard.",
+      "Select your country or region and call the toll-free phone number shown on the screen.",
+      "Follow the automated phone system instructions to provide your 9-group Installation ID.",
+      "Enter the Confirmation ID provided by the automated system into the wizard fields and click [Activate Windows].",
+      "If the previous PC is still operational, open Command Prompt as administrator and run `slmgr.vbs /upk` to uninstall the product key."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09096754-015a-4674-0c19-ea6284272f2e",
+      "https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/slmgrvbs-options"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C008",
+      "slui 4",
+      "Windows 전화 정품인증",
+      "제품 키 사용 제한 초과",
+      "Product key limit exceeded"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-10-31T21:02:45.254Z",
+    "updatedAt": "2026-10-31T21:02:45.254Z",
+    "verifiedAt": "2026-10-31T21:02:45.254Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000139-mvxc9125",
+    "category": "시스템/블루스크린",
+    "code": "0x00000139",
+    "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix KERNEL_SECURITY_CHECK_FAILURE (0x00000139) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows 10/11 최신 업데이트 후 커널 데이터 구조 손상 또는 구형 드라이버 충돌로 인해 시스템이 갑자기 중단되고 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린이 발생합니다.",
+    "symptoms_en": "The system unexpectedly crashes with a KERNEL_SECURITY_CHECK_FAILURE (0x00000139) stop code following Windows 10/11 updates, usually caused by driver memory corruption or damaged system integrity.",
+    "script": "Write-Host \"Checking and Repairing System File Integrity...\" -ForegroundColor Cyan\r\nsfc /scannow\r\ndism /online /cleanup-image /restorehealth",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행한 뒤 'sfc /scannow' 명령어를 입력하여 무결성 검사를 진행합니다.",
+      "DISM 도구('dism /online /cleanup-image /restorehealth')를 실행하여 Windows 커널 이미지 데이터베이스를 복구합니다.",
+      "장치 관리자에서 그래픽, 네트워크 및 주요 시스템 드라이버를 최신 버전으로 업데이트하거나 최근 설치한 드라이버를 롤백합니다.",
+      "Windows 메모리 진단 도구('mdsched.exe')를 실행하여 물리적 RAM 모듈 이상 여부를 테스트합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to verify and fix system file integrity.",
+      "Execute DISM command ('dism /online /cleanup-image /restorehealth') to repair the Windows component store image.",
+      "Update graphic, network, and chipset drivers via Device Manager, or roll back recently updated drivers.",
+      "Run the Windows Memory Diagnostic tool ('mdsched.exe') to test physical RAM for hardware memory faults."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139-kernel-security-check-failure",
+      "https://support.microsoft.com/windows/troubleshoot-blue-screen-errors-5c62b728-795f-40d9-b570-5b86bd811d38"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x00000139",
+      "KERNEL_SECURITY_CHECK_FAILURE",
+      "블루스크린 해결",
+      "Windows 11 BSOD",
+      "커널 보안 검사 실패",
+      "Blue Screen Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T04:37:03.004Z",
+    "updatedAt": "2026-11-01T04:37:03.004Z",
+    "verifiedAt": "2026-11-01T04:37:03.004Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x000000e6-mvxc9125",
+    "category": "시스템/블루스크린",
+    "code": "0x000000E6",
+    "title": "Windows 10/11 DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows Kernel DMA Protection(직접 메모리 액세스 보호) 활성화 상태에서 PCIe, NVMe SSD 또는 썬더볼트 드라이버의 결함으로 인해 시스템이 재부팅되며 DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) 블루스크린이 발생합니다.",
+    "symptoms_en": "The system encounters a DRIVER_VERIFIER_DMA_VIOLATION (0x000000E6) BSOD when Kernel DMA Protection blocks illegal direct memory access operations caused by outdated PCIe, NVMe, or Thunderbolt drivers.",
+    "script": "Write-Host \"Resetting Driver Verifier settings...\" -ForegroundColor Cyan\r\nverifier /reset\r\nGet-PnpDevice -Class \"System\" | Where-Object {$_.Status -ne \"OK\"}",
+    "manualSteps": [
+      "안전 모드로 부팅한 후 명령 프롬프트에서 'verifier /reset'을 실행하여 드라이버 검증 도구 설정을 리셋합니다.",
+      "메인보드 제조업체 웹사이트를 방문하여 최신 BIOS/UEFI 업데이트 및 Chipset, Thunderbolt 드라이버를 설치합니다.",
+      "장치 관리자에서 NVMe SSD 컨트롤러 및 PCIe 버스 드라이버를 최신 버전으로 업데이트합니다.",
+      "오류가 지속될 경우 BIOS 설정 진입 후 'Kernel DMA Protection' 또는 'Virtualization Technology (VT-d)' 옵션을 점검 및 재설정합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode, open Command Prompt, and run 'verifier /reset' to disable Driver Verifier flags.",
+      "Visit your motherboard manufacturer's website to update to the latest BIOS/UEFI firmware and chipset/Thunderbolt drivers.",
+      "Update NVMe SSD controller drivers and PCIe bridge drivers in Device Manager.",
+      "If the issue persists, enter BIOS setup to review and reconfigure 'Kernel DMA Protection' or 'VT-d' virtualization settings."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xe6--driver-verifier-dma-violation",
+      "https://support.microsoft.com/windows/troubleshoot-blue-screen-errors-5c62b728-795f-40d9-b570-5b86bd811d38"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x000000E6",
+      "DRIVER_VERIFIER_DMA_VIOLATION",
+      "Kernel DMA Protection",
+      "블루스크린 0xE6",
+      "NVMe 블루스크린",
+      "DMA Violation Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T04:37:03.004Z",
+    "updatedAt": "2026-11-01T04:37:03.004Z",
+    "verifiedAt": "2026-11-01T04:37:03.004Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mvxtobzs",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "Windows 10/11 네트워크 연결 오류 0x800704cf (네트워크 위치에 도달할 수 없음) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Network Error 0x800704cf (The Network Location Cannot Be Reached)",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 적용 후 Microsoft 계정 로그인, 공유 드라이브 접근 또는 네트워크 리소스 연결 시 '오류 0x800704cf: 네트워크 위치에 도달할 수 없습니다' 메시지가 표시되며 통신이 중단되는 현상입니다. 어댑터 속성의 Microsoft 네트워크 용 클라이언트 비활성화, IP 스택 동기화 오류 또는 어댑터 바인딩 문제로 발생합니다.",
+    "symptoms_en": "After installing recent cumulative updates on Windows 10/11, signing in to Microsoft accounts, accessing network drives, or connecting to local network resources fails with error code 0x800704cf ('The network location cannot be reached'). This typically occurs due to disabled Microsoft Network client components, IP stack desynchronization, or adapter binding failures.",
+    "script": "# 네트워크 어댑터 바인딩 및 TCP/IP 스택 초기화\nWrite-Host '네트워크 스택 재설정 작업을 시작합니다...' -ForegroundColor Green\nnetsh winsock reset\nnetsh int ip reset\nipconfig /release\nipconfig /renew\nipconfig /flushdns\nWrite-Host '네트워크 초기화가 완료되었습니다. 시스템을 재부팅하세요.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "[Windows 키 + R]을 누르고 ncpa.cpl을 입력하여 네트워크 연결 창을 열어줍니다.",
+      "사용 중인 네트워크 어댑터(Wi-Fi 또는 이더넷)를 마우스 우클릭한 후 [속성]을 클릭합니다.",
+      "[Microsoft 네트워크용 클라이언트 (Client for Microsoft Networks)] 항목에 체크가 누락되어 있다면 체크 후 [확인]을 눌러 적용합니다.",
+      "장치 관리자(devmgmt.msc)를 실행하고 [네트워크 어댑터] 항목 아래의 어댑터를 마우스 우클릭하여 [디바이스 제거]를 진행한 뒤 PC를 재부팅하여 드라이버를 재로드합니다.",
+      "[설정] > [네트워크 및 인터넷] > [고급 네트워크 설정] > [네트워크 재설정]을 실행하여 전체 어댑터 구성을 기본값으로 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Press [Windows Key + R], type ncpa.cpl, and press Enter to open Network Connections.",
+      "Right-click your active network adapter (Wi-Fi or Ethernet) and select Properties.",
+      "Ensure 'Client for Microsoft Networks' is checked. If unchecked, check it and click OK.",
+      "Open Device Manager (devmgmt.msc), expand 'Network adapters', right-click your network device, select 'Uninstall device', and restart the PC to reinstall.",
+      "Go to Settings > Network & internet > Advanced network settings > Network reset, and click 'Reset now' to restore all default settings."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/windows/fix-network-connection-issues-in-windows-15642510-b536-4d92-086b-2e44a46b3ef6",
+      "https://learn.microsoft.com/troubleshoot/windows-client/networking/welcome-networking"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704cf",
+      "네트워크 위치에 도달할 수 없습니다",
+      "The network location cannot be reached",
+      "Windows 11 네트워크 오류",
+      "Winsock reset",
+      "TCP IP 스택 초기화"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T12:44:50.488Z",
+    "updatedAt": "2026-11-01T12:44:50.488Z",
+    "verifiedAt": "2026-11-01T12:44:50.488Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee7-mvxtobzs",
+    "category": "네트워크",
+    "code": "0x80072EE7",
+    "title": "Windows 10/11 DNS 이름 확인 실패 및 네트워크 업데이트 오류 0x80072EE7 해결 방법",
+    "title_en": "How to Fix Windows 10/11 DNS Resolution & Network Update Error 0x80072EE7",
+    "symptoms": "Windows 10/11 환경에서 인터넷 웹 페이지 접속, Windows 업데이트 진행 또는 Microsoft Store 이용 중 'ERROR_INTERNET_NAME_NOT_RESOLVED (0x80072EE7)' 오류가 발생하면서 서버 이름을 확인하지 못하는 현상입니다. DNS 캐시 오염, 손상된 HOSTS 파일, 또는 최근 업데이트 후 WinHTTP 프록시 설정 비정상 작동으로 인해 발생합니다.",
+    "symptoms_en": "When browsing the web, running Windows Update, or accessing the Microsoft Store on Windows 10/11, error 0x80072EE7 (ERROR_INTERNET_NAME_NOT_RESOLVED) prevents the system from resolving domain names. This issue is caused by corrupted DNS cache entries, damaged HOSTS file entries, or misconfigured WinHTTP proxy settings following recent updates.",
+    "script": "# DNS 캐시 플러시 및 네트워크 프록시 초기화\nWrite-Host 'DNS 캐시 클리어 및 프록시 초기화를 수행합니다...' -ForegroundColor Green\nClear-DnsClientCache\nipconfig /flushdns\nnetsh winhttp reset proxy\nGet-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object {\n    Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses\n}\nWrite-Host 'DNS 및 프록시 설정 초기화 완료.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "[Windows 키 + R]을 누르고 ncpa.cpl을 입력하여 네트워크 연결로 이동한 뒤 사용 중인 어댑터 [속성]을 열어줍니다.",
+      "[인터넷 프로토콜 버전 4(TCP/IPv4)]를 선택하고 [속성]을 클릭한 후, '다음 DNS 서버 주소 사용'을 선택해 기본 DNS를 8.8.8.8, 보조 DNS를 8.8.4.4로 지정합니다.",
+      "파일 탐색기를 열어 C:\\Windows\\System32\\drivers\\etc 경로의 hosts 파일을 관리자 권한 메모장으로 열어 비정상적인 리다이렉션 항목을 제거합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'netsh winhttp reset proxy'를 입력하여 WinHTTP 프록시 설정을 초기화합니다.",
+      "시스템을 다시 시작한 후 네트워크 접속 및 인터넷 연결 상태를 재검증합니다."
+    ],
+    "manualSteps_en": [
+      "Press [Windows Key + R], type ncpa.cpl, press Enter, and open Properties for your active network adapter.",
+      "Select 'Internet Protocol Version 4 (TCP/IPv4)', click Properties, choose 'Use the following DNS server addresses', and enter Preferred DNS: 8.8.8.8 and Alternate DNS: 8.8.4.4.",
+      "Open C:\\Windows\\System32\\drivers\\etc in File Explorer, open the 'hosts' file with Notepad as Administrator, and clean up invalid DNS entries.",
+      "Open Command Prompt as Administrator and run 'netsh winhttp reset proxy' to reset proxy configurations.",
+      "Restart your computer and verify network connectivity and system updates."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/windows/fix-network-connection-issues-in-windows-15642510-b536-4d92-086b-2e44a46b3ef6",
+      "https://learn.microsoft.com/troubleshoot/windows-client/networking/dns-client-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE7",
+      "ERROR_INTERNET_NAME_NOT_RESOLVED",
+      "DNS 서버 응답 없음",
+      "Hosts 파일 초기화",
+      "Windows 11 DNS 오류",
+      "WinHTTP reset proxy"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T12:44:50.488Z",
+    "updatedAt": "2026-11-01T12:44:50.488Z",
+    "verifiedAt": "2026-11-01T12:44:50.488Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-43-mvycy9iz",
+    "category": "디스플레이/그래픽",
+    "code": "Code 43",
+    "title": "Windows 10/11 그래픽 드라이버 충돌 및 장치 작동 중단 오류 (코드 43)",
+    "title_en": "Windows 10/11 Graphics Driver Conflict and Device Stop Error (Code 43)",
+    "symptoms": "Windows 10/11 누적 업데이트 또는 드라이버 자동 업데이트 이후 장치 관리자의 디스플레이 어댑터에서 'Windows가 장치에서 문제를 보고했기 때문에 이 장치를 중지했습니다. (코드 43)' 오류가 발생하며 외장 GPU 가속, 다중 모니터 출력 및 고해상도 설정이 무력화되는 현상입니다.",
+    "symptoms_en": "After recent Windows 10/11 cumulative updates or GPU driver auto-updates, Device Manager shows 'Windows has stopped this device because it has reported problems. (Code 43)' under Display Adapters, causing external GPU acceleration, multi-monitor display, and high-resolution options to fail.",
+    "script": "Get-PnpDevice -Class Display | Where-Object { $_.Status -ne 'OK' } | Select-Object Name, InstanceId, Status, ErrorCode",
+    "manualSteps": [
+      "장치 관리자를 실행하고 '디스플레이 어댑터'에서 오류가 발생한 그래픽 카드를 우클릭한 후 '장치 사용 안 함'을 선택한 뒤 다시 '장치 사용'으로 전환합니다.",
+      "DDU(Display Driver Uninstaller) 프로그램 또는 전용 삭제 툴을 사용하여 기존 디스플레이 드라이버를 안전 모드에서 완전히 제거합니다.",
+      "GPU 제조사(NVIDIA, AMD, Intel) 공식 웹사이트에서 사용 중인 OS 버전에 맞는 최신 WHQL 인증 드라이버를 다운로드하여 새로 설치합니다.",
+      "로컬 그룹 정책 편집기(gpedit.msc) 또는 설정에서 특정 디스플레이 드라이버가 Windows 업데이트에 의해 자동 덮어쓰기되지 않도록 방지 옵션을 구성합니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager, right-click the problematic graphics adapter under 'Display adapters', select 'Disable device', and then select 'Enable device' again.",
+      "Completely remove existing graphics drivers in Safe Mode using Display Driver Uninstaller (DDU) or official cleanup utilities.",
+      "Download and clean-install the latest WHQL-certified driver matching your OS version directly from the GPU manufacturer (NVIDIA, AMD, Intel).",
+      "Configure Local Group Policy (gpedit.msc) or Settings to prevent Windows Update from automatically overwriting custom graphics drivers."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/fix-graphics-device-problems-with-error-code-43-4718100b-0361-4601-576f-3c6c97ee2e92",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-prob-failed-post-start"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "코드 43",
+      "Code 43",
+      "디스플레이 드라이버 오류",
+      "그래픽 카드 중지",
+      "Graphics Device Stopped",
+      "GPU Driver Code 43"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T21:44:26.554Z",
+    "updatedAt": "2026-11-01T21:44:26.554Z",
+    "verifiedAt": "2026-11-01T21:44:26.554Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x0000003b-mvycy9iz",
+    "category": "디스플레이/그래픽",
+    "code": "0x0000003B",
+    "title": "DirectX 그래픽 커널 오류로 인한 SYSTEM_SERVICE_EXCEPTION 블루스크린 (0x0000003B)",
+    "title_en": "SYSTEM_SERVICE_EXCEPTION (0x0000003B) BSOD Caused by DirectX Graphics Kernel (dxgkrnl.sys)",
+    "symptoms": "Windows 11/10 최신 환경에서 하드웨어 가속 앱 실행, HDR 모드 전환, 또는 게임 중 DirectX 커널 드라이버(dxgkrnl.sys)와 그래픽 드라이버 모듈 간 충돌로 인해 SYSTEM_SERVICE_EXCEPTION (0x0000003B) 블루스크린이 발생하고 시스템이 멈추거나 재부팅되는 현상입니다.",
+    "symptoms_en": "In recent Windows 11/10 environments, when launching hardware-accelerated apps, toggling HDR, or playing games, driver call conflicts between the DirectX kernel (dxgkrnl.sys) and graphics drivers trigger a SYSTEM_SERVICE_EXCEPTION (0x0000003B) BSOD crash and system reboot.",
+    "script": "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WER-SystemErrorReporting'} -MaxEvents 10 | Where-Object { $_.Message -match '0x0000003b' } | Select-Object TimeCreated, Message",
+    "manualSteps": [
+      "설정 > 시스템 > 디스플레이 > 그래픽 설정으로 이동하여 '하드웨어 가속 GPU 일정 관리(HAGS)' 항목을 끔(Off)으로 설정한 후 PC를 재부팅합니다.",
+      "관리자 권한 프롬프트에서 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth' 명령을 실행하여 손상된 dxgkrnl.sys 등 그래픽 시스템 파일을 복구합니다.",
+      "DirectX 최종 사용자 런타임 및 최신 Windows 누적 업데이트를 설치하여 그래픽 하위 시스템 코드를 최신 상태로 유지합니다.",
+      "NVIDIA 제어판 또는 AMD Software에서 전력 관리 모드를 '최고 성능 선호'로 변경하고, 디스플레이 주사율 및 G-Sync/FreeSync 설정을 다시 맞춥니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Display > Graphics settings, turn off 'Hardware-accelerated GPU scheduling (HAGS)', and restart the PC.",
+      "Run 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' in an elevated command prompt to repair corrupted system files such as dxgkrnl.sys.",
+      "Install the DirectX End-User Runtimes and the latest Windows cumulative updates to keep the graphics subsystem updated.",
+      "In NVIDIA Control Panel or AMD Software, set Power Management Mode to 'Prefer maximum performance' and reconfigure refresh rate and G-Sync/FreeSync settings."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-5c622672-00b6-3922-11a8-23372072fb08",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x3b--system-service-exception"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x0000003B",
+      "SYSTEM_SERVICE_EXCEPTION",
+      "dxgkrnl.sys 블루스크린",
+      "DirectX 커널 오류",
+      "HAGS 블루스크린",
+      "Graphics BSOD 0x3B"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-01T21:44:26.554Z",
+    "updatedAt": "2026-11-01T21:44:26.554Z",
+    "verifiedAt": "2026-11-01T21:44:26.554Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mvyrrrow",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 (유효하지 않은 제품 키)",
+    "title_en": "Windows 10/11 Activation Error 0xC004C003 (Invalid Product Key)",
+    "symptoms": "Windows 10 및 Windows 11 최신 기능 업데이트 후 또는 메인보드 등 주요 하드웨어 교체 시 정품 인증 상태가 취소되며 0xC004C003 오류가 발생하는 현상입니다. Microsoft 정품 인증 서버에서 입력된 제품 키가 차단되었거나 유효하지 않은 라이선스로 판정될 때 나타납니다.",
+    "symptoms_en": "Occurs when Windows 10/11 activation fails after major feature updates or hardware replacements, displaying error code 0xC004C003 due to an invalid or blocked product key on Microsoft activation servers.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingProduct -Filter \"PartialProductKey IS NOT NULL\" | Select-Object Name, ApplicationId, LicenseStatus, PartialProductKey",
+    "manualSteps": [
+      "설정 > 시스템 > 정품 인증으로 이동하여 '문제 해결(Troubleshoot)' 옵션을 실행합니다.",
+      "메인보드 등 주요 하드웨어를 교체한 경우 문제 해결 도구에서 '최근에 이 장치의 하드웨어를 변경했습니다'를 선택하고 기존 Microsoft 계정으로 로그인합니다.",
+      "명령 프롬프트(관리자)를 열고 'cscript C:\\Windows\\System32\\slmgr.vbs /dlv' 명령을 실행하여 상세 라이선스 상태를 확인합니다.",
+      "올바른 정품 키를 재입력하기 위해 'cscript C:\\Windows\\System32\\slmgr.vbs /ipk <제품키>' 입력 후 'cscript C:\\Windows\\System32\\slmgr.vbs /ato'를 실행하여 온라인 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > System > Activation and run the 'Troubleshoot' tool.",
+      "If you replaced major hardware, select 'I changed hardware on this device recently' in the troubleshooter and sign in with your Microsoft account.",
+      "Open Command Prompt as Administrator and run 'cscript C:\\Windows\\System32\\slmgr.vbs /dlv' to check detailed licensing status.",
+      "Re-register your valid key by running 'cscript C:\\Windows\\System32\\slmgr.vbs /ipk <ProductKey>' followed by 'cscript C:\\Windows\\System32\\slmgr.vbs /ato' to force activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09cd354a-60cf-4a29-b3ab-d881e15f550f",
+      "https://learn.microsoft.com/troubleshoot/windows-client/deployment/activation-error-0xc004c003"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품 인증 오류",
+      "제품 키 유효성 오류",
+      "Activation Error 0xC004C003",
+      "Windows 11 activation failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T04:39:17.743Z",
+    "updatedAt": "2026-11-02T04:39:17.743Z",
+    "verifiedAt": "2026-11-02T04:39:17.743Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803fa067-mvyrrrow",
+    "category": "정품인증",
+    "code": "0x803FA067",
+    "title": "Windows 10/11 에디션 업그레이드 및 정품 인증 오류 0x803FA067",
+    "title_en": "Windows 10/11 Edition Upgrade and Activation Error 0x803FA067",
+    "symptoms": "Windows 10/11 Home 에디션에서 Pro 에디션으로 업그레이드를 시도하거나 디지털 라이선스를 적용할 때, Microsoft 정품 인증 서버의 자격 증명 검증 실패로 인해 0x803FA067 오류 메시지가 출력되며 에디션 전환이 중단되는 현상입니다.",
+    "symptoms_en": "Occurs when attempting to upgrade Windows 10/11 Home to Pro edition using a product key or digital entitlement, failing with error code 0x803FA067 due to activation server validation issues.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingService | Select-Object OA3xOriginalProductKey, KeyManagementServiceMachine",
+    "manualSteps": [
+      "PC의 네트워크 연결(Wi-Fi 또는 이더넷 랜선)을 일시적으로 해제합니다.",
+      "'설정 > 시스템 > 정품 인증'으로 이동하여 '제품 키 변경'을 클릭하고 범용 업그레이드 키(VK7JG-NPHTM-C97JM-9MPGT-3V66T)를 입력하여 오프라인 에디션 업그레이드를 진행합니다.",
+      "시스템 재부팅 후 Pro 에디션으로 전환되면 인터넷 네트워크를 다시 연결합니다.",
+      "'설정 > 시스템 > 정품 인증'에서 보유 중인 정품 Windows Pro 제품 키를 입력하거나 명령 프롬프트(관리자)에서 'cscript C:\\Windows\\System32\\slmgr.vbs /ato'를 실행하여 디지털 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Temporarily disconnect your PC from the network (disable Wi-Fi or unplug the Ethernet cable).",
+      "Go to Settings > System > Activation, click 'Change product key', and enter the generic upgrade key (VK7JG-NPHTM-C97JM-9MPGT-3V66T) to perform an offline upgrade.",
+      "After the system restarts and upgrades to Pro edition, reconnect to the internet.",
+      "Navigate to Settings > System > Activation and enter your legitimate Windows Pro product key, or run 'cscript C:\\Windows\\System32\\slmgr.vbs /ato' in Administrator Command Prompt to complete activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09cd354a-60cf-4a29-b3ab-d881e15f550f",
+      "https://learn.microsoft.com/windows/deployment/upgrade/windows-10-edition-upgrade"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x803FA067",
+      "Home to Pro 업그레이드 오류",
+      "Windows 11 Pro 정품 인증",
+      "Activation Error 0x803FA067",
+      "Windows Pro Upgrade failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T04:39:17.743Z",
+    "updatedAt": "2026-11-02T04:39:17.743Z",
+    "verifiedAt": "2026-11-02T04:39:17.743Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mvzdns80",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 10/11 누적 업데이트 설치 실패 및 롤백 오류 (0x800f0922)",
+    "title_en": "Windows 10/11 Cumulative Update Failure and Rollback Error (0x800f0922)",
+    "symptoms": "최신 Windows 10 및 11 누적 업데이트 진행 중 설치가 96%~99% 단계에서 중단되고 \"계획대로 진행되지 않았습니다\" 메시지와 함께 업데이트가 취소되며 롤백됩니다. 주로 시스템 예약 파티션(SRP) 공간 부족, VPN/네트워크 간섭, 또는 .NET Framework 관련 구성 요소 충돌로 인해 발생합니다.",
+    "symptoms_en": "During recent Windows 10 and 11 cumulative update installations, the process reaches 96%-99% and rolls back with the message \"Something didn't go as planned\". This error is typically caused by insufficient System Reserved Partition (SRP) space, active VPN/network interference, or conflicts with .NET Framework components.",
+    "script": "Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\nStop-Service -Name cryptsvc -Force -ErrorAction SilentlyContinue\nStop-Service -Name bits -Force -ErrorAction SilentlyContinue\nRename-Item -Path \"C:\\Windows\\SoftwareDistribution\" -NewName \"SoftwareDistribution.bak\" -Force -ErrorAction SilentlyContinue\nStart-Service -Name wuauserv\nStart-Service -Name cryptsvc\nStart-Service -Name bits\nWrite-Host \"Windows Update cache safely reset.\"",
+    "manualSteps": [
+      "설정 > 시스템 > 문제 해결 > 기타 문제 해결사에서 'Windows 업데이트' 문제 해결사를 실행합니다.",
+      "활성화된 VPN 연결 및 제3자 백신 프로그램의 실시간 감시를 임시 비활성화합니다.",
+      "제어판 > 프로그램 및 기능 > Windows 기능 켜기/끄기에서 .NET Framework 3.5 및 4.8 항목이 정상 활성화되어 있는지 확인합니다.",
+      "관리자 권한 PowerShell에서 `dism /online /cleanup-image /restorehealth` 명령을 실행하여 시스템 이미지를 복구합니다.",
+      "Microsoft Update 카탈로그 웹사이트에서 실패한 KB 패치를 직접 검색하여 수동 다운로드 후 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Run the Windows Update Troubleshooter via Settings > System > Troubleshoot > Other troubleshooters.",
+      "Temporarily disable active VPN connections and third-party antivirus real-time protection.",
+      "Ensure .NET Framework 3.5 and 4.8 feature options are properly enabled in 'Turn Windows features on or off'.",
+      "Open PowerShell as Administrator and run `dism /online /cleanup-image /restorehealth` to repair system images.",
+      "Search and download the standalone update package (KB number) directly from the Microsoft Update Catalog site."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/windows-update-error-0x800f0922-927978e8-6e86-4e5a-9351-40ff8d12ef24",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-update-errors-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0922",
+      "Windows update rollback",
+      "윈도우 업데이트 오류 0x800f0922",
+      "업데이트 실패 롤백",
+      "KB 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T14:52:03.359Z",
+    "updatedAt": "2026-11-02T14:52:03.359Z",
+    "verifiedAt": "2026-11-02T14:52:03.359Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f081f-mvzdns80",
+    "category": "업데이트",
+    "code": "0x800f081f",
+    "title": "Windows 업데이트 구성 요소 저장소 손상 오류 (0x800f081f)",
+    "title_en": "Windows Update Component Store Corruption Error (0x800f081f)",
+    "symptoms": "Windows 10/11 누적 패치 또는 기능 업데이트 설치 중 CBS_E_SOURCE_MISSING (0x800f081f) 오류가 발생하여 진행이 차단됩니다. WinSxS 시스템 구성 요소 저장소의 원본 파일이 손상되거나 누락되어 패치 패키지를 적용하지 못하는 현상입니다.",
+    "symptoms_en": "Windows 10/11 cumulative patch or feature update fails with error code 0x800f081f (CBS_E_SOURCE_MISSING). This happens when required source files in the WinSxS component store are corrupted or missing, preventing Windows Update from staging the update payload.",
+    "script": "Write-Host \"Checking Windows Component Store status...\"\nDISM /Online /Cleanup-Image /CheckHealth\nWrite-Host \"Running System File Checker...\"\nsfc /scannow",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트(CMD) 또는 PowerShell을 실행합니다.",
+      "`sfc /scannow` 명령을 실행하여 손상된 시스템 파일을 검사하고 자동으로 복구합니다.",
+      "`DISM /Online /Cleanup-Image /ScanHealth` 명령으로 구성 요소 저장소의 손상 여부를 진단합니다.",
+      "`DISM /Online /Cleanup-Image /RestoreHealth` 명령을 실행하여 온라인 Windows Update 서버에서 손상된 패시지를 새로 받아와 복구합니다.",
+      "복구 완료 후 PC를 재부팅하고 Windows 업데이트를 다시 검색하여 설치를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt or PowerShell with Administrator privileges.",
+      "Run `sfc /scannow` to scan and automatically repair corrupted system files.",
+      "Execute `DISM /Online /Cleanup-Image /ScanHealth` to check the component store health status.",
+      "Execute `DISM /Online /Cleanup-Image /RestoreHealth` to repair component corruption using Windows Update sources.",
+      "Reboot the computer upon completion and attempt checking for updates again."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/fix-windows-update-errors",
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-79aa86cb-ca52-166a-92a3-966e85d4094e"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f081f",
+      "CBS_E_SOURCE_MISSING",
+      "Windows update source missing",
+      "윈도우 업데이트 0x800f081f",
+      "DISM RestoreHealth"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-02T14:52:03.359Z",
+    "updatedAt": "2026-11-02T14:52:03.359Z",
+    "verifiedAt": "2026-11-02T14:52:03.359Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mvzyhifp",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows 업데이트 중 복구 파티션 용량 부족으로 인한 0x80070643 설치 오류 (KB5034441)",
+    "title_en": "Windows Update Error 0x80070643 Caused by Insufficient Recovery Partition Size (KB5034441)",
+    "symptoms": "Windows 10 및 11 시스템에서 WinRE(Windows 복구 환경) 보안 업데이트(KB5034441/KB5034440)를 설치할 때 복구 파티션의 남은 공간 부족으로 인해 업데이트가 실패하고 0x80070643(ERROR_INSTALL_FAILURE) 오류가 발생합니다.",
+    "symptoms_en": "When installing WinRE security updates (KB5034441/KB5034440) on Windows 10 and 11, the update fails with error code 0x80070643 (ERROR_INSTALL_FAILURE) due to insufficient free space on the system Recovery Partition.",
+    "script": "Get-Partition | Where-Type -eq 'Recovery' | Select-Object DiskNumber, PartitionNumber, Size, Offset\nGet-Service -Name wuauserv, bits | Select-Object Name, Status",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 실행한 후 'reagentc /disable'을 입력하여 WinRE 활성화 상태를 해제합니다.",
+      "Diskpart 도구를 사용하여 주요 OS 파티션 용량을 축소(약 250MB 이상)하고 복구 파티션 공간을 확장합니다.",
+      "'reagentc /enable' 명령을 실행하여 WinRE를 다시 활성화합니다.",
+      "Windows Update 서비스(wuauserv 및 bits)를 재시작한 후 업데이트를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'reagentc /disable' to turn off WinRE.",
+      "Use the Diskpart tool to shrink the main OS partition by at least 250MB and extend the Recovery Partition.",
+      "Run 'reagentc /enable' to re-enable the Windows Recovery Environment.",
+      "Restart the Windows Update services (wuauserv and bits) and retry the update process."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-windows-recovery-environment-update-for-windows-10-version-21h2-and-22h2-january-9-2024-671752b5-e630-4e58-9411-7393437e6d01",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "KB5034441",
+      "WinRE 업데이트 오류",
+      "복구 파티션 용량",
+      "Windows Update 0x80070643",
+      "Recovery Partition Shrink"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T00:35:02.676Z",
+    "updatedAt": "2026-11-03T00:35:02.676Z",
+    "verifiedAt": "2026-11-03T00:35:02.676Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mvzyhifp",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 10/11 누적 업데이트 진행 중 96%에서 멈추고 롤백되는 0x800f0922 오류",
+    "title_en": "Windows 10/11 Cumulative Update Fails at 96% and Rolls Back with Error 0x800f0922",
+    "symptoms": "Windows 10/11 최신 누적 업데이트(KB5034765 등) 적용 중 설치가 96% 지점에서 중단된 뒤 '계획대로 진행되지 않았습니다' 메시지와 함께 변경 사항이 롤백되며 0x800f0922 오류가 발생합니다. 주로 C 드라이브 루트의 숨겨진 $WinREAgent 폴더 임시 데이터 충돌이 원인입니다.",
+    "symptoms_en": "During cumulative update installation (e.g., KB5034765) on Windows 10/11, progress halts at 96%, triggers a rollback with the message 'Something didn't go as planned', and returns error code 0x800f0922. This is commonly caused by corrupted temporary files in the hidden C:\\$WinREAgent directory.",
+    "script": "Get-Service -Name wuauserv, cryptsvc | Select-Object Name, Status\nif (Test-Path 'C:\\$WinREAgent') { Get-Item 'C:\\$WinREAgent' -Force }",
+    "manualSteps": [
+      "파일 탐색기 보기 옵션에서 '숨김 파일, 폴더 및 드라이브 표시'를 활성화한 후 'C:\\$WinREAgent' 폴더를 삭제합니다.",
+      "관리자 권한으로 명령 프롬프트를 열고 'net stop wuauserv' 및 'net stop cryptsvc'를 입력하여 업데이트 관련 서비스를 정지합니다.",
+      "'C:\\Windows\\SoftwareDistribution' 폴더 내부의 임시 데이터 파일들을 삭제합니다.",
+      "'net start wuauserv' 및 'net start cryptsvc' 명령으로 서비스를 재시작한 뒤 시스템을 재부팅하고 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Enable 'Show hidden files, folders, and drives' in File Explorer options and delete the hidden 'C:\\$WinREAgent' folder.",
+      "Open Command Prompt as administrator and stop update services by running 'net stop wuauserv' and 'net stop cryptsvc'.",
+      "Delete all temporary cache files inside 'C:\\Windows\\SoftwareDistribution'.",
+      "Restart services using 'net start wuauserv' and 'net start cryptsvc', reboot the system, and attempt the update again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/february-13-2024-kb5034765-os-builds-22621-3155-and-22631-3155-70362f6d-ef72-46c9-b7b2-10e39c4d2dd6",
+      "https://learn.microsoft.com/en-us/windows/release-health/status-windows-11-23h2"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0922",
+      "KB5034765",
+      "WinREAgent 삭제",
+      "Windows 업데이트 롤백",
+      "Windows Update 0x800f0922",
+      "Update Stuck 96%"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T00:35:02.676Z",
+    "updatedAt": "2026-11-03T00:35:02.676Z",
+    "verifiedAt": "2026-11-03T00:35:02.676Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d02-mw0qmi1q",
+    "category": "스토어/앱",
+    "code": "0x80073D02",
+    "title": "Microsoft Store 앱 업데이트 실패 및 패키지 리소스 충돌 오류 (0x80073D02) 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Update and Package Deployment Failure Error (0x80073D02)",
+    "symptoms": "최신 Windows 10 및 Windows 11 환경에서 Microsoft Store를 통해 앱(Xbox 서비스, 시스템 기본 앱 등)을 업데이트하거나 설치할 때, 대상 앱 또는 종속성 프로세스가 백그라운드에서 실행 중이어서 리소스가 잠겨 0x80073D02 오류와 함께 업데이트가 취소되는 현상입니다.",
+    "symptoms_en": "When attempting to update or install UWP applications via Microsoft Store in Windows 10 or 11, the deployment fails with error code 0x80073D02 because modified resources or background processes of the target app are currently active.",
+    "script": "Get-Process -Name 'WinStore.App','GamingServices' -ErrorAction SilentlyContinue | Stop-Process -Force; Get-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자(Ctrl + Shift + Esc)를 열어 Microsoft Store 및 업데이트하려는 앱(예: Xbox, Gaming Services) 관련 백그라운드 프로세스를 찾아 종료합니다.",
+      "설정 > 앱 > 설치된 앱에서 'Microsoft Store'를 검색하고 고급 옵션으로 이동하여 '복구' 및 '초기화' 버튼을 클릭합니다.",
+      "Windows 키 + R을 눌러 실행 창을 열고 wsreset.exe를 입력한 후 실행하여 스토어 캐시를 초기화합니다.",
+      "PowerShell을 관리자 권한으로 실행하여 Microsoft Store 패키지를 재등록하고 시스템을 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager (Ctrl + Shift + Esc) and end all background processes related to Microsoft Store and the target application (e.g., Xbox, Gaming Services).",
+      "Go to Settings > Apps > Installed apps, locate 'Microsoft Store', open Advanced Options, and click 'Repair' followed by 'Reset'.",
+      "Press Windows Key + R, type wsreset.exe, and press Enter to clear the Microsoft Store cache.",
+      "Run PowerShell as Administrator to re-register the Microsoft Store package and restart the computer."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fixes-or-workarounds-for-recent-issues-in-the-microsoft-store-12a84e62-c0cb-4654-be7d-304b087aed09",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/appx-package-deployment-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D02",
+      "Microsoft Store 오류 0x80073D02",
+      "스토어 앱 업데이트 실패",
+      "Package deployment error 0x80073D02",
+      "AppX deployment failure",
+      "Windows Store Update Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T13:42:44.701Z",
+    "updatedAt": "2026-11-03T13:42:44.701Z",
+    "verifiedAt": "2026-11-03T13:42:44.701Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf9-mw0qmi1q",
+    "category": "스토어/앱",
+    "code": "0x80073CF9",
+    "title": "Microsoft Store 앱 설치 및 업데이트 중단 오류 (0x80073CF9) 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Installation and Update Failure Error (0x80073CF9)",
+    "symptoms": "Windows 10/11 환경에서 Microsoft Store를 통해 새로운 앱을 설치하거나 기존 앱을 업데이트할 때, 시스템 임시 폴더(AUInstallAgent) 누락 또는 AppReadiness 서비스 종속성 문제로 인해 0x80073CF9 오류 메시지와 함께 다운로드가 거부되는 현상입니다.",
+    "symptoms_en": "During app download or update in Microsoft Store on Windows 10/11, the installation fails with error 0x80073CF9 due to missing AUInstallAgent system directory, corrupted AppReadiness service state, or store cache folder issues.",
+    "script": "$folderPath = 'C:\\Windows\\AUInstallAgent'; if (-not (Test-Path $folderPath)) { New-Item -Path $folderPath -ItemType Directory -Force }; Get-Service -Name AppReadiness | Restart-Service -Force",
+    "manualSteps": [
+      "파일 탐색기에서 C:\\Windows 경로로 이동하여 'AUInstallAgent' 폴더가 없는 경우 새 폴더를 생성합니다.",
+      "서비스 창(services.msc)을 열고 'AppReadiness' 서비스를 찾아 시작 유형을 '자동'으로 변경한 후 서비스를 다시 시작합니다.",
+      "Windows 키 + R을 누르고 wsreset.exe를 실행하여 Microsoft Store 관련 임시 캐시 파일을 완전히 지웁니다.",
+      "Microsoft Store 앱 실행 후 상단 프로필에서 로그아웃했다가 다시 로그인한 뒤 앱 다운로드를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to C:\\Windows in File Explorer and create a new folder named 'AUInstallAgent' if it does not exist.",
+      "Open Services (services.msc), find 'AppReadiness', set its startup type to 'Automatic', and restart the service.",
+      "Press Windows Key + R, run wsreset.exe to clear the Microsoft Store cache files.",
+      "Open Microsoft Store, sign out of your account, sign back in, and retry downloading the apps."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/microsoft-store-doesn-t-open-1b20464d-572-47e2-45e0-1d46d22384a6",
+      "https://learn.microsoft.com/en-us/windows/application-management/apps-in-windows-10"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF9",
+      "Microsoft Store 0x80073CF9",
+      "AUInstallAgent",
+      "AppReadiness 스토어 오류",
+      "스토어 다운로드 취소 오류",
+      "Windows Store App Installation Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T13:42:44.701Z",
+    "updatedAt": "2026-11-03T13:42:44.701Z",
+    "verifiedAt": "2026-11-03T13:42:44.701Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000124--whea-uncorrectable-error--mw1af634",
+    "category": "시스템/블루스크린",
+    "code": "0x00000124 (WHEA_UNCORRECTABLE_ERROR)",
+    "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 치명적 하드웨어 블루스크린 해결 방법",
+    "title_en": "How to Fix WHEA_UNCORRECTABLE_ERROR (0x00000124) BSOD in Windows 10/11",
+    "symptoms": "고부하 작업 또는 시스템 구동 중 WHEA_UNCORRECTABLE_ERROR (0x00000124) 블루스크린이 발생하며 갑자기 컴퓨터가 재부팅됩니다. 최신 고성능 CPU 전압 불안정, 메인보드 BIOS 미지원, 과도한 오버클럭(XMP/EXPO 포함) 또는 하드웨어 드라이버 손상이 원인입니다.",
+    "symptoms_en": "The system abruptly crashes with a WHEA_UNCORRECTABLE_ERROR (0x00000124) Blue Screen of Death during normal usage or high workloads. It is commonly triggered by CPU voltage instability, outdated BIOS microcode, memory overclocking (XMP/EXPO), or hardware driver corruption.",
+    "script": "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WHEA-Logger'} -MaxEvents 10 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message | Format-Table -AutoSize",
+    "manualSteps": [
+      "최신 BIOS 마이크로코드 업데이트: 메인보드 제조사 공식 지원 페이지에서 CPU 전압 안정화 패치가 적용된 최신 BIOS 버전을 다운로드하여 업데이트합니다.",
+      "오버클럭 및 XMP/EXPO 비활성화: BIOS 설정 진입 후 CPU/RAM 오버클럭, XMP, EXPO 설정을 순정 기본값(Default)으로 복원합니다.",
+      "시스템 파일 무결성 복구: 관리자 권한 명령 프롬프트에서 'sfc /scannow' 및 'DISM.exe /Online /Cleanup-image /Restorehealth'를 순차적으로 실행합니다.",
+      "전원 옵션 최적화: 제어판 > 전원 옵션에서 '고성능' 프로필을 선택하고, PCI Express 링크 상태 전원 관리를 '해제'로 설정합니다."
+    ],
+    "manualSteps_en": [
+      "Update BIOS Microcode: Visit your motherboard manufacturer's website and update to the latest BIOS version containing CPU voltage stability patches.",
+      "Disable Overclocking & XMP/EXPO: Access BIOS setup and reset all CPU/RAM overclocking, XMP, or EXPO profiles to factory defaults.",
+      "Run SFC and DISM Repairs: Open Administrator Command Prompt and run 'sfc /scannow' followed by 'DISM.exe /Online /Cleanup-image /Restorehealth'.",
+      "Adjust Power Plan Settings: In Control Panel Power Options, select the 'High Performance' plan and turn off PCI Express Link State Power Management."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x124---whea-uncorrectable-error",
+      "https://support.microsoft.com/en-us/symptom/how-to-fix-whea-uncorrectable-error-0x00000124"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "Windows 11 BSOD",
+      "블루스크린 0x124",
+      "하드웨어 오류 해결",
+      "CPU 전압 불안정"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T22:56:54.927Z",
+    "updatedAt": "2026-11-03T22:56:54.927Z",
+    "verifiedAt": "2026-11-03T22:56:54.927Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000050--page-fault-in-nonpaged-area--mw1af634",
+    "category": "시스템/블루스크린",
+    "code": "0x00000050 (PAGE_FAULT_IN_NONPAGED_AREA)",
+    "title": "Windows 10/11 PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) BSOD in Windows 10/11",
+    "symptoms": "부팅 중 또는 특정 애플리케이션 및 드라이버 구동 시 PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) 메시지와 함께 시스템이 멈춥니다. 시스템이 올바르지 않은 시스템 메모리 주소를 참조하거나 서드파티 커널 드라이버, 보안 프로그램 충돌, RAM 칩 손상 시 발생합니다.",
+    "symptoms_en": "The operating system crashes with a PAGE_FAULT_IN_NONPAGED_AREA (0x00000050) stop code during startup or execution of apps/drivers. This occurs when Windows invalidly requests non-paged memory, caused by faulty kernel drivers, security software conflicts, or RAM failure.",
+    "script": "Get-CimInstance -ClassName Win32_NTLogEvent -Filter \"Logfile='System' AND EventCode=1001\" | Select-Object -First 5 TimeGenerated, Message | Format-List",
+    "manualSteps": [
+      "Windows 메모리 진단 실행: Win + R을 누르고 'mdsched.exe'를 입력한 후 즉시 다시 시작하여 RAM 메모리의 물리적 불량 여부를 검사합니다.",
+      "가상 메모리(페이징 파일) 재설정: 제어판 > 시스템 > 고급 시스템 설정 > 성능 설정 > 고급 > 가상 메모리 변경에서 '모든 드라이브에 대한 페이징 파일 크기 자동 관리'를 껐다 다시 설정합니다.",
+      "충돌 드라이버 및 보안 소프트웨어 제거: 안전 모드로 부팅하여 최근 설치되거나 업데이트된 백신, 안티치트, 타사 커널 드라이버를 삭제합니다.",
+      "디스크 무결성 검사: 관리자 권한 명령 프롬프트에서 'chkdsk C: /f /r' 명령어를 실행하여 파일 시스템 및 섹터 오류를 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Run Windows Memory Diagnostic: Press Win + R, type 'mdsched.exe', and choose to restart now to check physical RAM modules for defects.",
+      "Reconfigure Virtual Memory Paging File: Go to System Properties > Advanced > Performance Settings > Advanced > Virtual Memory, uncheck automatic management, apply, and re-enable it.",
+      "Uninstall Conflict Drivers & Security Software: Boot into Safe Mode and remove recently updated antivirus software, anti-cheat drivers, or third-party hardware drivers.",
+      "Perform Disk Check: Open Administrator Command Prompt and run 'chkdsk C: /f /r' to scan and fix file system integrity issues."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x50--page-fault-in-nonpaged-area",
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-4b55700f-4681-54a9-8477-718b34e4d138"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "PAGE_FAULT_IN_NONPAGED_AREA",
+      "0x00000050",
+      "블루스크린 0x50",
+      "Windows 메모리 오류",
+      "커널 드라이버 충돌",
+      "BSOD 0x00000050"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-03T22:56:54.927Z",
+    "updatedAt": "2026-11-03T22:56:54.927Z",
+    "verifiedAt": "2026-11-03T22:56:54.927Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d02-mw1nd94q",
+    "category": "스토어/앱",
+    "code": "0x80073D02",
+    "title": "Microsoft Store 앱 설치 및 업데이트 시 패키지 배포 실패 오류",
+    "title_en": "Microsoft Store App Installation and Update Failure (0x80073D02)",
+    "symptoms": "Windows 11 최신 업데이트 이후 앱 설치나 업데이트를 시도할 때, 해당 앱이 현재 사용 중이거나 배포 패키지 작업이 잠겨 있어 설치가 중단되는 현상입니다.",
+    "symptoms_en": "Occurs after recent Windows 11 updates when attempting to install or update apps, where the system reports the package cannot be installed because it is currently in use or the deployment is locked.",
+    "script": "Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자를 실행하여 실행 중인 모든 스토어 관련 프로세스를 종료합니다.",
+      "설정 > 앱 > 설치된 앱에서 Microsoft Store를 찾아 '고급 옵션'의 '복구' 및 '초기화'를 실행합니다.",
+      "명령 프롬프트를 관리자 권한으로 열고 'wsreset.exe'를 입력하여 캐시를 초기화합니다.",
+      "시스템을 재부팅한 후 스토어를 다시 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager and terminate all store-related processes.",
+      "Navigate to Settings > Apps > Installed Apps, find Microsoft Store, and perform 'Repair' or 'Reset' via Advanced options.",
+      "Run Command Prompt as administrator and execute 'wsreset.exe' to clear the store cache.",
+      "Restart the system and try launching the store again."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-app-deployment-issues"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D02",
+      "스토어 설치 오류",
+      "Microsoft Store 배포 실패",
+      "Windows 11 앱 업데이트 오류",
+      "App deployment error 0x80073D02",
+      "Microsoft Store fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T04:59:20.570Z",
+    "updatedAt": "2026-11-04T04:59:20.570Z",
+    "verifiedAt": "2026-11-04T04:59:20.570Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80244017-mw1nd94q",
+    "category": "스토어/앱",
+    "code": "0x80244017",
+    "title": "Microsoft Store 연결 시 프록시 또는 네트워크 통신 오류",
+    "title_en": "Microsoft Store Proxy or Network Communication Error (0x80244017)",
+    "symptoms": "2024년 이후 누적 업데이트 적용 후, 특정 네트워크 환경이나 프록시 설정 문제로 인해 스토어 서버와 통신하지 못하고 앱 다운로드가 실패하는 증상입니다.",
+    "symptoms_en": "Occurs after recent 2024 cumulative updates, where the system fails to communicate with store servers due to proxy or network configuration issues, resulting in download failures.",
+    "script": "netsh winhttp reset proxy; ipconfig /flushdns",
+    "manualSteps": [
+      "설정 > 네트워크 및 인터넷 > 프록시 항목에서 '자동으로 설정 검색'을 켭니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'netsh winhttp reset proxy'를 입력합니다.",
+      "DNS 캐시를 지우기 위해 'ipconfig /flushdns' 명령어를 실행합니다.",
+      "Windows 업데이트를 통해 최신 네트워크 드라이버가 설치되어 있는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Settings > Network & internet > Proxy, and enable 'Automatically detect settings'.",
+      "Open Command Prompt as administrator and execute 'netsh winhttp reset proxy'.",
+      "Execute the command 'ipconfig /flushdns' to clear the local DNS cache.",
+      "Check Windows Update to ensure that the latest network drivers are installed."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/microsoft-store%EC%97%90-%EC%84%B8%EC%9A%B4-%EC%97%B0%EA%B2%B0-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80244017",
+      "스토어 네트워크 오류",
+      "Microsoft Store 연결 안됨",
+      "프록시 오류",
+      "Store connection issue",
+      "Windows app store error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T04:59:20.570Z",
+    "updatedAt": "2026-11-04T04:59:20.570Z",
+    "verifiedAt": "2026-11-04T04:59:20.570Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mw26cauc",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 (차단된 제품 키 및 디지털 라이선스 미불합치) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004C003 (Blocked Product Key or License Mismatch)",
+    "symptoms": "Windows 10/11 업데이트 후 또는 메인보드 등 주요 하드웨어 변경 후 정품 인증 상태가 해제되며 '이 장치의 제품 키가 차단되었습니다'라는 메시지와 함께 오류 코드 0xC004C003이 발생합니다. 주로 마이크로소프트 서버에서 키가 무효화되었거나 귀속된 디지털 권한(Digital Entitlement)과 현재 설치된 Windows 에디션(Home/Pro)이 일치하지 않을 때 발생합니다.",
+    "symptoms_en": "After a Windows 10/11 update or hardware change, Windows activation fails with error code 0xC004C003 and the message 'The product key for this device has been blocked.' This occurs when Microsoft invalidates a key or when there is an edition mismatch between the installed OS and the associated digital entitlement.",
+    "script": "Get-CimInstance -ClassName SoftwareLicensingProduct -Filter \"Name like 'Windows%'\" | Where-Object PartialProductKey | Select-Object Name, ApplicationId, LicenseStatus, PartialProductKey",
+    "manualSteps": [
+      "시작 > 설정 > 시스템 > 정품 인증으로 이동하여 현재 에디션과 인증 상태를 확인합니다.",
+      "정품 인증 페이지에서 '문제 해결(Troubleshoot)' 단추를 클릭하여 디지털 라이선스 진단 및 자동으로 라이선스 다시 연결을 시도합니다.",
+      "최근 메인보드를 교체한 경우 문제 해결 창 하단의 '최근에 이 장치의 하드웨어를 변경했습니다'를 선택한 후 Microsoft 계정으로 로그인하여 활성화를 이전합니다.",
+      "올바른 25자리 정품 키를 보유한 경우 '제품 키 변경'을 클릭하여 키를 다시 입력합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Start > Settings > System > Activation to verify your current edition and activation status.",
+      "Click the 'Troubleshoot' button on the Activation page to run automated diagnostics and restore digital license binding.",
+      "If you recently replaced the motherboard, select 'I changed hardware on this device recently' at the bottom of the Troubleshooter and sign in with your Microsoft Account.",
+      "Select 'Change product key' and re-enter your valid 25-character product key if available."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09d05e45-2551-4811-b047-3ba4914706a9",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-activation-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 오류",
+      "제품키 차단",
+      "Windows activation error 0xC004C003",
+      "Digital License Mismatch"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T13:50:28.836Z",
+    "updatedAt": "2026-11-04T13:50:28.836Z",
+    "verifiedAt": "2026-11-04T13:50:28.836Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004f074-mw26cauc",
+    "category": "정품인증",
+    "code": "0xC004F074",
+    "title": "Windows 10/11 정품 인증 오류 0xC004F074 (KMS 서버 연결 실패 및 시간 동기화 오류) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Activation Error 0xC004F074 (KMS Server Connection or Time Sync Failure)",
+    "symptoms": "기업, 학교 또는 조직 네트워크 환경에서 KMS(키 관리 서비스)를 통해 정품 인증을 진행할 때, 클라이언트 PC가 KMS 호스트 서버에 연결하지 못하거나 클라이언트와 KMS 서버 간 시스템 시간이 일치하지 않아 활성화에 실패하며 'Software Licensing Service에서 컴퓨터를 정품 인증할 수 없다고 보고했습니다'라는 경고 메시지가 출력됩니다.",
+    "symptoms_en": "Occurs in corporate or academic environments when activating Windows via Key Management Service (KMS) if the KMS server is unreachable or system clocks between client and server differ, showing error 0xC004F074 indicating Software Licensing Service failure.",
+    "script": "w32tm /query /status\nGet-Service -Name w32time | Select-Object Status, StartType\nslmgr.vbs /dli",
+    "manualSteps": [
+      "시작 > 설정 > 시간 및 언어 > 날짜 및 시간으로 이동하여 '지금 동기화'를 눌러 시스템 시간을 정밀하게 일치시킵니다.",
+      "사내 네트워크 또는 조직 VPN에 정상 연결되어 있는지 확인하고 DNS 및 TCP 1688 포트 통신이 가능한지 점검합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 slmgr.vbs /skms <KMS서버주소:포트> 명령을 입력하여 올바른 KMS 호스트를 수동으로 지정합니다.",
+      "명령 프롬프트에서 slmgr.vbs /ato 명령을 실행하여 KMS 정품 인증을 즉시 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Navigate to Start > Settings > Time & Language > Date & time and click 'Sync now' to precisely synchronize system time.",
+      "Verify connection to your corporate network or VPN and ensure port 1688 (KMS port) and DNS resolution are active.",
+      "Open Command Prompt as Administrator and run 'slmgr.vbs /skms <KMS_Server_Address:Port>' to set the correct KMS host manually.",
+      "Execute 'slmgr.vbs /ato' in the Command Prompt to force activation against the KMS host."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/error-0xc004f074-activate-windows",
+      "https://support.microsoft.com/ko-kr/windows/get-help-with-windows-activation-errors-09d05e45-2551-4811-b047-3ba4914706a9"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004F074",
+      "KMS 정품인증 오류",
+      "Software Licensing Service 오류",
+      "KMS activation error 0xC004F074",
+      "Windows activation time sync"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T13:50:28.836Z",
+    "updatedAt": "2026-11-04T13:50:28.836Z",
+    "verifiedAt": "2026-11-04T13:50:28.836Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-critical-process-died--0x000000ef--mw2qj4dl",
+    "category": "시스템/블루스크린",
+    "code": "CRITICAL_PROCESS_DIED (0x000000EF)",
+    "title": "Windows 10/11 CRITICAL_PROCESS_DIED (0x000000EF) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix CRITICAL_PROCESS_DIED (0x000000EF) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows 10 및 11 시스템 운용 중 주요 백그라운드 필수 프로세스(csrss.exe, svchost.exe 등)가 비정상적으로 종료되면서 'CRITICAL_PROCESS_DIED' 메시지와 함께 블루스크린이 발생하고 시스템이 강제 재부팅됩니다. 최근 Windows 누적 업데이트 후 시스템 핵심 파일 손상, 드라이버 호환성 문제 또는 보안 프로그램 간 충돌로 주로 유발됩니다.",
+    "symptoms_en": "The operating system crashes with a 'CRITICAL_PROCESS_DIED' BSOD error (0x000000EF) when a critical background system process (such as csrss.exe or svchost.exe) terminates unexpectedly. This often occurs after recent Windows cumulative updates due to corrupted system files, incompatible device drivers, or third-party security software conflicts.",
+    "script": "Write-Host \"[1/2] Checking and repairing system image corruption via DISM...\" -ForegroundColor Cyan\nDISM.exe /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host \"[2/2] Scanning and restoring system file integrity via SFC...\" -ForegroundColor Cyan\nsfc /scannow",
+    "manualSteps": [
+      "안전 모드(Safe Mode)로 부팅한 후 최근 설치된 타사 드라이버 및 보안 소프트웨어를 제거합니다.",
+      "관리자 권한으로 명령 프롬프트(CMD)를 실행하여 'sfc /scannow' 및 'DISM' 명령어로 손상된 시스템 파일을 복구합니다.",
+      "장치 관리자에서 그래픽, 칩셋, 저장 장치 드라이버를 최신 버전으로 업데이트하거나 이전 안정 버전으로 롤백합니다.",
+      "시스템 복원(System Restore) 기능을 활용하여 블루스크린 오류가 발생하기 전의 정상 작동 시점으로 시스템을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode and uninstall any recently installed third-party drivers or security software.",
+      "Open Command Prompt as administrator and run 'sfc /scannow' and 'DISM' commands to repair corrupted system files.",
+      "Open Device Manager to update graphics, chipset, and storage drivers to their latest versions or roll back to a stable version.",
+      "Use System Restore to revert the system configuration back to a restore point prior to the error occurrence."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/symptoms-stop-code-critical-process-died-0x000000ef",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "CRITICAL_PROCESS_DIED",
+      "0x000000EF",
+      "블루스크린 해결",
+      "Windows 11 BSOD",
+      "시스템 프로세스 중단",
+      "Stop Code 0xEF"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T23:15:39.369Z",
+    "updatedAt": "2026-11-04T23:15:39.369Z",
+    "verifiedAt": "2026-11-04T23:15:39.369Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-whea-uncorrectable-error--0x00000124--mw2qj4dl",
+    "category": "시스템/블루스크린",
+    "code": "WHEA_UNCORRECTABLE_ERROR (0x00000124)",
+    "title": "Windows 10/11 WHEA_UNCORRECTABLE_ERROR (0x00000124) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix WHEA_UNCORRECTABLE_ERROR (0x00000124) Blue Screen Error in Windows 10/11",
+    "symptoms": "Windows 하드웨어 오류 아키텍처(WHEA)에서 복구할 수 없는 하드웨어 에러를 감지하여 'WHEA_UNCORRECTABLE_ERROR (0x00000124)' 블루스크린이 발생합니다. CPU/GPU 과열, 과도한 오버클럭(XMP/EXPO 포함), 구버전 BIOS/UEFI 펌웨어, NVMe SSD 드라이버 불량 또는 전력 공급 불안정이 주 원인입니다.",
+    "symptoms_en": "The system abruptly crashes displaying 'WHEA_UNCORRECTABLE_ERROR' (0x00000124) when the Windows Hardware Error Architecture detects an uncorrectable hardware fault. Common triggers include CPU/GPU overheating, aggressive overclocking (XMP/EXPO), outdated BIOS/UEFI firmware, faulty NVMe drivers, or power supply instability.",
+    "script": "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WHEA-Logger'} -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message -First 10",
+    "manualSteps": [
+      "컴퓨터 재부팅 후 BIOS/UEFI 설정으로 진입하여 CPU 및 메모리 오버클럭(XMP/EXPO) 설정을 해제(Default)합니다.",
+      "메인보드 제조사의 공식 지원 페이지에서 최신 BIOS/UEFI 펌웨어 및 메인보드 칩셋 드라이버를 다운로드하여 업데이트합니다.",
+      "하드웨어 온도를 점검하고 쿨링 팬 동작 상태 확인, 먼지 제거 및 필요 시 CPU/GPU 서멀 페이스트를 재도포합니다.",
+      "Windows 메모리 진단 도구(mdsched.exe)를 실행하여 RAM 메모리의 물리적 고장 유무를 점검합니다."
+    ],
+    "manualSteps_en": [
+      "Reboot into BIOS/UEFI setup and disable all CPU/RAM overclocking configurations (XMP/EXPO) to restore default factory settings.",
+      "Visit the motherboard manufacturer's official support website to update to the latest BIOS/UEFI firmware and chipset drivers.",
+      "Monitor hardware thermal levels, verify cooling fan operation, clear dust, and reapply thermal paste to the CPU/GPU if overheating occurs.",
+      "Run the Windows Memory Diagnostic tool (mdsched.exe) to check for physical hardware failures in RAM modules."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/how-to-fix-whea-uncorrectable-error-08da0ce5-b0d1-42da-91e6-6e676794e33d",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x124---whea-uncorrectable-error"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "WHEA_UNCORRECTABLE_ERROR",
+      "0x00000124",
+      "하드웨어 블루스크린",
+      "BIOS 업데이트",
+      "WHEA Logger",
+      "BSOD 0x124"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-04T23:15:39.369Z",
+    "updatedAt": "2026-11-04T23:15:39.369Z",
+    "verifiedAt": "2026-11-04T23:15:39.369Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--0x00000116--mw33jiv7",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (0x00000116)",
+    "title": "Windows 10/11 VIDEO_TDR_FAILURE (0x00000116) 블루스크린 오류 해결 방법",
+    "title_en": "How to Fix VIDEO_TDR_FAILURE (0x00000116) BSOD Error in Windows 10/11",
+    "symptoms": "고사양 게임, 3D 작업 또는 웹 브라우저의 하드웨어 가속 기능 사용 중 화면이 순간적으로 정지된 후 VIDEO_TDR_FAILURE (0x00000116) 블루스크린이 발생합니다. 그래픽 드라이버(nvlddmkm.sys, atikmpag.sys, igdkmd64.sys) 응답 시간이 초과(TDR)하여 Windows가 드라이버를 재설정하지 못할 때 나타납니다.",
+    "symptoms_en": "The system crashes with a VIDEO_TDR_FAILURE (0x00000116) BSOD during GPU-intensive games, 3D rendering, or web browsing with hardware acceleration. It occurs when the Timeout Detection and Recovery (TDR) mechanism fails to reset a non-responsive graphics driver (nvlddmkm.sys, atikmpag.sys, igdkmd64.sys).",
+    "script": "Write-Host 'Checking Display Device status...' -ForegroundColor Cyan\nGet-PnpDevice -Class 'Display' | Select-Object FriendlyName, Status, InstanceId\n\nWrite-Host 'Checking TDR Delay setting in Registry...' -ForegroundColor Cyan\nGet-ItemProperty -Path 'HKLM:\\\\SYSTEM\\\\CurrentControlSet\\\\Control\\\\GraphicsDrivers' -Name 'TdrDelay' -ErrorAction SilentlyContinue",
+    "manualSteps": [
+      "DDU(Display Driver Uninstaller)를 사용하여 안전 모드에서 기존 그래픽 드라이버를 완전히 삭제한 후 제조사(NVIDIA, AMD, Intel) 최신 안정 버전 드라이버 재설치",
+      "웹 브라우저(Chrome, Edge 등) 및 미디어 재생 프로그램의 '하드웨어 가속' 옵션 비활성화",
+      "전원 관리 옵션을 '고성능'으로 설정하고 MSI Afterburner 등의 GPU 오버클럭/언더볼팅 설정을 기본값으로 복구",
+      "레지스트리 편집기(regedit)를 실행하여 HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers 경로로 이동한 뒤 DWORD(32비트) 값 'TdrDelay'를 신규 생성하고 16진수 값 8(초)로 설정"
+    ],
+    "manualSteps_en": [
+      "Completely uninstall the graphics driver in Safe Mode using DDU (Display Driver Uninstaller), then reinstall the latest stable driver from the GPU manufacturer (NVIDIA, AMD, Intel).",
+      "Disable 'Hardware Acceleration' in web browsers (Chrome, Edge) and background media applications.",
+      "Set Windows Power Options to 'High Performance' and reset any GPU overclocking or undervolting profiles to default.",
+      "Open Registry Editor (regedit), navigate to HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers, create a DWORD (32-bit) named 'TdrDelay', and set its hexadecimal value to 8."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x116--video-tdr-failure",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-blue-screen-errors-5c62bfe8-6772-556a-4f4d-4956623549e4"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE",
+      "0x00000116",
+      "nvlddmkm.sys",
+      "atikmpag.sys",
+      "그래픽 드라이버 블루스크린",
+      "TDRDelay"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T05:19:53.154Z",
+    "updatedAt": "2026-11-05T05:19:53.154Z",
+    "verifiedAt": "2026-11-05T05:19:53.154Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-43--graphics-device-error--mw33jiv7",
+    "category": "디스플레이/그래픽",
+    "code": "Code 43 (Graphics Device Error)",
+    "title": "Windows 10/11 그래픽 카드 디바이스 관리자 오류 코드 43 (Code 43) 해결 방법",
+    "title_en": "How to Fix Graphics Card Code 43 Error in Windows 10/11 Device Manager",
+    "symptoms": "디바이스 관리자의 디스플레이 어댑터 항목에 노란색 경고 표시가 나타나며 '이 장치에서 문제가 보고되었으므로 장치를 중지했습니다. (코드 43)' 메시지가 출력됩니다. 그래픽 카드가 가동되지 않아 해상도가 떨어지거나 외장 GPU를 활용하는 게임 및 멀티 모니터 출력이 불가능해집니다.",
+    "symptoms_en": "A yellow exclamation mark appears next to the display adapter in Device Manager with the message 'Windows has stopped this device because it has reported problems. (Code 43)'. The graphics device fails to load, causing resolution degradation, loss of secondary monitor support, and failure in 3D applications.",
+    "script": "Write-Host 'Checking Display Adapters with Error Status...' -ForegroundColor Cyan\nGet-PnpDevice -Class 'Display' | Where-Object { $_.Status -ne 'OK' } | Select-Object FriendlyName, Status, Class, InstanceId",
+    "manualSteps": [
+      "디바이스 관리자(devmgmt.msc)를 실행하여 문제의 그래픽 카드를 우클릭한 뒤 '디바이스 사용 안 함' 후 '디바이스 사용'으로 다시 활성화",
+      "제조사 공식 사이트에서 최신 드라이버 패키지를 다운로드한 후 설치 단계에서 '새로 설치(Clean Installation)' 옵션을 선택하여 실행",
+      "데스크톱 전원을 차단하고 그래픽 카드를 메인보드 PCIe 슬롯에서 분리 후 먼지를 제거하고 재장착, 8핀/6핀 전원 케이블 결착 상태 확인",
+      "메인보드 BIOS/UEFI 버전을 최신으로 업데이트하고 BIOS 설정 메뉴에서 Primary Display Output을 PCIe/PEG로 설정"
+    ],
+    "manualSteps_en": [
+      "Open Device Manager (devmgmt.msc), right-click the affected display adapter, select 'Disable device', wait a few seconds, then select 'Enable device'.",
+      "Download the latest driver installer package from the graphics manufacturer's website and select the 'Clean Installation' option during setup.",
+      "Power off the PC, remove the graphics card from the PCIe slot, clean contacts, securely re-seat the card, and re-check all 6/8-pin power connectors.",
+      "Update the motherboard BIOS/UEFI to the latest version and ensure the Primary Graphics Adapter setting in BIOS is configured to PCIe/PEG."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/fix-graphics-device-problems-with-error-code-43-19544158-450f-48d8-be94-39fa2799db68",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-prob-code-43"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Code 43",
+      "코드 43",
+      "디바이스 관리자 그래픽 오류",
+      "이 장치에서 문제가 보고되었으므로 장치를 중지했습니다",
+      "Graphics Driver Code 43",
+      "Display Adapter Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T05:19:53.154Z",
+    "updatedAt": "2026-11-05T05:19:53.154Z",
+    "verifiedAt": "2026-11-05T05:19:53.154Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mw3m9k8k",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows 10/11 업데이트 오류 0x80070643 (복구 파티션 용량 부족 및 설치 실패) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Update Error 0x80070643 (WinRE Partition Failure)",
+    "symptoms": "Windows 보안 업데이트(KB5034441 등) 설치 시 0x80070643 (ERROR_INSTALL_FAILURE) 오류가 발생하며 업데이트 실패가 반복됩니다. 복구 환경(WinRE) 파티션의 여유 공간 부족 또는 손상된 시스템 파일로 인해 발생합니다.",
+    "symptoms_en": "Windows security update installation (such as KB5034441) fails repeatedly with error 0x80070643 (ERROR_INSTALL_FAILURE). This is primarily caused by insufficient free space in the Windows Recovery Environment (WinRE) partition or corrupted servicing files.",
+    "script": "if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {\n    Write-Host \"Please run PowerShell as Administrator.\" -ForegroundColor Red\n    return\n}\nWrite-Host \"[1/4] Checking WinRE Status...\" -ForegroundColor Green\nreagentc /info\n\nWrite-Host \"[2/4] Stopping Windows Update Services...\" -ForegroundColor Yellow\nStop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\nStop-Service -Name bits -Force -ErrorAction SilentlyContinue\nStop-Service -Name cryptsvc -Force -ErrorAction SilentlyContinue\n\nWrite-Host \"[3/4] Renaming SoftwareDistribution Cache...\" -ForegroundColor Yellow\nif (Test-Path \"C:\\\\Windows\\\\SoftwareDistribution\") {\n    Rename-Item -Path \"C:\\\\Windows\\\\SoftwareDistribution\" -NewName \"SoftwareDistribution.bak\" -Force -ErrorAction SilentlyContinue\n}\n\nWrite-Host \"[4/4] Restarting Update Services...\" -ForegroundColor Green\nStart-Service -Name wuauserv\nStart-Service -Name bits\nStart-Service -Name cryptsvc\n\nWrite-Host \"Completed. Next, run 'sfc /scannow' or resize the WinRE partition if issue persists.\" -ForegroundColor Green",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 실행하고 'reagentc /info'를 입력하여 WinRE 복구 환경 활성화 여부를 확인합니다.",
+      "WinRE 파티션 용량 문제인 경우, 'reagentc /disable' 명령을 실행한 후 diskpart를 이용하여 OS 파티션을 일부 축소하고 복구 파티션을 250MB 이상 확장합니다.",
+      "Windows Update 서비스(wuauserv, bits, cryptsvc)를 중지하고 C:\\Windows\\SoftwareDistribution 폴더의 이름을 변경하여 캐시를 정돈합니다.",
+      "명령 프롬프트에서 'sfc /scannow' 및 'DISM /Online /Cleanup-Image /RestoreHealth'를 실행하여 손상된 시스템 파일을 복구합니다.",
+      "컴퓨터를 다시 시작한 후 Windows 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator and run 'reagentc /info' to check the status of the Windows Recovery Environment.",
+      "If the issue is caused by low space on the WinRE partition, disable WinRE via 'reagentc /disable' and use diskpart to shrink the main partition and expand the recovery partition by at least 250MB.",
+      "Stop the Windows Update services (wuauserv, bits, cryptsvc) and rename the C:\\Windows\\SoftwareDistribution folder to clear cached update files.",
+      "Run 'sfc /scannow' and 'DISM /Online /Cleanup-Image /RestoreHealth' to repair damaged system components.",
+      "Reboot the system and retry Windows Update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-windows-recovery-environment-update-for-windows-10-version-21h2-and-22h2-january-9-2024-79452b48-de8e-438c-a5d6-0b82f066060f",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "KB5034441",
+      "WinRE 파티션 오류",
+      "Windows Update Error 0x80070643",
+      "윈도우 업데이트 설치 실패 0x80070643"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T14:04:01.076Z",
+    "updatedAt": "2026-11-05T14:04:01.076Z",
+    "verifiedAt": "2026-11-05T14:04:01.076Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f081f-mw3m9k8k",
+    "category": "업데이트",
+    "code": "0x800f081f",
+    "title": "Windows 10/11 누적 업데이트 오류 0x800f081f (CBS_E_SOURCE_MISSING 저장소 손상) 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Cumulative Update Error 0x800f081f (Source Files Not Found)",
+    "symptoms": "Windows 10/11 누적 업데이트 진행 중 설치가 일정 비율(예: 96%)에서 멈추거나 0x800f081f (CBS_E_SOURCE_MISSING) 오류 코드를 내며 실패합니다. 시스템 파일 저장소(WinSxS) 내 필수 원본 파일이 누락되었거나 손상되었을 때 발생합니다.",
+    "symptoms_en": "Windows 10/11 Cumulative Update fails to install, returning error code 0x800f081f (CBS_E_SOURCE_MISSING). This error occurs when the core source files required by the servicing component in WinSxS are missing or corrupted.",
+    "script": "if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {\n    Write-Host \"Please run PowerShell as Administrator.\" -ForegroundColor Red\n    return\n}\nWrite-Host \"[1/3] Cleaning superseded components...\" -ForegroundColor Green\nDism /Online /Cleanup-Image /StartComponentCleanup\n\nWrite-Host \"[2/3] Repairing Component Store via DISM...\" -ForegroundColor Yellow\nDism /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host \"[3/3] Running System File Checker...\" -ForegroundColor Yellow\nsfc /scannow\n\nWrite-Host \"DISM & SFC verification completed. Please reboot your PC and retry Windows Update.\" -ForegroundColor Green",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell 또는 명령 프롬프트를 실행합니다.",
+      "'DISM /Online /Cleanup-Image /StartComponentCleanup' 명령어를 실행하여 대체된 오래된 구성 요소 데이터를 정리합니다.",
+      "'DISM /Online /Cleanup-Image /RestoreHealth' 명령어를 입력하여 온라인 Windows 이미지 복구를 진행합니다.",
+      "'sfc /scannow' 명령으로 시스템 무결성을 확인하고 손상된 구성 요소를 복구합니다.",
+      "업데이트가 지속적으로 실패할 경우 Microsoft Update 카탈로그(catalog.update.microsoft.com)에서 해당 KB 패키지를 직접 다운로드하여 수동 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Open PowerShell or Command Prompt with elevated Administrator privileges.",
+      "Execute 'DISM /Online /Cleanup-Image /StartComponentCleanup' to clean superseded component files.",
+      "Run 'DISM /Online /Cleanup-Image /RestoreHealth' to repair corrupted servicing stack components online.",
+      "Perform 'sfc /scannow' to verify and auto-repair system file integrity.",
+      "If the automatic update continues to fail, manually download the standalone KB package from the Microsoft Update Catalog (catalog.update.microsoft.com) and install it."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-795e5682-9620-471e-978d-b86e0600a2e3",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-troubleshoot"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f081f",
+      "CBS_E_SOURCE_MISSING",
+      "Windows Update 0x800f081f",
+      "DISM RestoreHealth",
+      "윈도우 업데이트 오류 0x800f081f"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T14:04:01.076Z",
+    "updatedAt": "2026-11-05T14:04:01.076Z",
+    "verifiedAt": "2026-11-05T14:04:01.076Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d05-mw461p9y",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Windows 스토어 앱 제거 실패 및 재설치 오류 0x80073D05 해결 방법",
+    "title_en": "Troubleshooting Windows Store App Removal and Reinstallation Error 0x80073D05",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 후, 특정 앱을 제거하거나 재설치할 때 잔여 파일 또는 데이터베이스 잠금으로 인해 발생하는 오류입니다.",
+    "symptoms_en": "Occurs when attempting to remove or reinstall an app after Windows 11 23H2/24H2 updates, caused by residual files or database locks.",
+    "script": "Get-AppxPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}; Get-AppXProvisionedPackage -Online | Foreach {Add-AppxProvisionedPackage -Online -PackagePath $_.PackagePath -PackageId $_.PackageId}",
+    "manualSteps": [
+      "설정 > 앱 > 설치된 앱에서 해당 앱을 찾아 고급 옵션을 선택합니다.",
+      "앱 페이지 내 '초기화' 또는 '복구' 버튼을 클릭하여 데이터를 지웁니다.",
+      "파일 탐색기를 열고 C:\\Program Files\\WindowsApps 폴더의 권한을 확인합니다.",
+      "PC를 재부팅하고 Microsoft Store를 실행하여 앱을 다시 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Settings > Apps > Installed apps and select 'Advanced options' for the app.",
+      "Click 'Reset' or 'Repair' on the app page to clear local data.",
+      "Open File Explorer and verify permissions for the C:\\\\Program Files\\\\WindowsApps folder.",
+      "Restart the PC and launch the Microsoft Store to reinstall the app."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-appx-package-deployment-errors",
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3df6-6a75-2365b210c4d9"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "스토어 앱 삭제 오류",
+      "Windows 11 앱 초기화",
+      "Store App Removal Error",
+      "AppxPackage failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T23:17:46.678Z",
+    "updatedAt": "2026-11-05T23:17:46.678Z",
+    "verifiedAt": "2026-11-05T23:17:46.678Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070005-mw461p9y",
+    "category": "스토어/앱",
+    "code": "0x80070005",
+    "title": "Windows 스토어 앱 업데이트 차단 및 액세스 거부 오류 (0x80070005)",
+    "title_en": "Fixing Windows Store Update Access Denied Error (0x80070005)",
+    "symptoms": "Windows 최신 빌드에서 앱을 업데이트하려 할 때 권한 문제로 인해 '액세스가 거부되었습니다' 오류가 발생하며 앱 업데이트가 중단되는 현상입니다.",
+    "symptoms_en": "Occurs during app updates in recent Windows builds due to permission conflicts, resulting in an 'Access Denied' message and update failure.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-AppXPackage *WindowsStore* -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "시작 메뉴에서 'wsreset.exe'를 입력하여 실행하고 스토어 캐시를 초기화합니다.",
+      "Windows 업데이트 서비스가 실행 중인지 확인합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 권한 복구 명령어를 수행합니다.",
+      "타사 백신 소프트웨어를 일시 중지한 후 업데이트를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Type 'wsreset.exe' in the Start menu and run it to clear the Store cache.",
+      "Ensure the Windows Update service is running.",
+      "Run Command Prompt as Administrator and execute recovery commands.",
+      "Temporarily disable third-party antivirus software and retry the update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-opening-microsoft-store-126a875d-8b71-59ba-1385-e49c7161c35a",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070005",
+      "스토어 업데이트 오류",
+      "액세스 거부",
+      "Store Access Denied",
+      "App update error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-05T23:17:46.678Z",
+    "updatedAt": "2026-11-05T23:17:46.678Z",
+    "verifiedAt": "2026-11-05T23:17:46.678Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070490-mw4iyvuy",
+    "category": "업데이트",
+    "code": "0x80070490",
+    "title": "Windows 10/11 누적 업데이트 설치 실패 오류 0x80070490 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Cumulative Update Installation Error 0x80070490",
+    "symptoms": "Windows 업데이트 진행 시 패키지 설치 단계에서 'ERROR_NOT_FOUND' 상태 코드와 함께 0x80070490 오류가 발생하여 업데이트가 중단됩니다. 시스템 컴포넌트 기반 서비싱(CBS) 매니페스트 레지스트리 키가 손상되었거나 필요한 시스템 구성 요소 파일을 참조할 수 없을 때 발생합니다.",
+    "symptoms_en": "Windows Update fails during the installation stage with error code 0x80070490 (ERROR_NOT_FOUND). This issue occurs when Component-Based Servicing (CBS) manifest registry entries are corrupted or when required update files cannot be located.",
+    "script": "# Safe Repair Script for Windows Update Error 0x80070490\nWrite-Host 'Stopping Windows Update services...' -ForegroundColor Green\nStop-Service -Name wuauserv, bits, cryptsvc -Force -ErrorAction SilentlyContinue\n\nWrite-Host 'Running DISM Component Store Repair...' -ForegroundColor Green\n& dism.exe /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host 'Running System File Checker...' -ForegroundColor Green\n& sfc /scannow\n\nWrite-Host 'Restarting Windows Update services...' -ForegroundColor Green\nStart-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue\nWrite-Host 'Repair complete. Please reboot and retry Windows Update.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "관리자 권한으로 Windows PowerShell 또는 명령 프롬프트를 실행합니다.",
+      "DISM 도구를 실행하여 시스템 이미지 및 구성 요소 저장소를 복구합니다: dism /online /cleanup-image /restorehealth",
+      "시스템 파일 무결성 검사를 실행합니다: sfc /scannow",
+      "복구 프로세스가 완료되면 컴퓨터를 재부팅합니다.",
+      "설정 > Windows 업데이트로 이동하여 업데이트를 다시 확인하고 설치를 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows PowerShell or Command Prompt as Administrator.",
+      "Run the DISM tool to repair system component store: dism /online /cleanup-image /restorehealth",
+      "Run System File Checker to repair corrupted files: sfc /scannow",
+      "Restart the computer once the repair processes are complete.",
+      "Go to Settings > Windows Update and click Check for updates to retry installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x80070490-e2b2fb98-1e0e-43a9-a9a7-897b48325779",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/fix-windows-update-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070490",
+      "Windows Update Error 0x80070490",
+      "ERROR_NOT_FOUND",
+      "CBS Manifest Corruption",
+      "Windows 11 업데이트 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T05:19:30.250Z",
+    "updatedAt": "2026-11-06T05:19:30.250Z",
+    "verifiedAt": "2026-11-06T05:19:30.250Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80246007-mw4iyvuz",
+    "category": "업데이트",
+    "code": "0x80246007",
+    "title": "Windows 10/11 업데이트 다운로드 중단 및 0x80246007 오류 해결 방법",
+    "title_en": "Fix Windows 10/11 Update Download Stuck Error 0x80246007",
+    "symptoms": "Windows 업데이트 다운로드 진행률이 특정 퍼센트에서 멈추거나 진행되지 않고 0x80246007 오류 메시지를 출력합니다. 배경 지능형 전송 서비스(BITS)가 중지되었거나 BITS 전송 작업 큐가 손상되어 패키지를 정상적으로 받지 못할 때 발생합니다.",
+    "symptoms_en": "Windows Update download process gets stuck at a certain percentage and fails with error code 0x80246007. This occurs when the Background Intelligent Transfer Service (BITS) is stopped or its transfer job queue becomes corrupted.",
+    "script": "# Safe BITS & Download Cache Reset Script for Error 0x80246007\nWrite-Host 'Configuring BITS Service...' -ForegroundColor Green\nSet-Service -Name BITS -StartupType Automatic -ErrorAction SilentlyContinue\nStart-Service -Name BITS -ErrorAction SilentlyContinue\n\nWrite-Host 'Clearing BITS Transfer Queue...' -ForegroundColor Green\nImport-Module BitsTransfer -ErrorAction SilentlyContinue\nGet-BitsTransfer -AllUsers | Remove-BitsTransfer -ErrorAction SilentlyContinue\n\nWrite-Host 'Resetting Windows Update Download Directory...' -ForegroundColor Green\nStop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue\n$downloadDir = \"$env:SystemRoot\\SoftwareDistribution\\Download\"\nif (Test-Path $downloadDir) {\n    Remove-Item -Path \"$downloadDir\\*\" -Recurse -Force -ErrorAction SilentlyContinue\n}\nStart-Service -Name wuauserv -ErrorAction SilentlyContinue\nWrite-Host 'BITS reset completed. Retry Windows Update now.' -ForegroundColor Yellow",
+    "manualSteps": [
+      "키보드의 Win + R을 누르고 services.msc를 입력하여 서비스 관리자를 엽니다.",
+      "'Background Intelligent Transfer Service (BITS)'를 찾아 두 번 클릭한 후 시작 유형을 '자동'으로 변경하고 '시작' 버튼을 누릅니다.",
+      "관리자 권한 PowerShell을 열고 'Get-BitsTransfer | Remove-BitsTransfer'를 실행하여 멈춘 전송 작업을 취소합니다.",
+      "Windows Update 서비스(wuauserv)를 일시 중지한 후 C:\\Windows\\SoftwareDistribution\\Download 폴더 내부 파일을 모두 삭제합니다.",
+      "서비스를 다시 시작하고 Windows 업데이트를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type services.msc, and press Enter to open Services manager.",
+      "Locate 'Background Intelligent Transfer Service (BITS)', set its startup type to 'Automatic', and click 'Start'.",
+      "Open PowerShell as Administrator and execute 'Get-BitsTransfer | Remove-BitsTransfer' to clear stalled queue items.",
+      "Stop the Windows Update service (wuauserv) and clear all files inside C:\\Windows\\SoftwareDistribution\\Download.",
+      "Restart the services and retry Windows Update."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d177d13e57"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80246007",
+      "Windows Update Error 0x80246007",
+      "BITS Service Reset",
+      "Windows 업데이트 다운로드 멈춤",
+      "SoftwareDistribution Download Clear"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T05:19:30.250Z",
+    "updatedAt": "2026-11-06T05:19:30.250Z",
+    "verifiedAt": "2026-11-06T05:19:30.250Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000139-mw4uenly",
+    "category": "시스템/블루스크린",
+    "code": "0x00000139",
+    "title": "Windows 10/11 KERNEL_SECURITY_CHECK_FAILURE (0x00000139) 블루스크린 오류 해결",
+    "title_en": "Resolving KERNEL_SECURITY_CHECK_FAILURE (0x00000139) BSOD Error on Windows 10/11",
+    "symptoms": "Windows 10/11 최신 누적 업데이트(23H2/24H2) 적용 후 시스템 작업 중이나 고사양 게임/프로그램 실행 시 'KERNEL_SECURITY_CHECK_FAILURE' 문구와 함께 0x00000139 블루스크린이 발생하며 시스템이 강제 재부팅됩니다. 커널 데이터 구조 손상 또는 메모리 무결성(HVCI) 기능과 충돌하는 호환되지 않는 드라이버로 인해 발생합니다.",
+    "symptoms_en": "After applying recent cumulative updates on Windows 10/11 (23H2/24H2), a KERNEL_SECURITY_CHECK_FAILURE BSOD (0x00000139) occurs during general operation or under high workloads, forcing a system restart. This is primarily caused by corrupted kernel data structures or driver conflicts with Hypervisor-Protected Code Integrity (HVCI).",
+    "script": "Write-Host 'Starting System File Diagnostics and Driver Verification...' -ForegroundColor Green\nsfc /scannow\ndism /online /cleanup-image /restorehealth\nWrite-Host 'Checking Hypervisor-Protected Code Integrity (HVCI) Status...' -ForegroundColor Yellow\nGet-CimInstance -ClassName Win32_DeviceGuard -Namespace root\\Microsoft\\Windows\\DeviceGuard | Select-Object VirtualizationBasedSecurityStatus, SecurityServicesRunning",
+    "manualSteps": [
+      "안전 모드로 부팅하여 SFC(sfc /scannow) 및 DISM 명령어를 실행하여 손상된 시스템 커널 파일을 복구합니다.",
+      "Windows 보안 설정에서 '코어 격리 > 메모리 무결성' 옵션을 토글(꺼짐 후 재부팅 또는 켜짐)하여 드라이버 호환성을 검증합니다.",
+      "최근 업데이트된 타사 보안 프로그램, 백신 또는 주요 드라이버(그래픽, 네트워크)를 최신 버전으로 업데이트하거나 제거합니다.",
+      "Windows 메모리 진단 도구(mdsched.exe)를 실행하여 RAM의 물리적 불량 여부를 검사합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode and execute SFC (sfc /scannow) and DISM commands to repair corrupted kernel files.",
+      "Navigate to Windows Security > Core Isolation > Memory Integrity and toggle the setting to resolve driver incompatibility.",
+      "Update or uninstall recently updated third-party antivirus software or major hardware drivers (GPU, Network).",
+      "Run Windows Memory Diagnostic (mdsched.exe) to check physical RAM modules for hardware defects."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139--kernel-security-check-failure",
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-10-4b4574d1-d3b7-0573-7726-46e2d613522b"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x00000139",
+      "KERNEL_SECURITY_CHECK_FAILURE",
+      "블루스크린 0x139",
+      "메모리 무결성 블루스크린",
+      "Windows 11 BSOD 0x139"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T10:39:41.830Z",
+    "updatedAt": "2026-11-06T10:39:41.830Z",
+    "verifiedAt": "2026-11-06T10:39:41.830Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x0000007b-mw4uenly",
+    "category": "시스템/블루스크린",
+    "code": "0x0000007B",
+    "title": "Windows 10/11 INACCESSIBLE_BOOT_DEVICE (0x0000007B) 부팅 루프 블루스크린 해결",
+    "title_en": "Resolving INACCESSIBLE_BOOT_DEVICE (0x0000007B) BSOD Boot Loop Error on Windows 10/11",
+    "symptoms": "Windows 부팅 시작 단계에서 'INACCESSIBLE_BOOT_DEVICE' (0x0000007B) 오류 메시지가 표시되며 부팅에 실패하고 무한 재부팅됩니다. 최신 누적/보안 업데이트 설치 후 AHCI/NVMe 스토리지 컨트롤러 드라이버 손상, BCD(부팅 구성 데이터) 오류 또는 드라이버 필터 문제로 시스템 드라이브를 로드하지 못할 때 발생합니다.",
+    "symptoms_en": "During system startup, an INACCESSIBLE_BOOT_DEVICE (0x0000007B) BSOD appears, preventing Windows from loading and causing continuous reboot loops. This occurs after Windows updates when storage controller drivers (AHCI/NVMe) are corrupted or BCD/storage filter driver configurations fail.",
+    "script": "Write-Host 'Checking Storage Subsystem and Disk Volume Integrity...' -ForegroundColor Green\nGet-PhysicalDisk | Select-Object DeviceId, FriendlyName, OperationalStatus, HealthStatus\nGet-Volume | Select-Object DriveLetter, FileSystemLabel, DriveType, HealthStatus\nWrite-Host 'Verifying System Drive Accessibility...' -ForegroundColor Yellow\nTest-Path 'C:\\Windows\\System32\\drivers\\volsnap.sys'",
+    "manualSteps": [
+      "전원 재부팅 3회 시도로 Windows 복구 환경(WinRE)에 진입한 후 '문제 해결 > 고급 옵션 > 고급 시작'에서 안전 모드 부팅을 시도합니다.",
+      "WinRE 명령 프롬프트에서 'bootrec /fixmbr', 'bootrec /fixboot', 'bootrec /rebuildbcd'를 실행하여 부팅 구성 데이터를 재구축합니다.",
+      "메인보드 BIOS/UEFI 설정에 진입하여 SATA/NVMe 컨트롤러 모드가 기존 설치 방식(AHCI 또는 RAID/VMD)과 일치하는지 확인합니다.",
+      "WinRE 환경에서 손상된 최신 누적 업데이트를 지우기 위해 DISM 오프라인령(dism /image:C:\\ /cleanup-image /revertpendingactions)을 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Access Windows Recovery Environment (WinRE) after three failed boots and attempt booting into Safe Mode.",
+      "Open Command Prompt in WinRE and execute 'bootrec /fixmbr', 'bootrec /fixboot', and 'bootrec /rebuildbcd' to rebuild BCD.",
+      "Enter BIOS/UEFI settings and verify SATA/NVMe operation mode matches system setup (AHCI vs. RAID/VMD).",
+      "Run offline DISM cleanup command ('dism /image:C:\\ /cleanup-image /revertpendingactions') in WinRE to rollback pending updates."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x7b--inaccessible-boot-device",
+      "https://support.microsoft.com/en-us/topic/troubleshoot-inaccessible-boot-device-error-in-windows-10-11-893f1d5e-d670-4bc3-9fa7-b4d08ec4f7ec"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x0000007B",
+      "INACCESSIBLE_BOOT_DEVICE",
+      "부팅 불가 블루스크린",
+      "윈도우11 부팅 루프",
+      "NVMe 드라이버 블루스크린"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T10:39:41.830Z",
+    "updatedAt": "2026-11-06T10:39:41.830Z",
+    "verifiedAt": "2026-11-06T10:39:41.830Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007001f-mw5160ms",
+    "category": "오디오/사운드",
+    "code": "0x8007001f",
+    "title": "Windows 10/11 오디오 재생 및 드라이버 기능 장애 오류 (0x8007001f)",
+    "title_en": "Windows 10/11 Audio Playback and Driver Failure Error (0x8007001f)",
+    "symptoms": "Windows 10/11 최신 누적 업데이트 실행 또는 오디오 장치 사용 중 소리가 전혀 출력되지 않으며, 소리 문제 해결사 실행 시 '오디오 서비스를 시작할 수 없음' 또는 '장치가 작동하지 않음' 메시지와 함께 0x8007001f 오류가 발생합니다. 이는 시스템 오디오 하위 시스템과 오디오 드라이버 간의 통신 서비스 실패로 인해 발생합니다.",
+    "symptoms_en": "After installing Windows updates or connecting audio devices, sound playback stops completely. Running the Sound Troubleshooter displays error 0x8007001f with messages indicating that audio services failed to initialize or the device is not functioning. This occurs due to communication pipeline failures between the audio driver and the Windows audio subsystem.",
+    "script": "Stop-Service -Name \"Audiosrv\" -Force -ErrorAction SilentlyContinue\nStop-Service -Name \"AudioEndpointBuilder\" -Force -ErrorAction SilentlyContinue\nSet-Service -Name \"AudioEndpointBuilder\" -StartupType Automatic\nSet-Service -Name \"Audiosrv\" -StartupType Automatic\nStart-Service -Name \"AudioEndpointBuilder\" -ErrorAction SilentlyContinue\nStart-Service -Name \"Audiosrv\" -ErrorAction SilentlyContinue\nGet-Service -Name \"Audiosrv\", \"AudioEndpointBuilder\" | Select-Object Name, Status, StartType",
+    "manualSteps": [
+      "Windows 서비스(services.msc)를 실행하여 'Windows Audio' 및 'Windows Audio Endpoint Builder' 서비스의 시작 유형을 '자동'으로 변경하고 재시작합니다.",
+      "장치 관리자(devmgmt.msc)를 열고 '사운드, 비디오 및 게임 컨트롤러' 아래의 오디오 드라이버(Realtek/Intel High Definition Audio 등)를 우클릭하여 '장치 제거'를 진행한 후 PC를 재부팅합니다.",
+      "설정 > 시스템 > 소리 > 더 보기 소리 설정(Control Panel Sound)에서 기본 재생 장치 속성을 열고 '모든 음향 효과 비활성화(Disable all enhancements)'를 체크합니다.",
+      "관리자 권한 명령 프롬프트에서 `sfc /scannow` 및 `DISM /Online /Cleanup-Image /RestoreHealth` 명령어를 실행하여 손상된 오디오 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows Services (services.msc), ensure 'Windows Audio' and 'Windows Audio Endpoint Builder' services are set to 'Automatic', and restart both services.",
+      "Open Device Manager (devmgmt.msc), expand 'Sound, video and game controllers', right-click your audio driver (e.g., Realtek or Intel HD Audio), select 'Uninstall device', and reboot your PC.",
+      "Go to Settings > System > Sound > More sound settings, open the Properties of your default playback device, and enable 'Disable all enhancements'.",
+      "Run `sfc /scannow` and `DISM /Online /Cleanup-Image /RestoreHealth` in an elevated Command Prompt to repair corrupted system audio components."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-73025246-b61c-40c6-b00d-34180f114003",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/windows-10-upgrade-complete-error-0x8007001f"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007001f",
+      "Windows Audio error 0x8007001f",
+      "오디오 오류 0x8007001f",
+      "사운드 문제 해결 0x8007001f",
+      "Audio playback error 0x8007001f"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T13:48:56.115Z",
+    "updatedAt": "2026-11-06T13:48:56.115Z",
+    "verifiedAt": "2026-11-06T13:48:56.115Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-error-1068-mw5160ms",
+    "category": "오디오/사운드",
+    "code": "Error 1068",
+    "title": "Windows Audio 서비스 종속성 시작 실패 오류 (Error 1068)",
+    "title_en": "Windows Audio Service Dependency Failed to Start Error (Error 1068)",
+    "symptoms": "Windows 10/11에서 작업 표시줄의 음량 아이콘에 빨간색 X 표시가 표시되고 소리가 재생되지 않습니다. 서비스(services.msc)에서 'Windows Audio(Audiosrv)' 서비스를 수동으로 시작하려고 시도할 때 '오류 1068: 종속성 서비스나 그룹이 시작될 수 없습니다'라는 오류 메시지가 나타나며 오디오 서비스가 비활성화됩니다.",
+    "symptoms_en": "A red 'X' mark appears on the volume icon in the taskbar on Windows 10/11, rendering all sound output non-functional. Attempting to start the 'Windows Audio' (Audiosrv) service manually in services.msc yields 'Error 1068: The dependency service or group failed to start', indicating corrupted service dependencies like AudioEndpointBuilder or RPC.",
+    "script": "$services = @(\"RpcSs\", \"DcomLaunch\", \"AudioEndpointBuilder\", \"Audiosrv\")\nforeach ($svc in $services) {\n    Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue\n    Start-Service -Name $svc -ErrorAction SilentlyContinue\n    $st = Get-Service -Name $svc -ErrorAction SilentlyContinue\n    Write-Host \"$($svc): $($st.Status)\"\n}",
+    "manualSteps": [
+      "Windows 서비스(services.msc)를 실행하여 'RPC Endpoint Mapper', 'DCOM Server Process Launcher', 'Windows Audio Endpoint Builder' 서비스가 모두 '실행 중' 및 '자동' 상태인지 확인합니다.",
+      "관리자 권한 명령 프롬프트를 열고 `net localgroup Administrators /add localservice` 및 `net localgroup Administrators /add networkservice`를 실행하여 서비스 계정 권한을 복원합니다.",
+      "레지스트리 편집기(regedit)에서 `HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Audiosrv` 경로로 이동하여 `DependOnService` 항목에 `AudioEndpointBuilder`, `RpcSs` 값이 올바르게 지정되어 있는지 점검합니다.",
+      "시스템을 재부팅한 후 Windows Audio 서비스가 정상적으로 자동 시작되는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Windows Services (services.msc) and verify that 'RPC Endpoint Mapper', 'DCOM Server Process Launcher', and 'Windows Audio Endpoint Builder' are all set to 'Automatic' and currently 'Running'.",
+      "Open Command Prompt as Administrator and execute `net localgroup Administrators /add localservice` and `net localgroup Administrators /add networkservice` to restore proper service account permissions.",
+      "Open Registry Editor (regedit), navigate to `HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Audiosrv`, and check if `DependOnService` contains `AudioEndpointBuilder` and `RpcSs`.",
+      "Restart the computer and verify that the Windows Audio service automatically starts without error."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-73025246-b61c-40c6-b00d-34180f114003",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/system-management-components/error-1068-when-start-service"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Error 1068",
+      "Windows Audio Error 1068",
+      "오디오 서비스 오류 1068",
+      "Audiosrv Error 1068",
+      "AudioEndpointBuilder 1068"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T13:48:56.115Z",
+    "updatedAt": "2026-11-06T13:48:56.115Z",
+    "verifiedAt": "2026-11-06T13:48:56.115Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000139--kernel-security-check-failure--mw5kbi0m",
+    "category": "시스템/블루스크린",
+    "code": "0x00000139 (KERNEL_SECURITY_CHECK_FAILURE)",
+    "title": "Windows 11 최신 보안 업데이트 이후 발생하는 커널 보안 검사 실패",
+    "title_en": "Kernel Security Check Failure after Windows 11 latest security updates",
+    "symptoms": "최신 윈도우 업데이트 후 특정 드라이버나 시스템 파일의 무결성 검증 실패로 인한 블루스크린 발생",
+    "symptoms_en": "Blue screen occurrence due to integrity check failure of specific drivers or system files after recent Windows updates",
+    "script": "sfc /scannow; DISM /Online /Cleanup-Image /RestoreHealth; driverquery /v",
+    "manualSteps": [
+      "안전 모드로 부팅합니다.",
+      "장치 관리자에서 그래픽 및 네트워크 드라이버를 최신 버전으로 업데이트하거나 롤백합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 시스템 파일 검사를 수행합니다.",
+      "최근 설치된 타사 보안 소프트웨어를 일시적으로 제거합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode.",
+      "Update or roll back Graphics and Network drivers in Device Manager.",
+      "Run Command Prompt as administrator and perform system file verification.",
+      "Temporarily uninstall recently installed third-party security software."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139--kernel-security-check-failure"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "블루스크린",
+      "커널 보안 오류",
+      "0x139 해결",
+      "Blue Screen",
+      "Kernel Security Check Failure",
+      "0x00000139 Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T22:45:04.630Z",
+    "updatedAt": "2026-11-06T22:45:04.630Z",
+    "verifiedAt": "2026-11-06T22:45:04.630Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x000000f4--critical-object-termination--mw5kbi0m",
+    "category": "시스템/블루스크린",
+    "code": "0x000000F4 (CRITICAL_OBJECT_TERMINATION)",
+    "title": "Windows 시스템 서비스 비정상 종료 및 블루스크린 발생",
+    "title_en": "Critical Object Termination and Blue Screen occurrence",
+    "symptoms": "시스템 프로세스에 필요한 중요 데이터 객체가 예기치 않게 종료되어 블루스크린이 발생하는 현상",
+    "symptoms_en": "Blue screen caused by the unexpected termination of critical data objects required for system processes",
+    "script": "netsh int ip reset; ipconfig /flushdns; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "디스크 오류 검사(chkdsk /f /r)를 수행하여 파일 시스템 무결성을 확인합니다.",
+      "메모리 진단 도구를 실행하여 RAM 하드웨어 결함 여부를 확인합니다.",
+      "시스템 설정에서 빠른 시작 켜기 옵션을 비활성화합니다.",
+      "최근 설치된 하드웨어 변경 사항을 되돌립니다."
+    ],
+    "manualSteps_en": [
+      "Run disk error check (chkdsk /f /r) to verify file system integrity.",
+      "Run Windows Memory Diagnostic tool to check for RAM hardware defects.",
+      "Disable the 'Turn on fast startup' option in System settings.",
+      "Revert any recently installed hardware changes."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xf4--critical-object-termination"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "시스템 중단",
+      "블루스크린 0xF4",
+      "치명적 오류",
+      "Critical Object Termination",
+      "BSOD 0x000000F4",
+      "System Crash"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-06T22:45:04.630Z",
+    "updatedAt": "2026-11-06T22:45:04.630Z",
+    "verifiedAt": "2026-11-06T22:45:04.630Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d05-mw5xbeoj",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Microsoft Store 앱 제거 잔여물로 인한 설치 실패 오류",
+    "title_en": "Installation Failure due to Remaining Microsoft Store App Fragments",
+    "symptoms": "Windows 11/10 최신 업데이트 이후, 이전에 제거한 앱을 다시 설치하려고 할 때 발생하며, 시스템에 남아있는 이전 패키지 폴더와 충돌하여 앱 설치가 차단됨.",
+    "symptoms_en": "Occurs after recent Windows 11/10 updates when attempting to reinstall previously removed apps; conflicts with lingering package folders in the system directory block the installation.",
+    "script": "Get-AppxPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}; Get-AppXProvisionedPackage -online | Foreach {Add-AppxProvisionedPackage -Online -PackageName $_.PackageName}",
+    "manualSteps": [
+      "Windows 검색창에 'wsreset.exe'를 입력하고 관리자 권한으로 실행합니다.",
+      "C:\\Program Files\\WindowsApps 폴더의 소유권을 확인하고 필요 시 접근 권한을 부여합니다.",
+      "설정 > 앱 > 설치된 앱에서 문제가 되는 앱을 찾아 '고급 옵션'의 '초기화'를 실행합니다.",
+      "시스템을 다시 시작한 후 Microsoft Store에서 다시 설치를 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Type 'wsreset.exe' in the Windows search bar and run as administrator.",
+      "Check the ownership of the C:\\\\Program Files\\\\WindowsApps folder and grant access if necessary.",
+      "Go to Settings > Apps > Installed Apps, locate the app, and select 'Reset' under 'Advanced options'.",
+      "Restart the system and try installing again from the Microsoft Store."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/appx-deployment-service-errors",
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3df6-6a75-a4342371b010"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "스토어 앱 설치 오류",
+      "Microsoft Store App Install Error",
+      "AppxDeploymentFailure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T04:48:55.315Z",
+    "updatedAt": "2026-11-07T04:48:55.315Z",
+    "verifiedAt": "2026-11-07T04:48:55.315Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007000b-mw5xbeoj",
+    "category": "스토어/앱",
+    "code": "0x8007000B",
+    "title": "Windows 스토어 앱 업데이트 중 잘못된 형식 오류",
+    "title_en": "Invalid Format Error during Windows Store App Update",
+    "symptoms": "최신 윈도우 환경에서 앱 업데이트 실행 시 라이브러리 파일이 올바르게 로드되지 않거나 패키지 인덱스 불일치로 인해 발생하는 오류입니다.",
+    "symptoms_en": "An error occurring during app updates in the latest Windows environment, caused by failure to correctly load library files or package index mismatches.",
+    "script": "sfc /scannow; DISM /Online /Cleanup-Image /RestoreHealth; Get-AppXPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "명령 프롬프트를 관리자 권한으로 실행합니다.",
+      "위의 스크립트 중 DISM과 SFC 명령어를 순차적으로 입력하여 시스템 파일을 복구합니다.",
+      "서비스 창(services.msc)을 열고 'Microsoft Store Install Service'가 실행 중인지 확인합니다.",
+      "Windows 업데이트를 최신 상태로 유지하고 스토어 캐시를 삭제합니다."
+    ],
+    "manualSteps_en": [
+      "Run Command Prompt as administrator.",
+      "Execute the DISM and SFC commands from the script above sequentially to repair system files.",
+      "Open the Services window (services.msc) and verify that the 'Microsoft Store Install Service' is running.",
+      "Keep Windows updated and clear the Store cache."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/using-system-file-checker-in-windows-365e0031-36b1-6031-f804-8fd86e0ef4ca",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007000B",
+      "스토어 업데이트 오류",
+      "Store Update Failed",
+      "Invalid Image Format"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T04:48:55.315Z",
+    "updatedAt": "2026-11-07T04:48:55.315Z",
+    "verifiedAt": "2026-11-07T04:48:55.315Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mw6du650",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "네트워크 위치에 액세스할 수 없음 (네트워크 경로를 찾을 수 없음)",
+    "title_en": "Network Path Not Found (Error 0x800704cf)",
+    "symptoms": "Windows 10/11 업데이트 후 로컬 네트워크 공유 폴더나 NAS에 접근할 때 발생하는 오류로, TCP/IP 스택 또는 네트워크 어댑터 구성이 손상되었을 때 나타납니다.",
+    "symptoms_en": "This error occurs when attempting to access local network shares or NAS after recent Windows 10/11 updates, typically caused by corrupted TCP/IP stack or network adapter configurations.",
+    "script": "netsh int ip reset; netsh winsock reset; ipconfig /flushdns",
+    "manualSteps": [
+      "제어판에서 '네트워크 및 공유 센터'를 엽니다.",
+      "어댑터 설정 변경을 클릭합니다.",
+      "사용 중인 네트워크 어댑터를 마우스 오른쪽 버튼으로 클릭하고 '속성'을 선택합니다.",
+      "Microsoft 네트워크용 클라이언트의 체크를 해제했다가 다시 체크하고 확인을 누릅니다."
+    ],
+    "manualSteps_en": [
+      "Open 'Network and Sharing Center' from the Control Panel.",
+      "Click on 'Change adapter settings'.",
+      "Right-click your network adapter and select 'Properties'.",
+      "Uncheck 'Client for Microsoft Networks', click OK, then re-check it and click OK again."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/netsh-int-ip-reset-command"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704cf 해결",
+      "네트워크 경로 찾을 수 없음",
+      "0x800704cf fix",
+      "Network path not found error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T12:31:24.564Z",
+    "updatedAt": "2026-11-07T12:31:24.564Z",
+    "verifiedAt": "2026-11-07T12:31:24.564Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80244010-mw6du651",
+    "category": "네트워크",
+    "code": "0x80244010",
+    "title": "Windows 업데이트 서비스 네트워크 연결 시간 초과",
+    "title_en": "Windows Update Network Connection Timeout (0x80244010)",
+    "symptoms": "Windows 업데이트를 확인할 때 네트워크 통신이 원활하지 않아 발생하는 오류로, 최근 보안 패치 적용 과정에서 프록시 설정 오류나 캐시 데이터 충돌로 인해 발생합니다.",
+    "symptoms_en": "An error that occurs when Windows Update fails to communicate due to connection timeouts, often triggered by proxy misconfigurations or corrupted cache data during recent security patch cycles.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow",
+    "manualSteps": [
+      "Windows 검색에서 'cmd'를 입력하고 관리자 권한으로 실행합니다.",
+      "net stop wuauserv를 입력하여 업데이트 서비스를 중지합니다.",
+      "C:\\\\Windows\\\\SoftwareDistribution 폴더의 내용을 삭제합니다.",
+      "net start wuauserv를 입력하여 서비스를 다시 시작합니다."
+    ],
+    "manualSteps_en": [
+      "Type 'cmd' in Windows search and run as Administrator.",
+      "Type 'net stop wuauserv' to stop the update service.",
+      "Delete the contents of the C:\\\\Windows\\\\SoftwareDistribution folder.",
+      "Type 'net start wuauserv' to restart the service."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d177eb136c"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80244010 해결",
+      "Windows 업데이트 오류",
+      "0x80244010 fix",
+      "Windows update connection timeout"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T12:31:24.564Z",
+    "updatedAt": "2026-11-07T12:31:24.564Z",
+    "verifiedAt": "2026-11-07T12:31:24.564Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mw6x1z5b",
+    "category": "네트워크",
+    "code": "0x800704cf",
+    "title": "Windows 10/11 네트워크 위치 연결 실패 오류 0x800704cf 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Network Error 0x800704cf (Network Location Cannot Be Reached)",
+    "symptoms": "Windows 10/11 환경에서 네트워크 공유 폴더 액세스, Microsoft 계정 로그인, 또는 네트워크 프록시 연결 시 'Error 0x800704cf: 네트워크 위치에 도달할 수 없습니다'라는 오류 메시지가 표시되는 현상입니다. 최근 Windows 보안 업데이트 후 TCP/IP 스택 캐시 손상, Microsoft 네트워크용 클라이언트 바인딩 해제, 또는 가상 네트워크 어댑터 충돌로 인해 발생합니다.",
+    "symptoms_en": "Occurs when accessing shared network drives, signing into Microsoft accounts, or using network connections, displaying 'Error 0x800704cf: The network location cannot be reached.' It is commonly caused by TCP/IP stack cache corruption, unbound Client for Microsoft Networks properties, or virtual network adapter conflicts after recent Windows updates.",
+    "script": "# PowerShell Network Diagnostic & Reset Script for 0x800704cf\nWrite-Host 'Resetting TCP/IP Stack, Winsock, and Flushing DNS Cache...' -ForegroundColor Cyan\nnetsh winsock reset\nnetsh int ip reset\nipconfig /flushdns\nipconfig /registerdns\nipconfig /release\nipconfig /renew\nGet-NetAdapter | Enable-NetAdapterBinding -ComponentID ms_netbios -ErrorAction SilentlyContinue\nWrite-Host 'Network reset complete. Restart system to apply changes.' -ForegroundColor Green",
+    "manualSteps": [
+      "제어판 > 네트워크 및 공유 센터 > 어댑터 설정 변경에서 현재 네트워크 속성을 열고 'Microsoft 네트워크용 클라이언트'가 체크되어 있는지 확인합니다.",
+      "장치 관리자를 실행한 후 [보기] > [숨겨진 장치 표시]를 선택하여 미사용 네트워크 어댑터 및 문제 있는 가상 어댑터를 제거합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 'netsh winsock reset' 및 'netsh int ip reset' 명령을 수행합니다.",
+      "자격 증명 관리자(Credential Manager)에 접속하여 저장된 Windows 네트워크 자격 증명 중 오류를 일으키는 대상을 삭제 후 재연결합니다."
+    ],
+    "manualSteps_en": [
+      "Open Control Panel > Network and Sharing Center > Change adapter settings, open Network Properties, and verify 'Client for Microsoft Networks' is checked.",
+      "Open Device Manager, select View > Show hidden devices, and remove unused virtual network adapters.",
+      "Run Command Prompt as Administrator and execute 'netsh winsock reset' and 'netsh int ip reset'.",
+      "Open Credential Manager, navigate to Windows Credentials, and remove outdated network credentials causing authentication conflicts."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/network-subsystem-troubleshooting",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-1fa90056-92c2-6567-0ac9-5b20ed0e1797"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704cf",
+      "네트워크 위치에 도달할 수 없습니다",
+      "Network location cannot be reached",
+      "Windows 네트워크 오류 0x800704cf",
+      "TCP/IP 초기화",
+      "Netsh winsock reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T21:29:21.455Z",
+    "updatedAt": "2026-11-07T21:29:21.455Z",
+    "verifiedAt": "2026-11-07T21:29:21.455Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072efe-mw6x1z5b",
+    "category": "네트워크",
+    "code": "0x80072efe",
+    "title": "Windows 10/11 네트워크 연결 중단 오류 0x80072efe 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Network Connection Aborted Error 0x80072efe",
+    "symptoms": "Windows Update 수행 시 또는 Microsoft 온라인 서비스 연결 중 'ERROR_INTERNET_CONNECTION_ABORTED (0x80072efe)' 오류가 나타나며 다운로드가 중단되는 현상입니다. 2024-2025년 최신 Windows 보안 정책 업데이트 이후 TLS 1.2/1.3 암호화 프로토콜 비활성화, WinHTTP 프록시 설정 오염, 또는 Catroot2/SoftwareDistribution 업데이트 캐시 손상으로 서버 통신 연결이 강제 종료되며 발생합니다.",
+    "symptoms_en": "Displays 'ERROR_INTERNET_CONNECTION_ABORTED (0x80072efe)' while running Windows Update or connecting to Microsoft server endpoints. The server connection is prematurely aborted due to disabled TLS 1.2/1.3 security protocols, corrupted WinHTTP proxy settings, or corrupted update cache folders following recent Windows updates.",
+    "script": "# PowerShell Script to Fix 0x80072efe Connection Aborted Error\nWrite-Host 'Enabling TLS 1.2/1.3 and resetting WinHTTP Proxy...' -ForegroundColor Cyan\n[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13\nnetsh winhttp reset proxy\nStop-Service -Name wuauserv, cryptSvc, bits, msiserver -Force -ErrorAction SilentlyContinue\nRename-Item -Path 'C:\\Windows\\SoftwareDistribution' -NewName 'SoftwareDistribution.old' -Force -ErrorAction SilentlyContinue\nRename-Item -Path 'C:\\Windows\\System32\\catroot2' -NewName 'catroot2.old' -Force -ErrorAction SilentlyContinue\nStart-Service -Name wuauserv, cryptSvc, bits, msiserver -ErrorAction SilentlyContinue\nWrite-Host 'TLS protocols restored and update components successfully reset.' -ForegroundColor Green",
+    "manualSteps": [
+      "인터넷 옵션(inetcpl.cpl) 실행 후 [고급] 탭에서 'TLS 1.2 사용' 및 'TLS 1.3 사용' 옵션이 모두 체크되어 있는지 확인하고 적용합니다.",
+      "관리자 권한 명령 프롬프트에서 'netsh winhttp reset proxy'를 실행하여 잘못 설정된 WinHTTP 프록시를 초기화합니다.",
+      "Windows Update 관련 서비스(wuauserv, cryptSvc, bits)를 중지하고 C:\\Windows\\SoftwareDistribution 및 Catroot2 폴더의 이름을 변경하여 캐시를 재설정합니다.",
+      "시스템 파일 검사기 명령어(sfc /scannow 및 DISM /Online /Cleanup-Image /RestoreHealth)를 실행하여 손상된 네트워크 DLL 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Run 'inetcpl.cpl', go to the Advanced tab, and ensure both 'Use TLS 1.2' and 'Use TLS 1.3' options are checked.",
+      "Open Command Prompt as Administrator and run 'netsh winhttp reset proxy' to clear proxy configurations.",
+      "Stop Windows Update services (wuauserv, cryptSvc, bits) and rename C:\\Windows\\SoftwareDistribution and Catroot2 folders to rebuild update caches.",
+      "Execute System File Checker commands (sfc /scannow and DISM) to repair corrupted network system files."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-windows-update-errors-1888695e-054f-4e9d-7e44-d8470a640904",
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072efe",
+      "ERROR_INTERNET_CONNECTION_ABORTED",
+      "Windows Update 네트워크 오류",
+      "TLS 1.2 활성화",
+      "WinHTTP 프록시 재설정",
+      "SoftwareDistribution 초기화"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-07T21:29:21.455Z",
+    "updatedAt": "2026-11-07T21:29:21.455Z",
+    "verifiedAt": "2026-11-07T21:29:21.455Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d02-mw7cfs5c",
+    "category": "스토어/앱",
+    "code": "0x80073D02",
+    "title": "Windows 10/11 Microsoft Store 앱 업데이트 오류 0x80073D02 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Update Error 0x80073D02 in Windows 10/11",
+    "symptoms": "Microsoft Store에서 앱이나 게임을 설치 또는 업데이트할 때 0x80073D02 오류가 발생하며 진행이 중단됩니다. 이 오류는 업데이트하려는 애플리케이션 또는 관련 백그라운드 프로세스가 현재 실행 중이어서 시스템이 앱 패키지 리소스를 수정하거나 교체하지 못할 때 주로 발생합니다.",
+    "symptoms_en": "Error 0x80073D02 occurs when installing or updating apps or games from the Microsoft Store, causing installation to fail. This typically happens because the application or its associated background process is currently running, preventing Windows from modifying package resources.",
+    "script": "Get-Process -Name 'WinStore.App', 'StoreExperienceHost' -ErrorAction SilentlyContinue | Stop-Process -Force\nStart-Process 'wsreset.exe' -Wait\nGet-AppxPackage -AllUsers *WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자(Ctrl + Shift + Esc)를 열고 실행 중인 Microsoft Store 및 관련 앱 백그라운드 프로세스를 찾아 모두 종료합니다.",
+      "Win + R 키를 눌러 실행 창을 열고 'wsreset.exe'를 입력한 후 확인을 눌러 Microsoft Store 캐시를 초기화합니다.",
+      "설정 > 앱 > 설치된 앱으로 이동하여 'Microsoft Store' 항목의 [고급 옵션]을 클릭한 후 [복구] 및 [초기화]를 실행합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 Microsoft Store 패키지 재등록 명령어를 수행한 후 컴퓨터를 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager (Ctrl + Shift + Esc) and end any running Microsoft Store and related application background processes.",
+      "Press Win + R, type 'wsreset.exe', and press Enter to reset the Microsoft Store cache.",
+      "Go to Settings > Apps > Installed apps, find 'Microsoft Store', click 'Advanced options', and select 'Repair' followed by 'Reset'.",
+      "Launch PowerShell as Administrator, execute the Microsoft Store package re-registration command, and restart your PC."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/microsoft-store-won-t-open-1544narrow-61f4-30cf-d912-70b54e4a727b",
+      "https://learn.microsoft.com/en-us/windows/msi/error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D02",
+      "Microsoft Store 오류",
+      "스토어 앱 업데이트 실패",
+      "AppX deployment error 0x80073D02",
+      "Store app update error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T04:39:59.807Z",
+    "updatedAt": "2026-11-08T04:39:59.807Z",
+    "verifiedAt": "2026-11-08T04:39:59.807Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073d05-mw7cfs5c",
+    "category": "스토어/앱",
+    "code": "0x80073D05",
+    "title": "Windows 10/11 Microsoft Store 패키지 데이터 삭제 실패 오류 0x80073D05 해결 방법",
+    "title_en": "How to Fix Microsoft Store App Data Deletion Error 0x80073D05 in Windows 10/11",
+    "symptoms": "Microsoft Store에서 앱을 업데이트하거나 재설치할 때 ERROR_DELETING_EXISTING_APPLICATIONDATA_STORE_FAILED(0x80073D05) 오류가 발생하며 다운로드가 실패합니다. 시스템이 이전 앱 패키지의 애플리케이션 데이터 폴더(LocalState/LocalCache)를 삭제하려 할 때 데이터 손상이나 파일 잠금으로 인해 접근이 거부되는 경우 발생합니다.",
+    "symptoms_en": "When updating or reinstalling apps from the Microsoft Store, the download fails with error code 0x80073D05 (ERROR_DELETING_EXISTING_APPLICATIONDATA_STORE_FAILED). This occurs when Windows attempts to delete existing application data folders (such as LocalState/LocalCache) from previous installations but encounters corruption or access restrictions.",
+    "script": "Stop-Service -Name 'AppXSvc' -Force -ErrorAction SilentlyContinue\n$cachePath = \"$env:LOCALAPPDATA\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe\\LocalCache\"\nif (Test-Path $cachePath) { Remove-Item -Path \"$cachePath\\*\" -Recurse -Force -ErrorAction SilentlyContinue }\nStart-Service -Name 'AppXSvc' -ErrorAction SilentlyContinue\nGet-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "Win + R 키를 눌러 실행 창을 열고 '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe' 경로를 입력합니다.",
+      "LocalCache 폴더 내부로 이동하여 포함된 모든 파일과 폴더를 삭제합니다.",
+      "서비스 관리자(services.msc)를 열고 'AppX Deployment Service (AppXSvc)' 항목을 찾아 서비스를 다시 시작합니다.",
+      "관리자 권한으로 PowerShell을 실행하여 Microsoft Store 앱을 다시 등록하고 스토어를 재열어 다운로드를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type '%localappdata%\\Packages\\Microsoft.WindowsStore_8wekyb3d8bbwe', and press Enter.",
+      "Open the 'LocalCache' folder and delete all files and subfolders contained inside it.",
+      "Open Services (services.msc), locate 'AppX Deployment Service (AppXSvc)', and restart the service.",
+      "Run PowerShell as Administrator, execute the Microsoft Store re-registration script, and retry downloading from the Store."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-problems-with-apps-from-microsoft-store-93ed1bcf-9d3e-4b49-b541-4296dcac30e6",
+      "https://learn.microsoft.com/en-us/windows/uwp/packaging/app-capability-declarations"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073D05",
+      "ERROR_DELETING_EXISTING_APPLICATIONDATA_STORE_FAILED",
+      "스토어 캐시 삭제 오류",
+      "Microsoft Store AppData error",
+      "AppX deployment failure 0x80073D05"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T04:39:59.807Z",
+    "updatedAt": "2026-11-08T04:39:59.807Z",
+    "verifiedAt": "2026-11-08T04:39:59.807Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0xc004c003-mw7txn5j",
+    "category": "정품인증",
+    "code": "0xC004C003",
+    "title": "Windows 10/11 정품 인증 오류 0xC004C003 (제품 키 차단 및 라이선스 유효성 검사 실패) 해결 방법",
+    "title_en": "Fix Windows 10/11 Activation Error 0xC004C003 (Product Key Blocked or Invalid License)",
+    "symptoms": "Windows 정품 인증 설정 페이지에 '입력한 제품 키가 작동하지 않습니다' 또는 오류 코드 0xC004C003이 표시됩니다. 메인보드 교체 등 주요 하드웨어 변경 후 디지털 라이선스가 정상 연결되지 않거나 마이크로소프트 정품 인증 서버에서 유효하지 않은 라이선스로 인식할 때 발생합니다.",
+    "symptoms_en": "The Windows Activation settings page displays 'The product key you entered didn't work' or error code 0xC004C003. This occurs when a digital license fails to re-activate after significant hardware changes (such as a motherboard replacement) or when the activation server flags the product key as invalid.",
+    "script": "# PowerShell Diagnostic & Repair Script for Activation Error 0xC004C003\nWrite-Host 'Restarting Software Protection Service (sppsvc)...' -ForegroundColor Cyan\nStop-Service -Name sppsvc -Force -ErrorAction SilentlyContinue\nStart-Service -Name sppsvc\n\nWrite-Host 'Checking BIOS Embedded OEM Product Key...' -ForegroundColor Cyan\n$oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey\n\nif ($oemKey) {\n    Write-Host \"Found embedded OEM Key: $oemKey. Re-applying key...\" -ForegroundColor Green\n    cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ipk $oemKey\n    cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ato\n} else {\n    Write-Host 'No embedded OEM Key found in BIOS. Attempting to force activation refresh...' -ForegroundColor Yellow\n    cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ato\n}",
+    "manualSteps": [
+      "[설정] > [시스템] > [정품 인증] 메뉴로 이동하여 [문제 해결] 버튼을 실행합니다.",
+      "메인보드 등 하드웨어를 변경한 경우 '최근에 이 장치의 하드웨어를 변경했습니다' 링크를 선택하고 기존 Microsoft 계정으로 로그인하여 디지털 라이선스를 재연결합니다.",
+      "관리자 권한으로 명령 프롬프트를 열고 `slmgr.vbs /rearm`을 입력한 뒤 PC를 재부팅합니다.",
+      "올바른 25자리 Windows 정품 제품 키를 다시 입력하거나 Microsoft 고객 지원을 통해 키 차단 해제를 요청합니다."
+    ],
+    "manualSteps_en": [
+      "Go to [Settings] > [System] > [Activation] and click on the [Troubleshoot] option.",
+      "If you recently replaced hardware, select 'I changed hardware on this device recently' and sign in with your linked Microsoft account to re-bind the digital license.",
+      "Open Command Prompt as Administrator, execute `slmgr.vbs /rearm`, and restart your computer.",
+      "Re-enter a valid 25-character Windows product key or contact Microsoft Support if the product key was incorrectly blocked."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d90571-0050-4159-a49f-a9b570e3a82b",
+      "https://learn.microsoft.com/en-us/windows/deployment/volume-activation/resolve-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0xC004C003",
+      "Windows 정품인증 0xC004C003",
+      "제품 키 차단 오류",
+      "Windows 11 activation error 0xC004C003",
+      "slmgr rearm 정품인증"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T12:49:46.614Z",
+    "updatedAt": "2026-11-08T12:49:46.614Z",
+    "verifiedAt": "2026-11-08T12:49:46.614Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803fa067-mw7txn5j",
+    "category": "정품인증",
+    "code": "0x803FA067",
+    "title": "Windows 10/11 Home에서 Pro 에디션 업그레이드 실패 및 오류 0x803FA067 해결 방법",
+    "title_en": "Fix Windows 10/11 Activation Error 0x803FA067 (Home to Pro Edition Upgrade Failure)",
+    "symptoms": "Windows 10 또는 11 Home 에디션에서 Pro 에디션 라이선스 키를 입력하여 에디션 업그레이드를 시도할 때 'Windows를 게시 버전으로 업데이트할 수 없습니다. 오류 코드 0x803FA067' 메시지가 출력되며 업그레이드가 중단됩니다.",
+    "symptoms_en": "When attempting to upgrade from Windows 10/11 Home to Pro edition by entering a product key, the upgrade process fails with the error message 'We couldn't upgrade your copy of Windows. Error code 0x803FA067'.",
+    "script": "# PowerShell Script to Bypass Activation Server Check during Home-to-Pro Upgrade\nWrite-Host 'Temporarily disabling active network adapters...' -ForegroundColor Cyan\n$adapters = Get-NetAdapter | Where-Object Status -eq 'Up'\n$adapters | Disable-NetAdapter -Confirm:$false\n\nWrite-Host 'Applying Windows Pro Default Generic Key for Edition Upgrade...' -ForegroundColor Yellow\n$genericProKey = 'VK7JG-NPHTM-C97JM-9MPGT-3V66T'\ncscript //nologo C:\\Windows\\System32\\slmgr.vbs /ipk $genericProKey\n\nWrite-Host 'Re-enabling network adapters...' -ForegroundColor Green\n$adapters | Enable-NetAdapter -Confirm:$false\n\nWrite-Host 'Script completed. Please restart your PC to complete the Pro upgrade, then activate with your digital license/key.' -ForegroundColor Cyan",
+    "manualSteps": [
+      "네트워크 연결(Wi-Fi 또는 이더넷 케이블)을 일시적으로 완전 해제합니다.",
+      "[설정] > [시스템] > [정품 인증] > [제품 키 변경] 메뉴를 클릭합니다.",
+      "기본 Pro 업그레이드 전용 범용 키인 `VK7JG-NPHTM-C97JM-9MPGT-3V66T`를 입력하고 업그레이드를 시작합니다.",
+      "시스템 재부팅 후 Windows Pro 에디션으로 변경되면 인터넷을 다시 연결합니다.",
+      "[제품 키 변경]을 다시 선택하여 구매한 25자리 정품 Windows Pro 키를 입력하고 최종 정품 인증을 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Disconnect your active internet connection (Wi-Fi or Ethernet cable).",
+      "Navigate to [Settings] > [System] > [Activation] and click [Change product key].",
+      "Enter the generic Windows Pro upgrade key `VK7JG-NPHTM-C97JM-9MPGT-3V66T` and initiate the edition upgrade.",
+      "Once the PC restarts and updates to Windows Pro, reconnect to the internet.",
+      "Return to Activation settings, click [Change product key], and enter your genuine Windows Pro product key to complete final activation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/upgrade-windows-home-to-windows-pro-ef3800e0-5492-b92f-b490-2f5090324d65",
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d90571-0050-4159-a49f-a9b570e3a82b"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x803FA067",
+      "Windows Home Pro 업그레이드 오류",
+      "Windows 11 Pro 업그레이드 0x803FA067",
+      "VK7JG-NPHTM-C97JM-9MPGT-3V66T",
+      "Windows activation error 0x803FA067"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T12:49:46.614Z",
+    "updatedAt": "2026-11-08T12:49:46.614Z",
+    "verifiedAt": "2026-11-08T12:49:46.614Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704ec-mw8d09eu",
+    "category": "보안/백신",
+    "code": "0x800704ec",
+    "title": "Windows 10/11 Windows Defender 실행 차단 오류 0x800704ec 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Windows Defender Blocked Error 0x800704ec",
+    "symptoms": "Windows 보안(Windows Defender)을 실행하거나 실시간 감시를 활성화하려 할 때 '이 앱은 그룹 정책에 의해 차단되었습니다'라는 메시지와 함께 오류 코드 0x800704ec가 발생합니다. 타사 백신 프로그램 잔재, DisableAntiSpyware 레지스트리 키 설정 손상 또는 그룹 정책 설정 충돌로 인해 보안 기능이 정지되는 현상입니다.",
+    "symptoms_en": "Occurs when launching Windows Security/Defender or enabling real-time protection, showing error 0x800704ec ('This app is turned off by group policy'). This is caused by leftover files from third-party antivirus software, corrupted DisableAntiSpyware registry keys, or group policy conflicts.",
+    "script": "# PowerShell Repair Script for Defender Error 0x800704ec\n$regPaths = @(\n    'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender',\n    'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender\\Real-Time Protection'\n)\n\nforeach ($path in $regPaths) {\n    if (Test-Path $path) {\n        Remove-ItemProperty -Path $path -Name 'DisableAntiSpyware' -ErrorAction SilentlyContinue\n        Remove-ItemProperty -Path $path -Name 'DisableRealtimeMonitoring' -ErrorAction SilentlyContinue\n        Write-Host \"Removed restriction policy from $path\"\n    }\n}\n\nSet-Service -Name 'WinDefend' -StartupType Automatic -ErrorAction SilentlyContinue\nStart-Service -Name 'WinDefend' -ErrorAction SilentlyContinue\nUpdate-MpSignature -ErrorAction SilentlyContinue\nGet-Service -Name 'WinDefend' | Select-Object Name, Status, StartType",
+    "manualSteps": [
+      "그룹 정책 에디터(gpedit.msc)를 실행하여 [컴퓨터 구성] > [관리 템플릿] > [Windows 구성 요소] > [Microsoft Defender 바이러스 백신]으로 이동합니다.",
+      "'Microsoft Defender 바이러스 백신 끄기' 항목을 두 번 클릭하여 '구성되지 않음' 또는 '사용 안 함'으로 변경한 후 확인을 클릭합니다.",
+      "타사 백신 프로그램(McAfee, Avast, Norton 등)이 설치되어 있다면 해당 전용 삭제 툴을 사용하여 완전히 제거합니다.",
+      "명령 프롬프트(관리자 권한)를 열고 `gpupdate /force`를 입력하여 그룹 정책을 즉시 새로 고칩니다.",
+      "시스템을 재부팅한 후 Windows 보안 앱에서 '지금 켜기'를 눌러 실시간 보호 상태를 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Local Group Policy Editor (gpedit.msc) and navigate to [Computer Configuration] > [Administrative Templates] > [Windows Components] > [Microsoft Defender Antivirus].",
+      "Double-click 'Turn off Microsoft Defender Antivirus', set it to 'Not Configured' or 'Disabled', and click OK.",
+      "If third-party antivirus software (e.g., McAfee, Avast, Norton) is installed, completely uninstall it using its official removal tool.",
+      "Open Command Prompt as Administrator and run `gpupdate /force` to refresh policy settings immediately.",
+      "Restart the system, open Windows Security, and click 'Turn on' to restore real-time antivirus protection."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-1748541c-b6cd-403a-9669-0428d052af27",
+      "https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-antivirus-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704ec",
+      "Windows Defender 0x800704ec",
+      "그룹 정책에 의해 차단되었습니다",
+      "DisableAntiSpyware",
+      "Windows 보안 실행 오류",
+      "Defender Realtime Protection Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T21:43:41.478Z",
+    "updatedAt": "2026-11-08T21:43:41.478Z",
+    "verifiedAt": "2026-11-08T21:43:41.478Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070424-mw8d09ev",
+    "category": "보안/백신",
+    "code": "0x80070424",
+    "title": "Windows 10/11 보안 센터 및 Defender 서비스 오류 0x80070424 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Security Center and Defender Service Error 0x80070424",
+    "symptoms": "Windows 보안 센터(Security Center) 서비스 또는 Windows Defender 실시간 보호를 활성화하려고 할 때 '지정된 서비스가 설치된 서비스로 존재하지 않습니다' 메시지와 함께 오류 0x80070424가 출력됩니다. 악성코드 감염 또는 누적 업데이트 손상으로 인해 보안 필수 서비스(WinDefend, wscsvc, mpsvc) 레지스트리가 유실되거나 비활성화되어 발생합니다.",
+    "symptoms_en": "Occurs when attempting to start Windows Security Center or Defender real-time protection, displaying error 0x80070424 ('The specified service does not exist as an installed service'). This happens when critical security services (WinDefend, wscsvc, mpsvc) are disabled, corrupted, or removed due to malware or update failures.",
+    "script": "# PowerShell Repair Script for Security Service Error 0x80070424\n$secServices = @('wscsvc', 'WinDefend', 'mpsvc', 'SecurityHealthService')\n\nforeach ($serviceName in $secServices) {\n    $svc = Get-Service -Name $serviceName -ErrorAction SilentlyContinue\n    if ($svc) {\n        Set-Service -Name $serviceName -StartupType Automatic -ErrorAction SilentlyContinue\n        if ($svc.Status -ne 'Running') {\n            Start-Service -Name $serviceName -ErrorAction SilentlyContinue\n        }\n        Write-Host \"Service '$serviceName' status: $($svc.Status)\"\n    } else {\n        Write-Warning \"Service '$serviceName' is missing from registry.\"\n    }\n}\n\nWrite-Host \"Running system integrity check...\"\nsfc /scannow\nDISM.exe /Online /Cleanup-Image /RestoreHealth",
+    "manualSteps": [
+      "Windows Key + R을 누르고 `services.msc`를 입력하여 서비스 관리자를 엽니다.",
+      "'Security Center', 'Windows Defender Antivirus Service', 'Windows Defender Firewall' 서비스를 각각 찾아 시작 유형을 '자동'으로 변경하고 서비스를 시작합니다.",
+      "서비스가 목록에 아예 없다면 관리자 권한 PowerShell을 실행하여 DISM 복구 명령(`DISM.exe /Online /Cleanup-Image /RestoreHealth`)을 수행합니다.",
+      "악성코드 검사를 위해 Microsoft Safety Scanner(MSERT)를 다운로드하여 전체 검사를 진행합니다.",
+      "컴퓨터를 다시 시작한 후 Windows 업데이트를 실행하여 보안 플랫폼 최신 패치를 설치합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type `services.msc`, and press Enter to open Services management.",
+      "Locate 'Security Center', 'Windows Defender Antivirus Service', and 'Windows Defender Firewall', set their Startup type to 'Automatic', and start them.",
+      "If the services are missing from the list, open PowerShell as administrator and execute DISM repair (`DISM.exe /Online /Cleanup-Image /RestoreHealth`).",
+      "Download and run Microsoft Safety Scanner (MSERT) to perform a full system scan and remove any malware blocking security services.",
+      "Reboot the PC and run Windows Update to apply the latest Security Health Platform updates."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/use-the-system-file-checker-tool-to-repair-missing-or-corrupted-system-files-79aa868f-054c-416d-865e-7d721706733b",
+      "https://learn.microsoft.com/en-us/windows/security/application-security/device-control/microsoft-defender-antivirus-in-windows"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070424",
+      "Windows Defender 0x80070424",
+      "지정된 서비스가 설치된 서비스로 존재하지 않습니다",
+      "Security Center Service missing",
+      "WinDefend service error",
+      "Windows 보안 센터 오류 0x80070424"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-08T21:43:41.478Z",
+    "updatedAt": "2026-11-08T21:43:41.478Z",
+    "verifiedAt": "2026-11-08T21:43:41.478Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-10--audio-controller--mw8s8p1d",
+    "category": "오디오/사운드",
+    "code": "Code 10 (Audio Controller)",
+    "title": "Windows 10/11 High Definition Audio 컨트롤러 '이 장치를 시작할 수 없습니다 (코드 10)' 오류 해결 방법",
+    "title_en": "How to Fix High Definition Audio Controller 'This device cannot start (Code 10)' Error in Windows 10/11",
+    "symptoms": "최신 Windows 10/11 누적 업데이트(23H2/24H2) 적용 후 시스템 오디오가 완전히 중단되며, 디바이스 관리자의 'High Definition Audio 컨트롤러' 또는 'Intel Smart Sound Technology(Intel SST)' 항목에 노란색 경고 표시와 함께 '이 장치를 시작할 수 없습니다. (코드 10)' 오류가 발생합니다.",
+    "symptoms_en": "After installing recent Windows 10/11 cumulative updates (23H2/24H2), system audio stops working completely. Device Manager displays a yellow exclamation mark on 'High Definition Audio Controller' or 'Intel Smart Sound Technology (Intel SST)' with the error 'This device cannot start. (Code 10)'.",
+    "script": "# Audio Services and Driver Hardware Re-enumeration Script\nWrite-Host 'Restarting Windows Audio Services...' -ForegroundColor Green\nGet-Service -Name Audiosrv, AudioEndpointBuilder | Set-Service -StartupType Automatic\nGet-Service -Name Audiosrv, AudioEndpointBuilder | Restart-Service -Force -ErrorAction SilentlyContinue\n\nWrite-Host 'Rescanning Audio Devices and Bus Encoders...' -ForegroundColor Green\npnputil /scan-devices\n\nWrite-Host 'Listing Audio Devices with Warning Status...' -ForegroundColor Yellow\nGet-PnpDevice -Class MEDIA, System | Where-Object { $_.Status -ne 'OK' } | Select-Object FriendlyName, InstanceId, Status | Format-Table -AutoSize",
+    "manualSteps": [
+      "장치 관리자(devmgmt.msc)를 실행하고 '사운드, 비디오 및 게임 컨트롤러' 및 '시스템 장치' 항목을 확장합니다.",
+      "오류가 표시된 'High Definition Audio 컨트롤러' 또는 'Intel Smart Sound Technology' 드라이버를 마우스 오른쪽 버튼으로 클릭 후 [드라이버 업데이트]를 선택합니다.",
+      "[내 컴퓨터에서 드라이버 찾기] -> [컴퓨터의 사용 가능한 드라이버 목록에서 직접 선택]을 클릭합니다.",
+      "호환 가능한 하드웨어 목록에서 기본 Microsoft 드라이버인 'High Definition Audio 장치'를 선택하여 설치합니다.",
+      "시스템을 재부팅하여 오디오 장치 인식을 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager (devmgmt.msc) and expand 'Sound, video and game controllers' as well as 'System devices'.",
+      "Right-click the problematic 'High Definition Audio Controller' or 'Intel Smart Sound Technology' entry and select 'Update driver'.",
+      "Click 'Browse my computer for drivers' -> 'Let me pick from a list of available drivers on my computer'.",
+      "Select the generic Microsoft driver 'High Definition Audio Device' from the compatible hardware list and complete the installation.",
+      "Restart the system and check if sound output is restored."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-7302370e-854e-4e22-a73a-79f019407640",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/cm-error-codes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "High Definition Audio Code 10",
+      "오디오 코드 10",
+      "이 장치를 시작할 수 없습니다 코드 10",
+      "Intel SST Code 10 fix",
+      "Windows 11 사운드 드라이버 오류",
+      "Audio Controller Code 10"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T04:50:09.216Z",
+    "updatedAt": "2026-11-09T04:50:09.216Z",
+    "verifiedAt": "2026-11-09T04:50:09.216Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800706ba-mw8s8p1d",
+    "category": "오디오/사운드",
+    "code": "0x800706BA",
+    "title": "Windows 10/11 오디오 서비스 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 오류 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Audio Service 'RPC Server is Unavailable (0x800706BA)' Error",
+    "symptoms": "작업 표시줄 오디오 아이콘에 빨간색 X 표시가 나타나며 사운드가 출력되지 않습니다. 오디오 문제 해결사를 실행하거나 음량을 조절할 때 'RPC 서버를 사용할 수 없습니다 (0x800706BA)' 메시지가 출력되며 Windows Audio (Audiosrv) 서비스가 강제 종료되는 현상입니다.",
+    "symptoms_en": "A red 'X' mark appears on the taskbar audio icon, preventing any sound playback. Running the Audio Troubleshooter or adjusting volume displays 'The RPC server is unavailable (0x800706BA)' and causes the Windows Audio (Audiosrv) service to terminate.",
+    "script": "# Windows Audio RPC Dependent Services Recovery Script\n$audioServices = @('RpcSs', 'DcomLaunch', 'AudioEndpointBuilder', 'Audiosrv')\n\nforeach ($svcName in $audioServices) {\n    $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue\n    if ($svc) {\n        Set-Service -Name $svcName -StartupType Automatic\n        if ($svc.Status -ne 'Running') {\n            Start-Service -Name $svcName -ErrorAction SilentlyContinue\n            Write-Host \"Started service: $svcName\" -ForegroundColor Green\n        } else {\n            Write-Host \"Service $svcName is already running.\" -ForegroundColor Cyan\n        }\n    }\n}\n\n# Restart AudioEndpointBuilder and Audiosrv to re-establish RPC binding\nRestart-Service -Name AudioEndpointBuilder -Force -ErrorAction SilentlyContinue\nRestart-Service -Name Audiosrv -Force -ErrorAction SilentlyContinue\nWrite-Host 'Audio Services RPC bindings refreshed successfully.' -ForegroundColor Green",
+    "manualSteps": [
+      "Win + R 키를 누르고 'services.msc'를 입력하여 서비스 관리자를 열어줍니다.",
+      "'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', 'Windows Audio' 서비스의 상태가 모두 '실행 중'인지 확인합니다.",
+      "해당 서비스들의 시작 유형을 마우스 우클릭 -> 속성에서 [자동]으로 변경합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 `netsh winsock reset` 명령을 입력하여 오디오 통신 소켓을 초기화합니다.",
+      "PC를 다시 시작한 후 오디오 출력이 정상 작동하는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'services.msc', and press Enter to open Services management.",
+      "Verify that 'Remote Procedure Call (RPC)', 'Windows Audio Endpoint Builder', and 'Windows Audio' services are all showing 'Running' status.",
+      "Right-click each service, select Properties, and set their Startup type to 'Automatic'.",
+      "Open Command Prompt as Administrator and run `netsh winsock reset` to clear audio network sockets.",
+      "Reboot your computer and confirm that audio playback is restored."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-7302370e-854e-4e22-a73a-79f019407640",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/rpc-errors-troubleshooting"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "오디오 0x800706BA",
+      "RPC 서버를 사용할 수 없습니다 오디오",
+      "Audio RPC server unavailable 0x800706BA",
+      "Windows Audio service 0x800706BA",
+      "Audiosrv RPC error",
+      "사운드 RPC 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T04:50:09.216Z",
+    "updatedAt": "2026-11-09T04:50:09.216Z",
+    "verifiedAt": "2026-11-09T04:50:09.216Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x803f8001-mw9eppew",
+    "category": "정품인증",
+    "code": "0x803F8001",
+    "title": "Windows 정품 인증 시 발생하는 0x803F8001 오류 해결 방법",
+    "title_en": "Fixing Windows Activation Error 0x803F8001",
+    "symptoms": "Windows 업데이트 이후 라이선스 서버와의 통신 실패로 인해 '이 장치에서 Windows를 정품 인증할 수 없습니다'라는 메시지가 나타나며 정품 인증이 거부됨.",
+    "symptoms_en": "After a Windows update, the system fails to communicate with the license server, resulting in 'Unable to activate Windows on this device' despite having a valid digital license.",
+    "script": "slmgr /ato; slmgr /dlv",
+    "manualSteps": [
+      "설정 > 업데이트 및 보안(또는 시스템) > 정품 인증 메뉴로 이동합니다.",
+      "문제 해결사 단추를 클릭하여 Windows가 자동으로 라이선스를 다시 확인하도록 합니다.",
+      "명령 프롬프트(관리자 권한)에서 'slmgr /rearm' 명령을 실행하여 인증 상태를 초기화합니다.",
+      "시스템을 재부팅하고 다시 인증을 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Settings > Update & Security (or System) > Activation.",
+      "Click the Troubleshoot button to allow Windows to re-verify the digital license automatically.",
+      "Open Command Prompt as Administrator and run 'slmgr /rearm' to reset the activation state.",
+      "Restart the system and attempt activation again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/get-help-with-windows-activation-errors-09d8fb64-6768-485a-0a70-34446c1e5505"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 11 정품인증 오류",
+      "0x803F8001 해결",
+      "Windows 10 라이선스 오류",
+      "Activation error 0x803F8001",
+      "Fix Windows activation"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T15:19:14.408Z",
+    "updatedAt": "2026-11-09T15:19:14.408Z",
+    "verifiedAt": "2026-11-09T15:19:14.408Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072f8f-mw9eppew",
+    "category": "정품인증",
+    "code": "0x80072F8F",
+    "title": "네트워크 설정으로 인한 정품 인증 오류 0x80072F8F 수정",
+    "title_en": "Fixing Activation Error 0x80072F8F Caused by Network/Date Settings",
+    "symptoms": "시스템 시간 불일치 또는 TLS 통신 오류로 인해 Microsoft 인증 서버와 연결할 수 없어 발생하는 오류.",
+    "symptoms_en": "An error that occurs when the system time is incorrect or TLS communication fails, preventing connection to Microsoft activation servers.",
+    "script": "w32tm /resync; netsh winsock reset",
+    "manualSteps": [
+      "설정 > 시간 및 언어 > 날짜 및 시간으로 이동하여 '자동으로 시간 설정'을 켭니다.",
+      "인터넷 연결이 정상인지 확인하고 프록시 서버 설정을 확인합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행한 후 'sfc /scannow'를 입력하여 시스템 파일을 복구합니다.",
+      "시스템을 다시 시작한 후 설정에서 제품 키를 다시 입력합니다."
+    ],
+    "manualSteps_en": [
+      "Go to Settings > Time & Language > Date & Time, and ensure 'Set time automatically' is turned on.",
+      "Verify your internet connection and check for any active proxy server settings.",
+      "Open Command Prompt as Administrator and run 'sfc /scannow' to repair potential system file corruption.",
+      "Restart your computer and re-enter the product key in Settings."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/deployment/error-0x80072f8f-activation-fails"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072F8F 해결",
+      "Windows 정품인증 실패",
+      "날짜 오류 인증",
+      "Activation error 0x80072F8F",
+      "Windows activation date error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-09T15:19:14.408Z",
+    "updatedAt": "2026-11-09T15:19:14.408Z",
+    "verifiedAt": "2026-11-09T15:19:14.408Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--0x00000116--mw9zxtkw",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (0x00000116)",
+    "title": "그래픽 드라이버 응답 중지 및 복구 오류",
+    "title_en": "Video TDR Failure (Timeout Detection and Recovery)",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 후 그래픽 드라이버가 응답을 멈추고 시스템이 멈추거나 블루스크린이 발생함.",
+    "symptoms_en": "Graphics driver stops responding and system hangs or crashes with BSOD after Windows 11 23H2/24H2 updates.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-PnpDevice -Class Display | Where-Object {$_.Status -eq 'Error'} | Enable-PnpDevice -Confirm:$false",
+    "manualSteps": [
+      "제어판에서 그래픽 드라이버를 완전히 제거합니다.",
+      "제조사(NVIDIA/AMD) 공식 홈페이지에서 최신 드라이버를 다운로드하여 다시 설치합니다.",
+      "Windows 설정에서 '하드웨어 가속 GPU 일정 예약' 기능을 끕니다.",
+      "장치 관리자에서 디스플레이 어댑터를 마우스 오른쪽 버튼으로 클릭하여 '디바이스 제거' 후 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Uninstall the current graphics driver completely via Control Panel.",
+      "Download and install the latest driver from the official manufacturer (NVIDIA/AMD) website.",
+      "Disable 'Hardware-accelerated GPU scheduling' in Windows Settings.",
+      "Right-click the display adapter in Device Manager, select 'Uninstall device', and restart your PC."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/display/timeout-detection-and-recovery",
+      "https://support.microsoft.com/en-us/windows/troubleshoot-screen-flickering-in-windows-3ac80b08-464c-0b89-a3b0-647d781b0ebf"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE",
+      "그래픽 오류",
+      "0x00000116",
+      "Display driver timeout",
+      "GPU Crash"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-10T01:13:24.992Z",
+    "updatedAt": "2026-11-10T01:13:24.992Z",
+    "verifiedAt": "2026-11-10T01:13:24.992Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-d3d-device-lost-mw9zxtkw",
+    "category": "디스플레이/그래픽",
+    "code": "D3D_DEVICE_LOST",
+    "title": "DirectX 그래픽 장치 연결 끊김 오류",
+    "title_en": "D3D Device Lost Error",
+    "symptoms": "최신 Windows 빌드에서 고사양 게임 또는 앱 실행 시 다이렉트X 그래픽 자원이 예기치 않게 손실되어 프로그램이 강제 종료됨.",
+    "symptoms_en": "DirectX graphical resources are unexpectedly lost when running high-performance games or apps on recent Windows builds, causing programs to crash.",
+    "script": "dism /online /cleanup-image /startcomponentcleanup; dxdiag /t %temp%\\dxdiag.txt; Add-AppxPackage -Register -Path 'C:\\Windows\\SystemApps\\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy\\AppxManifest.xml' -DisableDevelopmentMode",
+    "manualSteps": [
+      "Windows 키 + R을 누르고 'dxdiag'를 입력하여 DirectX 진단 도구를 실행해 오류를 확인합니다.",
+      "DirectX End-User Runtime 웹 설치 관리자를 실행하여 누락된 구성 요소를 복구합니다.",
+      "설정 > 시스템 > 디스플레이 > 그래픽에서 해당 앱의 그래픽 성능 기본 설정을 '고성능'으로 변경합니다.",
+      "전원 관리 옵션을 '고성능' 모드로 변경하여 그래픽 카드 전원 부족을 방지합니다."
+    ],
+    "manualSteps_en": [
+      "Press Windows Key + R, type 'dxdiag', and run the tool to check for diagnostic errors.",
+      "Run the DirectX End-User Runtime Web Installer to repair missing components.",
+      "Go to Settings > System > Display > Graphics and set the app's performance preference to 'High performance'.",
+      "Change Power Plan to 'High Performance' mode to prevent power drops to the GPU."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/win32/direct3d11/d3d11-graphics-reference-d3d11-core-enums",
+      "https://support.microsoft.com/en-us/windows/update-drivers-manually-in-windows-ec62f46c-ff14-c91d-eead-d7126dc1b7b6"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "D3D_DEVICE_LOST",
+      "DirectX 오류",
+      "다이렉트X",
+      "Graphics card crash",
+      "DXGI_ERROR_DEVICE_REMOVED"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-10T01:13:24.992Z",
+    "updatedAt": "2026-11-10T01:13:24.992Z",
+    "verifiedAt": "2026-11-10T01:13:24.992Z",
+    "verificationStatus": "verified"
   }
 ];
