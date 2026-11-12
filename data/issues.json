@@ -5895,5 +5895,93 @@
     "updatedAt": "2026-11-12T00:10:41.898Z",
     "verifiedAt": "2026-11-12T00:10:41.898Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mwdnpls9",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 업데이트 서비스 패키지 설치 실패 (0x800f0922)",
+    "title_en": "Windows Update Service Package Installation Failure (0x800f0922)",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 설치 중 시스템 예약 파티션 공간 부족이나 .NET Framework 관련 리소스 충돌로 인해 발생하는 오류입니다.",
+    "symptoms_en": "Occurs during Windows 11 23H2/24H2 update installation due to insufficient system reserved partition space or .NET Framework resource conflicts.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-WindowsCapability -Online -Name NetFx3~~~~ | Add-WindowsCapability -Online",
+    "manualSteps": [
+      "제어판 > 관리 도구 > 서비스에서 'Windows Update' 서비스를 중지합니다.",
+      "C:\\Windows\\SoftwareDistribution 폴더의 내용을 삭제하여 임시 파일을 정리합니다.",
+      "시스템 예약 파티션의 용량이 500MB 이상인지 확인하고 디스크 관리 도구를 통해 확보합니다.",
+      "컴퓨터를 재시작한 후 업데이트를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Stop the 'Windows Update' service via Control Panel > Administrative Tools > Services.",
+      "Delete the contents of the C:\\Windows\\SoftwareDistribution folder to clear temporary files.",
+      "Verify the System Reserved Partition has at least 500MB of free space using Disk Management.",
+      "Restart the computer and attempt to update again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d177812681"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "윈도우 업데이트 오류 0x800f0922",
+      "0x800f0922 해결 방법",
+      "Windows 11 update error 0x800f0922",
+      "0x800f0922 fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T14:42:10.953Z",
+    "updatedAt": "2026-11-12T14:42:10.953Z",
+    "verifiedAt": "2026-11-12T14:42:10.953Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073701-mwdnpls9",
+    "category": "업데이트",
+    "code": "0x80073701",
+    "title": "Windows 업데이트 모듈 누락 및 파일 오류 (0x80073701)",
+    "title_en": "Windows Update Module Missing and File Corruption (0x80073701)",
+    "symptoms": "최신 빌드 업데이트 설치 중 일부 파일이 누락되었거나 데이터가 손상되어 설치 프로세스가 완료되지 못하고 중단되는 현상입니다.",
+    "symptoms_en": "The update process fails to complete because some files are missing or corrupted during the installation of recent Windows builds.",
+    "script": "dism /online /cleanup-image /startcomponentcleanup; sfc /scannow; net stop wuauserv; net stop bits; del /f /q C:\\Windows\\SoftwareDistribution\\*.*; net start wuauserv; net start bits",
+    "manualSteps": [
+      "작업 표시줄 검색창에 'Windows 업데이트 문제 해결사'를 입력하여 실행합니다.",
+      "PowerShell을 관리자 권한으로 열고 구성 요소 저장소 복구 명령을 입력합니다.",
+      "Windows 설정의 복구 옵션을 통해 시스템 파일 검사를 수행합니다.",
+      "최신 Windows 업데이트 도우미(Update Assistant)를 사용하여 수동으로 설치를 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'Windows Update Troubleshooter' in the taskbar and run it.",
+      "Open PowerShell as Administrator and run the component store repair command.",
+      "Perform a system file check via the Recovery options in Windows Settings.",
+      "Manually attempt the update using the latest Windows Update Assistant."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/deployment/fix-windows-update-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "업데이트 오류 0x80073701",
+      "윈도우 파일 누락 업데이트 실패",
+      "0x80073701 fix",
+      "Windows update error 0x80073701"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T14:42:10.953Z",
+    "updatedAt": "2026-11-12T14:42:10.953Z",
+    "verifiedAt": "2026-11-12T14:42:10.953Z",
+    "verificationStatus": "verified"
   }
 ]

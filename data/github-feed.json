@@ -1,20 +1,20 @@
 {
-  "lastCollectedAt": "2026-11-12T00:10:41.898Z",
-  "modelUsed": "gemini-3.8-flash",
+  "lastCollectedAt": "2026-11-12T14:42:10.953Z",
+  "modelUsed": "gemini-3.1-flash-lite",
   "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 130,
+  "totalIssuesCount": 132,
   "newIssues": [
     {
-      "id": "gh-0x80070643-mwcskvaj",
-      "code": "0x80070643",
-      "title": "Windows 10/11 WinRE 복구 파티션 용량 부족으로 인한 업데이트 실패 오류 0x80070643 해결 방법",
+      "id": "gh-0x800f0922-mwdnpls9",
+      "code": "0x800f0922",
+      "title": "Windows 업데이트 서비스 패키지 설치 실패 (0x800f0922)",
       "category": "업데이트"
     },
     {
-      "id": "gh-0x800f0922-mwcskvaj",
-      "code": "0x800f0922",
-      "title": "Windows 10/11 업데이트 96% 롤백 및 설치 실패 오류 0x800f0922 해결 방법",
+      "id": "gh-0x80073701-mwdnpls9",
+      "code": "0x80073701",
+      "title": "Windows 업데이트 모듈 누락 및 파일 오류 (0x80073701)",
       "category": "업데이트"
     }
   ]
