@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-11T13:38:30.589Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "디스플레이/그래픽",
+  "lastCollectedAt": "2026-11-12T00:10:41.898Z",
+  "modelUsed": "gemini-3.8-flash",
+  "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 128,
+  "totalIssuesCount": 130,
   "newIssues": [
     {
-      "id": "gh-0x80070103-mwc5zvb2",
-      "code": "0x80070103",
-      "title": "Windows Update를 통한 디스플레이 드라이버 설치 실패",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x80070643-mwcskvaj",
+      "code": "0x80070643",
+      "title": "Windows 10/11 WinRE 복구 파티션 용량 부족으로 인한 업데이트 실패 오류 0x80070643 해결 방법",
+      "category": "업데이트"
     },
     {
-      "id": "gh-dwm-exe-crash-mwc5zvb2",
-      "code": "DWM.EXE_CRASH",
-      "title": "데스크톱 창 관리자(DWM) 비정상 종료 및 화면 깜빡임",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x800f0922-mwcskvaj",
+      "code": "0x800f0922",
+      "title": "Windows 10/11 업데이트 96% 롤백 및 설치 실패 오류 0x800f0922 해결 방법",
+      "category": "업데이트"
     }
   ]
 }

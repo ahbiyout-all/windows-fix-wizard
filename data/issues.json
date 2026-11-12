@@ -5797,5 +5797,103 @@
     "updatedAt": "2026-11-11T13:38:30.589Z",
     "verifiedAt": "2026-11-11T13:38:30.589Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mwcskvaj",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows 10/11 WinRE 복구 파티션 용량 부족으로 인한 업데이트 실패 오류 0x80070643 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Update Error 0x80070643 Caused by Insufficient WinRE Partition Space",
+    "symptoms": "Windows 업데이트 실행 시 누적 보안 패치(예: KB5034441, KB5034440 등) 설치 단계에서 '설치 실패 - 0x80070643' 오류 메시지가 발생하며 업데이트가 완료되지 않습니다. 복구 환경(WinRE) 파티션의 여유 공간이 250MB 미만일 때 최신 복구 패키지 이미지를 기록하지 못해 발생합니다.",
+    "symptoms_en": "When executing Windows Update, recovery environment updates (e.g., KB5034441, KB5034440) fail during installation with error 0x80070643. This issue occurs when the Windows Recovery Environment (WinRE) partition lacks sufficient free space (minimum 250MB required) to apply the updated recovery image.",
+    "script": "Write-Host 'Checking WinRE status...' -ForegroundColor Cyan\nreagentc /info\nWrite-Host 'Listing recovery and system partitions...' -ForegroundColor Cyan\nGet-Partition | Where-Object { $_.Type -eq 'Recovery' -or $_.IsSystem -eq $true } | Format-Table DiskNumber, PartitionNumber, DriveLetter, Size, Type\nWrite-Host 'Stopping Windows Update and Cryptographic services...' -ForegroundColor Cyan\nStop-Service -Name wuauserv, cryptSvc, bits -Force -ErrorAction SilentlyContinue\nStart-Sleep -Seconds 2\nWrite-Host 'Restarting services...' -ForegroundColor Cyan\nStart-Service -Name bits, cryptSvc, wuauserv\nWrite-Host 'Check completed. If WinRE partition is below 250MB free, resize partition per instructions.' -ForegroundColor Green",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트 또는 PowerShell을 열고 'reagentc /info'를 실행하여 Windows RE 활성화 상태와 파티션 번호를 확인합니다.",
+      "복구 파티션 여유 공간 확장을 위해 'reagentc /disable' 명령을 입력하여 WinRE를 임시 비활성화합니다.",
+      "디스크 관리(diskmgmt.msc) 또는 diskpart 유틸리티를 실행하여 Windows OS(C:) 파티션을 500MB~1GB 축소한 뒤 복구 파티션 크기를 늘립니다.",
+      "'reagentc /enable' 명령을 입력하여 복구 환경을 다시 켜고 시스템 상태를 정상화합니다.",
+      "설정 > Windows 업데이트로 이동하여 업데이트 확인을 다시 클릭하고 설치를 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt or PowerShell as Administrator and run 'reagentc /info' to inspect WinRE status and partition index.",
+      "Temporarily disable the recovery environment by running 'reagentc /disable'.",
+      "Using Disk Management (diskmgmt.msc) or diskpart, shrink the OS partition (C:) by 500MB-1GB and extend the recovery partition.",
+      "Re-enable the recovery environment by executing 'reagentc /enable'.",
+      "Go to Settings > Windows Update and click 'Check for updates' to re-attempt the installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/topic/kb5028997-instructions-to-manually-resize-your-partition-to-install-the-winre-update-4da21244-e327-442d-1ea9-648b496bd809",
+      "https://learn.microsoft.com/windows/release-health/resolved-issues-windows-11-23h2"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "KB5034441",
+      "WinRE update error",
+      "Windows Update 0x80070643",
+      "윈도우 업데이트 0x80070643",
+      "복구 파티션 용량"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T00:10:41.898Z",
+    "updatedAt": "2026-11-12T00:10:41.898Z",
+    "verifiedAt": "2026-11-12T00:10:41.898Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mwcskvaj",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 10/11 업데이트 96% 롤백 및 설치 실패 오류 0x800f0922 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Update Rollback and Installation Failure Error 0x800f0922",
+    "symptoms": "누적 업데이트(예: KB5034765 등) 설치가 96%~99%까지 진행된 후 '예기치 않은 오류가 발생했습니다. 변경 내용을 취소하는 중' 메시지와 함께 이전 상태로 롤백되며 0x800f0922 오류가 반환됩니다. C 드라이브 루트의 손상된 숨김 폴더(C:\\$WinREAgent), EFI/시스템 예약 파티션의 공간 부족, 또는 잘못된 Secure Boot 구성으로 인해 발생합니다.",
+    "symptoms_en": "During cumulative update installation (such as KB5034765), progress reaches 96% to 99% before rolling back with 'Something didn't go as planned. No need to worry—undoing changes' and logging error code 0x800f0922. This is triggered by leftover corrupted data in the hidden C:\\$WinREAgent folder, depleted EFI system partition space, or Secure Boot validation failures.",
+    "script": "Write-Host 'Checking for residual $WinREAgent folder...' -ForegroundColor Cyan\n$agentPath = 'C:\\$WinREAgent'\nif (Test-Path $agentPath) {\n    Write-Host 'Removing $WinREAgent directory...' -ForegroundColor Yellow\n    Remove-Item -Path $agentPath -Recurse -Force -ErrorAction SilentlyContinue\n    Write-Host '$WinREAgent folder deleted successfully.' -ForegroundColor Green\n} else {\n    Write-Host '$WinREAgent folder does not exist.' -ForegroundColor Gray\n}\nWrite-Host 'Stopping Windows Update components...' -ForegroundColor Cyan\nStop-Service -Name wuauserv, cryptSvc, bits -Force -ErrorAction SilentlyContinue\nWrite-Host 'Purging SoftwareDistribution download cache...' -ForegroundColor Cyan\nRemove-Item -Path 'C:\\Windows\\SoftwareDistribution\\Download\\*' -Recurse -Force -ErrorAction SilentlyContinue\nWrite-Host 'Restarting services...' -ForegroundColor Cyan\nStart-Service -Name bits, cryptSvc, wuauserv\nWrite-Host 'Running DISM Component Store cleanup...' -ForegroundColor Cyan\ndism.exe /Online /Cleanup-Image /StartComponentCleanup\nWrite-Host 'Diagnostic and repair routine completed. Please restart and check for updates.' -ForegroundColor Green",
+    "manualSteps": [
+      "파일 탐색기 보기 설정에서 '숨김 파일 표시'를 활성화하고 C 드라이브 루트에 있는 '$WinREAgent' 폴더를 삭제합니다.",
+      "디스크 관리(diskmgmt.msc)를 열어 EFI 시스템 파티션(ESP)의 잔여 공간이 최소 50MB 이상 남아 있는지 확인합니다.",
+      "관리자 권한 PowerShell에서 'dism.exe /Online /Cleanup-Image /StartComponentCleanup' 명령을 실행해 중복되거나 손상된 패키지 구성 요소를 정리합니다.",
+      "활성화된 타사 방화벽, 안티바이러스 실시간 보호 및 VPN 연결을 일시 중단합니다.",
+      "컴퓨터를 재부팅한 후 설정 > Windows 업데이트에서 업데이트를 다시 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Enable 'Hidden items' in File Explorer view options and remove the hidden folder named 'C:\\$WinREAgent'.",
+      "Open Disk Management (diskmgmt.msc) and ensure the EFI System Partition has at least 50MB of free disk space.",
+      "Execute 'dism.exe /Online /Cleanup-Image /StartComponentCleanup' in an elevated PowerShell to clear corrupted component stores.",
+      "Temporarily disconnect third-party antivirus real-time shields and active VPN profiles.",
+      "Restart your computer and retry updating from Settings > Windows Update."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/windows/release-health/status-windows-11-23h2#3269msgdesc",
+      "https://support.microsoft.com/windows/windows-update-error-0x800f0922-8610eb3f-4e09-418a-81a1-37d45e0f7608"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0922",
+      "Windows Update 0x800f0922",
+      "$WinREAgent",
+      "KB5034765 rollback",
+      "윈도우 업데이트 0x800f0922",
+      "96% 롤백 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T00:10:41.898Z",
+    "updatedAt": "2026-11-12T00:10:41.898Z",
+    "verifiedAt": "2026-11-12T00:10:41.898Z",
+    "verificationStatus": "verified"
   }
 ]
