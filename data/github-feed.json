@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-13T13:58:44.477Z",
+  "lastCollectedAt": "2026-11-13T23:17:26.460Z",
   "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "디스플레이/그래픽",
+  "targetCategory": "업데이트",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 138,
+  "totalIssuesCount": 140,
   "newIssues": [
     {
-      "id": "gh-video-tdr-failure--nvlddmkm-sys--mwf1lla5",
-      "code": "VIDEO_TDR_FAILURE (nvlddmkm.sys)",
-      "title": "Windows 11/10 그래픽 드라이버 응답 중단(TDR) 오류",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x800f0922-mwflk30d",
+      "code": "0x800f0922",
+      "title": "Windows 업데이트 누적 업데이트 설치 실패 오류 0x800f0922 해결 방법",
+      "category": "업데이트"
     },
     {
-      "id": "gh-0x8007010b-mwf1lla5",
-      "code": "0x8007010B",
-      "title": "Windows HDR 및 디스플레이 프로필 동기화 오류",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x80070643-mwflk30d",
+      "code": "0x80070643",
+      "title": "Windows 업데이트 설치 오류 0x80070643 (보안 업데이트 및 복구 파티션 문제) 해결",
+      "category": "업데이트"
     }
   ]
 }
