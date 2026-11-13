@@ -6071,5 +6071,91 @@
     "updatedAt": "2026-11-12T23:19:57.496Z",
     "verifiedAt": "2026-11-12T23:19:57.496Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-critical-process-died-mwej41k4",
+    "category": "시스템/블루스크린",
+    "code": "CRITICAL_PROCESS_DIED",
+    "title": "CRITICAL_PROCESS_DIED 블루스크린 오류 해결 방법",
+    "title_en": "How to fix CRITICAL_PROCESS_DIED Blue Screen error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 후 시스템이 갑자기 재부팅되며 블루스크린이 발생하는 현상. 중요한 시스템 프로세스가 예기치 않게 종료될 때 발생합니다.",
+    "symptoms_en": "The system unexpectedly restarts with a blue screen after Windows 11 23H2/24H2 updates. This occurs when a critical system process terminates unexpectedly.",
+    "script": "DISM /Online /Cleanup-Image /RestoreHealth; sfc /scannow; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "안전 모드로 부팅하여 최근 설치된 드라이버를 제거합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하여 시스템 파일 검사를 수행합니다.",
+      "시스템 복원 지점을 사용하여 오류 발생 이전 시점으로 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode and uninstall recently installed drivers.",
+      "Run Command Prompt as Administrator and perform system file verification.",
+      "Use System Restore to revert to a point before the error occurred."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "CRITICAL_PROCESS_DIED",
+      "블루스크린 해결",
+      "시스템 프로세스 오류",
+      "Windows 11 Blue Screen",
+      "BSOD Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T05:21:12.675Z",
+    "updatedAt": "2026-11-13T05:21:12.675Z",
+    "verifiedAt": "2026-11-13T05:21:12.675Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070002-mwej41k4",
+    "category": "시스템/블루스크린",
+    "code": "0x80070002",
+    "title": "Windows 시스템 파일 손상 및 업데이트 실패 0x80070002 오류",
+    "title_en": "Windows system file corruption and update failure 0x80070002 error",
+    "symptoms": "최신 Windows 빌드 업데이트 중 '지정된 파일을 찾을 수 없습니다' 메시지와 함께 설치가 중단되는 증상. 시스템 파일이 누락되거나 손상되어 발생하는 서비스 오류입니다.",
+    "symptoms_en": "Installation fails during recent Windows build updates with the message 'The system cannot find the file specified'. This is a service error caused by missing or corrupted system files.",
+    "script": "net stop wuauserv; net stop bits; ren C:\\Windows\\SoftwareDistribution SoftwareDistribution.old; net start wuauserv; net start bits",
+    "manualSteps": [
+      "Windows 업데이트 서비스와 관련된 임시 저장소 폴더 이름을 변경합니다.",
+      "시스템의 날짜와 시간 설정이 올바른지 확인합니다.",
+      "Windows 업데이트 문제 해결사를 실행하여 자동 수정을 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Rename the temporary storage folder related to the Windows Update service.",
+      "Ensure that the system date and time settings are correct.",
+      "Run the Windows Update Troubleshooter to attempt automatic repairs."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d1778126af"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070002",
+      "Windows 업데이트 오류",
+      "파일 누락 해결",
+      "Update Error 0x80070002",
+      "System File Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T05:21:12.675Z",
+    "updatedAt": "2026-11-13T05:21:12.675Z",
+    "verifiedAt": "2026-11-13T05:21:12.675Z",
+    "verificationStatus": "verified"
   }
 ]
