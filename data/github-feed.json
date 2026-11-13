@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-13T05:21:12.675Z",
+  "lastCollectedAt": "2026-11-13T13:58:44.477Z",
   "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "시스템/블루스크린",
+  "targetCategory": "디스플레이/그래픽",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 136,
+  "totalIssuesCount": 138,
   "newIssues": [
     {
-      "id": "gh-critical-process-died-mwej41k4",
-      "code": "CRITICAL_PROCESS_DIED",
-      "title": "CRITICAL_PROCESS_DIED 블루스크린 오류 해결 방법",
-      "category": "시스템/블루스크린"
+      "id": "gh-video-tdr-failure--nvlddmkm-sys--mwf1lla5",
+      "code": "VIDEO_TDR_FAILURE (nvlddmkm.sys)",
+      "title": "Windows 11/10 그래픽 드라이버 응답 중단(TDR) 오류",
+      "category": "디스플레이/그래픽"
     },
     {
-      "id": "gh-0x80070002-mwej41k4",
-      "code": "0x80070002",
-      "title": "Windows 시스템 파일 손상 및 업데이트 실패 0x80070002 오류",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x8007010b-mwf1lla5",
+      "code": "0x8007010B",
+      "title": "Windows HDR 및 디스플레이 프로필 동기화 오류",
+      "category": "디스플레이/그래픽"
     }
   ]
 }

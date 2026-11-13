@@ -6157,5 +6157,97 @@
     "updatedAt": "2026-11-13T05:21:12.675Z",
     "verifiedAt": "2026-11-13T05:21:12.675Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--nvlddmkm-sys--mwf1lla5",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (nvlddmkm.sys)",
+    "title": "Windows 11/10 그래픽 드라이버 응답 중단(TDR) 오류",
+    "title_en": "Windows 11/10 Graphics Driver Timeout Detection and Recovery (TDR) Error",
+    "symptoms": "최신 윈도우 업데이트 후 게임이나 고사양 작업 중 화면이 멈추거나 검은 화면으로 전환된 뒤 'VIDEO_TDR_FAILURE' 블루스크린이 발생함.",
+    "symptoms_en": "System freezes or turns black during gaming or graphic-intensive tasks, followed by a BSOD with 'VIDEO_TDR_FAILURE', often caused by outdated or conflicting NVIDIA/AMD display drivers after Windows updates.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-WmiObject Win32_PnPSignedDriver | Where-Object {$_.DeviceName -like '*Display*'} | Select-Object DeviceName, DriverVersion",
+    "manualSteps": [
+      "장치 관리자를 열고 디스플레이 어댑터를 선택합니다.",
+      "그래픽 드라이버를 우클릭하여 '디바이스 제거'를 선택하고 '드라이버 소프트웨어 삭제'를 체크합니다.",
+      "PC를 재부팅하고 그래픽 카드 제조사(NVIDIA/AMD) 공식 홈페이지에서 최신 드라이버를 설치합니다.",
+      "Windows 설정에서 '고급 그래픽 설정'의 하드웨어 가속 GPU 일정을 끕니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager and expand Display adapters.",
+      "Right-click your graphics driver, select 'Uninstall device', and check 'Attempt to remove the driver for this device'.",
+      "Restart the PC and download/install the latest drivers from the official manufacturer website (NVIDIA/AMD).",
+      "Disable 'Hardware-accelerated GPU scheduling' in Windows Settings > System > Display > Graphics."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/display/tdr-registry-keys"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE 해결",
+      "nvlddmkm.sys 오류",
+      "그래픽 드라이버 멈춤",
+      "TDR error fix",
+      "graphics driver timeout",
+      "BSOD fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T13:58:44.477Z",
+    "updatedAt": "2026-11-13T13:58:44.477Z",
+    "verifiedAt": "2026-11-13T13:58:44.477Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007010b-mwf1lla5",
+    "category": "디스플레이/그래픽",
+    "code": "0x8007010B",
+    "title": "Windows HDR 및 디스플레이 프로필 동기화 오류",
+    "title_en": "Windows HDR and Display Profile Synchronization Error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 이후 HDR 설정 적용 시 색감이 왜곡되거나 디스플레이 프로필이 강제로 초기화되는 현상.",
+    "symptoms_en": "Color distortion or display profile resets occur when applying HDR settings following the Windows 11 23H2/24H2 updates, often due to corrupted color management registry entries.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.Windows.ContentDeliveryManager* | Reset-AppxPackage; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\LogonUI\\TestHooks' -Name 'XamlColor' -Value 0",
+    "manualSteps": [
+      "색 관리(Color Management) 설정에서 모든 사용자 지정 프로필을 제거하고 기본값으로 재설정합니다.",
+      "Windows 설정 > 시스템 > 디스플레이 > HDR 항목에서 자동 HDR 기능을 껐다가 다시 켭니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 'chkdsk /f'를 수행하여 시스템 파일 무결성을 검사합니다.",
+      "모니터의 OSD 메뉴에서 공장 초기화를 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Color Management, remove custom ICC profiles, and reset to system defaults.",
+      "Go to Windows Settings > System > Display > HDR and toggle 'Auto HDR' off and back on.",
+      "Run Command Prompt as administrator and execute 'chkdsk /f' to check for file integrity issues.",
+      "Perform a factory reset on your monitor using the physical OSD menu buttons."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/hdr-settings-in-windows-2d767185-38ec-7fdc-6f97-cdc1c5df40e6"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "HDR 색감 오류",
+      "Windows 디스플레이 프로필",
+      "0x8007010B 해결",
+      "HDR color wash out",
+      "display profile reset",
+      "Windows 11 HDR fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T13:58:44.477Z",
+    "updatedAt": "2026-11-13T13:58:44.477Z",
+    "verifiedAt": "2026-11-13T13:58:44.477Z",
+    "verificationStatus": "verified"
   }
 ]
