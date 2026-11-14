@@ -5897,5 +5897,537 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-12T00:10:41.898Z",
     "verifiedAt": "2026-11-12T00:10:41.898Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mwdnpls9",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 업데이트 서비스 패키지 설치 실패 (0x800f0922)",
+    "title_en": "Windows Update Service Package Installation Failure (0x800f0922)",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 설치 중 시스템 예약 파티션 공간 부족이나 .NET Framework 관련 리소스 충돌로 인해 발생하는 오류입니다.",
+    "symptoms_en": "Occurs during Windows 11 23H2/24H2 update installation due to insufficient system reserved partition space or .NET Framework resource conflicts.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-WindowsCapability -Online -Name NetFx3~~~~ | Add-WindowsCapability -Online",
+    "manualSteps": [
+      "제어판 > 관리 도구 > 서비스에서 'Windows Update' 서비스를 중지합니다.",
+      "C:\\Windows\\SoftwareDistribution 폴더의 내용을 삭제하여 임시 파일을 정리합니다.",
+      "시스템 예약 파티션의 용량이 500MB 이상인지 확인하고 디스크 관리 도구를 통해 확보합니다.",
+      "컴퓨터를 재시작한 후 업데이트를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Stop the 'Windows Update' service via Control Panel > Administrative Tools > Services.",
+      "Delete the contents of the C:\\Windows\\SoftwareDistribution folder to clear temporary files.",
+      "Verify the System Reserved Partition has at least 500MB of free space using Disk Management.",
+      "Restart the computer and attempt to update again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d177812681"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "윈도우 업데이트 오류 0x800f0922",
+      "0x800f0922 해결 방법",
+      "Windows 11 update error 0x800f0922",
+      "0x800f0922 fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T14:42:10.953Z",
+    "updatedAt": "2026-11-12T14:42:10.953Z",
+    "verifiedAt": "2026-11-12T14:42:10.953Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073701-mwdnpls9",
+    "category": "업데이트",
+    "code": "0x80073701",
+    "title": "Windows 업데이트 모듈 누락 및 파일 오류 (0x80073701)",
+    "title_en": "Windows Update Module Missing and File Corruption (0x80073701)",
+    "symptoms": "최신 빌드 업데이트 설치 중 일부 파일이 누락되었거나 데이터가 손상되어 설치 프로세스가 완료되지 못하고 중단되는 현상입니다.",
+    "symptoms_en": "The update process fails to complete because some files are missing or corrupted during the installation of recent Windows builds.",
+    "script": "dism /online /cleanup-image /startcomponentcleanup; sfc /scannow; net stop wuauserv; net stop bits; del /f /q C:\\Windows\\SoftwareDistribution\\*.*; net start wuauserv; net start bits",
+    "manualSteps": [
+      "작업 표시줄 검색창에 'Windows 업데이트 문제 해결사'를 입력하여 실행합니다.",
+      "PowerShell을 관리자 권한으로 열고 구성 요소 저장소 복구 명령을 입력합니다.",
+      "Windows 설정의 복구 옵션을 통해 시스템 파일 검사를 수행합니다.",
+      "최신 Windows 업데이트 도우미(Update Assistant)를 사용하여 수동으로 설치를 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'Windows Update Troubleshooter' in the taskbar and run it.",
+      "Open PowerShell as Administrator and run the component store repair command.",
+      "Perform a system file check via the Recovery options in Windows Settings.",
+      "Manually attempt the update using the latest Windows Update Assistant."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/deployment/fix-windows-update-errors"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "업데이트 오류 0x80073701",
+      "윈도우 파일 누락 업데이트 실패",
+      "0x80073701 fix",
+      "Windows update error 0x80073701"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T14:42:10.953Z",
+    "updatedAt": "2026-11-12T14:42:10.953Z",
+    "verifiedAt": "2026-11-12T14:42:10.953Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf9-mwe67gvt",
+    "category": "스토어/앱",
+    "code": "0x80073CF9",
+    "title": "Microsoft Store 앱 설치 실패 및 패키지 설치 오류",
+    "title_en": "Microsoft Store App Installation Failure and Package Install Error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 이후 특정 앱을 설치하거나 업데이트할 때 발생하는 '패키지를 설치할 수 없습니다' 오류로, 주로 앱 설치 경로의 권한 문제나 캐시 손상으로 인해 발생합니다.",
+    "symptoms_en": "Occurs after Windows 11 23H2/24H2 updates when attempting to install or update apps, showing 'Package could not be installed'. Usually caused by app installation directory permission issues or cache corruption.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.WindowsStore* | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}; Get-AppXPackage | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 엽니다.",
+      "C:\\Windows 디렉토리 내에 'AUInstallAgent' 폴더가 없는 경우 새로 생성합니다.",
+      "설정 > 앱 > 설치된 앱에서 Microsoft Store를 찾아 '고급 옵션'의 '초기화'를 실행합니다.",
+      "시스템을 재부팅합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Navigate to C:\\Windows and create a folder named 'AUInstallAgent' if it does not exist.",
+      "Go to Settings > Apps > Installed Apps, find Microsoft Store, select Advanced options, and click 'Reset'.",
+      "Restart the system."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3df6-6a78-3370b1fd0259"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "스토어 오류",
+      "0x80073CF9",
+      "앱 설치 불가",
+      "Microsoft Store error",
+      "App install failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T23:19:57.496Z",
+    "updatedAt": "2026-11-12T23:19:57.496Z",
+    "verifiedAt": "2026-11-12T23:19:57.496Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070005-mwe67gvt",
+    "category": "스토어/앱",
+    "code": "0x80070005",
+    "title": "Windows 스토어 앱 업데이트 시 액세스 거부 오류",
+    "title_en": "Access Denied Error during Windows Store App Update",
+    "symptoms": "최신 윈도우 빌드에서 스토어 앱이 업데이트되거나 동기화될 때 '액세스 거부됨' 메시지가 나타나며, 사용자 계정의 앱 폴더 읽기/쓰기 권한이 보안 정책에 의해 차단될 때 발생합니다.",
+    "symptoms_en": "Appears in recent Windows builds when Store apps attempt to update or sync, triggering an 'Access Denied' message, often caused by security policies blocking read/write access to user AppData folders.",
+    "script": "sfc /scannow; DISM /Online /Cleanup-Image /RestoreHealth; wsreset.exe",
+    "manualSteps": [
+      "키보드의 Win + R 키를 누르고 'wsreset.exe'를 입력하여 캐시를 초기화합니다.",
+      "설정 > 개인 정보 및 보안 > Windows 보안에서 '앱 및 브라우저 제어' 설정을 확인합니다.",
+      "PowerShell을 관리자 권한으로 실행하고 'Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}' 명령어를 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Press Win + R, type 'wsreset.exe', and run to clear the Store cache.",
+      "Check 'App & browser control' settings under Settings > Privacy & security > Windows Security.",
+      "Run PowerShell as Administrator and execute 'Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}'."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/access-is-denied-error-when-installing-apps"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "액세스 거부",
+      "0x80070005",
+      "스토어 업데이트 오류",
+      "Access Denied",
+      "Store Update error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T23:19:57.496Z",
+    "updatedAt": "2026-11-12T23:19:57.496Z",
+    "verifiedAt": "2026-11-12T23:19:57.496Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-critical-process-died-mwej41k4",
+    "category": "시스템/블루스크린",
+    "code": "CRITICAL_PROCESS_DIED",
+    "title": "CRITICAL_PROCESS_DIED 블루스크린 오류 해결 방법",
+    "title_en": "How to fix CRITICAL_PROCESS_DIED Blue Screen error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 후 시스템이 갑자기 재부팅되며 블루스크린이 발생하는 현상. 중요한 시스템 프로세스가 예기치 않게 종료될 때 발생합니다.",
+    "symptoms_en": "The system unexpectedly restarts with a blue screen after Windows 11 23H2/24H2 updates. This occurs when a critical system process terminates unexpectedly.",
+    "script": "DISM /Online /Cleanup-Image /RestoreHealth; sfc /scannow; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "안전 모드로 부팅하여 최근 설치된 드라이버를 제거합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하여 시스템 파일 검사를 수행합니다.",
+      "시스템 복원 지점을 사용하여 오류 발생 이전 시점으로 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Boot into Safe Mode and uninstall recently installed drivers.",
+      "Run Command Prompt as Administrator and perform system file verification.",
+      "Use System Restore to revert to a point before the error occurred."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "CRITICAL_PROCESS_DIED",
+      "블루스크린 해결",
+      "시스템 프로세스 오류",
+      "Windows 11 Blue Screen",
+      "BSOD Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T05:21:12.675Z",
+    "updatedAt": "2026-11-13T05:21:12.675Z",
+    "verifiedAt": "2026-11-13T05:21:12.675Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070002-mwej41k4",
+    "category": "시스템/블루스크린",
+    "code": "0x80070002",
+    "title": "Windows 시스템 파일 손상 및 업데이트 실패 0x80070002 오류",
+    "title_en": "Windows system file corruption and update failure 0x80070002 error",
+    "symptoms": "최신 Windows 빌드 업데이트 중 '지정된 파일을 찾을 수 없습니다' 메시지와 함께 설치가 중단되는 증상. 시스템 파일이 누락되거나 손상되어 발생하는 서비스 오류입니다.",
+    "symptoms_en": "Installation fails during recent Windows build updates with the message 'The system cannot find the file specified'. This is a service error caused by missing or corrupted system files.",
+    "script": "net stop wuauserv; net stop bits; ren C:\\Windows\\SoftwareDistribution SoftwareDistribution.old; net start wuauserv; net start bits",
+    "manualSteps": [
+      "Windows 업데이트 서비스와 관련된 임시 저장소 폴더 이름을 변경합니다.",
+      "시스템의 날짜와 시간 설정이 올바른지 확인합니다.",
+      "Windows 업데이트 문제 해결사를 실행하여 자동 수정을 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Rename the temporary storage folder related to the Windows Update service.",
+      "Ensure that the system date and time settings are correct.",
+      "Run the Windows Update Troubleshooter to attempt automatic repairs."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b0f-10a7-d72f-65b8-32d1778126af"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070002",
+      "Windows 업데이트 오류",
+      "파일 누락 해결",
+      "Update Error 0x80070002",
+      "System File Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T05:21:12.675Z",
+    "updatedAt": "2026-11-13T05:21:12.675Z",
+    "verifiedAt": "2026-11-13T05:21:12.675Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-video-tdr-failure--nvlddmkm-sys--mwf1lla5",
+    "category": "디스플레이/그래픽",
+    "code": "VIDEO_TDR_FAILURE (nvlddmkm.sys)",
+    "title": "Windows 11/10 그래픽 드라이버 응답 중단(TDR) 오류",
+    "title_en": "Windows 11/10 Graphics Driver Timeout Detection and Recovery (TDR) Error",
+    "symptoms": "최신 윈도우 업데이트 후 게임이나 고사양 작업 중 화면이 멈추거나 검은 화면으로 전환된 뒤 'VIDEO_TDR_FAILURE' 블루스크린이 발생함.",
+    "symptoms_en": "System freezes or turns black during gaming or graphic-intensive tasks, followed by a BSOD with 'VIDEO_TDR_FAILURE', often caused by outdated or conflicting NVIDIA/AMD display drivers after Windows updates.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-WmiObject Win32_PnPSignedDriver | Where-Object {$_.DeviceName -like '*Display*'} | Select-Object DeviceName, DriverVersion",
+    "manualSteps": [
+      "장치 관리자를 열고 디스플레이 어댑터를 선택합니다.",
+      "그래픽 드라이버를 우클릭하여 '디바이스 제거'를 선택하고 '드라이버 소프트웨어 삭제'를 체크합니다.",
+      "PC를 재부팅하고 그래픽 카드 제조사(NVIDIA/AMD) 공식 홈페이지에서 최신 드라이버를 설치합니다.",
+      "Windows 설정에서 '고급 그래픽 설정'의 하드웨어 가속 GPU 일정을 끕니다."
+    ],
+    "manualSteps_en": [
+      "Open Device Manager and expand Display adapters.",
+      "Right-click your graphics driver, select 'Uninstall device', and check 'Attempt to remove the driver for this device'.",
+      "Restart the PC and download/install the latest drivers from the official manufacturer website (NVIDIA/AMD).",
+      "Disable 'Hardware-accelerated GPU scheduling' in Windows Settings > System > Display > Graphics."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/display/tdr-registry-keys"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "VIDEO_TDR_FAILURE 해결",
+      "nvlddmkm.sys 오류",
+      "그래픽 드라이버 멈춤",
+      "TDR error fix",
+      "graphics driver timeout",
+      "BSOD fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T13:58:44.477Z",
+    "updatedAt": "2026-11-13T13:58:44.477Z",
+    "verifiedAt": "2026-11-13T13:58:44.477Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007010b-mwf1lla5",
+    "category": "디스플레이/그래픽",
+    "code": "0x8007010B",
+    "title": "Windows HDR 및 디스플레이 프로필 동기화 오류",
+    "title_en": "Windows HDR and Display Profile Synchronization Error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 이후 HDR 설정 적용 시 색감이 왜곡되거나 디스플레이 프로필이 강제로 초기화되는 현상.",
+    "symptoms_en": "Color distortion or display profile resets occur when applying HDR settings following the Windows 11 23H2/24H2 updates, often due to corrupted color management registry entries.",
+    "script": "Get-AppxPackage -AllUsers *Microsoft.Windows.ContentDeliveryManager* | Reset-AppxPackage; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\LogonUI\\TestHooks' -Name 'XamlColor' -Value 0",
+    "manualSteps": [
+      "색 관리(Color Management) 설정에서 모든 사용자 지정 프로필을 제거하고 기본값으로 재설정합니다.",
+      "Windows 설정 > 시스템 > 디스플레이 > HDR 항목에서 자동 HDR 기능을 껐다가 다시 켭니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 'chkdsk /f'를 수행하여 시스템 파일 무결성을 검사합니다.",
+      "모니터의 OSD 메뉴에서 공장 초기화를 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Open Color Management, remove custom ICC profiles, and reset to system defaults.",
+      "Go to Windows Settings > System > Display > HDR and toggle 'Auto HDR' off and back on.",
+      "Run Command Prompt as administrator and execute 'chkdsk /f' to check for file integrity issues.",
+      "Perform a factory reset on your monitor using the physical OSD menu buttons."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/hdr-settings-in-windows-2d767185-38ec-7fdc-6f97-cdc1c5df40e6"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "HDR 색감 오류",
+      "Windows 디스플레이 프로필",
+      "0x8007010B 해결",
+      "HDR color wash out",
+      "display profile reset",
+      "Windows 11 HDR fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T13:58:44.477Z",
+    "updatedAt": "2026-11-13T13:58:44.477Z",
+    "verifiedAt": "2026-11-13T13:58:44.477Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mwflk30d",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 업데이트 누적 업데이트 설치 실패 오류 0x800f0922 해결 방법",
+    "title_en": "Windows Update Cumulative Update Installation Failure 0x800f0922 Fix",
+    "symptoms": "Windows 11/10 업데이트 과정에서 시스템 예약 파티션의 공간이 부족하거나 보안 소프트웨어가 업데이트 프로세스를 차단할 때 발생합니다.",
+    "symptoms_en": "Occurs during Windows 11/10 updates when the System Reserved Partition has insufficient space or security software blocks the update process.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; net stop wuauserv; net stop bits; del /f /s /q %windir%\\SoftwareDistribution\\Download\\*; net start wuauserv; net start bits",
+    "manualSteps": [
+      "시스템 예약 파티션의 여유 공간이 500MB 이상인지 디스크 관리에서 확인합니다.",
+      "타사 백신 프로그램을 일시적으로 비활성화합니다.",
+      "설정 > Windows 업데이트에서 업데이트를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Verify that the System Reserved Partition has at least 500MB of free space in Disk Management.",
+      "Temporarily disable third-party antivirus software.",
+      "Retry the update in Settings > Windows Update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c2b3f-10a7-d3f3-6568-36173a11005a"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 11 업데이트 오류",
+      "0x800f0922 해결",
+      "시스템 예약 파티션",
+      "Update error 0x800f0922",
+      "System Reserved Partition"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T23:17:26.460Z",
+    "updatedAt": "2026-11-13T23:17:26.460Z",
+    "verifiedAt": "2026-11-13T23:17:26.460Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mwflk30d",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows 업데이트 설치 오류 0x80070643 (보안 업데이트 및 복구 파티션 문제) 해결",
+    "title_en": "Windows Update Error 0x80070643 (Security Updates and Recovery Partition Issues) Fix",
+    "symptoms": "최근 윈도우 보안 업데이트(KB5034441 등) 설치 시 복구 파티션(WinRE) 용량이 부족하여 업데이트가 롤백되거나 실패하는 현상입니다.",
+    "symptoms_en": "Occurs when security updates (e.g., KB5034441) fail to install because the Windows Recovery Environment (WinRE) partition has insufficient space.",
+    "script": "Get-WindowsUpdateLog; Dism /Online /Cleanup-Image /ScanHealth; Dism /Online /Cleanup-Image /RestoreHealth",
+    "manualSteps": [
+      "명령 프롬프트를 관리자 권한으로 실행합니다.",
+      "reagentc /info 명령을 입력하여 현재 WinRE 상태를 확인합니다.",
+      "파티션 크기 조정이 필요할 경우 마이크로소프트의 공식 가이드를 따라 복구 파티션을 확장합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt as Administrator.",
+      "Type 'reagentc /info' to check the current WinRE status.",
+      "Follow Microsoft's official guide to resize the recovery partition if space is insufficient."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/kb5034441-how-to-address-cve-2024-20666-vulnerability-in-winre-by-manually-resizing-your-partition-1b771343-9828-48b7-8491-10c7104f2d01"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643 오류",
+      "WinRE 업데이트 실패",
+      "복구 파티션 용량",
+      "Error 0x80070643",
+      "WinRE partition size"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-13T23:17:26.460Z",
+    "updatedAt": "2026-11-13T23:17:26.460Z",
+    "verifiedAt": "2026-11-13T23:17:26.460Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000119-mwfy4w3n",
+    "category": "디스플레이/그래픽",
+    "code": "0x00000119",
+    "title": "Windows 10/11 그래픽 드라이버 블루스크린 VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) 오류 해결 방법",
+    "title_en": "How to Fix VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) BSOD in Windows 10/11",
+    "symptoms": "DirectX 12 기반 게임 실행, 3D 렌더링 작업, 또는 하드웨어 가속 GPU 일정 예약(HAGS)이 활성화된 상태에서 화면이 일시적으로 멈춘 뒤 VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) 블루스크린이 발생합니다. 이는 Windows 그래픽 스케줄러(Watchdog)가 GPU 드라이버의 스케줄링 이상을 감지하고 커널 패닉을 유발할 때 나타납니다.",
+    "symptoms_en": "The system encounters a Blue Screen of Death (BSOD) with stop code VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) during DirectX 12 gaming, 3D rendering, or when Hardware-Accelerated GPU Scheduling (HAGS) is enabled. It occurs when the Windows display scheduler watchdog detects an anomalous timeout or corruption in the GPU command queue.",
+    "script": "# VIDEO_SCHEDULER_INTERNAL_ERROR Diagnostic & System Integrity Script\nWrite-Output 'Checking Graphics Hardware & Driver Info...'\nGet-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, DriverDate, Status | Format-Table -AutoSize\n\nWrite-Output 'Checking DirectX Diagnostic Status...'\ndxdiag /dontskip /whql:off /t \"$env:TEMP\\dxdiag_log.txt\"\nStart-Sleep -Seconds 3\n\nWrite-Output 'Repairing corrupted system components and WDDM dependencies...'\nDISM.exe /Online /Cleanup-Image /RestoreHealth\nsfc /scannow\n\nWrite-Output 'Purging Direct3D Shader Cache...'\n$shaderCachePaths = @(\n    \"$env:LOCALAPPDATA\\D3DSCache\",\n    \"$env:LOCALAPPDATA\\NVIDIA\\DXCache\",\n    \"$env:LOCALAPPDATA\\AMD\\DxCache\"\n)\nforeach ($path in $shaderCachePaths) {\n    if (Test-Path $path) {\n        try {\n            Remove-Item \"$path\\*\" -Recurse -Force -ErrorAction SilentlyContinue\n            Write-Output \"Cleared shader cache: $path\"\n        } catch {\n            Write-Warning \"Could not clear: $path\"\n        }\n    }\n}\nWrite-Output 'Diagnostic and cleanup completed. Please reboot your PC.'",
+    "manualSteps": [
+      "최신 공식 그래픽 드라이버(NVIDIA, AMD, Intel)를 다운로드한 후, DDU(Display Driver Uninstaller)를 안전 모드에서 실행하여 이전 드라이버 잔여물을 완전히 제거하고 클린 설치합니다.",
+      "Windows 설정 > 시스템 > 디스플레이 > 그래픽 > '기본 그래픽 설정 변경'으로 이동하여 '하드웨어 가속 GPU 일정 예약(HAGS)' 옵션을 끔(Off)으로 설정한 뒤 재부팅합니다.",
+      "오버클럭 또는 언더볼팅 유틸리티(MSI Afterburner 등)가 실행 중인 경우 설정을 기본값(기본 클럭 및 전압)으로 초기화합니다.",
+      "메인보드 BIOS/UEFI 펌웨어를 최신 버전으로 업데이트하여 PCIe 및 ReBAR(Resizable BAR) 호환성을 확보합니다."
+    ],
+    "manualSteps_en": [
+      "Download the latest WHQL graphics driver from NVIDIA, AMD, or Intel, boot into Safe Mode, run Display Driver Uninstaller (DDU) to wipe residual driver files, and perform a clean installation.",
+      "Go to Windows Settings > System > Display > Graphics > 'Change default graphics settings', toggle 'Hardware-accelerated GPU scheduling' (HAGS) to Off, and restart the PC.",
+      "Reset any GPU overclocking, underclocking, or undervolting profiles (e.g., MSI Afterburner) back to factory default values.",
+      "Update your motherboard BIOS/UEFI firmware to ensure stable PCIe link and Resizable BAR compatibility."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x119---video-scheduler-internal-error"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x00000119",
+      "VIDEO_SCHEDULER_INTERNAL_ERROR",
+      "디스플레이 블루스크린",
+      "GPU 스케줄러 오류",
+      "HAGS BSOD",
+      "DirectX 12 crash"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T05:09:32.674Z",
+    "updatedAt": "2026-11-14T05:09:32.674Z",
+    "verifiedAt": "2026-11-14T05:09:32.674Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-43-mwfy4w3n",
+    "category": "디스플레이/그래픽",
+    "code": "Code 43",
+    "title": "Windows 10/11 그래픽 카드 장치 관리자 '이 장치를 중지했습니다 (코드 43)' 오류 해결 방법",
+    "title_en": "How to Fix Display Adapter 'Windows has stopped this device (Code 43)' Error in Windows 10/11",
+    "symptoms": "장치 관리자의 디스플레이 어댑터 항목에서 그래픽 카드에 노란색 느낌표 경고가 표시되며 속성 창에 '문제가 보고되었기 때문에 이 장치를 중지했습니다. (코드 43)' 오류 메시지가 나타납니다. 모니터 해상도가 기본 저해상도로 고정되고 다중 디스플레이 또는 외장 GPU가 정상 작동하지 않습니다.",
+    "symptoms_en": "The graphics card under Display Adapters in Device Manager displays a yellow warning icon with the status 'Windows has stopped this device because it has reported problems. (Code 43)'. The display resolution is locked to fallback standards, and external monitors or discrete GPU hardware fail to function.",
+    "script": "# Display Adapter Code 43 Diagnostic and Recovery Script\nWrite-Output 'Checking Display Adapters with Device Manager Errors...'\n$problemGPUs = Get-PnpDevice -Class 'Display' | Where-Object { $_.Status -ne 'OK' }\n\nif ($problemGPUs) {\n    foreach ($gpu in $problemGPUs) {\n        Write-Output \"Found issue on: $($gpu.FriendlyName) (Status: $($gpu.Status), ProblemCode: $($gpu.Problem))\"\n        Write-Output \"Attempting PnP device reset for: $($gpu.InstanceId)...\"\n        Disable-PnpDevice -InstanceId $gpu.InstanceId -Confirm:$false\n        Start-Sleep -Seconds 3\n        Enable-PnpDevice -InstanceId $gpu.InstanceId -Confirm:$false\n    }\n} else {\n    Write-Output 'No display devices currently reporting non-OK status via PnP.'\n}\n\nWrite-Output 'Verifying Windows Fast Startup Configuration...'\n$fastStartupPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power'\n$fastStartupVal = (Get-ItemProperty -Path $fastStartupPath -Name 'HiberbootEnabled' -ErrorAction SilentlyContinue).HiberbootEnabled\n\nif ($fastStartupVal -eq 1) {\n    Write-Output 'Disabling Fast Startup to prevent corrupted PCI power state loading...'\n    Set-ItemProperty -Path $fastStartupPath -Name 'HiberbootEnabled' -Value 0\n    Write-Output 'Fast Startup has been disabled.'\n}\n\nWrite-Output 'Checking graphics driver registration in system repository...'\npnpUtil.exe /enum-drivers | Select-String -Pattern 'Display' -Context 0,2 | Out-String | Write-Output",
+    "manualSteps": [
+      "빠른 시작 켜기(Fast Startup) 기능으로 인한 전원 상태 복구 오류를 방지하기 위해 제어판 > 전원 옵션 > '전원 단추 작동 설정'에서 '빠른 시작 켜기' 체크를 해제합니다.",
+      "장치 관리자에서 노란색 느낌표가 표시된 그래픽 카드를 마우스 우클릭한 후 '디바이스 제거'를 선택(이 디바이스의 드라이버 소프트웨어를 삭제합니다 옵션 선택)하고 시스템을 완전히 종료했다가 다시 켭니다.",
+      "노트북 환경(NVIDIA Optimus/AMD Switchable Graphics)인 경우 제조사 웹사이트(Dell, HP, Lenovo, ASUS 등)에서 OEM 인증 통합/외장 그래픽 드라이버를 순서대로 재설치합니다.",
+      "데스크톱 PC의 경우 PC 전원을 끄고 파워 케이블을 분리한 후, 그래픽 카드를 PCIe 슬롯에서 분리했다가 재장착하고 8핀/12VHPWR 보조 전원 케이블이 단단히 체결되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Disable 'Fast Startup' under Control Panel > Power Options > 'Choose what the power buttons do' to prevent corrupt PCIe power-state restorations upon cold boot.",
+      "Right-click the problematic graphics adapter in Device Manager, select 'Uninstall device' (checking driver deletion if prompted), perform a complete shutdown, and power on the system.",
+      "For hybrid laptops (NVIDIA Optimus / AMD Enduro), reinstall the verified OEM integrated (Intel/AMD) and discrete GPU drivers directly from the laptop manufacturer's support portal.",
+      "For desktop computers, power down completely, unplug the AC cable, reseat the graphics card in the PCIe slot, and verify all PCIe/12VHPWR power connectors are firmly locked in place."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/error-codes-in-device-manager-in-windows-f0e54451-8271-6c50-3382-365615c5f110"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Code 43",
+      "코드 43",
+      "이 장치를 중지했습니다",
+      "Display Adapter Code 43",
+      "그래픽 카드 느낌표",
+      "GPU Code 43 Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T05:09:32.674Z",
+    "updatedAt": "2026-11-14T05:09:32.674Z",
+    "verifiedAt": "2026-11-14T05:09:32.674Z",
+    "verificationStatus": "verified"
   }
 ];

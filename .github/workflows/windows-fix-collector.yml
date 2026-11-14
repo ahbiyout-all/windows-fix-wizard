@@ -73,8 +73,8 @@ jobs:
           git config --local user.name "github-actions[bot]"
           
           # Check if data files changed
-          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json)" ]; then
-            git add data/issues.json data/github-feed.json
+          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json src/data/knownIssues.ts)" ]; then
+            git add data/issues.json data/github-feed.json src/data/knownIssues.ts
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
             git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
             

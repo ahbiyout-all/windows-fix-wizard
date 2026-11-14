@@ -404,6 +404,16 @@ JSON Schema:
     fs.writeFileSync(issuesFilePath, JSON.stringify(updatedIssues, null, 2), 'utf-8');
     console.log(`💾 Saved updated dataset (${updatedIssues.length} total) to ${issuesFilePath}`);
 
+    // Automatically synchronize bundled main seed (src/data/knownIssues.ts)
+    try {
+      const knownIssuesTsPath = path.resolve(process.cwd(), 'src', 'data', 'knownIssues.ts');
+      const tsContent = `import { KnownIssue } from "../types";\n\nexport const KNOWN_ISSUES: KnownIssue[] = ${JSON.stringify(updatedIssues, null, 2)};\n`;
+      fs.writeFileSync(knownIssuesTsPath, tsContent, 'utf-8');
+      console.log(`🔄 Auto-integrated ${updatedIssues.length} issues into ${knownIssuesTsPath}`);
+    } catch (syncErr: any) {
+      console.warn(`⚠️ Failed to sync src/data/knownIssues.ts:`, syncErr.message);
+    }
+
     // Update github-feed.json
     const feedData = {
       lastCollectedAt: nowIso,

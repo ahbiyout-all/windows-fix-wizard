@@ -577,7 +577,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.86.0";
+const APP_VERSION = "3.97.7";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -598,6 +598,54 @@ const getKSTISOString = () => {
   const pad = (n: number) => n.toString().padStart(2, '0');
   const msPad = (n: number) => n.toString().padStart(3, '0');
   return `${kst.getFullYear()}-${pad(kst.getMonth() + 1)}-${pad(kst.getDate())}T${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}.${msPad(kst.getMilliseconds())}+09:00`;
+};
+
+const mergeIssuesDeduplicated = (baseList: KnownIssue[], incomingList: KnownIssue[]): { merged: KnownIssue[]; addedCount: number; updatedCount: number } => {
+  const result: KnownIssue[] = Array.isArray(baseList) ? [...baseList] : [];
+  const idIndexMap = new Map<string, number>();
+  const codeTitleIndexMap = new Map<string, number>();
+
+  result.forEach((item, idx) => {
+    if (item?.id) idIndexMap.set(String(item.id), idx);
+    const key = `${String(item?.code || '').toUpperCase().trim()}::${String(item?.title || '').toLowerCase().trim()}`;
+    if (key !== '::') codeTitleIndexMap.set(key, idx);
+  });
+
+  let addedCount = 0;
+  let updatedCount = 0;
+
+  if (Array.isArray(incomingList)) {
+    for (const item of incomingList) {
+      if (!item || !item.title) continue;
+      const key = `${String(item.code || '').toUpperCase().trim()}::${String(item.title || '').toLowerCase().trim()}`;
+      let existingIdx = item.id ? idIndexMap.get(String(item.id)) : undefined;
+      if (existingIdx === undefined && key !== '::') {
+        existingIdx = codeTitleIndexMap.get(key);
+      }
+
+      if (existingIdx !== undefined) {
+        const existing = result[existingIdx];
+        const incTime = item.updatedAt ? new Date(item.updatedAt).getTime() : 0;
+        const curTime = existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+        if (incTime > curTime) {
+          result[existingIdx] = {
+            ...existing,
+            ...item,
+            id: existing.id || item.id
+          };
+          updatedCount++;
+        }
+      } else {
+        const nextIdx = result.length;
+        result.push(item);
+        if (item.id) idIndexMap.set(String(item.id), nextIdx);
+        if (key !== '::') codeTitleIndexMap.set(key, nextIdx);
+        addedCount++;
+      }
+    }
+  }
+
+  return { merged: result, addedCount, updatedCount };
 };
 
 const formatCollectionDate = (rawDate: any): string => {
@@ -2933,6 +2981,8 @@ export default function App() {
     { kr: '스토어/앱', en: 'Store/Apps' },
     { kr: '정품인증', en: 'Activation' },
     { kr: '보안/백신', en: 'Security/Defender' },
+    { kr: '오디오/사운드', en: 'Audio/Sound' },
+    { kr: '디스플레이/그래픽', en: 'Display/Graphics' },
     { kr: '하드웨어/드라이버', en: 'Hardware/Drivers' },
     { kr: '성능/프리징', en: 'Performance' },
     { kr: '파일 시스템/저장소', en: 'File System' }
@@ -2948,44 +2998,57 @@ export default function App() {
     try {
       if (activeDbMode === 'server_file') {
         if (IS_GITHUB_PAGES) {
-          let staticIssues: KnownIssue[] = [];
+          let mergedIssues: KnownIssue[] = [...KNOWN_ISSUES];
           try {
             const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
             if (Array.isArray(idbMerged) && idbMerged.length > 0) {
-              staticIssues = idbMerged;
+              mergedIssues = mergeIssuesDeduplicated(mergedIssues, idbMerged).merged;
             }
           } catch (_) {}
-          if (staticIssues.length === 0) {
-            const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
-            if (localMerged) {
-              try { staticIssues = JSON.parse(localMerged); } catch(e) {}
+          const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
+          if (localMerged) {
+            try {
+              const parsedLocal = JSON.parse(localMerged);
+              if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
+                mergedIssues = mergeIssuesDeduplicated(mergedIssues, parsedLocal).merged;
+              }
+            } catch(e) {}
+          }
+          try {
+            const resp = await fetch(`./data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
+            if (resp.ok) {
+              const parsed = await resp.json();
+              const arr = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+              if (Array.isArray(arr) && arr.length > 0) {
+                mergedIssues = mergeIssuesDeduplicated(mergedIssues, arr).merged;
+              }
             }
-          }
-          if (staticIssues.length === 0) {
-            try {
-              const resp = await fetch('./data/issues.json');
-              if (resp.ok) {
-                const parsed = await resp.json();
-                staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+          } catch(e) {}
+          try {
+            const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
+            if (cdnResp.ok) {
+              const cdnParsed = await cdnResp.json();
+              const arr = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
+              if (Array.isArray(arr) && arr.length > 0) {
+                mergedIssues = mergeIssuesDeduplicated(mergedIssues, arr).merged;
               }
-            } catch(e) {}
-          }
-          if (staticIssues.length === 0) {
-            try {
-              const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json`);
-              if (cdnResp.ok) {
-                const cdnParsed = await cdnResp.json();
-                staticIssues = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
-              }
-            } catch(e) {}
-          }
+            }
+          } catch(e) {}
 
-          if (staticIssues.length > 0) {
-            const counts: Record<string, number> = { '전체': staticIssues.length };
+          if (mergedIssues.length > 0) {
+            await idbSet('winfix_merged_issues', mergedIssues);
+            try {
+              localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(mergedIssues));
+              localStorage.setItem('winfix_db_issues_cache', JSON.stringify(mergedIssues.slice(0, 200)));
+            } catch (_) {}
+
+            const counts: Record<string, number> = { '전체': mergedIssues.length };
             officialNames.forEach(c => { counts[c] = 0; });
             let uncategorized = 0;
-            staticIssues.forEach(item => {
+            mergedIssues.forEach(item => {
               if (item.category && officialNames.includes(item.category)) {
+                counts[item.category] = (counts[item.category] || 0) + 1;
+              } else if (item.category) {
                 counts[item.category] = (counts[item.category] || 0) + 1;
               } else {
                 uncategorized++;
@@ -2996,8 +3059,7 @@ export default function App() {
             localStorage.setItem('cached_category_counts', JSON.stringify(counts));
             localStorage.setItem('cached_category_counts_time', Date.now().toString());
 
-            const activeCategories = ['전체', ...officialNames];
-            if (uncategorized > 0) activeCategories.push('기타/미분류');
+            const activeCategories = ['전체', ...Object.keys(counts).filter(c => c !== '전체' && (counts[c] > 0 || officialNames.includes(c)))];
             setCategories(activeCategories);
             setDbStatus('connected');
             setLoadingDb(false);
@@ -3307,6 +3369,77 @@ export default function App() {
     fetchCategoryCounts();
     fetchBackendStatus();
   }, [user]); // Fetch on mount and when user auth state changes
+
+  // Automatic Background Integration: Automatically sync GitHub-collected issues into main data
+  useEffect(() => {
+    let cancelled = false;
+    const autoIntegrateFromGithub = async () => {
+      const COOLDOWN_MS = 5 * 60 * 1000;
+      const lastCheck = Number(localStorage.getItem('winfix_github_auto_integrated_at') || 0);
+      if (Date.now() - lastCheck < COOLDOWN_MS) return;
+
+      try {
+        localStorage.setItem('winfix_github_auto_integrated_at', Date.now().toString());
+
+        if (!IS_GITHUB_PAGES) {
+          const resp = await fetch('/api/github/auto-integrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: false })
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (!cancelled && data.success && (data.added > 0 || data.updated > 0 || (data.totalIssuesCount && data.totalIssuesCount > dbIssues.length))) {
+              console.log(`[Auto-Integrate] Synced +${data.added} new, ~${data.updated} updated from GitHub into main data.`);
+              setSearchCache({});
+              await Promise.all([fetchCategoryCounts(true), fetchIssues(false, true)]);
+              if (data.lastSyncAt) {
+                setGithubLastSync({
+                  at: data.lastSyncAt,
+                  count: data.totalIssuesCount,
+                  status: `Auto-Integrated (+${data.added})`
+                });
+              }
+              return;
+            }
+          }
+        }
+
+        // Static / GitHub Pages / Fallback direct merge from GitHub main data/issues.json
+        const targetRepo = githubRepo.trim() || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`;
+        const targetBranch = githubBranch.trim() || 'main';
+        const cdnResp = await fetch(`https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
+        if (cdnResp.ok) {
+          const parsed = await cdnResp.json();
+          const remoteList: KnownIssue[] = Array.isArray(parsed) ? parsed : (parsed?.issues || []);
+          if (remoteList.length > 0 && !cancelled) {
+            const { merged, addedCount, updatedCount } = mergeIssuesDeduplicated(dbIssues, remoteList);
+            if (addedCount > 0 || updatedCount > 0) {
+              await idbSet('winfix_merged_issues', merged);
+              try {
+                localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(merged));
+                localStorage.setItem('winfix_db_issues_cache', JSON.stringify(merged.slice(0, 200)));
+              } catch (_) {}
+              setDbIssues(merged);
+              setSearchCache({});
+              await fetchCategoryCounts(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Auto-Integrate] Background GitHub integration check skipped:', err);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      autoIntegrateFromGithub();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'guidebook') {
@@ -6150,13 +6283,12 @@ export default function App() {
         const bundleIssues: KnownIssue[] = stored ? JSON.parse(stored) : [];
         const cachedDefault = localStorage.getItem(ISSUES_CACHE_KEY);
         const defaultIssues: KnownIssue[] = cachedDefault ? JSON.parse(cachedDefault) : [];
-        const merged = [...KNOWN_ISSUES];
-        [...bundleIssues, ...defaultIssues].forEach(b => {
-          if (!merged.some(m => m.id === b.id || (m.code && b.code && m.code.toUpperCase() === b.code.toUpperCase()))) {
-            merged.push(b);
-          }
-        });
-        return merged;
+        const pagesMergedRaw = localStorage.getItem('winfix_github_pages_merged_issues');
+        const pagesMerged: KnownIssue[] = pagesMergedRaw ? JSON.parse(pagesMergedRaw) : [];
+        return mergeIssuesDeduplicated(
+          [...KNOWN_ISSUES, ...dbIssues],
+          [...bundleIssues, ...defaultIssues, ...pagesMerged]
+        ).merged;
       })();
 
       const sq = searchQuery.toLowerCase();
@@ -6207,44 +6339,55 @@ export default function App() {
     try {
       if (activeDbMode === 'server_file') {
         if (IS_GITHUB_PAGES) {
-          // On GitHub Pages, check local merged issues cache first, then static /data/issues.json or GitHub CDN
-          let staticIssues: KnownIssue[] = [];
+          // On GitHub Pages, continuously merge KNOWN_ISSUES + IndexedDB + ./data/issues.json + GitHub CDN
+          let mergedIssues: KnownIssue[] = [...KNOWN_ISSUES];
           try {
             const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
             if (Array.isArray(idbMerged) && idbMerged.length > 0) {
-              staticIssues = idbMerged;
+              mergedIssues = mergeIssuesDeduplicated(mergedIssues, idbMerged).merged;
             }
           } catch (_) {}
 
-          if (staticIssues.length === 0) {
-            const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
-            if (localMerged) {
-              try { staticIssues = JSON.parse(localMerged); } catch(e) {}
+          const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
+          if (localMerged) {
+            try {
+              const parsedLocal = JSON.parse(localMerged);
+              if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
+                mergedIssues = mergeIssuesDeduplicated(mergedIssues, parsedLocal).merged;
+              }
+            } catch(e) {}
+          }
+
+          try {
+            const resp = await fetch(`./data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
+            if (resp.ok) {
+              const parsed = await resp.json();
+              const arr = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+              if (Array.isArray(arr) && arr.length > 0) {
+                mergedIssues = mergeIssuesDeduplicated(mergedIssues, arr).merged;
+              }
             }
-          }
+          } catch(e) {}
 
-          if (staticIssues.length === 0) {
-            try {
-              const resp = await fetch(`./data/issues.json?t=${Date.now()}`);
-              if (resp.ok) {
-                const parsed = await resp.json();
-                staticIssues = Array.isArray(parsed) ? parsed : (parsed.issues || []);
+          try {
+            const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
+            if (cdnResp.ok) {
+              const cdnParsed = await cdnResp.json();
+              const arr = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
+              if (Array.isArray(arr) && arr.length > 0) {
+                mergedIssues = mergeIssuesDeduplicated(mergedIssues, arr).merged;
               }
-            } catch(e) {}
-          }
+            }
+          } catch(e) {}
 
-          if (staticIssues.length === 0) {
+          if (mergedIssues.length > 0) {
+            await idbSet('winfix_merged_issues', mergedIssues);
             try {
-              const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`);
-              if (cdnResp.ok) {
-                const cdnParsed = await cdnResp.json();
-                staticIssues = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
-              }
-            } catch(e) {}
-          }
+              localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(mergedIssues));
+              localStorage.setItem('winfix_db_issues_cache', JSON.stringify(mergedIssues.slice(0, 200)));
+            } catch (_) {}
 
-          if (staticIssues.length > 0) {
-            let filtered = staticIssues;
+            let filtered = mergedIssues;
             if (selectedCategory !== '전체') {
               filtered = filtered.filter(i => i.category === selectedCategory);
             }
@@ -13041,12 +13184,12 @@ export default function App() {
                     {githubLastSync?.at ? (
                       <span className="px-2.5 py-1 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1.5 font-medium">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>{language === 'en' ? 'Last Synced:' : '최근 동기화:'} {new Date(githubLastSync.at).toLocaleDateString()}</span>
+                        <span>{language === 'en' ? 'Auto-Integrated:' : '자동 통합 완료:'} {new Date(githubLastSync.at).toLocaleDateString()}</span>
                       </span>
                     ) : (
-                      <span className="px-2.5 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 font-medium">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{language === 'en' ? 'Standby / Ready' : '연동 대기 중'}</span>
+                      <span className="px-2.5 py-1 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1.5 font-medium">
+                        <RefreshCw className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>{language === 'en' ? 'Auto-Integration Active' : '메인데이터 자동 통합 가동 중'}</span>
                       </span>
                     )}
 
@@ -13076,7 +13219,7 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                        {language === 'en' ? 'Autonomous Data Harvesting Architecture' : 'GitHub Actions ➔ GitOps 데이터 파이프라인 흐름도'}
+                        {language === 'en' ? 'Autonomous Data Harvesting Architecture' : 'GitHub Actions ➔ GitOps 메인데이터 자동 통합 흐름도'}
                       </span>
                     </div>
 
@@ -13117,16 +13260,16 @@ export default function App() {
                           3. Git 자동 커밋 (GitOps)
                         </div>
                         <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                          data/issues.json에 누적 커밋하여 영구 보존 및 무제한 CDN 활용
+                          data/issues.json 및 시드 데이터에 누적 커밋하여 영구 보존
                         </p>
                       </div>
                       <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                         <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
                           <Zap className="w-3.5 h-3.5 text-amber-500" />
-                          4. 앱 웹훅 & 실시간 반영
+                          4. 메인데이터 자동 통합
                         </div>
                         <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                          수집 즉시 앱(/api/github/sync)으로 전송되어 사용자에게 노출
+                          서버(15분 주기·부팅 시) 및 앱 진입 시 메인데이터에 자동 병합 반영
                         </p>
                       </div>
                     </div>

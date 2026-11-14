@@ -567,8 +567,8 @@ async function saveIssuesToServer(issuesData: any[]) {
         localIssues.push({
           id: issueId,
           ...issueData,
-          source: "Automated AI Search (Autonomous Engine)",
-          createdAt: getKSTISOString()
+          source: issueData.source || "Automated AI Search (Autonomous Engine)",
+          createdAt: issueData.createdAt || getKSTISOString()
         });
         addedCount++;
       }
@@ -1608,7 +1608,171 @@ async function runMaintenance() {
 cron.schedule('0 0 * * *', async () => { 
   console.log("Triggering scheduled daily maintenance...");
   await runMaintenance();
-}); 
+});
+
+// Automatic GitHub-to-Main Dataset Integration
+let isGithubAutoIntegrateRunning = false;
+let lastGithubAutoIntegrateTime = 0;
+
+async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?: string } = {}) {
+  const { force = false, reason = 'scheduled' } = options;
+  const now = Date.now();
+  const COOLDOWN_MS = 2 * 60 * 1000; // 2-minute cooldown unless forced
+
+  if (isGithubAutoIntegrateRunning) {
+    return { success: true, skipped: true, reason: 'already_running', added: 0, updated: 0, totalIssuesCount: readLocalCollection('issues').length };
+  }
+  if (!force && lastGithubAutoIntegrateTime > 0 && now - lastGithubAutoIntegrateTime < COOLDOWN_MS) {
+    return { success: true, skipped: true, reason: 'cooldown', added: 0, updated: 0, totalIssuesCount: readLocalCollection('issues').length };
+  }
+
+  isGithubAutoIntegrateRunning = true;
+  try {
+    const ghConfig = readLocalCollection('github_config')[0] || {};
+    const targetRepo = (ghConfig.repo && String(ghConfig.repo).includes('/'))
+      ? ghConfig.repo
+      : (process.env.GITHUB_REPO || 'AhBiYout-all/windows-fix-wizard');
+    const targetBranch = ghConfig.branch || 'main';
+    const authToken = ghConfig.token || process.env.GITHUB_TOKEN;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'WindowsFixWizard-AutoIntegrator'
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    const rawUrl = `https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`;
+    let remoteIssues: any[] = [];
+    const resp = await fetch(rawUrl, { headers, signal: (AbortSignal as any).timeout(8000) });
+
+    if (resp.ok) {
+      const parsed = await resp.json();
+      remoteIssues = Array.isArray(parsed) ? parsed : (parsed?.issues || []);
+    } else if (authToken) {
+      const apiUrl = `https://api.github.com/repos/${targetRepo}/contents/data/issues.json?ref=${encodeURIComponent(targetBranch)}`;
+      const apiRes = await fetch(apiUrl, {
+        headers: { ...headers, 'Accept': 'application/vnd.github.v3.raw' },
+        signal: (AbortSignal as any).timeout(8000)
+      });
+      if (apiRes.ok) {
+        const parsed = await apiRes.json();
+        remoteIssues = Array.isArray(parsed) ? parsed : (parsed?.issues || []);
+      }
+    }
+
+    // Best-effort sync of github-feed.json metadata if remote is newer
+    try {
+      const feedUrl = `https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/github-feed.json?t=${Date.now()}`;
+      const feedResp = await fetch(feedUrl, { headers, signal: (AbortSignal as any).timeout(5000) });
+      if (feedResp.ok) {
+        const remoteFeed = await feedResp.json();
+        const feedPath = path.join(DATA_DIR, 'github-feed.json');
+        let localFeed: any = null;
+        if (fs.existsSync(feedPath)) {
+          try { localFeed = JSON.parse(fs.readFileSync(feedPath, 'utf8')); } catch {}
+        }
+        const remoteAt = remoteFeed?.lastCollectedAt ? new Date(remoteFeed.lastCollectedAt).getTime() : 0;
+        const localAt = localFeed?.lastCollectedAt ? new Date(localFeed.lastCollectedAt).getTime() : 0;
+        if (remoteFeed && remoteAt > localAt) {
+          fs.writeFileSync(feedPath, JSON.stringify(remoteFeed, null, 2), 'utf8');
+        }
+      }
+    } catch {}
+
+    const localIssues = readLocalCollection('issues');
+    let added = 0;
+    let updated = 0;
+
+    if (Array.isArray(remoteIssues) && remoteIssues.length > 0) {
+      const localById = new Map<string, any>();
+      const localByCodeTitle = new Map<string, any>();
+      localIssues.forEach((item: any) => {
+        if (item.id) localById.set(String(item.id), item);
+        const key = `${String(item.code || '').toUpperCase().trim()}::${String(item.title || '').toLowerCase().trim()}`;
+        localByCodeTitle.set(key, item);
+      });
+
+      const deltaIssues: any[] = [];
+      for (const remote of remoteIssues) {
+        if (!remote || !remote.title || !remote.code || !remote.category || !remote.symptoms) continue;
+        const remoteKey = `${String(remote.code || '').toUpperCase().trim()}::${String(remote.title || '').toLowerCase().trim()}`;
+        const existing = (remote.id && localById.get(String(remote.id))) || localByCodeTitle.get(remoteKey);
+        if (!existing) {
+          deltaIssues.push({
+            ...remote,
+            source: remote.source || 'GitHub Actions Autonomous Collector'
+          });
+        } else {
+          const remoteTime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+          const localTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+          if (remoteTime > localTime) {
+            deltaIssues.push({
+              ...remote,
+              id: existing.id || remote.id,
+              source: remote.source || existing.source || 'GitHub Actions Autonomous Collector'
+            });
+          }
+        }
+      }
+
+      if (deltaIssues.length > 0) {
+        const syncRes = await saveIssuesToServer(deltaIssues);
+        added = syncRes.added;
+        updated = syncRes.updated;
+
+        try {
+          const nextConfig = {
+            ...ghConfig,
+            repo: targetRepo,
+            branch: targetBranch,
+            lastSyncAt: getKSTISOString(),
+            lastSyncCount: added + updated,
+            lastSyncStatus: `Auto-Integrated (${reason}): +${added} new, ~${updated} updated`
+          };
+          writeLocalCollection('github_config', [nextConfig]);
+        } catch {}
+
+        await logSyncEvent({
+          type: 'success',
+          source: 'github-auto-integrate',
+          message: `GitHub 자동 수집 데이터 ${added}건 메인데이터에 자동 통합 완료 (원인: ${reason}, 총 ${readLocalCollection('issues').length}건)`,
+          details: { repo: targetRepo, branch: targetBranch, added, updated, reason }
+        });
+      }
+    }
+
+    lastGithubAutoIntegrateTime = Date.now();
+    return {
+      success: true,
+      skipped: false,
+      added,
+      updated,
+      totalIssuesCount: readLocalCollection('issues').length,
+      lastSyncAt: getKSTISOString()
+    };
+  } catch (err: any) {
+    console.warn(`[GitHub Auto-Integrate] Background check skipped (${reason}):`, err.message);
+    return {
+      success: false,
+      error: err.message,
+      added: 0,
+      updated: 0,
+      totalIssuesCount: readLocalCollection('issues').length
+    };
+  } finally {
+    isGithubAutoIntegrateRunning = false;
+  }
+}
+
+// Run GitHub-to-Main auto-integration shortly after server boot and every 15 minutes
+setTimeout(() => {
+  syncGithubDatasetIntoMainData({ force: true, reason: 'boot' }).catch(() => {});
+}, 5000);
+
+cron.schedule('*/15 * * * *', async () => {
+  await syncGithubDatasetIntoMainData({ reason: 'cron-15m' });
+});
 
 async function startServer() {
   const app = express();
@@ -4080,6 +4244,17 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 1-2. Automatic GitHub-to-Main Dataset Integration endpoint (cooldown-guarded)
+  app.post("/api/github/auto-integrate", async (req, res) => {
+    try {
+      const force = Boolean(req.body?.force);
+      const result = await syncGithubDatasetIntoMainData({ force, reason: 'client-auto-check' });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Auto-integration failed" });
     }
   });
 

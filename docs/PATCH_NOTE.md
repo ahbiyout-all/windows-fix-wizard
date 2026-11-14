@@ -1,6 +1,23 @@
-# Patch Note - System Update (v3.97.6)
+# Patch Note - System Update (v3.97.7)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.7] - 2026-11-14
+
+### 🔄 Automatic GitHub-to-Main Data Integration (GitHub 자동 수집 데이터 메인데이터 자동 통합)
+- **GitHub Actions 수집 데이터 ➔ 시드 및 메인데이터 자동 동기화 파이프라인 구축**:
+  - `data/issues.json`에 축적된 최신 142건 데이터를 `src/data/knownIssues.ts` 정적 시드 데이터셋과 100% 동기화.
+  - `scripts/github-collector.ts` 및 `.github/workflows/windows-fix-collector.yml`을 고도화하여 GitHub Actions가 새 해결책을 수집할 때마다 `data/issues.json`, `data/github-feed.json`과 함께 `src/data/knownIssues.ts`까지 자동 커밋·통합하도록 개선.
+- **서버 백엔드 백그라운드 자동 통합 엔진 (`server.ts`)**:
+  - `syncGithubDatasetIntoMainData` 스케줄러 신설: 서버 부팅 5초 후 및 매 15분(`*/15 * * * *`)마다 GitHub 저장소의 `data/issues.json` 및 `data/github-feed.json`을 조회하여 누락된 신규 수집 항목과 최신 업데이트를 메인데이터(`data/issues.json`)에 중복 없이 자동 병합.
+  - `saveIssuesToServer`가 기존 `source` 메타데이터(`GitHub Actions Autonomous Collector` 등) 및 `createdAt`을 보존하도록 수정.
+  - 클라이언트 진입 시 쿨다운 기반 자동 통합 트리거용 `POST /api/github/auto-integrate` 엔드포인트 추가.
+- **프론트엔드 자동 병합 & GitHub Pages 실시간 동기화 (`src/App.tsx`)**:
+  - 앱 마운트 시 백그라운드에서 자동으로 서버/GitHub 최신 데이터를 확인하여 `dbIssues`, `categoryCounts`, IndexedDB(`winfix_merged_issues`), `localStorage`에 즉시 병합 반영.
+  - `IS_GITHUB_PAGES` 정적 호스팅 환경에서도 기존 캐시가 존재할 때 신규 `./data/issues.json` 및 GitHub CDN 조회를 건너뛰던 문제를 해결하고, `mergeIssuesDeduplicated` 유틸리티로 시드 + 로컬 + 정적 JSON + GitHub 원격 데이터를 무손실 병합하도록 개선.
+  - `officialCategories`에 `오디오/사운드` 및 `디스플레이/그래픽` 카테고리를 추가하고, 로컬 검색 후보에 자동 통합된 `dbIssues` 및 병합 캐시가 모두 포함되도록 보완.
 
 ---
 
