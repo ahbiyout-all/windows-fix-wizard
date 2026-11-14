@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-14T13:00:32.868Z",
+  "lastCollectedAt": "2026-11-14T22:04:45.484Z",
   "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "시스템/블루스크린",
+  "targetCategory": "보안/백신",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 144,
+  "totalIssuesCount": 146,
   "newIssues": [
     {
-      "id": "gh-0x00000133--dpc-watchdog-violation--mwgeylt1",
-      "code": "0x00000133 (DPC_WATCHDOG_VIOLATION)",
-      "title": "Windows 11 최신 업데이트 후 DPC_WATCHDOG_VIOLATION 블루스크린 오류 해결",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x80070005-mwgyegq5",
+      "code": "0x80070005",
+      "title": "Windows 보안 업데이트 및 앱 설치 시 발생하는 '액세스 거부(Access Denied)' 오류",
+      "category": "보안/백신"
     },
     {
-      "id": "gh-critical-process-died--0x000000ef--mwgeylt1",
-      "code": "CRITICAL_PROCESS_DIED (0x000000EF)",
-      "title": "Windows 11/10 시스템 파일 무결성 손상으로 인한 CRITICAL_PROCESS_DIED 오류",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x80070643-mwgyegq5",
+      "code": "0x80070643",
+      "title": "Windows 보안 관련 업데이트(KB5034441 등) 설치 실패 오류",
+      "category": "보안/백신"
     }
   ]
 }

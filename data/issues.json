@@ -6517,5 +6517,96 @@
     "updatedAt": "2026-11-14T13:00:32.868Z",
     "verifiedAt": "2026-11-14T13:00:32.868Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070005-mwgyegq5",
+    "category": "보안/백신",
+    "code": "0x80070005",
+    "title": "Windows 보안 업데이트 및 앱 설치 시 발생하는 '액세스 거부(Access Denied)' 오류",
+    "title_en": "Access Denied error 0x80070005 during Windows Security updates or app installation",
+    "symptoms": "Windows 보안 프로그램 또는 앱 업데이트 시 권한 부족으로 인해 설치가 차단되거나 업데이트가 실패하는 현상입니다. 최근 2024년 보안 패치 이후 시스템 파일 보안 정책 강화로 인해 자주 발생합니다.",
+    "symptoms_en": "Occurs when security updates or app installations are blocked due to insufficient permissions. Frequently observed after recent 2024 security patch rollouts due to tightened system file access policies.",
+    "script": "takeown /f C:\\ProgramData\\Microsoft /r /d y; icacls C:\\ProgramData\\Microsoft /grant *S-1-5-32-544:F /t /c /q; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트를 실행합니다.",
+      "시스템 파일에 대한 전체 권한을 재설정합니다.",
+      "Windows 보안 서비스를 다시 시작합니다.",
+      "PC를 재부팅하여 업데이트를 다시 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Run Command Prompt as an administrator.",
+      "Reset full permissions for system files.",
+      "Restart the Windows Security service.",
+      "Reboot the PC and retry the update."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/topic/0x80070005-access-denied-error-88167f65-ef59-54bc-440d-d41a8775f042"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Windows 업데이트 오류",
+      "액세스 거부",
+      "보안 업데이트 실패",
+      "Access Denied 0x80070005",
+      "Windows Security Update Error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T22:04:45.484Z",
+    "updatedAt": "2026-11-14T22:04:45.484Z",
+    "verifiedAt": "2026-11-14T22:04:45.484Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mwgyegq5",
+    "category": "보안/백신",
+    "code": "0x80070643",
+    "title": "Windows 보안 관련 업데이트(KB5034441 등) 설치 실패 오류",
+    "title_en": "Windows security update installation failure error 0x80070643",
+    "symptoms": "복구 파티션(WinRE) 업데이트 공간 부족으로 인해 최신 보안 패치가 적용되지 않는 현상입니다. 2024년 이후 보안 표준 강화로 인해 특정 빌드에서 필수적으로 요구되는 업데이트입니다.",
+    "symptoms_en": "Occurs when security patches fail to install due to insufficient space in the Windows Recovery Environment (WinRE) partition. This is a critical requirement for modern security builds as of 2024.",
+    "script": "Get-WindowsUpdate -Install -AcceptAll; Dism /Online /Cleanup-Image /RestoreHealth; sfc /scannow",
+    "manualSteps": [
+      "디스크 관리에서 복구 파티션의 크기를 확인합니다.",
+      "Windows 업데이트 문제 해결사를 실행합니다.",
+      "필요 시 DISM 도구를 사용하여 시스템 이미지를 복구합니다.",
+      "최신 보안 패치를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Check the size of the recovery partition in Disk Management.",
+      "Run the Windows Update Troubleshooter.",
+      "Use DISM tools to restore the system image if necessary.",
+      "Retry the latest security patch."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/security/operating-system-security/patch-management",
+      "https://support.microsoft.com/en-us/topic/kb5034441"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643 해결",
+      "Windows 보안 업데이트 실패",
+      "복구 파티션 오류",
+      "Update Installation Error 0x80070643",
+      "WinRE partition issue"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T22:04:45.484Z",
+    "updatedAt": "2026-11-14T22:04:45.484Z",
+    "verifiedAt": "2026-11-14T22:04:45.484Z",
+    "verificationStatus": "verified"
   }
 ]
