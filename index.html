@@ -23,6 +23,75 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var reloadedKey = 'winfix_sw_reloaded_v1';
+        if ('serviceWorker' in navigator) {
+          var refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (refreshing) return;
+            try {
+              if (sessionStorage.getItem(reloadedKey) === '1') return;
+              sessionStorage.setItem(reloadedKey, '1');
+            } catch (e) {}
+            refreshing = true;
+            window.location.reload();
+          });
+        }
+
+        function showRecoveryUI(reason) {
+          var root = document.getElementById('root');
+          if (!root || root.childElementCount > 0) return;
+          root.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,sans-serif;color:#0f172a;">' +
+              '<div style="max-width:460px;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;box-shadow:0 4px 20px rgba(15,23,42,0.06);">' +
+                '<h2 style="margin:0 0 8px;font-size:18px;font-weight:700;">Windows Fix Wizard 페이지 복구</h2>' +
+                '<p style="margin:0 0 14px;font-size:13px;color:#475569;line-height:1.5;">브라우저 캐시 또는 이전 Service Worker 충돌로 화면이 열리지 않았습니다. 아래 버튼을 누르면 캐시를 비우고 최신 버전으로 다시 엽니다.</p>' +
+                (reason ? '<div style="margin:0 0 16px;padding:10px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-size:12px;font-family:monospace;word-break:break-word;">' + String(reason).replace(/[<>&]/g, '') + '</div>' : '') +
+                '<button id="winfix-recover-btn" style="width:100%;padding:11px 16px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">캐시 및 Service Worker 초기화 후 다시 열기</button>' +
+              '</div>' +
+            '</div>';
+          var btn = document.getElementById('winfix-recover-btn');
+          if (btn) {
+            btn.onclick = function () {
+              Promise.all([
+                'serviceWorker' in navigator
+                  ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+                      return Promise.all(regs.map(function (r) { return r.unregister(); }));
+                    })
+                  : Promise.resolve(),
+                'caches' in window
+                  ? caches.keys().then(function (keys) {
+                      return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                    })
+                  : Promise.resolve()
+              ]).finally(function () {
+                try {
+                  localStorage.removeItem('ai_auto_sync_counts');
+                  localStorage.removeItem('cached_category_counts');
+                  sessionStorage.removeItem(reloadedKey);
+                } catch (e) {}
+                window.location.replace(window.location.pathname + '?v=' + Date.now());
+              });
+            };
+          }
+        }
+
+        window.addEventListener('error', function (ev) {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount === 0) {
+            showRecoveryUI(ev && ev.message ? ev.message : 'Script load error');
+          }
+        });
+
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount === 0) {
+            showRecoveryUI('Mount timeout (stale cache or blocked module)');
+          }
+        }, 4500);
+      })();
+    </script>
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

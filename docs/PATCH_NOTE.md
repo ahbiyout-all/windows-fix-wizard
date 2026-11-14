@@ -1,6 +1,18 @@
-# Patch Note - System Update (v3.97.8)
+# Patch Note - System Update (v3.97.9)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.9] - 2026-11-14
+
+### 🛡️ Service Worker Stale Cache Auto-Recovery & Watchdog (구형 캐시 자동 갱신 및 부트 복구 가드)
+- **`index.html` Service Worker 갱신 즉시 반영 (`controllerchange` 자동 리로드)**:
+  - 이전 방문 시 브라우저에 캐시된 구형 Service Worker(`sw.js`)가 오래된 `index.html`을 반환하여 최신 GitHub Pages 배포본이 즉시 반영되지 않던 현상을 해소하기 위해, 신규 Service Worker 제어권 전환 시 `sessionStorage` 가드 기반 1회 자동 새로고침 로직을 탑재.
+- **React 마운트 전 백지 화면 Watchdog 및 원클릭 복구 UI 신설**:
+  - 모듈 스크립트 로드 실패나 구형 캐시 충돌로 `#root`가 4.5초 이내에 마운트되지 못할 경우, 빈 화면 대신 **[캐시 및 Service Worker 초기화 후 다시 열기]** 복구 패널을 즉시 표시하도록 개선.
+- **최신 데이터셋 동기화 반영 (144개)**:
+  - `data/issues.json`, `data/github-feed.json`, `src/data/knownIssues.ts`의 144건 전체 데이터 기준 정상 렌더링 및 빌드 검증 완료.
 
 ---
 
