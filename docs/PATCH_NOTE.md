@@ -1,6 +1,21 @@
-# Patch Note - System Update (v3.97.7)
+# Patch Note - System Update (v3.97.8)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.8] - 2026-11-14
+
+### 🔧 GitHub Pages White-Screen Crash & Subpath PWA/Asset Fixes (깃허브 페이지 미실행 장애 해결)
+- **Temporal Dead Zone (`ReferenceError`) 초기화 크래시 근본 해결 (`src/App.tsx`)**:
+  - 신규 방문자 또는 캐시 카운트(`< 142`건) 환경에서 `categoryCounts` 초기 상태(`useState`)가 선언되지 않은 `officialNames`를 먼저 참조하여 GitHub Pages 접속 시 백지 화면(Blank Screen)이 발생하던 치명적 버그를 수정 (`OFFICIAL_CATEGORIES` / `OFFICIAL_CATEGORY_NAMES`를 모듈 최상위 스코프로 승격).
+  - `quotaUsage` `useState` 초기화의 `JSON.parse` 예외 가드 보강 및 정적 호스팅(`IS_GITHUB_PAGES`) 시 불필요한 `/api/backend-health` 호출 스킵 처리.
+- **PWA Manifest & 서브패스(`/windows-fix-wizard/`) 경로 정규화 (`vite.config.ts`, `index.html`, `public/manifest.json`)**:
+  - `index.html`의 중복 `<link rel="manifest" href="./manifest.json" />` 태그를 제거하여 `VitePWA`가 생성하는 `./manifest.webmanifest`와 충돌하지 않도록 일원화.
+  - `manifest.json` 및 `VitePWA` 설정의 `id`, `start_url`, `scope`, 아이콘 경로(`icon-192.png`, `icon-512.png`, `icon.svg`)를 상대 경로(`./`) 기반으로 통일하고 `navigateFallbackDenylist` 적용.
+  - 헤더 로고(`<img src="./icon.svg">`) 및 `GitHubPagesDeployDoc`의 정적 파일 검증 URL(`./index.html`, `./data/issues.json`, `./404.html`)을 GitHub Pages 서브패스와 호환되도록 수정.
+- **런타임 에러 복구 안전망 (`AppErrorBoundary`) 도입 (`src/main.tsx`)**:
+  - 예기치 않은 런타임 오류 발생 시 백지 화면 대신 원인 진단 및 `[캐시 초기화 및 새로고침]`(LocalStorage 캐시·Service Worker 초기화) 복구 UI를 제공하도록 래핑.
 
 ---
 

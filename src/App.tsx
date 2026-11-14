@@ -526,6 +526,21 @@ const WINDOWS_VERSIONS = [
   "Windows Server 2019"
 ];
 
+const OFFICIAL_CATEGORIES = [
+  { kr: '업데이트', en: 'Update' },
+  { kr: '네트워크', en: 'Network' },
+  { kr: '시스템/블루스크린', en: 'System/BSOD' },
+  { kr: '스토어/앱', en: 'Store/Apps' },
+  { kr: '정품인증', en: 'Activation' },
+  { kr: '보안/백신', en: 'Security/Defender' },
+  { kr: '오디오/사운드', en: 'Audio/Sound' },
+  { kr: '디스플레이/그래픽', en: 'Display/Graphics' },
+  { kr: '하드웨어/드라이버', en: 'Hardware/Drivers' },
+  { kr: '성능/프리징', en: 'Performance' },
+  { kr: '파일 시스템/저장소', en: 'File System' }
+];
+const OFFICIAL_CATEGORY_NAMES = OFFICIAL_CATEGORIES.map(c => c.kr);
+
 // AdSense Component
 const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   const adClient = client || import.meta.env.VITE_GOOGLE_ADSENSE_CLIENT_ID || 'ca-pub-PLACEHOLDER';
@@ -577,7 +592,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.97.7";
+const APP_VERSION = "3.97.8";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -893,6 +908,10 @@ export default function App() {
   const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
 
   const fetchBackendStatus = async () => {
+    if (IS_GITHUB_PAGES) {
+      setBackendStatus('local_active');
+      return;
+    }
     setBackendStatus('checking');
     try {
       const response = await fetch('/api/backend-health');
@@ -1132,9 +1151,17 @@ export default function App() {
   };
 
   const [quotaUsage, setQuotaUsage] = useState<{ reads: number, writes: number }>(() => {
-    const today = getKSTISOString().split('T')[0];
-    const saved = localStorage.getItem(`winfix_quota_${today}`);
-    return saved ? JSON.parse(saved) : { reads: 0, writes: 0 };
+    try {
+      const today = getKSTISOString().split('T')[0];
+      const saved = localStorage.getItem(`winfix_quota_${today}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.reads === 'number' && typeof parsed.writes === 'number') {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+    return { reads: 0, writes: 0 };
   });
 
   const trackUsage = useCallback((reads: number, writes: number) => {
@@ -1287,9 +1314,9 @@ export default function App() {
       console.error("Failed to load counts from localStorage", e);
     }
     const counts: Record<string, number> = { '전체': KNOWN_ISSUES.length };
-    officialNames.forEach(c => { counts[c] = 0; });
+    OFFICIAL_CATEGORY_NAMES.forEach(c => { counts[c] = 0; });
     KNOWN_ISSUES.forEach(item => {
-      if (item.category && officialNames.includes(item.category)) {
+      if (item.category && OFFICIAL_CATEGORY_NAMES.includes(item.category)) {
         counts[item.category] = (counts[item.category] || 0) + 1;
       }
     });
@@ -2974,20 +3001,8 @@ export default function App() {
   };
 
   // Database State
-  const officialCategories = [
-    { kr: '업데이트', en: 'Update' },
-    { kr: '네트워크', en: 'Network' },
-    { kr: '시스템/블루스크린', en: 'System/BSOD' },
-    { kr: '스토어/앱', en: 'Store/Apps' },
-    { kr: '정품인증', en: 'Activation' },
-    { kr: '보안/백신', en: 'Security/Defender' },
-    { kr: '오디오/사운드', en: 'Audio/Sound' },
-    { kr: '디스플레이/그래픽', en: 'Display/Graphics' },
-    { kr: '하드웨어/드라이버', en: 'Hardware/Drivers' },
-    { kr: '성능/프리징', en: 'Performance' },
-    { kr: '파일 시스템/저장소', en: 'File System' }
-  ];
-  const officialNames = officialCategories.map(c => c.kr);
+  const officialCategories = OFFICIAL_CATEGORIES;
+  const officialNames = OFFICIAL_CATEGORY_NAMES;
 
   const fetchCategoryCounts = async (force: boolean = false) => {
     const activeDbMode = (localStorage.getItem('winfix_db_mode') as 'server_file') || dbMode;
@@ -9998,7 +10013,7 @@ export default function App() {
         <div className="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
           {/* Logo & Brand Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
-            <img src="/icon.svg" alt="WinFix Logo" className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 drop-shadow-xs" />
+            <img src="./icon.svg" alt="WinFix Logo" className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 drop-shadow-xs" />
             <h1 className="text-base sm:text-lg lg:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap truncate">
               Windows Fix Wizard
             </h1>

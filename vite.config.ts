@@ -13,11 +13,13 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['icon.svg'],
+        includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
         workbox: {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+          navigateFallbackDenylist: [/^\/api\//, /\/data\//],
         },
         manifest: {
+          id: './',
           name: 'Windows Fix Wizard',
           short_name: 'WinFix',
           description: 'AI 기반 Windows 오류 진단 및 해결 마법사',
@@ -25,12 +27,26 @@ export default defineConfig(({mode}) => {
           background_color: '#ffffff',
           display: 'standalone',
           orientation: 'portrait',
+          start_url: './',
+          scope: './',
           icons: [
             {
+              src: 'icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: 'icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
               src: 'icon.svg',
-              sizes: '192x192 512x512',
+              sizes: 'any',
               type: 'image/svg+xml',
-              purpose: 'any maskable'
+              purpose: 'any'
             }
           ]
         }

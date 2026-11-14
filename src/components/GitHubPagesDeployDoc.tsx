@@ -178,7 +178,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
       setChecks([...updatedChecks]);
       const startTime = performance.now();
       try {
-        const res = await fetch('/index.html?t=' + Date.now(), { cache: 'no-cache' });
+        const res = await fetch('./index.html?t=' + Date.now(), { cache: 'no-cache' });
         const latency = Math.round(performance.now() - startTime);
         if (res.ok) {
           const text = await res.text();
@@ -226,7 +226,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
       setChecks([...updatedChecks]);
       const startTime = performance.now();
       try {
-        const res = await fetch('/data/issues.json?t=' + Date.now());
+        const res = await fetch('./data/issues.json?t=' + Date.now());
         const latency = Math.round(performance.now() - startTime);
         if (res.ok) {
           const json = await res.json();
@@ -264,7 +264,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
       updatedChecks[spaIdx].status = 'checking';
       setChecks([...updatedChecks]);
       try {
-        const res = await fetch('/404.html?t=' + Date.now());
+        const res = await fetch('./404.html?t=' + Date.now());
         if (res.ok) {
           updatedChecks[spaIdx] = {
             ...updatedChecks[spaIdx],
