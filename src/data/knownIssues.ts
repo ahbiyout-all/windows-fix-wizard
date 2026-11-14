@@ -6429,5 +6429,95 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-14T05:09:32.674Z",
     "verifiedAt": "2026-11-14T05:09:32.674Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000133--dpc-watchdog-violation--mwgeylt1",
+    "category": "시스템/블루스크린",
+    "code": "0x00000133 (DPC_WATCHDOG_VIOLATION)",
+    "title": "Windows 11 최신 업데이트 후 DPC_WATCHDOG_VIOLATION 블루스크린 오류 해결",
+    "title_en": "Resolving DPC_WATCHDOG_VIOLATION Blue Screen Error after Windows 11 Latest Updates",
+    "symptoms": "Windows 11 최신 업데이트(23H2/24H2) 이후 특정 하드웨어 드라이버나 SSD 펌웨어 충돌로 인해 시스템이 멈추고 DPC_WATCHDOG_VIOLATION 블루스크린이 발생함.",
+    "symptoms_en": "System freezes and displays DPC_WATCHDOG_VIOLATION BSOD after recent Windows 11 updates (23H2/24H2) due to driver conflicts or SSD firmware compatibility issues.",
+    "script": "dism /online /cleanup-image /restorehealth; sfc /scannow; Get-WindowsDriver -Online -All | Where-Object {$_.Inbox -eq $false} | Select-Object DeviceName, DriverProvider",
+    "manualSteps": [
+      "안전 모드로 부팅합니다.",
+      "장치 관리자를 실행하여 디스플레이 및 SATA AHCI 드라이버를 업데이트하거나 이전 버전으로 되돌립니다.",
+      "빠른 시작 켜기 옵션을 제어판 전원 옵션에서 해제합니다.",
+      "시스템 파일 검사기를 실행하여 손상된 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Boot the system into Safe Mode.",
+      "Open Device Manager to update or roll back Display and SATA AHCI controllers.",
+      "Disable 'Turn on fast startup' in Control Panel power options.",
+      "Run the System File Checker to repair corrupted system files."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x133-dpc-watchdog-violation"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "DPC_WATCHDOG_VIOLATION",
+      "블루스크린",
+      "드라이버 충돌",
+      "BSOD Fix",
+      "Windows 11 Crash"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T13:00:32.868Z",
+    "updatedAt": "2026-11-14T13:00:32.868Z",
+    "verifiedAt": "2026-11-14T13:00:32.868Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-critical-process-died--0x000000ef--mwgeylt1",
+    "category": "시스템/블루스크린",
+    "code": "CRITICAL_PROCESS_DIED (0x000000EF)",
+    "title": "Windows 11/10 시스템 파일 무결성 손상으로 인한 CRITICAL_PROCESS_DIED 오류",
+    "title_en": "CRITICAL_PROCESS_DIED Error due to System File Integrity Corruption in Windows 11/10",
+    "symptoms": "중요한 시스템 프로세스가 예기치 않게 종료되어 재부팅 시 CRITICAL_PROCESS_DIED 블루스크린이 반복 발생하며 정상적인 윈도우 진입이 불가능함.",
+    "symptoms_en": "Essential system process terminates unexpectedly, causing recurrent CRITICAL_PROCESS_DIED BSOD during boot and preventing normal system access.",
+    "script": "chkdsk C: /f /r /x; dism /online /cleanup-image /checkhealth; sfc /scannow",
+    "manualSteps": [
+      "Windows 복구 환경(WinRE)에 진입합니다.",
+      "명령 프롬프트를 선택하고 chkdsk 명령어를 사용하여 디스크 오류를 검사합니다.",
+      "최근 설치된 타사 보안 소프트웨어나 드라이버를 제거합니다.",
+      "시스템 복원 지점을 사용하여 오류 이전 상태로 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Enter the Windows Recovery Environment (WinRE).",
+      "Select Command Prompt and use the chkdsk command to scan for disk errors.",
+      "Uninstall recently installed third-party security software or drivers.",
+      "Use System Restore to revert the system to a point before the error occurred."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/sbs/windows/troubleshoot-blue-screen-errors-5c62726c-6489-05d6-6b2a-874b0162584e"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "CRITICAL_PROCESS_DIED",
+      "부팅 오류",
+      "시스템 파일 복구",
+      "BSOD Loop",
+      "System Repair"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T13:00:32.868Z",
+    "updatedAt": "2026-11-14T13:00:32.868Z",
+    "verifiedAt": "2026-11-14T13:00:32.868Z",
+    "verificationStatus": "verified"
   }
 ];
