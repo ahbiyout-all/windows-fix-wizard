@@ -5616,5 +5616,286 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-10T01:13:24.992Z",
     "verifiedAt": "2026-11-10T01:13:24.992Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800704cf-mwc27fme",
+    "category": "네트워크",
+    "code": "0x800704CF",
+    "title": "Windows 10/11 네트워크 위치 연결 실패 및 0x800704CF 오류 해결",
+    "title_en": "Resolving Windows 10/11 Network Location Unreachable Error 0x800704CF",
+    "symptoms": "인터넷 브라우징은 정상 작동하지만 Microsoft 계정 로그인, Microsoft Store 앱 동기화 또는 LAN/SMB 네트워크 공유 폴더 접속 시 '오류 0x800704CF: 네트워크 위치에 연결할 수 없습니다' 메시지가 발생합니다. 최신 Windows 10/11 업데이트 이후 네트워크 어댑터 바인딩 손상, TCP/IP 스택 충돌 또는 잔류 프록시 설정으로 인해 발생합니다.",
+    "symptoms_en": "Occurs when attempting to sign in to a Microsoft Account, synchronize Store apps, or access local network shares, displaying 'Error 0x800704CF: The network location cannot be reached' despite active internet connectivity. This is triggered by TCP/IP stack corruption, disabled Client for Microsoft Networks adapter bindings, or stale proxy configurations following recent Windows updates.",
+    "script": "Write-Output '=== Windows Network Stack & Adapter Binding Diagnostics ==='\n\n# 1. Reset WinHTTP proxy configuration\nWrite-Output 'Resetting WinHTTP proxy to direct connection...'\nnetsh winhttp reset proxy\n\n# 2. Reset Winsock catalog and TCP/IP stack\nWrite-Output 'Resetting Winsock and IP stack...'\nnetsh winsock reset | Out-Null\nnetsh int ip reset | Out-Null\n\n# 3. Flush and register DNS\nWrite-Output 'Flushing and refreshing DNS cache...'\nClear-DnsClientCache\nRegister-DnsClient\n\n# 4. Check Client for Microsoft Networks binding on active network adapters\nWrite-Output 'Checking network adapter client bindings...'\n$activeAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }\nforeach ($adapter in $activeAdapters) {\n    $binding = Get-NetAdapterBinding -Name $adapter.Name -ComponentID 'ms_msclient' -ErrorAction SilentlyContinue\n    if ($binding -and -not $binding.Enabled) {\n        Write-Output \"Enabling Client for Microsoft Networks on adapter: $($adapter.Name)\"\n        Enable-NetAdapterBinding -Name $adapter.Name -ComponentID 'ms_msclient'\n    } else {\n        Write-Output \"Adapter $($adapter.Name): Client binding is active or verified.\"\n    }\n}\n\nWrite-Output 'Network remediation completed. Please restart your PC to finalize changes.'",
+    "manualSteps": [
+      "네트워크 어댑터 설정 열기: 'Win + R' 키를 누른 뒤 'ncpa.cpl'을 입력하고 확인을 클릭합니다.",
+      "현재 사용 중인 네트워크 어댑터(이더넷 또는 Wi-Fi)를 우클릭하고 '속성'을 선택합니다.",
+      "'Microsoft 네트워크용 클라이언트' 항목이 체크되어 있는지 확인하고, 해제되어 있다면 체크 후 확인을 누릅니다.",
+      "Windows 설정 > 네트워크 및 인터넷 > 프록시로 이동하여 '프록시 서버 사용'이 켜져 있는 경우 비활성화합니다.",
+      "시스템을 재부팅한 후 Microsoft 계정 로그인 및 네트워크 공유 리소스 접속을 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Open Network Connections by pressing 'Win + R', typing 'ncpa.cpl', and pressing Enter.",
+      "Right-click your active network adapter (Ethernet or Wi-Fi) and select 'Properties'.",
+      "Ensure 'Client for Microsoft Networks' is checked. If it is unchecked, enable it and click OK.",
+      "Navigate to Windows Settings > Network & internet > Proxy, and verify that 'Use a proxy server' is toggled Off.",
+      "Restart the system and test Microsoft Account authentication or shared folder connectivity."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/tcpip-troubleshooting-overview",
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-in-windows-166580f4-2792-7104-e576-92d95e0c0307"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800704CF",
+      "네트워크 위치에 연결할 수 없습니다",
+      "network location unreachable",
+      "Microsoft 계정 네트워크 오류",
+      "winsock reset 0x800704cf",
+      "Client for Microsoft Networks"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T11:52:25.045Z",
+    "updatedAt": "2026-11-11T11:52:25.045Z",
+    "verifiedAt": "2026-11-11T11:52:25.045Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80072ee7-mwc27fme",
+    "category": "네트워크",
+    "code": "0x80072EE7",
+    "title": "Windows 10/11 서버 이름 및 주소 확인 실패 오류 0x80072EE7 해결",
+    "title_en": "Resolving Windows 10/11 Server Name Resolution Error 0x80072EE7",
+    "symptoms": "Windows 업데이트 검색 중단, Microsoft Store 앱 다운로드 오류 또는 특정 도메인 서비스 접근 시 '0x80072EE7: 서버 이름 또는 주소를 확인할 수 없습니다(ERROR_INTERNET_NAME_NOT_RESOLVED)' 오류가 발생합니다. DNS 캐시 손상, 비정상적인 hosts 파일 리디렉션 항목, 또는 IPv6 DNS 확인 우선순위 충돌이 주원인입니다.",
+    "symptoms_en": "Windows Update fails to search for patches, Microsoft Store throws download errors, or enterprise domain connections fail with error 0x80072EE7 (ERROR_INTERNET_NAME_NOT_RESOLVED). This is caused by corrupted DNS resolver cache, malicious or stale hosts file mappings, or faulty IPv6 DNS name resolution fallback on Windows 10 and 11.",
+    "script": "Write-Output '=== Diagnostics & Repair for Error 0x80072EE7 (DNS Name Resolution) ==='\n\n# 1. Clear DNS Client Cache\nWrite-Output 'Flushing local DNS cache...'\nClear-DnsClientCache\n\n# 2. Inspect Windows hosts file for interfering Microsoft/Update endpoints\n$hostsPath = \"$env:SystemRoot\\System32\\drivers\\etc\\hosts\"\nif (Test-Path $hostsPath) {\n    $hostsContent = Get-Content -Path $hostsPath\n    $blockedDomains = $hostsContent | Where-Object { $_ -match 'microsoft|windowsupdate|msftconnecttest' -and $_ -notmatch '^\\s*#' }\n    if ($blockedDomains) {\n        Write-Warning \"Potentially blocking entries found in hosts file:\"\n        $blockedDomains | ForEach-Object { Write-Warning \" - $_\" }\n        Write-Output \"Note: Please inspect C:\\Windows\\System32\\drivers\\etc\\hosts to remove unauthorized overrides.\"\n    } else {\n        Write-Output 'Hosts file clean: No conflicting Microsoft update entries detected.'\n    }\n}\n\n# 3. Renew IP configuration\nWrite-Output 'Renewing DHCP leases...'\nipconfig /renew | Out-Null\n\n# 4. Test DNS resolution for core Windows Update endpoints\n$testDomains = @('slscr.update.microsoft.com', 'fe3.delivery.mp.microsoft.com')\nforeach ($domain in $testDomains) {\n    try {\n        $result = Resolve-DnsName -Name $domain -ErrorAction Stop\n        Write-Output \"[PASS] Successfully resolved: $domain (IP: $($result.IPAddress | Select-Object -First 1))\"\n    } catch {\n        Write-Warning \"[FAIL] Could not resolve: $domain. Consider configuring public DNS (e.g., 1.1.1.1 / 8.8.8.8).\"\n    }\n}\n\nWrite-Output 'Diagnostic routine completed.'",
+    "manualSteps": [
+      "hosts 파일 검사: '메모장'을 관리자 권한으로 실행한 후 'C:\\Windows\\System32\\drivers\\etc\\hosts' 파일을 열어 Microsoft 또는 Windows Update 관련 도메인이 리디렉션되어 있는지 확인하고 해당 행을 제거 후 저장합니다.",
+      "DNS 서버 수동 변경: Windows 설정 > 네트워크 및 인터넷 > 어댑터 속성(IPv4)에서 기본 설정 DNS를 '1.1.1.1' 또는 '8.8.8.8', 보조 DNS를 '1.0.0.1' 또는 '8.8.4.4'로 지정합니다.",
+      "관리자 권한 PowerShell에서 'ipconfig /flushdns' 명령어를 실행하여 오래된 캐시 레코드를 제거합니다.",
+      "보안 소프트웨어 또는 VPN 프로그램의 DNS 리디렉션 필터링 기능을 일시 비활성화한 후 Windows 업데이트 또는 Store 다운로드를 재시도합니다."
+    ],
+    "manualSteps_en": [
+      "Inspect the hosts file: Open Notepad as Administrator, load 'C:\\Windows\\System32\\drivers\\etc\\hosts', and verify there are no entries redirecting Microsoft or Windows Update domains; remove them if present.",
+      "Configure Public DNS: In Settings > Network & internet > Hardware properties, edit IPv4 DNS settings to use Cloudflare (1.1.1.1 / 1.0.0.1) or Google (8.8.8.8 / 8.8.4.4).",
+      "Run 'ipconfig /flushdns' in an elevated PowerShell or Command Prompt to purge corrupt DNS records.",
+      "Temporarily disable third-party VPNs, firewalls, or secure DNS interception tools, then retry Windows Update or Microsoft Store operations."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/troubleshoot-dns-client",
+      "https://support.microsoft.com/en-us/windows/windows-update-troubleshooter-19bc41eb-249c-7d9c-d086-a30c7705c96f"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80072EE7",
+      "ERROR_INTERNET_NAME_NOT_RESOLVED",
+      "DNS 확인 실패",
+      "서버 이름 또는 주소를 확인할 수 없습니다",
+      "Windows update 0x80072ee7",
+      "Clear-DnsClientCache"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T11:52:25.045Z",
+    "updatedAt": "2026-11-11T11:52:25.045Z",
+    "verifiedAt": "2026-11-11T11:52:25.045Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070103-mwc5zvb2",
+    "category": "디스플레이/그래픽",
+    "code": "0x80070103",
+    "title": "Windows Update를 통한 디스플레이 드라이버 설치 실패",
+    "title_en": "Display Driver Installation Failure via Windows Update",
+    "symptoms": "Windows 업데이트 시 이미 설치된 디스플레이 드라이버가 최신 버전임에도 불구하고 오류가 발생하며 그래픽 드라이버 업데이트가 루프에 빠지거나 실패함.",
+    "symptoms_en": "Windows Update reports an error code 0x80070103 when trying to install a driver that is already present or older than the one installed, causing update loops.",
+    "script": "Get-WindowsUpdateLog; wuauclt /resetauthorization /detectnow; DISM.exe /Online /Cleanup-Image /RestoreHealth",
+    "manualSteps": [
+      "제어판에서 '장치 설치 설정'을 검색하여 '아니요(장치를 수동으로 선택할 수 있음)'를 선택합니다.",
+      "장치 관리자를 열고 디스플레이 어댑터를 우클릭하여 '드라이버 업데이트'를 클릭합니다.",
+      "제조사 공식 웹사이트에서 제공하는 최신 그래픽 드라이버를 직접 다운로드하여 설치합니다.",
+      "Windows 업데이트 문제 해결사를 실행하여 보류 중인 업데이트 캐시를 지웁니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'Device installation settings' in Control Panel and select 'No (your device might not work as expected)'.",
+      "Open Device Manager, right-click the display adapter, and select 'Update driver'.",
+      "Download and install the latest graphics driver directly from the manufacturer's official website.",
+      "Run the Windows Update Troubleshooter to clear the pending update cache."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/troubleshoot-problems-updating-windows-188c8b0f-1095-d323-e65a-31bbe49f755e"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070103 해결",
+      "그래픽 드라이버 업데이트 실패",
+      "Windows Update Error 0x80070103",
+      "Display Driver Update Failed"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T13:38:30.589Z",
+    "updatedAt": "2026-11-11T13:38:30.589Z",
+    "verifiedAt": "2026-11-11T13:38:30.589Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-dwm-exe-crash-mwc5zvb2",
+    "category": "디스플레이/그래픽",
+    "code": "DWM.EXE_CRASH",
+    "title": "데스크톱 창 관리자(DWM) 비정상 종료 및 화면 깜빡임",
+    "title_en": "Desktop Window Manager (DWM) Crash and Screen Flickering",
+    "symptoms": "최신 24H2 업데이트 환경에서 다중 모니터 사용 시 DWM.exe가 비정상적으로 종료되어 화면이 검게 변하거나 깜빡이는 현상.",
+    "symptoms_en": "DWM.exe crashes intermittently in the 24H2 update environment when using multiple monitors, leading to screen flickering or black screens.",
+    "script": "sfc /scannow; Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
+    "manualSteps": [
+      "작업 관리자(Ctrl+Shift+Esc)를 열고 '데스크톱 창 관리자' 프로세스를 찾아 '작업 끝내기'를 수행하여 프로세스를 재시작합니다.",
+      "제어판 > 시스템 > 고급 시스템 설정 > 성능 설정에서 '시각 효과'를 '최적 성능으로 조정'으로 변경합니다.",
+      "Windows 설정에서 '고대비 모드'나 '테마'를 기본값으로 재설정합니다.",
+      "명령 프롬프트를 관리자 권한으로 실행하고 'sfc /scannow'를 수행하여 시스템 파일을 복구합니다."
+    ],
+    "manualSteps_en": [
+      "Open Task Manager (Ctrl+Shift+Esc), find 'Desktop Window Manager', and select 'End task' to restart the process.",
+      "Go to Control Panel > System > Advanced system settings > Performance settings and change 'Visual Effects' to 'Adjust for best performance'.",
+      "Reset 'High contrast' or 'Themes' to default in Windows Settings.",
+      "Run Command Prompt as Administrator and execute 'sfc /scannow' to repair system files."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/client-management/troubleshoot-dwm-crashes"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11"
+    ],
+    "searchKeywords": [
+      "DWM.exe 오류",
+      "화면 깜빡임",
+      "Desktop Window Manager Crash",
+      "Screen Flickering Windows 11"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-11T13:38:30.589Z",
+    "updatedAt": "2026-11-11T13:38:30.589Z",
+    "verifiedAt": "2026-11-11T13:38:30.589Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070643-mwcskvaj",
+    "category": "업데이트",
+    "code": "0x80070643",
+    "title": "Windows 10/11 WinRE 복구 파티션 용량 부족으로 인한 업데이트 실패 오류 0x80070643 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Update Error 0x80070643 Caused by Insufficient WinRE Partition Space",
+    "symptoms": "Windows 업데이트 실행 시 누적 보안 패치(예: KB5034441, KB5034440 등) 설치 단계에서 '설치 실패 - 0x80070643' 오류 메시지가 발생하며 업데이트가 완료되지 않습니다. 복구 환경(WinRE) 파티션의 여유 공간이 250MB 미만일 때 최신 복구 패키지 이미지를 기록하지 못해 발생합니다.",
+    "symptoms_en": "When executing Windows Update, recovery environment updates (e.g., KB5034441, KB5034440) fail during installation with error 0x80070643. This issue occurs when the Windows Recovery Environment (WinRE) partition lacks sufficient free space (minimum 250MB required) to apply the updated recovery image.",
+    "script": "Write-Host 'Checking WinRE status...' -ForegroundColor Cyan\nreagentc /info\nWrite-Host 'Listing recovery and system partitions...' -ForegroundColor Cyan\nGet-Partition | Where-Object { $_.Type -eq 'Recovery' -or $_.IsSystem -eq $true } | Format-Table DiskNumber, PartitionNumber, DriveLetter, Size, Type\nWrite-Host 'Stopping Windows Update and Cryptographic services...' -ForegroundColor Cyan\nStop-Service -Name wuauserv, cryptSvc, bits -Force -ErrorAction SilentlyContinue\nStart-Sleep -Seconds 2\nWrite-Host 'Restarting services...' -ForegroundColor Cyan\nStart-Service -Name bits, cryptSvc, wuauserv\nWrite-Host 'Check completed. If WinRE partition is below 250MB free, resize partition per instructions.' -ForegroundColor Green",
+    "manualSteps": [
+      "관리자 권한으로 명령 프롬프트 또는 PowerShell을 열고 'reagentc /info'를 실행하여 Windows RE 활성화 상태와 파티션 번호를 확인합니다.",
+      "복구 파티션 여유 공간 확장을 위해 'reagentc /disable' 명령을 입력하여 WinRE를 임시 비활성화합니다.",
+      "디스크 관리(diskmgmt.msc) 또는 diskpart 유틸리티를 실행하여 Windows OS(C:) 파티션을 500MB~1GB 축소한 뒤 복구 파티션 크기를 늘립니다.",
+      "'reagentc /enable' 명령을 입력하여 복구 환경을 다시 켜고 시스템 상태를 정상화합니다.",
+      "설정 > Windows 업데이트로 이동하여 업데이트 확인을 다시 클릭하고 설치를 완료합니다."
+    ],
+    "manualSteps_en": [
+      "Open Command Prompt or PowerShell as Administrator and run 'reagentc /info' to inspect WinRE status and partition index.",
+      "Temporarily disable the recovery environment by running 'reagentc /disable'.",
+      "Using Disk Management (diskmgmt.msc) or diskpart, shrink the OS partition (C:) by 500MB-1GB and extend the recovery partition.",
+      "Re-enable the recovery environment by executing 'reagentc /enable'.",
+      "Go to Settings > Windows Update and click 'Check for updates' to re-attempt the installation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/topic/kb5028997-instructions-to-manually-resize-your-partition-to-install-the-winre-update-4da21244-e327-442d-1ea9-648b496bd809",
+      "https://learn.microsoft.com/windows/release-health/resolved-issues-windows-11-23h2"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070643",
+      "KB5034441",
+      "WinRE update error",
+      "Windows Update 0x80070643",
+      "윈도우 업데이트 0x80070643",
+      "복구 파티션 용량"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T00:10:41.898Z",
+    "updatedAt": "2026-11-12T00:10:41.898Z",
+    "verifiedAt": "2026-11-12T00:10:41.898Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800f0922-mwcskvaj",
+    "category": "업데이트",
+    "code": "0x800f0922",
+    "title": "Windows 10/11 업데이트 96% 롤백 및 설치 실패 오류 0x800f0922 해결 방법",
+    "title_en": "How to Fix Windows 10/11 Update Rollback and Installation Failure Error 0x800f0922",
+    "symptoms": "누적 업데이트(예: KB5034765 등) 설치가 96%~99%까지 진행된 후 '예기치 않은 오류가 발생했습니다. 변경 내용을 취소하는 중' 메시지와 함께 이전 상태로 롤백되며 0x800f0922 오류가 반환됩니다. C 드라이브 루트의 손상된 숨김 폴더(C:\\$WinREAgent), EFI/시스템 예약 파티션의 공간 부족, 또는 잘못된 Secure Boot 구성으로 인해 발생합니다.",
+    "symptoms_en": "During cumulative update installation (such as KB5034765), progress reaches 96% to 99% before rolling back with 'Something didn't go as planned. No need to worry—undoing changes' and logging error code 0x800f0922. This is triggered by leftover corrupted data in the hidden C:\\$WinREAgent folder, depleted EFI system partition space, or Secure Boot validation failures.",
+    "script": "Write-Host 'Checking for residual $WinREAgent folder...' -ForegroundColor Cyan\n$agentPath = 'C:\\$WinREAgent'\nif (Test-Path $agentPath) {\n    Write-Host 'Removing $WinREAgent directory...' -ForegroundColor Yellow\n    Remove-Item -Path $agentPath -Recurse -Force -ErrorAction SilentlyContinue\n    Write-Host '$WinREAgent folder deleted successfully.' -ForegroundColor Green\n} else {\n    Write-Host '$WinREAgent folder does not exist.' -ForegroundColor Gray\n}\nWrite-Host 'Stopping Windows Update components...' -ForegroundColor Cyan\nStop-Service -Name wuauserv, cryptSvc, bits -Force -ErrorAction SilentlyContinue\nWrite-Host 'Purging SoftwareDistribution download cache...' -ForegroundColor Cyan\nRemove-Item -Path 'C:\\Windows\\SoftwareDistribution\\Download\\*' -Recurse -Force -ErrorAction SilentlyContinue\nWrite-Host 'Restarting services...' -ForegroundColor Cyan\nStart-Service -Name bits, cryptSvc, wuauserv\nWrite-Host 'Running DISM Component Store cleanup...' -ForegroundColor Cyan\ndism.exe /Online /Cleanup-Image /StartComponentCleanup\nWrite-Host 'Diagnostic and repair routine completed. Please restart and check for updates.' -ForegroundColor Green",
+    "manualSteps": [
+      "파일 탐색기 보기 설정에서 '숨김 파일 표시'를 활성화하고 C 드라이브 루트에 있는 '$WinREAgent' 폴더를 삭제합니다.",
+      "디스크 관리(diskmgmt.msc)를 열어 EFI 시스템 파티션(ESP)의 잔여 공간이 최소 50MB 이상 남아 있는지 확인합니다.",
+      "관리자 권한 PowerShell에서 'dism.exe /Online /Cleanup-Image /StartComponentCleanup' 명령을 실행해 중복되거나 손상된 패키지 구성 요소를 정리합니다.",
+      "활성화된 타사 방화벽, 안티바이러스 실시간 보호 및 VPN 연결을 일시 중단합니다.",
+      "컴퓨터를 재부팅한 후 설정 > Windows 업데이트에서 업데이트를 다시 진행합니다."
+    ],
+    "manualSteps_en": [
+      "Enable 'Hidden items' in File Explorer view options and remove the hidden folder named 'C:\\$WinREAgent'.",
+      "Open Disk Management (diskmgmt.msc) and ensure the EFI System Partition has at least 50MB of free disk space.",
+      "Execute 'dism.exe /Online /Cleanup-Image /StartComponentCleanup' in an elevated PowerShell to clear corrupted component stores.",
+      "Temporarily disconnect third-party antivirus real-time shields and active VPN profiles.",
+      "Restart your computer and retry updating from Settings > Windows Update."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/windows/release-health/status-windows-11-23h2#3269msgdesc",
+      "https://support.microsoft.com/windows/windows-update-error-0x800f0922-8610eb3f-4e09-418a-81a1-37d45e0f7608"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x800f0922",
+      "Windows Update 0x800f0922",
+      "$WinREAgent",
+      "KB5034765 rollback",
+      "윈도우 업데이트 0x800f0922",
+      "96% 롤백 오류"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-12T00:10:41.898Z",
+    "updatedAt": "2026-11-12T00:10:41.898Z",
+    "verifiedAt": "2026-11-12T00:10:41.898Z",
+    "verificationStatus": "verified"
   }
 ];

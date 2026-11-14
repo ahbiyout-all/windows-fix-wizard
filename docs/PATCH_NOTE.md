@@ -1,6 +1,25 @@
-# Patch Note - System Update (v3.97.5)
+# Patch Note - System Update (v3.97.6)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.97.6] - 2026-11-12
+
+### 📂 Collapsible Admin Console Importance Tier Navigation (관리자 페이지 등급별 메뉴 접이식 전환)
+- **관리자 페이지 4대 중요 등급 섹션 접이식(Collapsible Accordion) 구현**:
+  - `[1등급] 핵심 필수 관리`: 일일 필수 점검 및 AI 자율 데이터 수집 엔진
+  - `[2등급] 성능 모니터링 & 트러블슈팅`: GitHub 배포 성과 및 통합 로그 감사
+  - `[3등급] 환경 설정 & 보조 관리`: Gemini API 키 제어, 유지보수 & 계정 관리
+  - `[4등급] 실험실 이전 기능`: Windows 이벤트 뷰어 Quick Link 및 DB 이슈 관리
+- **상단 마스터 콘솔 뷰어 툴바 (`[모두 펼치기]` / `[모두 접기]`) 신설**:
+  - 원클릭으로 4개 등급 메뉴 전체를 한번에 펼치거나 접을 수 있는 `setAllAdminTiersCollapsed` 마스터 토글 버튼 제공.
+- **인터랙티브 헤더 UI & Framer Motion 애니메이션**:
+  - 각 등급 헤더 클릭 시 상태 바주(`펼침` / `접힘`), Chevron Down/Up 아이콘 전환, Framer Motion height/opacity 부드러운 애니메이션 적용.
+- **데이터셋 130개 동기화 보장**:
+  - `data/issues.json` (130개) 데이터셋과 `src/data/knownIssues.ts` 시드 데이터 100% 동기화 유지.
+- **빌드 및 린트 전수 검증 통과**:
+  - `compile_applet` 및 `lint_applet` (`tsc --noEmit`) 무결점 통과 (Zero Errors).
 
 ---
 

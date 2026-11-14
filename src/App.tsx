@@ -1063,6 +1063,26 @@ export default function App() {
   const [dateSortOrder, setDateSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all'); // 'all' | '7days' | '30days' | '90days' | 'YYYY-MM'
   const [isGroupByDate, setIsGroupByDate] = useState<boolean>(false);
+  const [adminTierCollapse, setAdminTierCollapse] = useState<{ [tier: number]: boolean }>({
+    1: false,
+    2: false,
+    3: false,
+    4: false,
+  });
+
+  const toggleAdminTier = (tier: number) => {
+    setAdminTierCollapse(prev => ({ ...prev, [tier]: !prev[tier] }));
+  };
+
+  const setAllAdminTiersCollapsed = (collapsed: boolean) => {
+    setAdminTierCollapse({
+      1: collapsed,
+      2: collapsed,
+      3: collapsed,
+      4: collapsed,
+    });
+  };
+
   const [quotaUsage, setQuotaUsage] = useState<{ reads: number, writes: number }>(() => {
     const today = getKSTISOString().split('T')[0];
     const saved = localStorage.getItem(`winfix_quota_${today}`);
@@ -12411,63 +12431,154 @@ export default function App() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
-            {/* [1등급] 핵심 필수 관리 기능 (Daily Check & Core Operations) */}
-            <div className="flex items-center gap-2.5 pt-2 pb-2 border-b-2 border-emerald-500/40 dark:border-emerald-500/30 mb-6">
-              <span className="px-3 py-1 text-xs font-black rounded-xl bg-emerald-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
-                <CheckCircle2 className="w-4 h-4" />
-                {language === 'en' ? '[Tier 1] Core Operations' : '[1등급] 핵심 필수 관리'}
-              </span>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-                {language === 'en' ? 'Daily Check & Core Operations' : '일일 필수 점검 및 AI 자율 데이터 수집 엔진'}
-              </h3>
-            </div>
-
-            {/* DATABASE ENGINE CONTROL CENTER (100% Jamstack & GitOps Architecture) */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-emerald-100 dark:bg-emerald-950/35 p-2 rounded-lg shrink-0">
-                    <Database className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                        {language === 'en' ? 'Serverless Jamstack & GitOps Engine' : '독립형 Jamstack & GitOps 무과금 데이터 엔진'}
-                      </h2>
-                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                        ● Zero Cloud DB
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-                      {language === 'en'
-                        ? 'Operating 100% serverless via local data/issues.json feeds, IndexedDB in-browser caching, and automated GitHub Actions cron.'
-                        : '클라우드 DB 의존성 및 할당량 소모 없이 data/issues.json 정적 피드와 브라우저 IndexedDB, GitHub Actions 스케줄러로 무중단 작동합니다.'}
-                    </p>
-                  </div>
+            {/* Master Tier Collapsible Navigation Header */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-sm shrink-0">
+                  <Sliders className="w-5 h-5" />
                 </div>
-
-                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                  <span className="px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    {language === 'en' ? 'Static Feed Active' : '정적 피드 가동 중'}
-                  </span>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    {language === 'en' ? 'Admin Console Tier Navigation' : '관리자 콘솔 중요 등급별 뷰어 설정'}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {language === 'en' 
+                      ? 'Quickly toggle or collapse importance tier sections to focus on specific management tasks.' 
+                      : '필요한 등급 메뉴만 선택하여 열람하거나 전체 메뉴를 한번에 접어서 화면을 깔끔하게 정리하세요.'}
+                  </p>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setAllAdminTiersCollapsed(false)}
+                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                >
+                  <ChevronsDown className="w-4 h-4 text-emerald-500" />
+                  {language === 'en' ? 'Expand All' : '모두 펼치기'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAllAdminTiersCollapsed(true)}
+                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                >
+                  <ChevronsUp className="w-4 h-4 text-slate-400" />
+                  {language === 'en' ? '모두 접기' : 'Collapse All'}
+                </button>
               </div>
             </div>
 
-            {/* Daily API Quota & Usage Monitor (Jamstack & Gemini) */}
-            <DailyQuotaUsageChart language={language} />
+            {/* [1등급] 핵심 필수 관리 기능 (Daily Check & Core Operations) */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all mb-6">
+              <button
+                type="button"
+                onClick={() => toggleAdminTier(1)}
+                className="w-full flex items-center justify-between p-4 bg-emerald-500/10 dark:bg-emerald-950/30 hover:bg-emerald-500/15 dark:hover:bg-emerald-950/40 transition-colors border-b border-emerald-500/20 text-left cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="px-3 py-1 text-xs font-black rounded-xl bg-emerald-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {language === 'en' ? '[Tier 1] Core Operations' : '[1등급] 핵심 필수 관리'}
+                  </span>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                    {language === 'en' ? 'Daily Check & Core Operations' : '일일 필수 점검 및 AI 자율 데이터 수집 엔진'}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:inline-block text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                    {adminTierCollapse[1] ? (language === 'en' ? 'Collapsed' : '접힘') : (language === 'en' ? 'Active' : '펼침')}
+                  </span>
+                  <div className="p-1 rounded-lg bg-emerald-200/50 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200">
+                    {adminTierCollapse[1] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                  </div>
+                </div>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {!adminTierCollapse[1] && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    className="p-5 sm:p-6 space-y-6 overflow-hidden"
+                  >
+                    {/* DATABASE ENGINE CONTROL CENTER (100% Jamstack & GitOps Architecture) */}
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-emerald-100 dark:bg-emerald-950/35 p-2 rounded-lg shrink-0">
+                            <Database className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                                {language === 'en' ? 'Serverless Jamstack & GitOps Engine' : '독립형 Jamstack & GitOps 무과금 데이터 엔진'}
+                              </h2>
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                ● Zero Cloud DB
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                              {language === 'en'
+                                ? 'Operating 100% serverless via local data/issues.json feeds, IndexedDB in-browser caching, and automated GitHub Actions cron.'
+                                : '클라우드 DB 의존성 및 할당량 소모 없이 data/issues.json 정적 피드와 브라우저 IndexedDB, GitHub Actions 스케줄러로 무중단 작동합니다.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            {language === 'en' ? 'Static Feed Active' : '정적 피드 가동 중'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Daily API Quota & Usage Monitor (Jamstack & Gemini) */}
+                    <DailyQuotaUsageChart language={language} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* [2등급] 성능 모니터링 & 트러블슈팅 (System Monitoring) */}
-            <div className="flex items-center gap-2.5 pt-6 pb-2 border-b-2 border-blue-500/40 dark:border-blue-500/30 mb-6">
-              <span className="px-3 py-1 text-xs font-black rounded-xl bg-blue-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
-                <Activity className="w-4 h-4" />
-                {language === 'en' ? '[Tier 2] System Monitoring' : '[2등급] 성능 모니터링 & 트러블슈팅'}
-              </span>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-                {language === 'en' ? 'Performance Telemetry & Diagnostic Logs Audit' : 'GitHub 배포 성과, AI 가동 인텔리전스 및 통합 로그 감사'}
-              </h3>
-            </div>
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all mb-6">
+              <button
+                type="button"
+                onClick={() => toggleAdminTier(2)}
+                className="w-full flex items-center justify-between p-4 bg-blue-500/10 dark:bg-blue-950/30 hover:bg-blue-500/15 dark:hover:bg-blue-950/40 transition-colors border-b border-blue-500/20 text-left cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="px-3 py-1 text-xs font-black rounded-xl bg-blue-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+                    <Activity className="w-4 h-4" />
+                    {language === 'en' ? '[Tier 2] System Monitoring' : '[2등급] 성능 모니터링 & 트러블슈팅'}
+                  </span>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                    {language === 'en' ? 'Performance Telemetry & Diagnostic Logs Audit' : 'GitHub 배포 성과, AI 가동 인텔리전스 및 통합 로그 감사'}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:inline-block text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                    {adminTierCollapse[2] ? (language === 'en' ? 'Collapsed' : '접힘') : (language === 'en' ? 'Active' : '펼침')}
+                  </span>
+                  <div className="p-1 rounded-lg bg-blue-200/50 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200">
+                    {adminTierCollapse[2] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                  </div>
+                </div>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {!adminTierCollapse[2] && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    className="p-5 sm:p-6 space-y-6 overflow-hidden"
+                  >
 
             <DashboardWidget engineStatus={engineStatus} language={language} />
 
@@ -14122,19 +14233,49 @@ export default function App() {
                       {language === 'en' ? 'Apply AdSense Settings' : '애드센스 설정 저장 및 즉시 적용'}
                     </button>
                   </div>
+                  </div>
                 </div>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-            {/* [3등급] 환경 설정 & 보조 관리 (Settings & Maintenance) */}
-            <div className="flex items-center gap-2.5 pt-6 pb-2 border-b-2 border-purple-500/40 dark:border-purple-500/30 mb-6">
-              <span className="px-3 py-1 text-xs font-black rounded-xl bg-purple-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
-                <Settings className="w-4 h-4" />
-                {language === 'en' ? '[Tier 3] Settings & Maintenance' : '[3등급] 환경 설정 & 보조 관리'}
-              </span>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-                {language === 'en' ? 'API Key Management, Server Maintenance & Member Accounts' : '보조 AI 키 제어, 서버 자동 유지보수 및 계정 관리'}
-              </h3>
+      {/* [3등급] 환경 설정 & 보조 관리 (Settings & Maintenance) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all mb-6">
+        <button
+          type="button"
+          onClick={() => toggleAdminTier(3)}
+          className="w-full flex items-center justify-between p-4 bg-purple-500/10 dark:bg-purple-950/30 hover:bg-purple-500/15 dark:hover:bg-purple-950/40 transition-colors border-b border-purple-500/20 text-left cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="px-3 py-1 text-xs font-black rounded-xl bg-purple-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+              <Settings className="w-4 h-4" />
+              {language === 'en' ? '[Tier 3] Settings & Maintenance' : '[3등급] 환경 설정 & 보조 관리'}
+            </span>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+              {language === 'en' ? 'API Key Management, Server Maintenance & Member Accounts' : '보조 AI 키 제어, 서버 자동 유지보수 및 계정 관리'}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-block text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+              {adminTierCollapse[3] ? (language === 'en' ? 'Collapsed' : '접힘') : (language === 'en' ? 'Active' : '펼침')}
+            </span>
+            <div className="p-1 rounded-lg bg-purple-200/50 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200">
+              {adminTierCollapse[3] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
             </div>
+          </div>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {!adminTierCollapse[3] && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              className="p-5 sm:p-6 space-y-6 overflow-hidden"
+            >
 
             {/* API Key Management */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
@@ -15589,17 +15730,46 @@ export default function App() {
 
               {/* Member & User Account Management Panel (Zero Cloud DB) */}
               <MemberManagementPanel language={language} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-              {/* [4등급] 나의 실험실 이전 기능 (User Lab Transferred) */}
-              <div className="flex items-center gap-2.5 pt-6 pb-2 border-b-2 border-slate-400/40 dark:border-slate-600/30 mb-6">
-                <span className="px-3 py-1 text-xs font-black rounded-xl bg-slate-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
-                  <Terminal className="w-4 h-4" />
-                  {language === 'en' ? '[Tier 4] Transferred Lab Utilities' : '[4등급] 실험실 이전 기능'}
-                </span>
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-                  {language === 'en' ? 'Windows Event Viewer & PC Specs Laboratory' : 'Windows 이벤트 뷰어 및 내 PC 실시간 사양 실험실'}
-                </h3>
-              </div>
+      {/* [4등급] 나의 실험실 이전 기능 (User Lab Transferred) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all mb-6">
+        <button
+          type="button"
+          onClick={() => toggleAdminTier(4)}
+          className="w-full flex items-center justify-between p-4 bg-slate-500/10 dark:bg-slate-800/30 hover:bg-slate-500/15 dark:hover:bg-slate-800/40 transition-colors border-b border-slate-500/20 text-left cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="px-3 py-1 text-xs font-black rounded-xl bg-slate-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
+              <Terminal className="w-4 h-4" />
+              {language === 'en' ? '[Tier 4] Transferred Lab Utilities' : '[4등급] 실험실 이전 기능'}
+            </span>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+              {language === 'en' ? 'Windows Event Viewer & PC Specs Laboratory' : 'Windows 이벤트 뷰어 및 내 PC 실시간 사양 실험실'}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-block text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+              {adminTierCollapse[4] ? (language === 'en' ? 'Collapsed' : '접힘') : (language === 'en' ? 'Active' : '펼침')}
+            </span>
+            <div className="p-1 rounded-lg bg-slate-200/50 dark:bg-slate-800/60 text-slate-800 dark:text-slate-200">
+              {adminTierCollapse[4] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+            </div>
+          </div>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {!adminTierCollapse[4] && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              className="p-5 sm:p-6 space-y-6 overflow-hidden"
+            >
 
               {/* Quick Link to My Lab Event Viewer */}
               <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-750 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
@@ -15824,9 +15994,12 @@ export default function App() {
               </div>
             );
           })()}
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  )}
 
         {/* SYSTEM THREAT VERIFIER & ROADMAP TAB */}
         {activeTab === 'threat-verifier' && (
