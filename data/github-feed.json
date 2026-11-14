@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-13T23:17:26.460Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "업데이트",
+  "lastCollectedAt": "2026-11-14T05:09:32.674Z",
+  "modelUsed": "gemini-3.8-flash",
+  "targetCategory": "디스플레이/그래픽",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 140,
+  "totalIssuesCount": 142,
   "newIssues": [
     {
-      "id": "gh-0x800f0922-mwflk30d",
-      "code": "0x800f0922",
-      "title": "Windows 업데이트 누적 업데이트 설치 실패 오류 0x800f0922 해결 방법",
-      "category": "업데이트"
+      "id": "gh-0x00000119-mwfy4w3n",
+      "code": "0x00000119",
+      "title": "Windows 10/11 그래픽 드라이버 블루스크린 VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) 오류 해결 방법",
+      "category": "디스플레이/그래픽"
     },
     {
-      "id": "gh-0x80070643-mwflk30d",
-      "code": "0x80070643",
-      "title": "Windows 업데이트 설치 오류 0x80070643 (보안 업데이트 및 복구 파티션 문제) 해결",
-      "category": "업데이트"
+      "id": "gh-code-43-mwfy4w3n",
+      "code": "Code 43",
+      "title": "Windows 10/11 그래픽 카드 장치 관리자 '이 장치를 중지했습니다 (코드 43)' 오류 해결 방법",
+      "category": "디스플레이/그래픽"
     }
   ]
 }

@@ -6335,5 +6335,97 @@
     "updatedAt": "2026-11-13T23:17:26.460Z",
     "verifiedAt": "2026-11-13T23:17:26.460Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x00000119-mwfy4w3n",
+    "category": "디스플레이/그래픽",
+    "code": "0x00000119",
+    "title": "Windows 10/11 그래픽 드라이버 블루스크린 VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) 오류 해결 방법",
+    "title_en": "How to Fix VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) BSOD in Windows 10/11",
+    "symptoms": "DirectX 12 기반 게임 실행, 3D 렌더링 작업, 또는 하드웨어 가속 GPU 일정 예약(HAGS)이 활성화된 상태에서 화면이 일시적으로 멈춘 뒤 VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) 블루스크린이 발생합니다. 이는 Windows 그래픽 스케줄러(Watchdog)가 GPU 드라이버의 스케줄링 이상을 감지하고 커널 패닉을 유발할 때 나타납니다.",
+    "symptoms_en": "The system encounters a Blue Screen of Death (BSOD) with stop code VIDEO_SCHEDULER_INTERNAL_ERROR (0x00000119) during DirectX 12 gaming, 3D rendering, or when Hardware-Accelerated GPU Scheduling (HAGS) is enabled. It occurs when the Windows display scheduler watchdog detects an anomalous timeout or corruption in the GPU command queue.",
+    "script": "# VIDEO_SCHEDULER_INTERNAL_ERROR Diagnostic & System Integrity Script\nWrite-Output 'Checking Graphics Hardware & Driver Info...'\nGet-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, DriverDate, Status | Format-Table -AutoSize\n\nWrite-Output 'Checking DirectX Diagnostic Status...'\ndxdiag /dontskip /whql:off /t \"$env:TEMP\\dxdiag_log.txt\"\nStart-Sleep -Seconds 3\n\nWrite-Output 'Repairing corrupted system components and WDDM dependencies...'\nDISM.exe /Online /Cleanup-Image /RestoreHealth\nsfc /scannow\n\nWrite-Output 'Purging Direct3D Shader Cache...'\n$shaderCachePaths = @(\n    \"$env:LOCALAPPDATA\\D3DSCache\",\n    \"$env:LOCALAPPDATA\\NVIDIA\\DXCache\",\n    \"$env:LOCALAPPDATA\\AMD\\DxCache\"\n)\nforeach ($path in $shaderCachePaths) {\n    if (Test-Path $path) {\n        try {\n            Remove-Item \"$path\\*\" -Recurse -Force -ErrorAction SilentlyContinue\n            Write-Output \"Cleared shader cache: $path\"\n        } catch {\n            Write-Warning \"Could not clear: $path\"\n        }\n    }\n}\nWrite-Output 'Diagnostic and cleanup completed. Please reboot your PC.'",
+    "manualSteps": [
+      "최신 공식 그래픽 드라이버(NVIDIA, AMD, Intel)를 다운로드한 후, DDU(Display Driver Uninstaller)를 안전 모드에서 실행하여 이전 드라이버 잔여물을 완전히 제거하고 클린 설치합니다.",
+      "Windows 설정 > 시스템 > 디스플레이 > 그래픽 > '기본 그래픽 설정 변경'으로 이동하여 '하드웨어 가속 GPU 일정 예약(HAGS)' 옵션을 끔(Off)으로 설정한 뒤 재부팅합니다.",
+      "오버클럭 또는 언더볼팅 유틸리티(MSI Afterburner 등)가 실행 중인 경우 설정을 기본값(기본 클럭 및 전압)으로 초기화합니다.",
+      "메인보드 BIOS/UEFI 펌웨어를 최신 버전으로 업데이트하여 PCIe 및 ReBAR(Resizable BAR) 호환성을 확보합니다."
+    ],
+    "manualSteps_en": [
+      "Download the latest WHQL graphics driver from NVIDIA, AMD, or Intel, boot into Safe Mode, run Display Driver Uninstaller (DDU) to wipe residual driver files, and perform a clean installation.",
+      "Go to Windows Settings > System > Display > Graphics > 'Change default graphics settings', toggle 'Hardware-accelerated GPU scheduling' (HAGS) to Off, and restart the PC.",
+      "Reset any GPU overclocking, underclocking, or undervolting profiles (e.g., MSI Afterburner) back to factory default values.",
+      "Update your motherboard BIOS/UEFI firmware to ensure stable PCIe link and Resizable BAR compatibility."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x119---video-scheduler-internal-error"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x00000119",
+      "VIDEO_SCHEDULER_INTERNAL_ERROR",
+      "디스플레이 블루스크린",
+      "GPU 스케줄러 오류",
+      "HAGS BSOD",
+      "DirectX 12 crash"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T05:09:32.674Z",
+    "updatedAt": "2026-11-14T05:09:32.674Z",
+    "verifiedAt": "2026-11-14T05:09:32.674Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-code-43-mwfy4w3n",
+    "category": "디스플레이/그래픽",
+    "code": "Code 43",
+    "title": "Windows 10/11 그래픽 카드 장치 관리자 '이 장치를 중지했습니다 (코드 43)' 오류 해결 방법",
+    "title_en": "How to Fix Display Adapter 'Windows has stopped this device (Code 43)' Error in Windows 10/11",
+    "symptoms": "장치 관리자의 디스플레이 어댑터 항목에서 그래픽 카드에 노란색 느낌표 경고가 표시되며 속성 창에 '문제가 보고되었기 때문에 이 장치를 중지했습니다. (코드 43)' 오류 메시지가 나타납니다. 모니터 해상도가 기본 저해상도로 고정되고 다중 디스플레이 또는 외장 GPU가 정상 작동하지 않습니다.",
+    "symptoms_en": "The graphics card under Display Adapters in Device Manager displays a yellow warning icon with the status 'Windows has stopped this device because it has reported problems. (Code 43)'. The display resolution is locked to fallback standards, and external monitors or discrete GPU hardware fail to function.",
+    "script": "# Display Adapter Code 43 Diagnostic and Recovery Script\nWrite-Output 'Checking Display Adapters with Device Manager Errors...'\n$problemGPUs = Get-PnpDevice -Class 'Display' | Where-Object { $_.Status -ne 'OK' }\n\nif ($problemGPUs) {\n    foreach ($gpu in $problemGPUs) {\n        Write-Output \"Found issue on: $($gpu.FriendlyName) (Status: $($gpu.Status), ProblemCode: $($gpu.Problem))\"\n        Write-Output \"Attempting PnP device reset for: $($gpu.InstanceId)...\"\n        Disable-PnpDevice -InstanceId $gpu.InstanceId -Confirm:$false\n        Start-Sleep -Seconds 3\n        Enable-PnpDevice -InstanceId $gpu.InstanceId -Confirm:$false\n    }\n} else {\n    Write-Output 'No display devices currently reporting non-OK status via PnP.'\n}\n\nWrite-Output 'Verifying Windows Fast Startup Configuration...'\n$fastStartupPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power'\n$fastStartupVal = (Get-ItemProperty -Path $fastStartupPath -Name 'HiberbootEnabled' -ErrorAction SilentlyContinue).HiberbootEnabled\n\nif ($fastStartupVal -eq 1) {\n    Write-Output 'Disabling Fast Startup to prevent corrupted PCI power state loading...'\n    Set-ItemProperty -Path $fastStartupPath -Name 'HiberbootEnabled' -Value 0\n    Write-Output 'Fast Startup has been disabled.'\n}\n\nWrite-Output 'Checking graphics driver registration in system repository...'\npnpUtil.exe /enum-drivers | Select-String -Pattern 'Display' -Context 0,2 | Out-String | Write-Output",
+    "manualSteps": [
+      "빠른 시작 켜기(Fast Startup) 기능으로 인한 전원 상태 복구 오류를 방지하기 위해 제어판 > 전원 옵션 > '전원 단추 작동 설정'에서 '빠른 시작 켜기' 체크를 해제합니다.",
+      "장치 관리자에서 노란색 느낌표가 표시된 그래픽 카드를 마우스 우클릭한 후 '디바이스 제거'를 선택(이 디바이스의 드라이버 소프트웨어를 삭제합니다 옵션 선택)하고 시스템을 완전히 종료했다가 다시 켭니다.",
+      "노트북 환경(NVIDIA Optimus/AMD Switchable Graphics)인 경우 제조사 웹사이트(Dell, HP, Lenovo, ASUS 등)에서 OEM 인증 통합/외장 그래픽 드라이버를 순서대로 재설치합니다.",
+      "데스크톱 PC의 경우 PC 전원을 끄고 파워 케이블을 분리한 후, 그래픽 카드를 PCIe 슬롯에서 분리했다가 재장착하고 8핀/12VHPWR 보조 전원 케이블이 단단히 체결되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Disable 'Fast Startup' under Control Panel > Power Options > 'Choose what the power buttons do' to prevent corrupt PCIe power-state restorations upon cold boot.",
+      "Right-click the problematic graphics adapter in Device Manager, select 'Uninstall device' (checking driver deletion if prompted), perform a complete shutdown, and power on the system.",
+      "For hybrid laptops (NVIDIA Optimus / AMD Enduro), reinstall the verified OEM integrated (Intel/AMD) and discrete GPU drivers directly from the laptop manufacturer's support portal.",
+      "For desktop computers, power down completely, unplug the AC cable, reseat the graphics card in the PCIe slot, and verify all PCIe/12VHPWR power connectors are firmly locked in place."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/error-codes-in-device-manager-in-windows-f0e54451-8271-6c50-3382-365615c5f110"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Code 43",
+      "코드 43",
+      "이 장치를 중지했습니다",
+      "Display Adapter Code 43",
+      "그래픽 카드 느낌표",
+      "GPU Code 43 Fix"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-14T05:09:32.674Z",
+    "updatedAt": "2026-11-14T05:09:32.674Z",
+    "verifiedAt": "2026-11-14T05:09:32.674Z",
+    "verificationStatus": "verified"
   }
 ]
