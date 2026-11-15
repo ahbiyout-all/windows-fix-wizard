@@ -1,0 +1,101 @@
+{
+  "version": "3.100.0",
+  "updatedAt": "2026-11-15T10:15:00.000Z",
+  "lastDiscoveryAt": null,
+  "routingPolicy": "quota-split",
+  "providerOrder": [
+    "gemini",
+    "groq",
+    "mistral",
+    "openrouter",
+    "cerebras",
+    "cloudflare"
+  ],
+  "geminiModels": [
+    {
+      "id": "gemini-4-hydrogen",
+      "displayName": "Gemini 4 Hydrogen (Flash Default)",
+      "tier": "generation-4",
+      "supportsGrounding": true,
+      "enabled": true,
+      "priority": 1,
+      "source": "default"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "displayName": "Gemini 3.1 Flash Lite (High Quota / Fast)",
+      "tier": "lite",
+      "supportsGrounding": true,
+      "enabled": true,
+      "priority": 2,
+      "source": "default"
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "displayName": "Gemini 3.8 Flash",
+      "tier": "generation-3",
+      "supportsGrounding": true,
+      "enabled": true,
+      "priority": 3,
+      "source": "default"
+    },
+    {
+      "id": "gemini-flash-latest",
+      "displayName": "Gemini Flash Latest (Rolling Alias)",
+      "tier": "latest-alias",
+      "supportsGrounding": true,
+      "enabled": true,
+      "priority": 4,
+      "source": "default"
+    }
+  ],
+  "openrouterFreeModels": [
+    "deepseek/deepseek-chat-v3-0324:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen-2.5-72b-instruct:free",
+    "mistralai/mistral-small-3.1-24b-instruct:free"
+  ],
+  "providerModels": {
+    "groq": [
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant",
+      "qwen/qwen3-32b"
+    ],
+    "mistral": [
+      "mistral-small-latest",
+      "open-mistral-nemo"
+    ],
+    "openrouter": [
+      "deepseek/deepseek-chat-v3-0324:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "qwen/qwen-2.5-72b-instruct:free"
+    ],
+    "cerebras": [
+      "gpt-oss-120b",
+      "qwen-3-32b"
+    ],
+    "cloudflare": [
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "@cf/google/gemma-3-12b-it"
+    ]
+  },
+  "circuitBreakers": {},
+  "telemetry": {
+    "totalRequests": 0,
+    "geminiRequests": 0,
+    "freeProviderRequests": 0,
+    "failoverSaves": 0,
+    "circuitTrips404": 0,
+    "lastProviderUsed": null,
+    "lastModelUsed": null,
+    "lastUpdatedAt": null,
+    "perProviderUsage": {
+      "gemini": 0,
+      "groq": 0,
+      "mistral": 0,
+      "openrouter": 0,
+      "cerebras": 0,
+      "cloudflare": 0
+    }
+  }
+}

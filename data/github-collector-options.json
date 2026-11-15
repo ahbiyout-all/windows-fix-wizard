@@ -1,0 +1,26 @@
+{
+  "enabled": true,
+  "scheduleCron": "0 */6 * * *",
+  "batchSize": 2,
+  "topicMode": "all",
+  "fixedTopic": "all",
+  "preferredTopics": [
+    "업데이트",
+    "네트워크",
+    "시스템/블루스크린",
+    "스토어/앱",
+    "정품인증",
+    "보안/백신",
+    "오디오/사운드",
+    "디스플레이/그래픽"
+  ],
+  "targetWindowsVersions": [
+    "Windows 11",
+    "Windows 10"
+  ],
+  "modelPreference": "auto",
+  "dedupStrictness": "strict",
+  "autoDeployPages": true,
+  "autoIntegrateSeed": true,
+  "updatedAt": "2026-11-14T22:00:00+09:00"
+}

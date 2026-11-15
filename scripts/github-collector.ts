@@ -12,6 +12,16 @@ import "dotenv/config";
 import * as fs from 'fs';
 import * as path from 'path';
 import { GoogleGenAI } from '@google/genai';
+import {
+  loadAiModelRegistry,
+  getHealthyGeminiCandidates,
+  classifyAiError,
+  tripCircuitBreaker,
+  discoverLiveModels,
+  callExternalFreeProvider,
+  recordRegistryUsage,
+  type ProviderId
+} from '../lib/ai-resilience-router';
 
 interface KnownIssue {
   id: string;
@@ -92,8 +102,9 @@ async function runCollector() {
   const avoidCodes = new Set(existingIssues.map(i => (i.code || '').trim().toLowerCase()).filter(Boolean));
   const avoidTitles = existingIssues.slice(-25).map(i => i.title).join(', ');
 
-  // Load system config if present
+  // Load system config & GitHub collector options if present
   const sysConfigPath = path.join(dataDir, 'system_config.json');
+  const collectorOptionsPath = path.join(dataDir, 'github-collector-options.json');
   let configEngineBatchSize: number | undefined;
   if (fs.existsSync(sysConfigPath)) {
     try {
@@ -107,24 +118,73 @@ async function runCollector() {
     }
   }
 
-  // Select target category
-  const targetCategory = process.env.INPUT_TOPIC && process.env.INPUT_TOPIC !== 'all'
-    ? process.env.INPUT_TOPIC
-    : CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+  let collectorOpts: any = {};
+  if (fs.existsSync(collectorOptionsPath)) {
+    try {
+      collectorOpts = JSON.parse(fs.readFileSync(collectorOptionsPath, 'utf-8'));
+      console.log(`⚙️ Loaded collector options from ${collectorOptionsPath}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not parse github-collector-options.json:`, e.message);
+    }
+  }
 
-  console.log(`🎯 Target Category: [${targetCategory}]`);
+  // Respect pause state on scheduled runs (manual workflow_dispatch can still run explicitly)
+  const eventName = process.env.GITHUB_EVENT_NAME || '';
+  if (collectorOpts.enabled === false && eventName === 'schedule') {
+    console.log('⏸️ GitHub Auto-Collection is currently PAUSED in data/github-collector-options.json. Skipping scheduled run.');
+    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryFile && fs.existsSync(summaryFile)) {
+      fs.appendFileSync(summaryFile, `## ⏸️ Autonomous Collection Paused\n\n- Scheduled collection was skipped because \`enabled: false\` is set in \`data/github-collector-options.json\`.\n`, 'utf-8');
+    }
+    return;
+  }
 
-  const rawBatchSize = process.env.BATCH_SIZE || (configEngineBatchSize ? String(configEngineBatchSize) : '2');
-  const batchSize = Math.min(Math.max(parseInt(rawBatchSize, 10), 1), 10);
+  // Select target category using INPUT_TOPIC > fixed/rotate options > all categories
+  const envTopic = (process.env.INPUT_TOPIC || '').trim();
+  const preferredPool: string[] = Array.isArray(collectorOpts.preferredTopics) && collectorOpts.preferredTopics.length > 0
+    ? collectorOpts.preferredTopics.filter((c: string) => CATEGORIES.includes(c))
+    : CATEGORIES;
+  const activePool = preferredPool.length > 0 ? preferredPool : CATEGORIES;
+
+  let targetCategory = '';
+  if (envTopic && envTopic !== 'all' && CATEGORIES.includes(envTopic)) {
+    targetCategory = envTopic;
+  } else if (collectorOpts.topicMode === 'fixed' && collectorOpts.fixedTopic && collectorOpts.fixedTopic !== 'all' && CATEGORIES.includes(collectorOpts.fixedTopic)) {
+    targetCategory = collectorOpts.fixedTopic;
+  } else if (collectorOpts.topicMode === 'rotate') {
+    targetCategory = activePool[Math.floor(Math.random() * activePool.length)];
+  } else {
+    targetCategory = activePool[Math.floor(Math.random() * activePool.length)];
+  }
+
+  console.log(`🎯 Target Category: [${targetCategory}] (Mode: ${collectorOpts.topicMode || 'all'})`);
+
+  const rawBatchSize = (process.env.INPUT_BATCH_SIZE || process.env.BATCH_SIZE || '').trim()
+    || (collectorOpts.batchSize ? String(collectorOpts.batchSize) : '')
+    || (configEngineBatchSize ? String(configEngineBatchSize) : '2');
+  const parsedBatch = parseInt(rawBatchSize, 10);
+  const batchSize = Math.min(Math.max(isNaN(parsedBatch) ? 2 : parsedBatch, 1), 10);
   console.log(`📦 Batch Size: ${batchSize}`);
 
-  const ai = new GoogleGenAI({ apiKey });
-  const modelsToTry = [
-    'gemini-3.8-flash',
-    'gemini-3.1-flash-lite',
-    'gemini-3.1-pro-preview',
-    'gemini-flash-latest'
-  ];
+  const envTargetWindows = (process.env.INPUT_TARGET_WINDOWS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const targetWindowsVersions: string[] = envTargetWindows.length > 0
+    ? envTargetWindows
+    : (Array.isArray(collectorOpts.targetWindowsVersions) && collectorOpts.targetWindowsVersions.length > 0
+      ? collectorOpts.targetWindowsVersions
+      : ['Windows 11', 'Windows 10']);
+  console.log(`🪟 Target OS Versions: ${targetWindowsVersions.join(', ')}`);
+
+  const dedupStrictness: 'strict' | 'balanced' = collectorOpts.dedupStrictness === 'balanced' ? 'balanced' : 'strict';
+  const autoIntegrateSeed: boolean = collectorOpts.autoIntegrateSeed !== false;
+
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+  });
+  let registry = loadAiModelRegistry();
+  const preferredModel = (process.env.INPUT_MODEL_PREFERENCE || collectorOpts.modelPreference || 'auto').trim();
+  let modelsToTry = getHealthyGeminiCandidates(preferredModel, registry);
+  console.log(`🤖 AI Model Priority (Registry-Backed): ${modelsToTry.join(' -> ')}`);
 
 function generateDefaultPowerShellScript(code: string = '', category: string = '', title: string = ''): string {
   const codeUpper = (code || '').toUpperCase();
@@ -154,19 +214,20 @@ function generateDefaultPowerShellScript(code: string = '', category: string = '
   return `# Windows System Integrity Repair Script (${codeUpper || 'System Fix'})\n# Target: SFC System File Checker & DISM Image Servicing\n\nWrite-Host "[1/3] Running System File Checker (SFC)..." -ForegroundColor Cyan\nsfc /scannow\n\nWrite-Host "[2/3] Checking Component Store Health via DISM..." -ForegroundColor Cyan\ndism /Online /Cleanup-Image /CheckHealth\n\nWrite-Host "[3/3] Restoring Component Store Corruption via DISM..." -ForegroundColor Cyan\ndism /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host "[+] System file integrity repair complete. Please restart your system." -ForegroundColor Green`;
 }
 
-  const prompt = `Search and identify ${batchSize} verified and LATEST (2024-2026) Windows 10/11 troubleshooting guide(s) or error code(s).
+  const prompt = `Search and identify ${batchSize} verified and LATEST (2024-2026) ${targetWindowsVersions.join(' / ')} troubleshooting guide(s) or error code(s).
 Category focus: "${targetCategory}".
+Target OS focus: ${JSON.stringify(targetWindowsVersions)}.
 Do NOT generate these existing issues: [${avoidTitles.substring(0, 400)}...].
-Avoid error codes already present: [${Array.from(avoidCodes).slice(-15).join(', ')}].
+Avoid error codes already present: [${Array.from(avoidCodes).slice(-25).join(', ')}].
 
 Requirements for each item:
 1. Specific Windows error code (e.g., 0x80070005, 0x8024402f, WHEA_UNCORRECTABLE_ERROR, 0x80073D02) or clear identifier.
-2. Accurate Korean title & symptoms explaining why it occurs in recent Windows 10/11 updates.
+2. Accurate Korean title & symptoms explaining why it occurs in recent Windows updates.
 3. English title and English symptoms.
 4. A MANDATORY, working, non-destructive PowerShell repair or diagnostic script specifically tailored for this error (e.g. sfc /scannow, DISM, Get-AppxPackage, netsh winsock reset, etc.). Do NOT leave script empty or null!
 5. 3-5 structured step-by-step recovery instructions in Korean (manualSteps) and English (manualSteps_en).
 6. 1-2 legitimate source URLs (e.g. support.microsoft.com, learn.microsoft.com, or official tech portals).
-7. Applicable Windows versions (['Windows 11', 'Windows 10']).
+7. Applicable Windows versions (${JSON.stringify(targetWindowsVersions)}).
 8. 4-6 search keywords in Korean & English.
 
 IMPORTANT JSON FORMATTING RULES:
@@ -187,110 +248,88 @@ JSON Schema:
     "manualSteps": ["Step 1", "Step 2", "Step 3"],
     "manualSteps_en": ["Step 1", "Step 2", "Step 3"],
     "sourceUrls": ["https://support.microsoft.com/..."],
-    "windowsVersions": ["Windows 11", "Windows 10"],
+    "windowsVersions": ${JSON.stringify(targetWindowsVersions)},
     "searchKeywords": ["Keyword1", "Keyword2"]
   }
 ]`;
 
   let generatedText = '';
   let successfulModel = '';
+  let encountered404 = false;
 
-  for (const model of modelsToTry) {
+  const tryGeminiList = async (candidates: string[]) => {
+    for (const model of candidates) {
+      try {
+        console.log(`🤖 Attempting generation with model: ${model}...`);
+        let response;
+        try {
+          response = await ai.models.generateContent({
+            model,
+            contents: prompt,
+            config: { tools: [{ googleSearch: {} }] }
+          });
+        } catch (groundingErr: any) {
+          const classifiedGround = classifyAiError(groundingErr);
+          if (classifiedGround.type === 'MODEL_NOT_FOUND_404') {
+            throw groundingErr;
+          }
+          console.warn(`⚠️ Search grounding not available for ${model} (${classifiedGround.message.substring(0, 120)}). Retrying standard generation...`);
+          response = await ai.models.generateContent({
+            model,
+            contents: prompt
+          });
+        }
+
+        if (response && response.text) {
+          generatedText = response.text;
+          successfulModel = model;
+          recordRegistryUsage('gemini', model, false);
+          console.log(`✅ Successfully generated response using model: ${model}`);
+          return true;
+        }
+      } catch (modelErr: any) {
+        const classified = classifyAiError(modelErr);
+        console.warn(`⚠️ Model ${model} failed [${classified.type}]: ${classified.message.substring(0, 140)}`);
+        if (classified.type === 'MODEL_NOT_FOUND_404') {
+          encountered404 = true;
+          tripCircuitBreaker(registry, model, 'gemini', 404, classified.message);
+        } else if (classified.type === 'INVALID_KEY') {
+          break;
+        }
+      }
+    }
+    return false;
+  };
+
+  await tryGeminiList(modelsToTry);
+
+  // If 404s occurred and Gemini generation didn't succeed, attempt live catalog discovery once
+  if (!generatedText && encountered404) {
+    console.log('🔎 404 model error detected; running live Gemini model auto-discovery...');
     try {
-      console.log(`🤖 Attempting generation with model: ${model}...`);
-      let response;
-      try {
-        // Attempt with Google Search grounding for real-time web verification
-        response = await ai.models.generateContent({
-          model,
-          contents: prompt,
-          config: { tools: [{ googleSearch: {} }] }
-        });
-      } catch (groundingErr: any) {
-        console.warn(`⚠️ Search grounding not available for ${model} (${groundingErr.message || groundingErr}). Retrying standard generation...`);
-        response = await ai.models.generateContent({
-          model,
-          contents: prompt
-        });
+      const discovery = await discoverLiveModels({ geminiApiKey: apiKey });
+      registry = discovery.registry;
+      const freshCandidates = getHealthyGeminiCandidates(preferredModel, registry).filter((m) => !modelsToTry.includes(m));
+      if (freshCandidates.length > 0) {
+        console.log(`🆕 Discovered fresh healthy Gemini models: ${freshCandidates.join(', ')}`);
+        await tryGeminiList(freshCandidates);
       }
+    } catch (_) {}
+  }
 
-      if (response && response.text) {
-        generatedText = response.text;
-        successfulModel = model;
-        console.log(`✅ Successfully generated response using model: ${model}`);
+  // Multi-provider Free-Tier Failover across configured external providers
+  if (!generatedText) {
+    const externalProviders = (registry.providerOrder || ['groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'])
+      .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini');
+    for (const providerId of externalProviders) {
+      console.log(`🔄 Attempting external free-tier failover via ${providerId.toUpperCase()}...`);
+      const extRes = await callExternalFreeProvider(providerId, prompt, { registry });
+      if (extRes && extRes.text) {
+        generatedText = extRes.text;
+        successfulModel = extRes.modelUsed;
+        recordRegistryUsage(providerId, extRes.modelUsed, true);
+        console.log(`✅ Successfully generated response via ${extRes.modelUsed}!`);
         break;
-      }
-    } catch (modelErr: any) {
-      console.warn(`⚠️ Model ${model} failed: ${modelErr.message || modelErr}`);
-    }
-  }
-
-  if (!generatedText && process.env.GROQ_API_KEY) {
-    console.log('🔄 Attempting Groq API secondary failover in collector...');
-    const groqKey = process.env.GROQ_API_KEY.trim();
-    const groqModels = ['llama-3.3-70b-versatile', 'llama3-8b-8192', 'mixtral-8x7b-32768'];
-    for (const gModel of groqModels) {
-      try {
-        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: gModel,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.3
-          })
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const text = data?.choices?.[0]?.message?.content || '';
-          if (text.trim()) {
-            generatedText = text;
-            successfulModel = `Groq (${gModel})`;
-            console.log(`✅ Successfully generated response via Groq API (${gModel})!`);
-            break;
-          }
-        }
-      } catch (gErr: any) {
-        console.warn(`⚠️ Groq ${gModel} failed:`, gErr.message || gErr);
-      }
-    }
-  }
-
-  if (!generatedText && process.env.OPENROUTER_API_KEY) {
-    console.log('🔄 Attempting OpenRouter API secondary failover in collector...');
-    const openrouterKey = process.env.OPENROUTER_API_KEY.trim();
-    const openrouterModels = ['deepseek/deepseek-chat', 'meta-llama/llama-3.3-70b-instruct:free'];
-    for (const oModel of openrouterModels) {
-      try {
-        const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openrouterKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://windows-fix-wizard.github.io',
-            'X-Title': 'Windows Fix Wizard'
-          },
-          body: JSON.stringify({
-            model: oModel,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.3
-          })
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const text = data?.choices?.[0]?.message?.content || '';
-          if (text.trim()) {
-            generatedText = text;
-            successfulModel = `OpenRouter (${oModel})`;
-            console.log(`✅ Successfully generated response via OpenRouter API (${oModel})!`);
-            break;
-          }
-        }
-      } catch (oErr: any) {
-        console.warn(`⚠️ OpenRouter ${oModel} failed:`, oErr.message || oErr);
       }
     }
   }
@@ -339,18 +378,19 @@ JSON Schema:
 
     if (!title) continue;
 
-    // Check duplication (only skip if exact title matches or both code and title match)
+    // Check duplication according to dedupStrictness option
     const normalizedCode = code.toLowerCase().trim();
     const normalizedTitle = title.toLowerCase().replace(/\s+/g, '');
     const isDupTitle = existingIssues.some(
       ex => ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
     );
+    const isDupCodeStrict = dedupStrictness === 'strict' && normalizedCode.length >= 4 && avoidCodes.has(normalizedCode);
     const isDupCodeAndTitle = existingIssues.some(
       ex => ex.code && ex.code.toLowerCase().trim() === normalizedCode && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
     );
 
-    if (isDupTitle || isDupCodeAndTitle) {
-      console.log(`⏭️ Skipping duplicate issue: [${code}] ${title}`);
+    if (isDupTitle || isDupCodeAndTitle || isDupCodeStrict) {
+      console.log(`⏭️ Skipping duplicate issue (${dedupStrictness}): [${code}] ${title}`);
       continue;
     }
 
@@ -380,7 +420,7 @@ JSON Schema:
         'https://support.microsoft.com/windows'
       ],
       source: 'GitHub Actions Autonomous Collector',
-      windowsVersions: Array.isArray(raw.windowsVersions) ? raw.windowsVersions : ['Windows 11', 'Windows 10'],
+      windowsVersions: Array.isArray(raw.windowsVersions) && raw.windowsVersions.length > 0 ? raw.windowsVersions : targetWindowsVersions,
       searchKeywords: Array.isArray(raw.searchKeywords) ? raw.searchKeywords : [cleanCode, targetCategory, 'Windows Fix'],
       upvoteCount: 0,
       upvotedBy: [],
@@ -393,7 +433,7 @@ JSON Schema:
     };
 
     newIssues.push(formattedIssue);
-    avoidCodes.add(normalizedCode);
+    if (normalizedCode) avoidCodes.add(normalizedCode);
   }
 
   console.log(`\n✨ Discovered and formatted ${newIssues.length} new unique issues!`);
@@ -404,14 +444,18 @@ JSON Schema:
     fs.writeFileSync(issuesFilePath, JSON.stringify(updatedIssues, null, 2), 'utf-8');
     console.log(`💾 Saved updated dataset (${updatedIssues.length} total) to ${issuesFilePath}`);
 
-    // Automatically synchronize bundled main seed (src/data/knownIssues.ts)
-    try {
-      const knownIssuesTsPath = path.resolve(process.cwd(), 'src', 'data', 'knownIssues.ts');
-      const tsContent = `import { KnownIssue } from "../types";\n\nexport const KNOWN_ISSUES: KnownIssue[] = ${JSON.stringify(updatedIssues, null, 2)};\n`;
-      fs.writeFileSync(knownIssuesTsPath, tsContent, 'utf-8');
-      console.log(`🔄 Auto-integrated ${updatedIssues.length} issues into ${knownIssuesTsPath}`);
-    } catch (syncErr: any) {
-      console.warn(`⚠️ Failed to sync src/data/knownIssues.ts:`, syncErr.message);
+    // Automatically synchronize bundled main seed (src/data/knownIssues.ts) if enabled
+    if (autoIntegrateSeed) {
+      try {
+        const knownIssuesTsPath = path.resolve(process.cwd(), 'src', 'data', 'knownIssues.ts');
+        const tsContent = `import { KnownIssue } from "../types";\n\nexport const KNOWN_ISSUES: KnownIssue[] = ${JSON.stringify(updatedIssues, null, 2)};\n`;
+        fs.writeFileSync(knownIssuesTsPath, tsContent, 'utf-8');
+        console.log(`🔄 Auto-integrated ${updatedIssues.length} issues into ${knownIssuesTsPath}`);
+      } catch (syncErr: any) {
+        console.warn(`⚠️ Failed to sync src/data/knownIssues.ts:`, syncErr.message);
+      }
+    } else {
+      console.log('ℹ️ Skipping src/data/knownIssues.ts sync (autoIntegrateSeed: false).');
     }
 
     // Update github-feed.json

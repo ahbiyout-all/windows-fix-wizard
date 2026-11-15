@@ -592,7 +592,7 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.97.9";
+const APP_VERSION = "3.100.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -666,22 +666,40 @@ const mergeIssuesDeduplicated = (baseList: KnownIssue[], incomingList: KnownIssu
 const formatCollectionDate = (rawDate: any): string => {
   if (!rawDate) return '2026-11-05';
   if (typeof rawDate === 'string') {
-    if (rawDate.includes('T')) return rawDate.split('T')[0];
-    return rawDate;
+    const trimmed = rawDate.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      return new Date(parsed.getTime() + 9 * 3600000).toISOString().slice(0, 10);
+    }
+    if (trimmed.includes('T')) return trimmed.split('T')[0];
+    return trimmed;
   }
   if (rawDate?.toDate && typeof rawDate.toDate === 'function') {
     try {
       const d = rawDate.toDate();
-      return d.toISOString().split('T')[0];
+      return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10);
     } catch (_) {}
   }
   try {
     const d = new Date(rawDate);
     if (!isNaN(d.getTime())) {
-      return d.toISOString().split('T')[0];
+      return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10);
     }
   } catch (_) {}
   return String(rawDate);
+};
+
+const formatKSTDateTime = (rawDate: any): string => {
+  if (!rawDate) return '';
+  try {
+    const d = typeof rawDate?.toDate === 'function' ? rawDate.toDate() : new Date(rawDate);
+    if (isNaN(d.getTime())) return '';
+    const kstIso = new Date(d.getTime() + 9 * 3600000).toISOString();
+    return `${kstIso.slice(0, 10)} ${kstIso.slice(11, 16)} KST`;
+  } catch (_) {
+    return '';
+  }
 };
 
 const formatLogTimestamp = (rawDate: any): string => {
@@ -728,17 +746,121 @@ const generateDefaultPowerShellScript = (code: string = '', category: string = '
   return `# Windows System Integrity Repair Script (${codeUpper || 'System Fix'})\r\n# Target: SFC System File Checker & DISM Image Servicing\r\n\r\nWrite-Host "[1/3] Running System File Checker (SFC)..." -ForegroundColor Cyan\r\nsfc /scannow\r\n\r\nWrite-Host "[2/3] Checking Component Store Health via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /CheckHealth\r\n\r\nWrite-Host "[3/3] Restoring Component Store Corruption via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /RestoreHealth\r\n\r\nWrite-Host "[+] System file integrity repair complete. Please restart your system." -ForegroundColor Green`;
 };
 
-const GITHUB_WORKFLOW_YAML = `name: Windows Fix Autonomous Collector & GitOps Sync
+interface GithubCollectorOptions {
+  enabled: boolean;
+  scheduleCron: string;
+  batchSize: number;
+  topicMode: 'all' | 'rotate' | 'fixed';
+  fixedTopic: string;
+  preferredTopics: string[];
+  targetWindowsVersions: string[];
+  modelPreference: string;
+  dedupStrictness: 'strict' | 'balanced';
+  autoDeployPages: boolean;
+  autoIntegrateSeed: boolean;
+  updatedAt?: string;
+}
+
+const ALL_COLLECTOR_TOPICS: string[] = [
+  '업데이트',
+  '네트워크',
+  '시스템/블루스크린',
+  '스토어/앱',
+  '정품인증',
+  '보안/백신',
+  '오디오/사운드',
+  '디스플레이/그래픽'
+];
+
+const COLLECTOR_WINDOWS_TARGETS: string[] = [
+  'Windows 11',
+  'Windows 10',
+  'Windows Server',
+  'Windows 8.1'
+];
+
+const COLLECTOR_MODEL_OPTIONS: Array<{ value: string; labelKo: string; labelEn: string }> = [
+  { value: 'auto', labelKo: '자동 스마트 라우팅 (Gemini 4/Lite + 서킷 브레이커 + Groq/Mistral/OpenRouter)', labelEn: 'Auto Smart Routing (Gemini 4/Lite + Circuit Breaker + Multi-Provider)' },
+  { value: 'gemini-4-hydrogen', labelKo: 'Gemini 4 Hydrogen 우선 (최신 4세대 Flash · 검색 그라운딩)', labelEn: 'Gemini 4 Hydrogen First (Latest Flash · Grounding)' },
+  { value: 'gemini-4-argon', labelKo: 'Gemini 4 Argon 우선 (고성능 추론 및 복합 분석)', labelEn: 'Gemini 4 Argon First (Deep Reasoning)' },
+  { value: 'gemini-3.1-flash-lite', labelKo: 'Gemini 3.1 Flash Lite 우선 (대용량 무료 할당량 최적화)', labelEn: 'Gemini 3.1 Flash Lite First (High Free Quota)' },
+  { value: 'gemini-3.8-flash', labelKo: 'Gemini 3.8 Flash 우선 (검색 그라운딩 안정화)', labelEn: 'Gemini 3.8 Flash First (Search Grounding)' },
+  { value: 'gemini-flash-latest', labelKo: 'Gemini Flash Latest 우선 (롤링 별칭 자동 추적)', labelEn: 'Gemini Flash Latest First (Rolling Alias)' }
+];
+
+const CRON_SCHEDULE_PRESETS: Array<{ cron: string; labelKo: string; labelEn: string; runsPerDay: number }> = [
+  { cron: '0 */3 * * *', labelKo: '매 3시간마다 (일 8회)', labelEn: 'Every 3 hours (8x/day)', runsPerDay: 8 },
+  { cron: '0 */6 * * *', labelKo: '매 6시간마다 (일 4회 · 기본)', labelEn: 'Every 6 hours (4x/day · Default)', runsPerDay: 4 },
+  { cron: '0 */12 * * *', labelKo: '매 12시간마다 (일 2회 · 오전/오후 9시 KST)', labelEn: 'Every 12 hours (2x/day)', runsPerDay: 2 },
+  { cron: '0 0 * * *', labelKo: '매일 1회 (KST 오전 9시)', labelEn: 'Daily once (00:00 UTC / 09:00 KST)', runsPerDay: 1 },
+  { cron: '0 15 * * *', labelKo: '매일 1회 (KST 자정 0시)', labelEn: 'Daily once (15:00 UTC / 00:00 KST)', runsPerDay: 1 },
+  { cron: '0 0 */2 * *', labelKo: '격일 1회 (2일마다)', labelEn: 'Every 2 days (0.5x/day)', runsPerDay: 0.5 },
+  { cron: '0 0 * * 1,4', labelKo: '주 2회 (월·목 KST 오전 9시)', labelEn: 'Twice a week (Mon & Thu)', runsPerDay: 2 / 7 }
+];
+
+const DEFAULT_COLLECTOR_OPTIONS: GithubCollectorOptions = {
+  enabled: true,
+  scheduleCron: '0 */6 * * *',
+  batchSize: 2,
+  topicMode: 'all',
+  fixedTopic: 'all',
+  preferredTopics: [...ALL_COLLECTOR_TOPICS],
+  targetWindowsVersions: ['Windows 11', 'Windows 10'],
+  modelPreference: 'auto',
+  dedupStrictness: 'strict',
+  autoDeployPages: true,
+  autoIntegrateSeed: true
+};
+
+const estimateDailyRunsFromCron = (cronExpr: string): number => {
+  const preset = CRON_SCHEDULE_PRESETS.find((p) => p.cron === cronExpr.trim());
+  if (preset) return preset.runsPerDay;
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return 4;
+  const [minPart, hourPart, domPart, , dowPart] = parts;
+  let runsPerDay = 1;
+  if (minPart.startsWith('*/')) {
+    const step = Math.max(1, parseInt(minPart.slice(2), 10) || 60);
+    runsPerDay *= 60 / step;
+  }
+  if (hourPart === '*') {
+    runsPerDay *= 24;
+  } else if (hourPart.startsWith('*/')) {
+    const step = Math.max(1, parseInt(hourPart.slice(2), 10) || 6);
+    runsPerDay *= 24 / step;
+  } else if (hourPart.includes(',')) {
+    runsPerDay *= hourPart.split(',').filter(Boolean).length;
+  }
+  if (domPart.startsWith('*/')) {
+    const step = Math.max(1, parseInt(domPart.slice(2), 10) || 1);
+    runsPerDay /= step;
+  } else if (dowPart !== '*') {
+    const days = dowPart.split(',').filter(Boolean).length;
+    if (days > 0) runsPerDay = (runsPerDay * days) / 7;
+  }
+  return Math.max(0.1, Number(runsPerDay.toFixed(2)));
+};
+
+const buildCollectorWorkflowYaml = (opts: GithubCollectorOptions): string => {
+  const safeCron = (opts.scheduleCron || '0 */6 * * *').trim();
+  const defaultTopic = opts.topicMode === 'fixed' && opts.fixedTopic ? opts.fixedTopic : 'all';
+  const targetWindows = (opts.targetWindowsVersions && opts.targetWindowsVersions.length > 0)
+    ? opts.targetWindowsVersions.join(',')
+    : 'Windows 11,Windows 10';
+  return `name: Windows Fix Autonomous Collector & GitOps Sync
 
 on:
+  # Automated scheduled run (Configured via Admin GitOps Options: ${safeCron} UTC)
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '${safeCron}'
+
+  # Manual execution trigger from GitHub Web UI or API dispatch
   workflow_dispatch:
     inputs:
       topic:
         description: 'Target Error Category (or all)'
         required: false
-        default: 'all'
+        default: '${defaultTopic}'
         type: choice
         options:
           - 'all'
@@ -751,9 +873,17 @@ on:
           - '오디오/사운드'
           - '디스플레이/그래픽'
       batch_size:
-        description: 'Number of fixes to collect (1-4)'
+        description: 'Number of fixes to collect (1-10)'
         required: false
-        default: '2'
+        default: ''
+      model_preference:
+        description: 'Preferred Gemini AI Model (auto or model ID)'
+        required: false
+        default: '${opts.modelPreference || 'auto'}'
+      target_windows:
+        description: 'Comma-separated Windows versions'
+        required: false
+        default: '${targetWindows}'
 
 permissions:
   contents: write
@@ -785,10 +915,19 @@ jobs:
         id: run-collector
         env:
           GEMINI_API_KEY: \${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: \${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: \${{ secrets.MISTRAL_API_KEY }}
+          OPENROUTER_API_KEY: \${{ secrets.OPENROUTER_API_KEY }}
+          CEREBRAS_API_KEY: \${{ secrets.CEREBRAS_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
           APP_WEBHOOK_URL: \${{ secrets.APP_WEBHOOK_URL }}
           CRON_SECRET: \${{ secrets.CRON_SECRET }}
-          INPUT_TOPIC: \${{ github.event.inputs.topic || 'all' }}
-          BATCH_SIZE: \${{ github.event.inputs.batch_size || '2' }}
+          INPUT_TOPIC: \${{ github.event.inputs.topic || '' }}
+          INPUT_BATCH_SIZE: \${{ github.event.inputs.batch_size || '' }}
+          INPUT_MODEL_PREFERENCE: \${{ github.event.inputs.model_preference || '' }}
+          INPUT_TARGET_WINDOWS: \${{ github.event.inputs.target_windows || '' }}
+          GITHUB_EVENT_NAME: \${{ github.event_name }}
         run: |
           npx tsx scripts/github-collector.ts
 
@@ -798,8 +937,14 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json)" ]; then
+          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json data/ai-model-registry.json src/data/knownIssues.ts)" ]; then
             git add data/issues.json data/github-feed.json
+            if [ -f data/ai-model-registry.json ]; then
+              git add data/ai-model-registry.json || true
+            fi
+            if [ -f src/data/knownIssues.ts ]; then
+              git add src/data/knownIssues.ts || true
+            fi
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
             git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
             
@@ -819,9 +964,17 @@ jobs:
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
         run: |
+          AUTO_DEPLOY=$(node -e "try{const fs=require('fs');const o=JSON.parse(fs.readFileSync('data/github-collector-options.json','utf8'));console.log(o.autoDeployPages===false?'false':'true')}catch{console.log('true')}")
+          if [ "$AUTO_DEPLOY" = "false" ] && [ "\${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "⏸️ Auto-deploy Pages is disabled in data/github-collector-options.json. Skipping."
+            exit 0
+          fi
           echo "Triggering deploy-pages.yml workflow for latest changes..."
           gh workflow run deploy-pages.yml --ref \${{ github.ref_name }} || echo "Workflow dispatch skipped or not required"
 `;
+};
+
+const GITHUB_WORKFLOW_YAML = buildCollectorWorkflowYaml(DEFAULT_COLLECTOR_OPTIONS);
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -881,10 +1034,113 @@ export default function App() {
   const [showWorkflowScriptModal, setShowWorkflowScriptModal] = useState<boolean>(false);
   const [copiedWorkflow, setCopiedWorkflow] = useState<boolean>(false);
   const [selectedGithubTopic, setSelectedGithubTopic] = useState<string>('all');
+  const [dispatchBatchSize, setDispatchBatchSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_github_collector_options');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const n = Number(parsed?.batchSize);
+        if (n >= 1 && n <= 10) return n;
+      }
+    } catch (_) {}
+    return 2;
+  });
+  const [collectorOptions, setCollectorOptions] = useState<GithubCollectorOptions>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_github_collector_options');
+      if (saved) {
+        return { ...DEFAULT_COLLECTOR_OPTIONS, ...JSON.parse(saved) };
+      }
+    } catch (_) {}
+    return DEFAULT_COLLECTOR_OPTIONS;
+  });
+  const [showCollectorOptionsPanel, setShowCollectorOptionsPanel] = useState<boolean>(true);
+  const [isSavingCollectorOptions, setIsSavingCollectorOptions] = useState<boolean>(false);
+  const [isPushingCollectorOptions, setIsPushingCollectorOptions] = useState<boolean>(false);
+  const [collectorOptionsStatus, setCollectorOptionsStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [showGitOpsGuideModal, setShowGitOpsGuideModal] = useState<boolean>(false);
   const [showGitOpsDiagramCard, setShowGitOpsDiagramCard] = useState<boolean>(true);
   const [gitOpsGuideActiveTab, setGitOpsGuideActiveTab] = useState<'architecture' | 'permissions' | 'secrets' | 'cron' | 'cli'>('architecture');
   const [copiedGuideMarkdown, setCopiedGuideMarkdown] = useState<boolean>(false);
+
+  const dynamicWorkflowYaml = useMemo(() => buildCollectorWorkflowYaml(collectorOptions), [collectorOptions]);
+
+  // Adaptive AI Model Resilience & Multi-Provider Free-Tier Router Hub (v3.100.0)
+  type ResilienceProviderId = 'gemini' | 'groq' | 'mistral' | 'openrouter' | 'cerebras' | 'cloudflare';
+  interface ResilienceGeminiModel {
+    id: string;
+    displayName: string;
+    tier: 'generation-4' | 'generation-3' | 'lite' | 'latest-alias' | 'other';
+    supportsGrounding: boolean;
+    enabled: boolean;
+    priority: number;
+    source: 'default' | 'auto-discovered';
+    lastVerifiedAt?: string;
+  }
+  interface ResilienceCircuitBreaker {
+    modelId: string;
+    provider: ResilienceProviderId;
+    statusCode: number;
+    reason: string;
+    trippedAt: string;
+    expiresAt: string;
+    failureCount: number;
+  }
+  interface ResilienceStrategyItem {
+    id: ResilienceProviderId | 'github-models';
+    name: string;
+    status: 'active' | 'trial' | 'retired';
+    envVars: string[];
+    freeTierLimits: string;
+    strengths: string;
+    privacyNote: string;
+    recommendedWorkload: string;
+    endpoint: string;
+  }
+  interface ResilienceStatusPayload {
+    registry: {
+      version: string;
+      updatedAt: string;
+      lastDiscoveryAt: string | null;
+      routingPolicy: 'quota-split' | 'gemini-first';
+      providerOrder: ResilienceProviderId[];
+      geminiModels: ResilienceGeminiModel[];
+      openrouterFreeModels: string[];
+      providerModels: Record<Exclude<ResilienceProviderId, 'gemini'>, string[]>;
+      circuitBreakers: Record<string, ResilienceCircuitBreaker>;
+      telemetry: {
+        totalRequests: number;
+        geminiRequests: number;
+        freeProviderRequests: number;
+        failoverSaves: number;
+        circuitTrips404: number;
+        lastProviderUsed: string | null;
+        lastModelUsed: string | null;
+        lastUpdatedAt: string | null;
+        perProviderUsage: Record<ResilienceProviderId, number>;
+      };
+    };
+    readiness: Record<ResilienceProviderId, { configured: boolean; envHint: string }>;
+    strategyCatalog: ResilienceStrategyItem[];
+  }
+
+  const [resilienceStatus, setResilienceStatus] = useState<ResilienceStatusPayload | null>(null);
+  const [aiHubTab, setAiHubTab] = useState<'discovery' | 'routing' | 'strategy'>('discovery');
+  const [isLoadingResilience, setIsLoadingResilience] = useState<boolean>(false);
+  const [isDiscoveringModels, setIsDiscoveringModels] = useState<boolean>(false);
+  const [isSavingResilience, setIsSavingResilience] = useState<boolean>(false);
+  const [isResettingCircuit, setIsResettingCircuit] = useState<string | null>(null);
+  const [testingChainProvider, setTestingChainProvider] = useState<string | null>(null);
+  const [chainTestResult, setChainTestResult] = useState<{
+    success: boolean;
+    provider?: string;
+    modelUsed?: string;
+    latencyMs?: number;
+    message?: string;
+    error?: string;
+  } | null>(null);
+  const [isPushingRegistry, setIsPushingRegistry] = useState<boolean>(false);
+  const [resilienceNotice, setResilienceNotice] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   // GitHub Releases Real-Time Auto-Update System
   const [updateModalOpen, setUpdateModalOpen] = useState<boolean>(false);
@@ -1323,12 +1579,73 @@ export default function App() {
     return counts;
   });
 
-  const githubIssuesCount = useMemo(() => {
-    return dbIssues.filter(i => 
-      (i.source && String(i.source).toLowerCase().includes('github')) || 
+  const githubHarvestStats = useMemo(() => {
+    const ghIssues = dbIssues.filter(i =>
+      (i.source && String(i.source).toLowerCase().includes('github')) ||
       (i.id && (String(i.id).startsWith('gh-') || String(i.id).includes('github')))
-    ).length;
-  }, [dbIssues]);
+    );
+
+    const nowMs = Date.now();
+    const todayKst = getKSTISOString().split('T')[0];
+    const dailyMap: Record<string, number> = {};
+    let latestMs = 0;
+    let firstMs = Infinity;
+    let rolling24hCount = 0;
+
+    for (const issue of ghIssues) {
+      const raw = issue.createdAt || issue.updatedAt;
+      if (!raw) continue;
+      const ms = typeof raw === 'number' ? raw : new Date(raw).getTime();
+      if (isNaN(ms) || ms <= 0) continue;
+
+      if (ms > latestMs) latestMs = ms;
+      if (ms < firstMs) firstMs = ms;
+      if (nowMs - ms <= 24 * 3600000) rolling24hCount++;
+
+      const dateKey = formatCollectionDate(raw);
+      if (dateKey) {
+        dailyMap[dateKey] = (dailyMap[dateKey] || 0) + 1;
+      }
+    }
+
+    const dailyHistory = Object.keys(dailyMap)
+      .sort((a, b) => b.localeCompare(a))
+      .map(date => ({ date, count: dailyMap[date] }));
+
+    const latestDate = latestMs > 0
+      ? new Date(latestMs + 9 * 3600000).toISOString().slice(0, 10)
+      : (githubLastSync?.at ? formatCollectionDate(githubLastSync.at) : '');
+
+    const firstDate = firstMs !== Infinity
+      ? new Date(firstMs + 9 * 3600000).toISOString().slice(0, 10)
+      : latestDate;
+
+    const latestCollectedKstTime = latestMs > 0
+      ? formatKSTDateTime(latestMs)
+      : (githubLastSync?.at ? formatKSTDateTime(githubLastSync.at) : '');
+
+    const todayCount = dailyMap[todayKst] || 0;
+    const latestDayCount = latestDate ? (dailyMap[latestDate] || 0) : 0;
+    const activeDaysCount = dailyHistory.length;
+    const dailyAverage = activeDaysCount > 0 ? Math.max(1, Math.round((ghIssues.length / activeDaysCount) * 10) / 10) : 0;
+
+    return {
+      totalCount: ghIssues.length,
+      todayKst,
+      todayCount,
+      rolling24hCount,
+      latestDate,
+      firstDate,
+      latestDayCount,
+      latestCollectedKstTime,
+      dailyHistory,
+      activeDaysCount,
+      dailyAverage,
+      displayDailyCount: rolling24hCount > 0 ? rolling24hCount : latestDayCount,
+    };
+  }, [dbIssues, githubLastSync]);
+
+  const githubIssuesCount = githubHarvestStats.totalCount;
 
   const githubRepoTotalCount = useMemo(() => {
     // In GitOps mode, the entire repository tracks all issues (Seed + Collected)
@@ -2171,23 +2488,52 @@ export default function App() {
       console.warn("GitHub config load from API skipped (static mode):", e);
     }
 
-    if (!loadedFromApi) {
-      try {
-        const savedLocal = localStorage.getItem('winfix_github_config');
-        if (savedLocal) {
-          const cfg = JSON.parse(savedLocal);
-          if (cfg.repo) setGithubRepo(cfg.repo);
-          if (cfg.branch) setGithubBranch(cfg.branch);
-          if (cfg.workflowId) setGithubWorkflowId(cfg.workflowId);
-          if (cfg.authMode) setGithubAuthMode(cfg.authMode);
-          if (cfg.autoDeployPages !== undefined) setAutoDeployPages(cfg.autoDeployPages);
-          if (cfg.token) {
-            setGithubToken(cfg.token);
-            setHasServerGithubToken(true);
+      if (!loadedFromApi) {
+        try {
+          const savedLocal = localStorage.getItem('winfix_github_config');
+          if (savedLocal) {
+            const cfg = JSON.parse(savedLocal);
+            if (cfg.repo) setGithubRepo(cfg.repo);
+            if (cfg.branch) setGithubBranch(cfg.branch);
+            if (cfg.workflowId) setGithubWorkflowId(cfg.workflowId);
+            if (cfg.authMode) setGithubAuthMode(cfg.authMode);
+            if (cfg.autoDeployPages !== undefined) setAutoDeployPages(cfg.autoDeployPages);
+            if (cfg.token) {
+              setGithubToken(cfg.token);
+              setHasServerGithubToken(true);
+            }
           }
+        } catch (err) {}
+      }
+
+      // Load GitHub Auto-Collection Advanced Options
+      let loadedOpts = false;
+      try {
+        const authHeaders = await getAuthHeaders();
+        const optResp = await fetch("/api/github/collector-options", {
+          headers: { ...authHeaders }
+        });
+        const optData = await parseJsonResponse(optResp);
+        if (optData.success && optData.options) {
+          const mergedOpts: GithubCollectorOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...optData.options };
+          setCollectorOptions(mergedOpts);
+          setDispatchBatchSize(mergedOpts.batchSize || 2);
+          localStorage.setItem('winfix_github_collector_options', JSON.stringify(mergedOpts));
+          loadedOpts = true;
         }
-      } catch (err) {}
-    }
+      } catch (optErr) {
+        console.warn("Collector options load from API skipped (static mode):", optErr);
+      }
+      if (!loadedOpts) {
+        try {
+          const savedOpts = localStorage.getItem('winfix_github_collector_options');
+          if (savedOpts) {
+            const parsedOpts: GithubCollectorOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...JSON.parse(savedOpts) };
+            setCollectorOptions(parsedOpts);
+            setDispatchBatchSize(parsedOpts.batchSize || 2);
+          }
+        } catch (_) {}
+      }
   };
 
   const saveGithubConfig = async () => {
@@ -2247,6 +2593,443 @@ export default function App() {
       customAlert(language === 'en' 
         ? "GitHub configuration saved successfully." 
         : "GitHub 연동 및 GitHub Pages 자동 배포 설정이 성공적으로 저장되었습니다.");
+    }
+  };
+
+  const saveCollectorOptions = async (silentAlert = false): Promise<GithubCollectorOptions | null> => {
+    if (!isAdmin) return null;
+    const cronParts = (collectorOptions.scheduleCron || '').trim().split(/\s+/);
+    if (cronParts.length !== 5) {
+      const errMsg = language === 'en'
+        ? 'Invalid cron schedule format. Must have 5 fields (e.g. "0 */6 * * *").'
+        : '유효하지 않은 Cron 스케줄 형식입니다. 5개 필드(예: "0 */6 * * *")를 입력하세요.';
+      setCollectorOptionsStatus({ type: 'error', message: errMsg });
+      if (!silentAlert) customAlert(errMsg);
+      return null;
+    }
+
+    setIsSavingCollectorOptions(true);
+    setCollectorOptionsStatus(null);
+    const normalized: GithubCollectorOptions = {
+      ...collectorOptions,
+      scheduleCron: collectorOptions.scheduleCron.trim(),
+      batchSize: Math.min(Math.max(Number(collectorOptions.batchSize) || 2, 1), 10),
+      preferredTopics: collectorOptions.preferredTopics.length > 0 ? collectorOptions.preferredTopics : [...ALL_COLLECTOR_TOPICS],
+      targetWindowsVersions: collectorOptions.targetWindowsVersions.length > 0 ? collectorOptions.targetWindowsVersions : ['Windows 11', 'Windows 10'],
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem('winfix_github_collector_options', JSON.stringify(normalized));
+      setCollectorOptions(normalized);
+      setDispatchBatchSize(normalized.batchSize);
+      setAutoDeployPages(normalized.autoDeployPages);
+    } catch (_) {}
+
+    let finalOptions = normalized;
+    let savedToServer = false;
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch("/api/github/collector-options", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify(normalized)
+      });
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      if (data.options) {
+        finalOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...data.options };
+        setCollectorOptions(finalOptions);
+        setDispatchBatchSize(finalOptions.batchSize);
+        localStorage.setItem('winfix_github_collector_options', JSON.stringify(finalOptions));
+      }
+      savedToServer = true;
+    } catch (err: any) {
+      // If server threw a validation error (e.g., invalid cron expression), surface it
+      if (err.message && (err.message.includes('Cron') || err.message.includes('400'))) {
+        setCollectorOptionsStatus({ type: 'error', message: err.message });
+        setIsSavingCollectorOptions(false);
+        if (!silentAlert) customAlert(err.message);
+        return null;
+      }
+      console.warn("Collector options server save skipped (static client mode):", err);
+    } finally {
+      setIsSavingCollectorOptions(false);
+    }
+
+    const msg = savedToServer
+      ? (language === 'en'
+          ? 'Collector options saved locally & synced to server engine.'
+          : '깃허브 자동수집 옵션이 저장되었으며 서버 수집 엔진과 동기화되었습니다.')
+      : (language === 'en'
+          ? 'Collector options saved to browser storage (static mode).'
+          : '깃허브 자동수집 옵션이 브라우저에 저장되었습니다 (정적 웹 모드).');
+    setCollectorOptionsStatus({ type: 'success', message: msg });
+    if (!silentAlert) customAlert(msg);
+    return finalOptions;
+  };
+
+  const pushCollectorOptionsToGithub = async () => {
+    if (!isAdmin) return;
+    const saved = await saveCollectorOptions(true);
+    if (!saved) return;
+
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? JSON.parse(local).token : '';
+      } catch (e) { return ''; }
+    })();
+
+    if (!hasServerGithubToken && !storedToken) {
+      const needPatMsg = language === 'en'
+        ? "GitHub PAT Token ('repo', 'workflow') is required to commit options and workflow schedule to GitHub."
+        : "GitHub 저장소에 수집 옵션(data/github-collector-options.json)과 스케줄(.github/workflows/windows-fix-collector.yml)을 반영하려면 PAT 토큰('repo', 'workflow' 권한)이 필요합니다.";
+      setCollectorOptionsStatus({ type: 'error', message: needPatMsg });
+      customAlert(needPatMsg, scrollToGithubSettings);
+      scrollToGithubSettings();
+      return;
+    }
+
+    setIsPushingCollectorOptions(true);
+    let success = false;
+    let pushMsg = '';
+
+    // 1. Try server endpoint first
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch("/api/github/push-collector-options", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify({
+          repo: targetRepo,
+          branch: targetBranch,
+          token: storedToken || undefined,
+          options: saved
+        })
+      });
+      const data = await parseJsonResponse(resp);
+      if (data.success) {
+        success = true;
+        pushMsg = data.message || `GitHub(${targetRepo})에 수집 옵션과 워크플로 스케줄을 성공적으로 커밋 반영했습니다!`;
+      } else if (data.error) {
+        throw new Error(data.error);
+      }
+    } catch (apiErr: any) {
+      console.warn("Server push-collector-options skipped/fallback:", apiErr);
+    }
+
+    // 2. Direct client-side GitHub Contents API fallback
+    if (!success) {
+      try {
+        if (!storedToken) {
+          throw new Error("PAT 토큰이 설정되지 않았습니다.");
+        }
+        const headers = {
+          'Authorization': `Bearer ${storedToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        };
+        const encodeUtf8Base64 = (text: string) => {
+          const bytes = new TextEncoder().encode(text);
+          let bin = '';
+          for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+          return btoa(bin);
+        };
+        const upsertGithubContent = async (filePath: string, contentText: string, message: string) => {
+          let sha: string | undefined;
+          const getRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`, { headers });
+          if (getRes.status === 401 || getRes.status === 403) {
+            throw new Error(`GitHub 인증 실패 (${getRes.status}): PAT 토큰의 'repo', 'workflow' 권한을 확인하세요.`);
+          }
+          if (getRes.ok) {
+            const info = await getRes.json();
+            sha = info.sha;
+          }
+          const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({
+              message,
+              content: encodeUtf8Base64(contentText),
+              branch: targetBranch,
+              ...(sha ? { sha } : {})
+            })
+          });
+          if (!putRes.ok) {
+            const errText = await putRes.text();
+            throw new Error(`GitHub 파일(${filePath}) 커밋 실패 (${putRes.status}): ${errText}`);
+          }
+        };
+
+        await upsertGithubContent(
+          'data/github-collector-options.json',
+          JSON.stringify(saved, null, 2) + '\n',
+          `⚙️ [GitOps] Update autonomous collector options (${saved.enabled ? 'active' : 'paused'}, batch=${saved.batchSize}, cron=${saved.scheduleCron})`
+        );
+        await upsertGithubContent(
+          '.github/workflows/windows-fix-collector.yml',
+          buildCollectorWorkflowYaml(saved),
+          `🕒 [GitOps] Sync collector schedule & inputs (${saved.scheduleCron})`
+        );
+        success = true;
+        pushMsg = `GitHub(${targetRepo}) 저장소에 수집 옵션과 워크플로 스케줄(${saved.scheduleCron}, ${saved.batchSize}개)을 직접 커밋 반영했습니다!`;
+      } catch (clientErr: any) {
+        const errMsg = clientErr.message || 'GitHub 반영 실패';
+        setCollectorOptionsStatus({ type: 'error', message: errMsg });
+        customAlert(errMsg, errMsg.includes('PAT') || errMsg.includes('인증') ? scrollToGithubSettings : undefined);
+        setIsPushingCollectorOptions(false);
+        return;
+      }
+    }
+
+    if (success) {
+      setCollectorOptionsStatus({ type: 'success', message: pushMsg });
+      customAlert(pushMsg);
+    }
+    setIsPushingCollectorOptions(false);
+  };
+
+  const fetchResilienceStatus = useCallback(async () => {
+    if (!isAdmin || IS_GITHUB_PAGES) return;
+    setIsLoadingResilience(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/ai/resilience-status', { headers: { ...authHeaders } });
+      const data = await parseJsonResponse(resp);
+      if (data.success && data.registry) {
+        setResilienceStatus({
+          registry: data.registry,
+          readiness: data.readiness,
+          strategyCatalog: Array.isArray(data.strategyCatalog) ? data.strategyCatalog : []
+        });
+      }
+    } catch (err) {
+      console.warn('Resilience status load skipped:', err);
+    } finally {
+      setIsLoadingResilience(false);
+    }
+  }, [isAdmin]);
+
+  const handleDiscoverLiveModels = async () => {
+    if (!isAdmin) return;
+    if (IS_GITHUB_PAGES) {
+      setResilienceNotice({ type: 'info', message: '정적 GitHub Pages 호스팅에서는 백엔드 실시간 탐색 대신 저장소의 ai-model-registry.json을 참조합니다.' });
+      return;
+    }
+    setIsDiscoveringModels(true);
+    setResilienceNotice(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/ai/discover-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders }
+      });
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      setResilienceStatus((prev) => ({
+        registry: data.registry,
+        readiness: data.readiness || prev?.readiness || ({} as any),
+        strategyCatalog: prev?.strategyCatalog || []
+      }));
+      setResilienceNotice({
+        type: 'success',
+        message: `실시간 모델 탐색 완료: Gemini ${data.geminiDiscoveredCount || 0}종 · OpenRouter :free ${data.openrouterDiscoveredCount || 0}종 동기화됨`
+      });
+    } catch (err: any) {
+      setResilienceNotice({ type: 'error', message: `실시간 모델 탐색 실패: ${err.message}` });
+    } finally {
+      setIsDiscoveringModels(false);
+    }
+  };
+
+  const persistResilienceConfig = async (
+    nextPolicy: 'quota-split' | 'gemini-first',
+    nextProviderOrder: ResilienceProviderId[],
+    nextGeminiModels: ResilienceGeminiModel[],
+    successMsg?: string
+  ) => {
+    if (!isAdmin) return;
+    setIsSavingResilience(true);
+    setResilienceNotice(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/ai/resilience-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          routingPolicy: nextPolicy,
+          providerOrder: nextProviderOrder,
+          geminiModels: nextGeminiModels
+        })
+      });
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      setResilienceStatus((prev) => (prev ? { ...prev, registry: data.registry } : prev));
+      setResilienceNotice({
+        type: 'success',
+        message: successMsg || 'AI 라우팅 정책 및 모델 우선순위가 저장되었습니다.'
+      });
+    } catch (err: any) {
+      setResilienceNotice({ type: 'error', message: `설정 저장 실패: ${err.message}` });
+    } finally {
+      setIsSavingResilience(false);
+    }
+  };
+
+  const handleMoveGeminiModel = (index: number, delta: -1 | 1) => {
+    if (!resilienceStatus) return;
+    const list = [...resilienceStatus.registry.geminiModels];
+    const targetIdx = index + delta;
+    if (targetIdx < 0 || targetIdx >= list.length) return;
+    const temp = list[index];
+    list[index] = list[targetIdx];
+    list[targetIdx] = temp;
+    const reindexed = list.map((m, i) => ({ ...m, priority: i + 1 }));
+    setResilienceStatus({ ...resilienceStatus, registry: { ...resilienceStatus.registry, geminiModels: reindexed } });
+  };
+
+  const handlePromotePrimaryGeminiModel = (modelId: string) => {
+    if (!resilienceStatus) return;
+    const list = [...resilienceStatus.registry.geminiModels];
+    const idx = list.findIndex((m) => m.id === modelId);
+    if (idx === -1) return;
+    const picked = { ...list[idx], enabled: true };
+    const rest = list.filter((m) => m.id !== modelId);
+    const reindexed = [picked, ...rest].map((m, i) => ({ ...m, priority: i + 1 }));
+    setResilienceStatus({ ...resilienceStatus, registry: { ...resilienceStatus.registry, geminiModels: reindexed } });
+    persistResilienceConfig(
+      resilienceStatus.registry.routingPolicy,
+      resilienceStatus.registry.providerOrder,
+      reindexed,
+      `주력 Gemini 모델을 '${modelId}'(1순위)로 승격했습니다.`
+    );
+  };
+
+  const handleToggleGeminiModel = (modelId: string) => {
+    if (!resilienceStatus) return;
+    const nextList = resilienceStatus.registry.geminiModels.map((m) =>
+      m.id === modelId ? { ...m, enabled: !m.enabled } : m
+    );
+    setResilienceStatus({ ...resilienceStatus, registry: { ...resilienceStatus.registry, geminiModels: nextList } });
+  };
+
+  const handleMoveProviderOrder = (index: number, delta: -1 | 1) => {
+    if (!resilienceStatus) return;
+    const order = [...resilienceStatus.registry.providerOrder];
+    const targetIdx = index + delta;
+    if (targetIdx < 0 || targetIdx >= order.length) return;
+    const temp = order[index];
+    order[index] = order[targetIdx];
+    order[targetIdx] = temp;
+    setResilienceStatus({ ...resilienceStatus, registry: { ...resilienceStatus.registry, providerOrder: order } });
+  };
+
+  const handleResetCircuitBreaker = async (modelId?: string) => {
+    if (!isAdmin) return;
+    setIsResettingCircuit(modelId || 'ALL');
+    setResilienceNotice(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/ai/circuit-breaker/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(modelId ? { modelId } : {})
+      });
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      setResilienceStatus((prev) => (prev ? { ...prev, registry: data.registry } : prev));
+      setResilienceNotice({
+        type: 'success',
+        message: modelId ? `'${modelId}' 404 서킷 브레이커 격리를 해제했습니다.` : '모든 404 서킷 브레이커 격리를 초기화했습니다.'
+      });
+    } catch (err: any) {
+      setResilienceNotice({ type: 'error', message: `서킷 브레이커 해제 실패: ${err.message}` });
+    } finally {
+      setIsResettingCircuit(null);
+    }
+  };
+
+  const handleTestProviderChain = async (provider?: ResilienceProviderId) => {
+    if (!isAdmin || IS_GITHUB_PAGES) return;
+    setTestingChainProvider(provider || 'chain');
+    setChainTestResult(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/ai/test-chain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(provider ? { provider } : {})
+      });
+      const data = await parseJsonResponse(resp);
+      setChainTestResult(data);
+      fetchResilienceStatus();
+    } catch (err: any) {
+      setChainTestResult({ success: false, provider: provider || 'chain', error: err.message });
+    } finally {
+      setTestingChainProvider(null);
+    }
+  };
+
+  const handlePushRegistryToGithub = async () => {
+    if (!isAdmin) return;
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? JSON.parse(local).token : '';
+      } catch {
+        return '';
+      }
+    })();
+
+    setIsPushingRegistry(true);
+    setResilienceNotice(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/ai/push-registry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          repo: targetRepo,
+          branch: targetBranch,
+          token: storedToken || undefined
+        })
+      });
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      setResilienceNotice({
+        type: 'success',
+        message: data.message || `GitHub(${targetRepo}) data/ai-model-registry.json 커밋 완료!`
+      });
+    } catch (err: any) {
+      setResilienceNotice({ type: 'error', message: err.message });
+      if ((err.message || '').includes('PAT')) {
+        scrollToGithubSettings();
+      }
+    } finally {
+      setIsPushingRegistry(false);
     }
   };
 
@@ -2372,11 +3155,16 @@ export default function App() {
     }, 200);
   };
 
-  const handleDispatchGithubWorkflow = async (topic = 'all') => {
+  const handleDispatchGithubWorkflow = async (topic = 'all', batchSizeOverride?: number) => {
     if (!isAdmin) return;
     const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
     const targetBranch = githubBranch.trim() || 'main';
     const workflowFile = githubWorkflowId.trim() || 'windows-fix-collector.yml';
+    const effectiveBatchSize = Math.min(Math.max(Number(batchSizeOverride ?? dispatchBatchSize ?? collectorOptions.batchSize ?? 2) || 2, 1), 10);
+    const effectiveModelPref = collectorOptions.modelPreference || 'auto';
+    const effectiveTargetWindows = (collectorOptions.targetWindowsVersions && collectorOptions.targetWindowsVersions.length > 0)
+      ? collectorOptions.targetWindowsVersions.join(',')
+      : 'Windows 11,Windows 10';
     const storedToken = (() => {
       if (githubToken.trim()) return githubToken.trim();
       try {
@@ -2415,13 +3203,15 @@ export default function App() {
           branch: targetBranch,
           token: storedToken || undefined,
           topic,
-          batchSize: 2
+          batchSize: effectiveBatchSize,
+          modelPreference: effectiveModelPref,
+          targetWindows: effectiveTargetWindows
         })
       });
       const data = await parseJsonResponse(resp);
       if (data.success) {
         success = true;
-        dispatchMsg = data.message || "워크플로가 성공적으로 원격 실행되었습니다!";
+        dispatchMsg = data.message || `워크플로가 성공적으로 원격 실행되었습니다! (주제: ${topic}, 수량: ${effectiveBatchSize}개)`;
       }
     } catch (apiErr) {
       console.warn("Server dispatch endpoint skipped (static mode):", apiErr);
@@ -2442,7 +3232,9 @@ export default function App() {
             ref: targetBranch,
             inputs: {
               topic,
-              batch_size: '2'
+              batch_size: String(effectiveBatchSize),
+              model_preference: effectiveModelPref,
+              target_windows: effectiveTargetWindows
             }
           })
         });
@@ -4743,8 +5535,9 @@ export default function App() {
   useEffect(() => {
     if (activeTab === 'admin' && isAdmin) {
       fetchLogSummary();
+      fetchResilienceStatus();
     }
-  }, [activeTab, isAdmin, fetchLogSummary]);
+  }, [activeTab, isAdmin, fetchLogSummary, fetchResilienceStatus]);
 
   const handleExportAllLogsZip = async () => {
     if (!isAdmin) return;
@@ -11226,6 +12019,107 @@ export default function App() {
               )}
             </AnimatePresence>
 
+            {/* GitHub Actions / GitOps Daily Collection Briefing Banner (User-facing) */}
+            {githubHarvestStats.totalCount > 0 && (
+              <div className="bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-slate-50 dark:from-indigo-950/35 dark:via-slate-900 dark:to-slate-900 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs shrink-0">
+                      <Github className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {language === 'en' ? 'GitHub (GitOps) Daily Auto-Collected Data' : '깃허브(GitHub Actions / GitOps) 일일 자동 수집 현황'}
+                        </h3>
+                        {githubHarvestStats.latestDate && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/70">
+                            <Calendar className="w-3 h-3" />
+                            <span>
+                              {language === 'en' ? 'Latest: ' : '최근 수집일: '}
+                              {githubHarvestStats.latestCollectedKstTime || githubHarvestStats.latestDate}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                        {language === 'en' ? (
+                          <>
+                            Collected <strong className="text-indigo-700 dark:text-indigo-300 font-bold">{githubHarvestStats.rolling24hCount} issues</strong> in the past 24 hours
+                            {githubHarvestStats.latestDate && ` (${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount} items)`}. Total <strong className="font-bold">{githubHarvestStats.totalCount}</strong> GitHub-collected solutions merged.
+                          </>
+                        ) : (
+                          <>
+                            최근 하루(24시간) 동안 <strong className="text-indigo-700 dark:text-indigo-300 font-bold">{githubHarvestStats.rolling24hCount}개</strong>의 Windows 오류 해결책이 새로 수집되었습니다
+                            {githubHarvestStats.todayKst === githubHarvestStats.latestDate
+                              ? ` (오늘 ${githubHarvestStats.todayKst} 수집: ${githubHarvestStats.todayCount}개)`
+                              : githubHarvestStats.latestDate
+                                ? ` (오늘 ${githubHarvestStats.todayKst}: ${githubHarvestStats.todayCount}개 · 직전 수집일 ${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount}개)`
+                                : ''}.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                    <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-700/70 text-center shadow-2xs">
+                      <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                        {language === 'en' ? 'Collected (24h)' : '하루(24h) 수집'}
+                      </div>
+                      <div className="text-base font-extrabold font-mono text-indigo-600 dark:text-indigo-400">
+                        +{githubHarvestStats.rolling24hCount}{language === 'en' ? '' : '개'}
+                      </div>
+                    </div>
+                    <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-center shadow-2xs">
+                      <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                        {language === 'en' ? 'GitHub Total' : 'GitHub 누적'}
+                      </div>
+                      <div className="text-base font-extrabold font-mono text-slate-800 dark:text-slate-100">
+                        {githubHarvestStats.totalCount}{language === 'en' ? '' : '개'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent 7 days collection breakdown (clickable date chips) */}
+                {githubHarvestStats.dailyHistory.length > 0 && (
+                  <div className="pt-2.5 border-t border-indigo-200/60 dark:border-indigo-800/40 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1 shrink-0">
+                      <Clock className="w-3 h-3 text-indigo-500" />
+                      {language === 'en' ? 'Daily Counts (Click date to filter):' : '일자별 수집 건수 (클릭 시 해당 날짜 필터):'}
+                    </span>
+                    {githubHarvestStats.dailyHistory.slice(0, 7).map((entry) => {
+                      const isActive = selectedDateFilter === entry.date;
+                      return (
+                        <button
+                          key={entry.date}
+                          type="button"
+                          onClick={() => setSelectedDateFilter(isActive ? 'all' : entry.date)}
+                          className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+                            isActive
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-white/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500'
+                          }`}
+                          title={language === 'en' ? `Filter issues collected on ${entry.date}` : `${entry.date} 수집 데이터만 보기`}
+                        >
+                          <span>{entry.date.slice(5)}</span>
+                          <span className={`font-bold ${isActive ? 'text-indigo-100' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                            {entry.count}{language === 'en' ? '' : '개'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {githubHarvestStats.firstDate && githubHarvestStats.latestDate && (
+                      <span className="ml-auto text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                        {githubHarvestStats.firstDate} ~ {githubHarvestStats.latestDate} ({language === 'en' ? `avg ${githubHarvestStats.dailyAverage}/day` : `일평균 ${githubHarvestStats.dailyAverage}개`})
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* System Info Auto-Detector Widget */}
             <SystemInfoWidget
               language={language}
@@ -11526,6 +12420,20 @@ export default function App() {
                     <span className="opacity-70 text-[10px] ml-1">({m.count})</span>
                   </button>
                 ))}
+
+                {/* Exact Date Chip (when a specific YYYY-MM-DD day is chosen) */}
+                {/^\d{4}-\d{2}-\d{2}$/.test(selectedDateFilter) && (
+                  <button
+                    onClick={() => setSelectedDateFilter('all')}
+                    className="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-all border cursor-pointer bg-indigo-600 text-white border-indigo-600 shadow-xs flex items-center gap-1"
+                    title={language === 'en' ? 'Clear selected date filter' : '선택한 일자 필터 해제'}
+                  >
+                    <Calendar className="w-3 h-3" />
+                    <span className="font-mono">{selectedDateFilter}</span>
+                    <span className="opacity-85 text-[10px]">({filteredIssues.length})</span>
+                    <X className="w-3 h-3 ml-0.5" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -12969,16 +13877,41 @@ export default function App() {
                         <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'Jamstack Static Dataset:' : 'Jamstack 정적 데이터셋 (data/issues.json):'}</span>
                         <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                      <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-400">
                         <span className="text-slate-400 font-mono">└─</span>
                         <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'GitHub (GitOps) Harvested Data:' : '깃허브(GitHub Actions / GitOps) 수집 데이터:'}</span>
                         <span className="font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/40">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</span>
+                        {githubHarvestStats.latestDate && (
+                          <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                            {language === 'en' ? 'Latest: ' : '최근 수집일: '}
+                            {githubHarvestStats.latestCollectedKstTime || githubHarvestStats.latestDate}
+                            {githubHarvestStats.firstDate && githubHarvestStats.firstDate !== githubHarvestStats.latestDate
+                              ? ` (${githubHarvestStats.firstDate} ~ ${githubHarvestStats.latestDate})`
+                              : ''}
+                          </span>
+                        )}
+                        <span className="font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">
+                          {language === 'en'
+                            ? `24h Daily: +${githubHarvestStats.rolling24hCount} items (Today ${githubHarvestStats.todayKst}: ${githubHarvestStats.todayCount})`
+                            : `하루(24h) 수집: +${githubHarvestStats.rolling24hCount}개 · 오늘(${githubHarvestStats.todayKst}): ${githubHarvestStats.todayCount}개${
+                                githubHarvestStats.latestDate && githubHarvestStats.latestDate !== githubHarvestStats.todayKst
+                                  ? ` · 직전일(${githubHarvestStats.latestDate}): ${githubHarvestStats.latestDayCount}개`
+                                  : ''
+                              }`}
+                        </span>
                       </div>
                     </div>
                   </li>
-                  <li className="flex items-center gap-2">
+                  <li className="flex flex-wrap items-center gap-2">
                     <span>• {language === 'en' ? 'GitHub (GitOps) Total Harvested Data:' : '깃허브(GitHub Actions / GitOps) 수집 총 데이터:'}</span>
                     <span className="font-bold text-slate-900 dark:text-slate-100">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</span>
+                    {githubHarvestStats.latestDate && (
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        ({language === 'en'
+                          ? `Latest ${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount} | 24h: +${githubHarvestStats.rolling24hCount}`
+                          : `최신일 ${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount}개 · 하루(24h): +${githubHarvestStats.rolling24hCount}개`})
+                      </span>
+                    )}
                   </li>
                   <li className="flex items-center gap-2">
                     <span>• {language === 'en' ? 'Jamstack Static Total Stored Data:' : 'Jamstack 정적 DB 보관 총 데이터:'}</span>
@@ -13177,6 +14110,14 @@ export default function App() {
                     <span className="px-2.5 py-1 text-xs rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 font-medium">
                       <Github className="w-3.5 h-3.5 text-indigo-500" />
                       <span>{language === 'en' ? 'GitHub Issues:' : 'GitHub 수집 데이터:'} <strong className="font-bold">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</strong></span>
+                    </span>
+                    <span className="px-2.5 py-1 text-xs rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 flex items-center gap-1.5 font-medium">
+                      <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                      <span>
+                        {language === 'en'
+                          ? `24h: +${githubHarvestStats.rolling24hCount} (${githubHarvestStats.latestDate || '-'})`
+                          : `하루(24h): +${githubHarvestStats.rolling24hCount}개 · 최근: ${githubHarvestStats.latestDate || '-'}`}
+                      </span>
                     </span>
 
                     {/* Real-time Collector Workflow Badge */}
@@ -13446,25 +14387,38 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <select
                         value={selectedGithubTopic}
                         onChange={(e) => setSelectedGithubTopic(e.target.value)}
-                        className="py-2 px-3 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                        className="py-2 px-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
                       >
                         <option value="all">카테고리: 전체</option>
-                        <option value="업데이트">업데이트 오류</option>
-                        <option value="시스템/블루스크린">블루스크린(BSOD)</option>
-                        <option value="네트워크">네트워크 오류</option>
-                        <option value="스토어/앱">MS 스토어/앱</option>
+                        <option value="업데이트">업데이트</option>
+                        <option value="네트워크">네트워크</option>
+                        <option value="시스템/블루스크린">시스템/블루스크린</option>
+                        <option value="스토어/앱">스토어/앱</option>
+                        <option value="정품인증">정품인증</option>
+                        <option value="보안/백신">보안/백신</option>
                         <option value="오디오/사운드">오디오/사운드</option>
                         <option value="디스플레이/그래픽">디스플레이/그래픽</option>
                       </select>
 
+                      <select
+                        value={dispatchBatchSize}
+                        onChange={(e) => setDispatchBatchSize(Number(e.target.value))}
+                        title={language === 'en' ? 'Fixes count per run' : '1회 실행 시 수집 수량'}
+                        className="py-2 px-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 font-semibold"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
+                          <option key={n} value={n}>{n}개 수집</option>
+                        ))}
+                      </select>
+
                       <button
-                        onClick={() => handleDispatchGithubWorkflow(selectedGithubTopic)}
+                        onClick={() => handleDispatchGithubWorkflow(selectedGithubTopic, dispatchBatchSize)}
                         disabled={isDispatchingWorkflow || !githubRepo}
-                        className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
+                        className="flex-1 min-w-[140px] py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
                       >
                         {isDispatchingWorkflow ? (
                           <>
@@ -13550,6 +14504,371 @@ export default function App() {
                       )}
                     </button>
                   </div>
+                </div>
+
+                {/* Advanced GitHub Auto-Collection Options Panel (v3.99.0) */}
+                <div className="bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 dark:from-indigo-950/20 dark:via-slate-900 dark:to-slate-900/80 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 overflow-hidden shadow-xs">
+                  <div
+                    onClick={() => setShowCollectorOptionsPanel(!showCollectorOptionsPanel)}
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-colors"
+                  >
+                    <div className="flex items-start sm:items-center gap-3">
+                      <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs shrink-0">
+                        <Sliders className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {language === 'en'
+                              ? 'GitHub Auto-Collection Engine Options'
+                              : '⚙️ 깃허브 자동수집 옵션 설정 (스케줄 · 수량 · 카테고리 · AI 모델)'}
+                          </h4>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                            collectorOptions.enabled
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                              : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                          }`}>
+                            {collectorOptions.enabled ? '자동수집 활성' : '정기수집 일시중지'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          예상 수집량: 하루 약 <strong className="text-indigo-600 dark:text-indigo-400">{Math.round(estimateDailyRunsFromCron(collectorOptions.scheduleCron) * collectorOptions.batchSize)}건</strong> · 월 약 <strong className="text-indigo-600 dark:text-indigo-400">{Math.round(estimateDailyRunsFromCron(collectorOptions.scheduleCron) * collectorOptions.batchSize * 30)}건</strong> ({collectorOptions.scheduleCron} UTC / 회당 {collectorOptions.batchSize}건)
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                        {showCollectorOptionsPanel ? '옵션 패널 접기' : '옵션 패널 열기'}
+                      </span>
+                      {showCollectorOptionsPanel ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                    </div>
+                  </div>
+
+                  {showCollectorOptionsPanel && (
+                    <div className="p-4 sm:p-5 border-t border-indigo-100 dark:border-indigo-900/50 space-y-5">
+                      {/* Row 1: Enable toggle & Cron Schedule */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                        <div className="lg:col-span-4 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between gap-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-bold text-slate-800 dark:text-slate-200">정기 크론 자동 수집 활성화</div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                끄면 정기 크론 실행은 건너뛰고 수동 실행(Dispatch)만 동작합니다.
+                              </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={collectorOptions.enabled}
+                                onChange={(e) => setCollectorOptions(prev => ({ ...prev, enabled: e.target.checked }))}
+                                className="sr-only peer"
+                              />
+                              <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                            <span className="text-slate-500">1회 수집 수량 (1~10개)</span>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 5, 8, 10].map((qty) => (
+                                <button
+                                  key={qty}
+                                  type="button"
+                                  onClick={() => setCollectorOptions(prev => ({ ...prev, batchSize: qty }))}
+                                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
+                                    collectorOptions.batchSize === qty
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {qty}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="lg:col-span-8 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                              <span>수집 주기 (Cron 스케줄 · GitHub Actions UTC 기준)</span>
+                            </label>
+                            <span className="text-[10px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                              UTC 00:00 = 한국(KST) 09:00
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <select
+                              value={CRON_SCHEDULE_PRESETS.some(p => p.cron === collectorOptions.scheduleCron) ? collectorOptions.scheduleCron : '__custom__'}
+                              onChange={(e) => {
+                                if (e.target.value !== '__custom__') {
+                                  setCollectorOptions(prev => ({ ...prev, scheduleCron: e.target.value }));
+                                }
+                              }}
+                              className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
+                            >
+                              {CRON_SCHEDULE_PRESETS.map((preset) => (
+                                <option key={preset.cron} value={preset.cron}>
+                                  {language === 'en' ? preset.labelEn : preset.labelKo}
+                                </option>
+                              ))}
+                              <option value="__custom__">직접 입력 (Custom Cron)</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={collectorOptions.scheduleCron}
+                              onChange={(e) => setCollectorOptions(prev => ({ ...prev, scheduleCron: e.target.value }))}
+                              placeholder="예: 0 */6 * * *"
+                              className="w-full text-xs font-mono px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Row 2: Topic Mode & Category Chips */}
+                      <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <Filter className="w-3.5 h-3.5 text-purple-500" />
+                              <span>수집 주제 선정 방식 및 우선 카테고리</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              선택된 카테고리 풀에서 AI가 최신 Windows 오류를 우선 발굴합니다.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {([
+                              { id: 'all', label: '전체 혼합' },
+                              { id: 'rotate', label: '시간대별 순환(Rotate)' },
+                              { id: 'fixed', label: '특정 카테고리 고정' }
+                            ] as const).map((mode) => (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                onClick={() => setCollectorOptions(prev => ({ ...prev, topicMode: mode.id }))}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                                  collectorOptions.topicMode === mode.id
+                                    ? 'bg-purple-600 text-white border-purple-600'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-purple-400'
+                                }`}
+                              >
+                                {mode.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {collectorOptions.topicMode === 'fixed' && (
+                          <div className="flex items-center gap-2 bg-purple-50/70 dark:bg-purple-950/30 p-2.5 rounded-lg border border-purple-200 dark:border-purple-800/50">
+                            <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 shrink-0">고정 카테고리:</span>
+                            <select
+                              value={collectorOptions.fixedTopic}
+                              onChange={(e) => setCollectorOptions(prev => ({ ...prev, fixedTopic: e.target.value }))}
+                              className="text-xs px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg text-slate-900 dark:text-slate-100"
+                            >
+                              <option value="all">전체 (자동 선택)</option>
+                              {ALL_COLLECTOR_TOPICS.map((t) => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {ALL_COLLECTOR_TOPICS.map((topic) => {
+                            const active = collectorOptions.preferredTopics.includes(topic);
+                            return (
+                              <button
+                                key={topic}
+                                type="button"
+                                onClick={() => {
+                                  setCollectorOptions(prev => {
+                                    const exists = prev.preferredTopics.includes(topic);
+                                    const next = exists
+                                      ? prev.preferredTopics.filter(x => x !== topic)
+                                      : [...prev.preferredTopics, topic];
+                                    return {
+                                      ...prev,
+                                      preferredTopics: next.length > 0 ? next : [topic]
+                                    };
+                                  });
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border flex items-center gap-1 transition-all cursor-pointer ${
+                                  active
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-400 border-slate-200 dark:border-slate-700 hover:text-slate-600'
+                                }`}
+                              >
+                                {active ? <CheckSquare className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> : <Square className="w-3 h-3" />}
+                                <span>{topic}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Row 3: Target Windows OS, AI Model, Dedup Strictness */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Monitor className="w-3.5 h-3.5 text-sky-500" />
+                            <span>대상 Windows 버전</span>
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {COLLECTOR_WINDOWS_TARGETS.map((osVer) => {
+                              const checked = collectorOptions.targetWindowsVersions.includes(osVer);
+                              return (
+                                <button
+                                  key={osVer}
+                                  type="button"
+                                  onClick={() => {
+                                    setCollectorOptions(prev => {
+                                      const exists = prev.targetWindowsVersions.includes(osVer);
+                                      const next = exists
+                                        ? prev.targetWindowsVersions.filter(v => v !== osVer)
+                                        : [...prev.targetWindowsVersions, osVer];
+                                      return {
+                                        ...prev,
+                                        targetWindowsVersions: next.length > 0 ? next : [osVer]
+                                      };
+                                    });
+                                  }}
+                                  className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
+                                    checked
+                                      ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700'
+                                      : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                  }`}
+                                >
+                                  {osVer}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Cpu className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>우선 AI 수집 모델</span>
+                          </label>
+                          <select
+                            value={collectorOptions.modelPreference}
+                            onChange={(e) => setCollectorOptions(prev => ({ ...prev, modelPreference: e.target.value }))}
+                            className="w-full text-xs px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
+                          >
+                            {COLLECTOR_MODEL_OPTIONS.map((m) => (
+                              <option key={m.value} value={m.value}>
+                                {language === 'en' ? m.labelEn : m.labelKo}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5 text-amber-500" />
+                            <span>중복 필터링 강도</span>
+                          </label>
+                          <select
+                            value={collectorOptions.dedupStrictness}
+                            onChange={(e) => setCollectorOptions(prev => ({ ...prev, dedupStrictness: e.target.value as 'strict' | 'balanced' }))}
+                            className="w-full text-xs px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
+                          >
+                            <option value="strict">엄격 (오류코드·ID·유사 제목 모두 차단)</option>
+                            <option value="balanced">표준 (동일 ID 및 핵심 오류코드만 차단)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Row 4: Integration toggles & Action buttons */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">수집 후 메인데이터(knownIssues.ts) 자동 통합</div>
+                            <div className="text-[11px] text-slate-500">정적 시드 코드까지 함께 동기화해 빌드 안정성을 유지합니다.</div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                            <input
+                              type="checkbox"
+                              checked={collectorOptions.autoIntegrateSeed}
+                              onChange={(e) => setCollectorOptions(prev => ({ ...prev, autoIntegrateSeed: e.target.checked }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">정기 수집 완료 시 GitHub Pages 자동 재배포</div>
+                            <div className="text-[11px] text-slate-500">신규 데이터 커밋 시 deploy-pages.yml을 자동 실행합니다.</div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                            <input
+                              type="checkbox"
+                              checked={collectorOptions.autoDeployPages}
+                              onChange={(e) => {
+                                const val = e.target.checked;
+                                setCollectorOptions(prev => ({ ...prev, autoDeployPages: val }));
+                                setAutoDeployPages(val);
+                              }}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {collectorOptionsStatus && (
+                        <div className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+                          collectorOptionsStatus.type === 'error'
+                            ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                            : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        }`}>
+                          {collectorOptionsStatus.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                          <span>{collectorOptionsStatus.message}</span>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          💡 <strong>옵션 저장</strong>은 로컬/서버 설정에 즉시 반영되며, <strong>GitHub 저장소 반영</strong>을 누르면 원격 워크플로(cron 포함)까지 업데이트됩니다.
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCollectorOptions(DEFAULT_COLLECTOR_OPTIONS);
+                              setDispatchBatchSize(DEFAULT_COLLECTOR_OPTIONS.batchSize);
+                              setCollectorOptionsStatus(null);
+                            }}
+                            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          >
+                            기본값 복원
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => saveCollectorOptions(false)}
+                            disabled={isSavingCollectorOptions}
+                            className="px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            {isSavingCollectorOptions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            <span>옵션 저장</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={pushCollectorOptionsToGithub}
+                            disabled={isPushingCollectorOptions || isSavingCollectorOptions}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            {isPushingCollectorOptions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                            <span>GitHub 저장소에 옵션 &amp; 워크플로 반영</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* GitHub Repository & Token Configuration */}
@@ -13720,7 +15039,7 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(GITHUB_WORKFLOW_YAML);
+                            navigator.clipboard.writeText(dynamicWorkflowYaml);
                             setCopiedWorkflow(true);
                             setTimeout(() => setCopiedWorkflow(false), 2500);
                           }}
@@ -13741,7 +15060,7 @@ export default function App() {
                       </div>
 
                       <pre className="text-[11px] font-mono leading-relaxed bg-slate-950 p-4 rounded-xl border border-slate-800 overflow-x-auto text-emerald-400 max-h-72 custom-scrollbar">
-                        {GITHUB_WORKFLOW_YAML}
+                        {dynamicWorkflowYaml}
                       </pre>
 
                       <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60 text-xs space-y-2">
@@ -13908,6 +15227,582 @@ export default function App() {
                   language={language}
                 />
 
+              </div>
+
+              {/* AI MODEL RESILIENCE & MULTI-PROVIDER FREE-TIER ROUTING HUB (v3.100.0) */}
+              <div id="ai-resilience-strategy-hub" className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-7 space-y-6">
+                {/* Header & Toolbar */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 shrink-0">
+                      <Cpu className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                        {language === 'en' ? 'Adaptive AI Model Resilience & Multi-Provider Router' : 'AI 모델 변경 대응 및 멀티 무료 티어 라우팅 허브'}
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                        {language === 'en'
+                          ? `Live Discovery · 404 Circuit Breaker (24h TTL) · 6 Free-Tier Providers · Last sync: ${resilienceStatus?.registry.lastDiscoveryAt ? formatKSTDateTime(resilienceStatus.registry.lastDiscoveryAt) : 'Standby'}`
+                          : `실시간 모델 탐색 · 404 서킷 브레이커(24시간 격리) · 6대 무료 프로바이더 분배 · 최근 탐색: ${resilienceStatus?.registry.lastDiscoveryAt ? formatKSTDateTime(resilienceStatus.registry.lastDiscoveryAt) : '대기중'}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={fetchResilienceStatus}
+                      disabled={isLoadingResilience}
+                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingResilience ? 'animate-spin' : ''}`} />
+                      <span>{language === 'en' ? 'Refresh' : '상태 새로고침'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDiscoverLiveModels}
+                      disabled={isDiscoveringModels}
+                      className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      {isDiscoveringModels ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                      <span>{language === 'en' ? 'Discover Live Models' : '실시간 모델 탐색'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePushRegistryToGithub}
+                      disabled={isPushingRegistry}
+                      className="px-3.5 py-2 rounded-lg bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      {isPushingRegistry ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      <span>{language === 'en' ? 'Sync Registry to GitHub' : 'GitOps 레지스트리 커밋'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4 KPI Summary Tiles */}
+                {(() => {
+                  const reg = resilienceStatus?.registry;
+                  const activePrimary = reg?.geminiModels.find((m) => m.enabled)?.id || 'gemini-4-hydrogen';
+                  const openBreakerCount = reg ? Object.keys(reg.circuitBreakers || {}).length : 0;
+                  const configuredCount = resilienceStatus?.readiness
+                    ? Object.values(resilienceStatus.readiness).filter((r: any) => Boolean(r?.configured)).length
+                    : 0;
+                  const totalReqs = reg?.telemetry?.totalRequests || 0;
+                  const failoverSaves = reg?.telemetry?.failoverSaves || 0;
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          {language === 'en' ? 'Primary Gemini Model' : '현재 1순위 Gemini 모델'}
+                        </div>
+                        <div className="mt-1.5 font-mono text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {activePrimary}
+                        </div>
+                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          {language === 'en' ? `Policy: ${reg?.routingPolicy || 'quota-split'}` : `라우팅 정책: ${reg?.routingPolicy === 'gemini-first' ? 'Gemini 우선' : '할당량 분산'}`}
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          {language === 'en' ? '404 Circuit Breakers' : '404 서킷 브레이커 격리'}
+                        </div>
+                        <div className={`mt-1.5 font-mono text-lg font-bold tabular-nums ${openBreakerCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                          {openBreakerCount} {language === 'en' ? 'Open' : '건 격리중'}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          {language === 'en' ? `24h TTL · Lifetime trips: ${reg?.telemetry?.circuitTrips404 || 0}` : `24시간 자동 복구 · 누적 감지: ${reg?.telemetry?.circuitTrips404 || 0}회`}
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          {language === 'en' ? 'Server Free Providers' : '서버 무료 AI 프로바이더'}
+                        </div>
+                        <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                          {configuredCount} / 6 Ready
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          {language === 'en' ? `OpenRouter :free pool: ${reg?.openrouterFreeModels?.length || 4} slugs` : `OpenRouter :free 풀 ${reg?.openrouterFreeModels?.length || 4}개 모델`}
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          {language === 'en' ? 'Requests & Failover Saves' : '라우팅 처리 및 페일오버 방어'}
+                        </div>
+                        <div className="mt-1.5 font-mono text-lg font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
+                          {totalReqs} Reqs · {failoverSaves} Saves
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 truncate font-mono">
+                          {reg?.telemetry?.lastProviderUsed ? `${reg.telemetry.lastProviderUsed} · ${reg.telemetry.lastModelUsed || '-'}` : 'Awaiting live traffic'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Feedback / Notice Bar */}
+                {resilienceNotice && (
+                  <div className={`p-3 rounded-xl border text-xs font-medium flex items-center justify-between gap-3 ${
+                    resilienceNotice.type === 'error'
+                      ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+                      : resilienceNotice.type === 'info'
+                        ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200'
+                        : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      {resilienceNotice.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                      <span>{resilienceNotice.message}</span>
+                    </div>
+                    <button type="button" onClick={() => setResilienceNotice(null)} className="text-current opacity-60 hover:opacity-100 text-[11px] cursor-pointer">
+                      닫기
+                    </button>
+                  </div>
+                )}
+
+                {chainTestResult && (
+                  <div className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                    chainTestResult.success
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                      : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+                  }`}>
+                    <div className="flex items-center gap-2 font-mono">
+                      {chainTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                      <span>
+                        {chainTestResult.success
+                          ? `[PROBE OK] ${chainTestResult.provider} · ${chainTestResult.message || chainTestResult.modelUsed}`
+                          : `[PROBE STANDBY] ${chainTestResult.provider || 'chain'} · ${chainTestResult.error}`}
+                      </span>
+                    </div>
+                    <button type="button" onClick={() => setChainTestResult(null)} className="text-current opacity-60 hover:opacity-100 text-[11px] cursor-pointer">
+                      닫기
+                    </button>
+                  </div>
+                )}
+
+                {/* Segmented Navigation Tabs */}
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-3">
+                  {[
+                    { id: 'discovery' as const, icon: Layers, labelKo: '1. 실시간 모델 탐색 & 404 서킷 브레이커', labelEn: '1. Live Discovery & 404 Breaker' },
+                    { id: 'routing' as const, icon: Sliders, labelKo: '2. 멀티 프로바이더 무료 티어 라우터', labelEn: '2. Multi-Provider Free Router' },
+                    { id: 'strategy' as const, icon: BookOpen, labelKo: '3. 2026 모델 변경 대응 & 무료 티어 전략 연구', labelEn: '3. 2026 Strategy Matrix' }
+                  ].map((tab) => {
+                    const TabIcon = tab.icon;
+                    const active = aiHubTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setAiHubTab(tab.id)}
+                        className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <TabIcon className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? tab.labelEn : tab.labelKo}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* TAB 1: Live Gemini Model Discovery & 404 Circuit Breaker */}
+                {aiHubTab === 'discovery' && (
+                  <div className="space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {language === 'en' ? 'Gemini Active Model Candidate Queue' : 'Gemini 가용 모델 후보군 및 우선순위 (신규 모델 자동 승격)'}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {language === 'en'
+                            ? 'Deprecated 1.x/2.0, TTS, embedding, and image models are strictly blocked. 404 responses automatically quarantine for 24h.'
+                            : '구형(gemini-1.x/2.0)·비텍스트 모델은 자동 차단되며, Google 404 종료 감지 시 즉시 다음 순위로 우회합니다.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!resilienceStatus || isSavingResilience}
+                        onClick={() => resilienceStatus && persistResilienceConfig(
+                          resilienceStatus.registry.routingPolicy,
+                          resilienceStatus.registry.providerOrder,
+                          resilienceStatus.registry.geminiModels
+                        )}
+                        className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        {isSavingResilience ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        <span>{language === 'en' ? 'Save Candidate Order' : '모델 우선순위 저장'}</span>
+                      </button>
+                    </div>
+
+                    <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-200 dark:divide-slate-800">
+                      {(resilienceStatus?.registry.geminiModels || []).map((m, idx) => {
+                        const breaker = resilienceStatus?.registry.circuitBreakers?.[m.id];
+                        return (
+                          <div key={m.id} className="p-3.5 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 w-6 pt-0.5 tabular-nums shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-100">
+                                    {m.id}
+                                  </span>
+                                  {breaker && (
+                                    <span className="text-[11px] font-mono font-semibold text-amber-700 dark:text-amber-300">
+                                      [404 격리됨]
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                                  {m.displayName} · {m.tier} · {m.source === 'auto-discovered' ? 'Live API Discovery' : 'Core Default'} · {m.supportsGrounding ? 'Search Grounding' : 'Standard'}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none mr-1">
+                                <input
+                                  type="checkbox"
+                                  checked={m.enabled}
+                                  onChange={() => handleToggleGeminiModel(m.id)}
+                                  className="rounded border-slate-300 dark:border-slate-700 text-indigo-600"
+                                />
+                                <span>{m.enabled ? '활성' : '비활성'}</span>
+                              </label>
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePromotePrimaryGeminiModel(m.id)}
+                                  className="px-2.5 py-1 rounded-md border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                                >
+                                  1순위 승격
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => handleMoveGeminiModel(idx, -1)}
+                                className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                title="위로 이동"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === (resilienceStatus?.registry.geminiModels.length || 1) - 1}
+                                onClick={() => handleMoveGeminiModel(idx, 1)}
+                                className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                title="아래로 이동"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {(!resilienceStatus || resilienceStatus.registry.geminiModels.length === 0) && (
+                        <div className="p-4 text-xs text-slate-500 dark:text-slate-400 text-center">
+                          백엔드 서버가 대기 중이거나 모델을 불러오는 중입니다.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Circuit Breakers Table */}
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 bg-slate-50/60 dark:bg-slate-800/30 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                            {language === 'en' ? 'Active 404 Circuit Breaker Quarantines' : '404 모델 종료 감지 서킷 브레이커 격리 현황'}
+                          </h4>
+                        </div>
+                        {resilienceStatus && Object.keys(resilienceStatus.registry.circuitBreakers || {}).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetCircuitBreaker()}
+                            disabled={isResettingCircuit === 'ALL'}
+                            className="px-2.5 py-1 rounded-md border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/40 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>전체 격리 해제</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {!resilienceStatus || Object.keys(resilienceStatus.registry.circuitBreakers || {}).length === 0 ? (
+                        <div className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-2 py-1">
+                          <ShieldCheck className="w-4 h-4 shrink-0" />
+                          <span>현재 404/지원 중단으로 격리된 모델이 없습니다. 모든 활성 후보 모델이 정상 상태입니다.</span>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-200 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900">
+                          {Object.values(resilienceStatus.registry.circuitBreakers).map((cb: ResilienceCircuitBreaker) => (
+                            <div key={cb.modelId} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                              <div className="min-w-0">
+                                <div className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                                  {cb.modelId} <span className="text-amber-600 dark:text-amber-400">· HTTP {cb.statusCode} · {cb.failureCount}회 감지</span>
+                                </div>
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                  격리 해제 예정: {formatKSTDateTime(cb.expiresAt)} · 사유: {cb.reason}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleResetCircuitBreaker(cb.modelId)}
+                                disabled={isResettingCircuit === cb.modelId}
+                                className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                              >
+                                {isResettingCircuit === cb.modelId ? '해제 중...' : '수동 격리 해제'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: Multi-Provider Free-Tier Router */}
+                {aiHubTab === 'routing' && resilienceStatus && (
+                  <div className="space-y-5">
+                    {/* Workload Routing Policy Selector */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {[
+                        {
+                          id: 'quota-split' as const,
+                          titleKo: '워크로드 지능 분산 (Quota-Split · 권장)',
+                          titleEn: 'Workload Quota-Split (Recommended)',
+                          descKo: '단문 진단·재분류는 Groq/Mistral 무료 티어로 즉시 분산하고, 웹 검색 그라운딩과 심층 분석에만 Gemini 할당량을 집중 보존합니다.'
+                        },
+                        {
+                          id: 'gemini-first' as const,
+                          titleKo: 'Gemini 우선 순차 폴백 (Gemini-First)',
+                          titleEn: 'Gemini-First Waterfall',
+                          descKo: '모든 요청을 Gemini 체인으로 먼저 시도하고, 429 할당량 소진 또는 404 장애 시에만 하위 무료 프로바이더로 우회합니다.'
+                        }
+                      ].map((pol) => {
+                        const selected = resilienceStatus.registry.routingPolicy === pol.id;
+                        return (
+                          <button
+                            key={pol.id}
+                            type="button"
+                            onClick={() => persistResilienceConfig(
+                              pol.id,
+                              resilienceStatus.registry.providerOrder,
+                              resilienceStatus.registry.geminiModels,
+                              `라우팅 정책을 '${pol.titleKo}'로 전환했습니다.`
+                            )}
+                            className={`p-4 rounded-xl border text-left transition-colors cursor-pointer ${
+                              selected
+                                ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/30'
+                                : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-slate-300 dark:hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                {language === 'en' ? pol.titleEn : pol.titleKo}
+                              </span>
+                              {selected && <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                            </div>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1.5 leading-relaxed">
+                              {pol.descKo}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Provider Priority Chain */}
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {language === 'en' ? 'Failover Execution Order & Server Readiness' : '프로바이더 페일오버 체인 및 서버 환경변수 연동 상태'}
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            모든 외부 AI 키는 브라우저에 저장하지 않고 서버 환경변수(.env) 및 GitHub Secrets로만 안전하게 주입됩니다.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleTestProviderChain()}
+                            disabled={testingChainProvider !== null}
+                            className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
+                          >
+                            {testingChainProvider === 'chain' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                            <span>전체 체인 연결 테스트</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSavingResilience}
+                            onClick={() => persistResilienceConfig(
+                              resilienceStatus.registry.routingPolicy,
+                              resilienceStatus.registry.providerOrder,
+                              resilienceStatus.registry.geminiModels,
+                              '프로바이더 페일오버 우선순위를 저장했습니다.'
+                            )}
+                            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>순서 저장</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden">
+                        {resilienceStatus.registry.providerOrder.map((pid, idx) => {
+                          const info = resilienceStatus.readiness?.[pid];
+                          const usage = resilienceStatus.registry.telemetry?.perProviderUsage?.[pid] || 0;
+                          const models = pid === 'gemini'
+                            ? resilienceStatus.registry.geminiModels.filter((m) => m.enabled).slice(0, 2).map((m) => m.id)
+                            : pid === 'openrouter'
+                              ? (resilienceStatus.registry.openrouterFreeModels || []).slice(0, 2)
+                              : (resilienceStatus.registry.providerModels?.[pid] || []);
+                          return (
+                            <div key={pid} className="p-3.5 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-start gap-3 min-w-0">
+                                <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 w-6 pt-0.5 tabular-nums shrink-0">
+                                  #{idx + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-900 dark:text-slate-100">
+                                      {pid}
+                                    </span>
+                                    <span className={`text-[11px] font-semibold ${info?.configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                                      · {info?.configured ? 'Configured (Server Env)' : `Not Set (${info?.envHint || 'ENV'})`}
+                                    </span>
+                                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                                      · Usage: {usage}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                    Active Models: {models.join(', ') || 'Auto'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTestProviderChain(pid)}
+                                  disabled={testingChainProvider !== null}
+                                  className="px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-50"
+                                >
+                                  {testingChainProvider === pid ? '테스트 중...' : '연결 테스트'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => handleMoveProviderOrder(idx, -1)}
+                                  className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                  title="우선순위 상향"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === resilienceStatus.registry.providerOrder.length - 1}
+                                  onClick={() => handleMoveProviderOrder(idx, 1)}
+                                  className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                  title="우선순위 하향"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* OpenRouter Live :free Slugs */}
+                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        OpenRouter 동적 <code className="font-mono">:free</code> 모델 풀 (종료된 google/gemini-2.0-flash-exp:free 대체 완료)
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(resilienceStatus.registry.openrouterFreeModels || []).map((slug) => (
+                          <code key={slug} className="text-[11px] font-mono px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                            {slug}
+                          </code>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: 2026 Model Change Resilience & Free-Tier Strategy Research Matrix */}
+                {aiHubTab === 'strategy' && (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {[
+                        { step: '01 · 롤링 탐색', title: 'Live Model Auto-Discovery', desc: '부팅 40초 후 및 6시간마다 ai.models.list()와 OpenRouter /models를 조회해 신형 Gemini(4/Lite) 및 :free 슬러그를 자동 등록합니다.' },
+                        { step: '02 · 404 즉시 격리', title: '24h Model Circuit Breaker', desc: '폐기된 모델이 HTTP 404를 반환하면 해당 모델 ID만 24시간 격리하고 즉시 다음 정상 모델과 6대 프로바이더로 우회합니다.' },
+                        { step: '03 · 작업별 쿼터 분할', title: 'Quota-Split Routing', desc: '웹 검색 그라운딩이 필요한 수집에만 Gemini를 쓰고, 단문 진단·재분류는 Groq/Mistral/Cloudflare 무료 티어로 분산합니다.' },
+                        { step: '04 · 2026 지원 현황 반영', title: 'Retired API Filtering', desc: '2026년 종료된 GitHub Models 추론 API는 실전 호출에서 제외하고 Cerebras($5 크레딧)는 선택적 버스트 폴백으로 배치했습니다.' }
+                      ].map((card) => (
+                        <div key={card.step} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 space-y-1.5">
+                          <div className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">{card.step}</div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100">{card.title}</div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{card.desc}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            <th className="py-2.5 px-3 font-semibold">프로바이더</th>
+                            <th className="py-2.5 px-3 font-semibold">상태 (2026)</th>
+                            <th className="py-2.5 px-3 font-semibold">무료 한도 &amp; 특징</th>
+                            <th className="py-2.5 px-3 font-semibold">권장 워크로드 &amp; 주의사항</th>
+                            <th className="py-2.5 px-3 font-semibold">필수 Env / Secret</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                          {(resilienceStatus?.strategyCatalog || []).map((item) => (
+                            <tr key={item.id} className="bg-white dark:bg-slate-900">
+                              <td className="py-3 px-3 align-top font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                                {item.name}
+                              </td>
+                              <td className="py-3 px-3 align-top whitespace-nowrap font-mono text-[11px]">
+                                <span className={
+                                  item.status === 'active'
+                                    ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                                    : item.status === 'trial'
+                                      ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                      : 'text-rose-600 dark:text-rose-400 font-bold'
+                                }>
+                                  {item.status === 'active' ? 'ACTIVE FREE' : item.status === 'trial' ? 'TRIAL CREDIT' : 'RETIRED (2026)'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 align-top text-slate-600 dark:text-slate-300 leading-relaxed min-w-[200px]">
+                                <div className="font-medium text-slate-800 dark:text-slate-200">{item.freeTierLimits}</div>
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{item.strengths}</div>
+                              </td>
+                              <td className="py-3 px-3 align-top text-slate-600 dark:text-slate-300 leading-relaxed min-w-[220px]">
+                                <div>{item.recommendedWorkload}</div>
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{item.privacyNote}</div>
+                              </td>
+                              <td className="py-3 px-3 align-top font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {item.envVars.length > 0 ? item.envVars.join(', ') : 'N/A (Excluded)'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* AI ENGINE SENTINEL HEALTH & ALARM CONTROLLER */}
@@ -20164,7 +22059,7 @@ npm run collect:github`}
                       <span className="text-xs font-mono text-slate-500">.github/workflows/windows-fix-collector.yml</span>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(GITHUB_WORKFLOW_YAML);
+                          navigator.clipboard.writeText(dynamicWorkflowYaml);
                           setCopiedWorkflow(true);
                           setTimeout(() => setCopiedWorkflow(false), 2500);
                         }}
@@ -20175,7 +22070,7 @@ npm run collect:github`}
                       </button>
                     </div>
                     <pre className="text-[11px] font-mono leading-relaxed bg-slate-950 p-4 rounded-xl border border-slate-800 overflow-x-auto text-emerald-400 max-h-96 custom-scrollbar">
-                      {GITHUB_WORKFLOW_YAML}
+                      {dynamicWorkflowYaml}
                     </pre>
                   </div>
                 )}
@@ -20199,7 +22094,7 @@ npm run collect:github`}
                       const markdownDoc = `# GitHub Actions & GitOps 자율 데이터 수집 시스템 구축 가이드\n\n` +
                         `- 상세 문서는 저장소의 /docs/GITHUB_ACTIONS_GUIDE.md 에서 확인하실 수 있습니다.\n` +
                         `- 워크플로 파일: .github/workflows/windows-fix-collector.yml\n\n` +
-                        GITHUB_WORKFLOW_YAML;
+                        dynamicWorkflowYaml;
                       navigator.clipboard.writeText(markdownDoc);
                       setCopiedGuideMarkdown(true);
                       setTimeout(() => setCopiedGuideMarkdown(false), 2500);

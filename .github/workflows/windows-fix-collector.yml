@@ -24,9 +24,17 @@ on:
           - '오디오/사운드'
           - '디스플레이/그래픽'
       batch_size:
-        description: 'Number of fixes to collect (1-4)'
+        description: 'Number of fixes to collect (1-10)'
         required: false
-        default: '2'
+        default: ''
+      model_preference:
+        description: 'Preferred Gemini AI Model (auto or model ID)'
+        required: false
+        default: 'auto'
+      target_windows:
+        description: 'Comma-separated Windows versions (e.g., Windows 11,Windows 10)'
+        required: false
+        default: ''
 
 # Ensure the workflow has write permissions to commit changes back and trigger Pages deployment
 permissions:
@@ -59,10 +67,19 @@ jobs:
         id: run-collector
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           APP_WEBHOOK_URL: ${{ secrets.APP_WEBHOOK_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          INPUT_TOPIC: ${{ github.event.inputs.topic || 'all' }}
-          BATCH_SIZE: ${{ github.event.inputs.batch_size || '2' }}
+          INPUT_TOPIC: ${{ github.event.inputs.topic || '' }}
+          INPUT_BATCH_SIZE: ${{ github.event.inputs.batch_size || '' }}
+          INPUT_MODEL_PREFERENCE: ${{ github.event.inputs.model_preference || '' }}
+          INPUT_TARGET_WINDOWS: ${{ github.event.inputs.target_windows || '' }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: |
           npx tsx scripts/github-collector.ts
 
@@ -73,8 +90,14 @@ jobs:
           git config --local user.name "github-actions[bot]"
           
           # Check if data files changed
-          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json src/data/knownIssues.ts)" ]; then
-            git add data/issues.json data/github-feed.json src/data/knownIssues.ts
+          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json data/ai-model-registry.json src/data/knownIssues.ts)" ]; then
+            git add data/issues.json data/github-feed.json
+            if [ -f data/ai-model-registry.json ]; then
+              git add data/ai-model-registry.json || true
+            fi
+            if [ -f src/data/knownIssues.ts ]; then
+              git add src/data/knownIssues.ts || true
+            fi
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
             git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
             
@@ -95,5 +118,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          AUTO_DEPLOY=$(node -e "try{const fs=require('fs');const o=JSON.parse(fs.readFileSync('data/github-collector-options.json','utf8'));console.log(o.autoDeployPages===false?'false':'true')}catch{console.log('true')}")
+          if [ "$AUTO_DEPLOY" = "false" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "⏸️ Auto-deploy Pages is disabled in data/github-collector-options.json. Skipping."
+            exit 0
+          fi
           echo "Triggering deploy-pages.yml workflow for latest changes..."
           gh workflow run deploy-pages.yml --ref ${{ github.ref_name }} || echo "Workflow dispatch skipped or not required"

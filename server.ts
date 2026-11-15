@@ -6,11 +6,27 @@ import { GoogleGenAI } from "@google/genai";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { KNOWN_ISSUES } from "./src/data/knownIssues";
 import nodemailer from "nodemailer";
 import JSZip from "jszip";
 import { validateKnownIssuesData } from "./src/utils/validateKnownIssue";
 import { parseAiJson } from "./src/utils/safeFetch";
+import {
+  loadAiModelRegistry,
+  saveAiModelRegistry,
+  getHealthyGeminiCandidates,
+  classifyAiError,
+  tripCircuitBreaker,
+  pruneExpiredCircuitBreakers,
+  discoverLiveModels,
+  callExternalFreeProvider,
+  contentsToPromptText,
+  recordRegistryUsage,
+  getProviderServerReadiness,
+  isProhibitedGeminiModel,
+  PROVIDER_STRATEGY_CATALOG,
+  type ProviderId,
+  type WorkloadType
+} from "./lib/ai-resilience-router";
 
 const getKSTISOString = () => {
   const now = new Date();
@@ -176,12 +192,21 @@ function generateInitialSystemEventLogs(limit: number = 50): any[] {
   return logs;
 }
 
-function readLocalCollection(collection: string): any[] {
-  const filePath = getJsonFilePath(collection);
-  if (!fs.existsSync(filePath)) {
-    if (collection === 'issues') {
+let issuesSeedPromise: Promise<any[]> | null = null;
+async function ensureIssuesSeeded(): Promise<any[]> {
+  const filePath = getJsonFilePath('issues');
+  if (fs.existsSync(filePath)) {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+      return [];
+    }
+  }
+  if (!issuesSeedPromise) {
+    issuesSeedPromise = (async () => {
       try {
-        const seeded = KNOWN_ISSUES.map((issue: any, idx) => ({
+        const { KNOWN_ISSUES } = await import("./src/data/knownIssues");
+        const seeded = KNOWN_ISSUES.map((issue: any, idx: number) => ({
           ...issue,
           id: issue.id || `seed-${Date.now()}-${idx}`,
           createdAt: issue.createdAt || getKSTISOString(),
@@ -190,8 +215,22 @@ function readLocalCollection(collection: string): any[] {
         fs.writeFileSync(filePath, JSON.stringify(seeded, null, 2), 'utf8');
         return seeded;
       } catch (e) {
+        console.error("Error lazy seeding issues:", e);
         return [];
+      } finally {
+        issuesSeedPromise = null;
       }
+    })();
+  }
+  return issuesSeedPromise;
+}
+
+function readLocalCollection(collection: string): any[] {
+  const filePath = getJsonFilePath(collection);
+  if (!fs.existsSync(filePath)) {
+    if (collection === 'issues') {
+      void ensureIssuesSeeded();
+      return [];
     }
     if (collection === 'system_event_logs') {
       try {
@@ -772,8 +811,35 @@ async function executeServerGeminiCall(
     stream?: boolean;
     onChunk?: (textChunk: string) => void;
     customApiKey?: string;
+    workloadType?: WorkloadType;
   } = {}
 ) {
+  let registry = loadAiModelRegistry();
+  pruneExpiredCircuitBreakers(registry);
+
+  const promptString = contentsToPromptText(contents);
+
+  // Workload-aware Quota Splitting:
+  // If routingPolicy is 'quota-split' and the task does NOT need streaming or Google Search grounding,
+  // try fast free external tiers (Groq -> Mistral -> Cloudflare) first to preserve Gemini quota!
+  if (
+    registry.routingPolicy === 'quota-split' &&
+    !options.stream &&
+    !options.enableSearch &&
+    (options.workloadType === 'classification' || options.workloadType === 'fast-diagnostic')
+  ) {
+    const splitProviders = (registry.providerOrder || []).filter(
+      (p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && (p === 'groq' || p === 'mistral' || p === 'cloudflare')
+    );
+    for (const p of splitProviders) {
+      const splitRes = await callExternalFreeProvider(p, promptString, { registry });
+      if (splitRes && splitRes.text) {
+        recordRegistryUsage(p, splitRes.modelUsed, false);
+        return { text: splitRes.text, modelUsed: `${splitRes.modelUsed} [Quota-Split]`, keyUsed: splitRes.keyUsed };
+      }
+    }
+  }
+
   const allKeys = getAllAvailableKeys(options.customApiKey);
   const now = Date.now();
   const validKeys = allKeys.filter(k => {
@@ -784,108 +850,137 @@ async function executeServerGeminiCall(
     return now >= throttledUntil;
   });
 
-  if (validKeys.length === 0) {
-    const info = getApiKeyInfo();
-    throw new Error(`Google AI API keys are unavailable or throttled (${info.placeholderReason || "No valid key"}). Serving queries via local database & GitOps cache.`);
-  }
-
-  const candidateModels = [
-    options.model || "gemini-3.8-flash",
-    "gemini-3.8-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-3.1-pro-preview",
-    "gemini-flash-latest"
-  ].filter((v, i, a) => a.indexOf(v) === i);
-
+  let candidateModels = getHealthyGeminiCandidates(options.model, registry);
   let lastError: any = null;
+  let encountered404 = false;
 
-  for (const k of validKeys) {
-    const ai = new GoogleGenAI({ 
-      apiKey: k.value, 
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
-    });
-    for (const modelName of candidateModels) {
-      try {
-        const configToUse = { ...options.config };
-        if (options.enableSearch && !configToUse.tools) {
-          const isSearchThrottled = (searchGroundingThrottledKeys.get(k.name) || 0) > Date.now();
-          if (!isSearchThrottled) {
-            configToUse.tools = [{ googleSearch: {} }];
-          }
-        }
-
-        if (options.stream) {
-          const responseStream = await ai.models.generateContentStream({
-            model: modelName,
-            contents,
-            config: configToUse
-          });
-          let fullText = "";
-          for await (const chunk of responseStream) {
-            const chunkText = chunk.text || "";
-            fullText += chunkText;
-            if (options.onChunk) {
-              options.onChunk(chunkText);
+  const attemptGeminiKeyLoop = async (modelsToUse: string[]) => {
+    for (const k of validKeys) {
+      const ai = new GoogleGenAI({
+        apiKey: k.value,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+      for (const modelName of modelsToUse) {
+        try {
+          const configToUse = { ...options.config };
+          if (options.enableSearch && !configToUse.tools) {
+            const isSearchThrottled = (searchGroundingThrottledKeys.get(k.name) || 0) > Date.now();
+            if (!isSearchThrottled) {
+              configToUse.tools = [{ googleSearch: {} }];
             }
           }
-          recordDailyQuotaMetric({ geminiRequests: 1, geminiTokens: Math.max(150, Math.round((fullText.length || 500) * 0.4)) });
-          return { text: fullText, modelUsed: modelName, keyUsed: k.name };
-        } else {
-          let response: any = null;
-          try {
-            response = await ai.models.generateContent({
+
+          if (options.stream) {
+            const responseStream = await ai.models.generateContentStream({
               model: modelName,
               contents,
               config: configToUse
             });
-          } catch (firstTryErr: any) {
-            const firstMsg = getCleanErrorMessage(firstTryErr).toLowerCase();
-            if (firstMsg.includes("api key not valid") || firstMsg.includes("api_key_invalid") || firstMsg.includes("invalid api key") || firstMsg.includes("api key expired")) {
-              keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
-              lastError = firstTryErr;
-              break; // Skip all other candidate models for this invalid key immediately
+            let fullText = "";
+            for await (const chunk of responseStream) {
+              const chunkText = chunk.text || "";
+              fullText += chunkText;
+              if (options.onChunk) {
+                options.onChunk(chunkText);
+              }
             }
-            if (configToUse.tools) {
-              const fallbackConfig = { ...configToUse };
-              delete fallbackConfig.tools;
+            recordDailyQuotaMetric({ geminiRequests: 1, geminiTokens: Math.max(150, Math.round((fullText.length || 500) * 0.4)) });
+            recordRegistryUsage('gemini', modelName, false);
+            return { text: fullText, modelUsed: modelName, keyUsed: k.name };
+          } else {
+            let response: any = null;
+            try {
               response = await ai.models.generateContent({
                 model: modelName,
                 contents,
-                config: fallbackConfig
+                config: configToUse
               });
-            } else {
-              throw firstTryErr;
+            } catch (firstTryErr: any) {
+              const firstClass = classifyAiError(firstTryErr);
+              if (firstClass.type === 'INVALID_KEY') {
+                keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+                lastError = firstTryErr;
+                break;
+              }
+              if (firstClass.type === 'MODEL_NOT_FOUND_404') {
+                throw firstTryErr;
+              }
+              if (configToUse.tools) {
+                const fallbackConfig = { ...configToUse };
+                delete fallbackConfig.tools;
+                response = await ai.models.generateContent({
+                  model: modelName,
+                  contents,
+                  config: fallbackConfig
+                });
+              } else {
+                throw firstTryErr;
+              }
             }
+            const text = response?.text || "";
+            recordDailyQuotaMetric({ geminiRequests: 1, geminiTokens: Math.max(150, Math.round((text.length || 500) * 0.4)) });
+            recordRegistryUsage('gemini', modelName, false);
+            return { text, modelUsed: modelName, keyUsed: k.name };
           }
-          const text = response?.text || "";
-          recordDailyQuotaMetric({ geminiRequests: 1, geminiTokens: Math.max(150, Math.round((text.length || 500) * 0.4)) });
-          return { text, modelUsed: modelName, keyUsed: k.name };
-        }
-      } catch (err: any) {
-        lastError = err;
-        const cleanMsg = getCleanErrorMessage(err);
-        const lower = cleanMsg.toLowerCase();
-        if (lower.includes("api key not valid") || lower.includes("api_key_invalid") || lower.includes("invalid api key") || lower.includes("api key expired")) {
-          keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
-          break; // Stop testing other models with this invalid key
-        }
-        if (lower.includes("resource_exhausted") || lower.includes("429") || lower.includes("quota")) {
-          keyThrottledUntil.set(k.name, now + 15 * 60 * 1000);
-          break;
+        } catch (err: any) {
+          lastError = err;
+          const classified = classifyAiError(err);
+          if (classified.type === 'MODEL_NOT_FOUND_404') {
+            encountered404 = true;
+            tripCircuitBreaker(registry, modelName, 'gemini', 404, classified.message);
+            console.warn(`[AI Circuit-Breaker] Tripped 404 for ${modelName}, advancing to next healthy model.`);
+            continue; // Advance to next healthy model on SAME key!
+          }
+          if (classified.type === 'INVALID_KEY') {
+            keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+            break;
+          }
+          if (classified.type === 'QUOTA_EXHAUSTED_429') {
+            keyThrottledUntil.set(k.name, now + 15 * 60 * 1000);
+            break;
+          }
         }
       }
     }
+    return null;
+  };
+
+  if (validKeys.length > 0) {
+    const primaryRes = await attemptGeminiKeyLoop(candidateModels);
+    if (primaryRes) return primaryRes;
+
+    // Live auto-discovery recovery if 404s tripped models
+    if (encountered404 && !options.stream) {
+      try {
+        console.log('[AI Resilience] 404 detected — running live Gemini catalog auto-discovery...');
+        const discovery = await discoverLiveModels({ geminiApiKey: validKeys[0].value });
+        registry = discovery.registry;
+        const fresh = getHealthyGeminiCandidates(options.model, registry).filter((m) => !candidateModels.includes(m));
+        if (fresh.length > 0) {
+          const recoveryRes = await attemptGeminiKeyLoop(fresh);
+          if (recoveryRes) return recoveryRes;
+        }
+      } catch (_) {}
+    }
   }
 
-  // Secondary free AI provider failover (Groq / OpenRouter)
-  const promptString = typeof contents === 'string' ? contents : (Array.isArray(contents) ? contents.map((c: any) => typeof c === 'string' ? c : c.text || JSON.stringify(c)).join(' ') : JSON.stringify(contents));
+  // Secondary multi-provider free-tier AI failover (Groq / Mistral / OpenRouter :free / Cerebras / Cloudflare)
   const secondaryRes = await callSecondaryFreeAiApi(promptString, {
     groqKey: options.customApiKey,
     openrouterKey: options.customApiKey
   });
 
   if (secondaryRes) {
+    if (options.stream && options.onChunk) {
+      options.onChunk(secondaryRes.text);
+    }
+    recordRegistryUsage(secondaryRes.provider, secondaryRes.modelUsed, true);
     return { text: secondaryRes.text, modelUsed: secondaryRes.modelUsed, keyUsed: secondaryRes.keyUsed };
+  }
+
+  if (validKeys.length === 0) {
+    const info = getApiKeyInfo();
+    throw new Error(`Google AI API keys are unavailable or throttled (${info.placeholderReason || "No valid key"}). Serving queries via local database & GitOps cache.`);
   }
 
   if (lastError) {
@@ -902,80 +997,28 @@ async function executeServerGeminiCall(
 
 async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey?: string; openrouterKey?: string }) {
   try {
+    const registry = loadAiModelRegistry();
     const configs = readLocalCollection('system_config');
     const config = (configs && configs[0]) || {};
-    const groqKey = customKeys?.groqKey || process.env.GROQ_API_KEY || config.groqApiKey || "";
-    const openrouterKey = customKeys?.openrouterKey || process.env.OPENROUTER_API_KEY || config.openrouterApiKey || "";
 
-    // 1. Try Groq API
-    if (groqKey && groqKey.trim() && !groqKey.includes("PLACEHOLDER")) {
-      const groqModels = ["llama-3.3-70b-versatile", "llama3-8b-8192", "mixtral-8x7b-32768"];
-      for (const model of groqModels) {
-        try {
-          console.log(`[Secondary AI Failover] Attempting Groq API (${model})...`);
-          const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${groqKey.trim()}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              model,
-              messages: [{ role: "user", content: promptText }],
-              temperature: 0.3
-            })
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            const text = data?.choices?.[0]?.message?.content || "";
-            if (text.trim()) {
-              console.log(`[Secondary AI Failover] Groq API (${model}) success!`);
-              return { text, modelUsed: `Groq (${model})`, keyUsed: "GROQ_API_KEY", provider: "groq" };
-            }
-          } else {
-            const errText = await resp.text();
-            console.warn(`[Secondary AI Failover] Groq (${model}) HTTP ${resp.status}:`, errText.substring(0, 100));
-          }
-        } catch (err: any) {
-          console.warn(`[Secondary AI Failover] Groq (${model}) error:`, err.message || err);
-        }
-      }
-    }
+    const providerKeyMap: Partial<Record<Exclude<ProviderId, 'gemini'>, string>> = {
+      groq: customKeys?.groqKey || process.env.GROQ_API_KEY || config.groqApiKey || "",
+      mistral: process.env.MISTRAL_API_KEY || "",
+      openrouter: customKeys?.openrouterKey || process.env.OPENROUTER_API_KEY || config.openrouterApiKey || "",
+      cerebras: process.env.CEREBRAS_API_KEY || "",
+      cloudflare: process.env.CLOUDFLARE_API_TOKEN || ""
+    };
 
-    // 2. Try OpenRouter API
-    if (openrouterKey && openrouterKey.trim() && !openrouterKey.includes("PLACEHOLDER")) {
-      const openrouterModels = ["deepseek/deepseek-chat", "meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free"];
-      for (const model of openrouterModels) {
-        try {
-          console.log(`[Secondary AI Failover] Attempting OpenRouter API (${model})...`);
-          const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${openrouterKey.trim()}`,
-              "Content-Type": "application/json",
-              "HTTP-Referer": "https://windows-fix-wizard.github.io",
-              "X-Title": "Windows Fix Wizard"
-            },
-            body: JSON.stringify({
-              model,
-              messages: [{ role: "user", content: promptText }],
-              temperature: 0.3
-            })
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            const text = data?.choices?.[0]?.message?.content || "";
-            if (text.trim()) {
-              console.log(`[Secondary AI Failover] OpenRouter API (${model}) success!`);
-              return { text, modelUsed: `OpenRouter (${model})`, keyUsed: "OPENROUTER_API_KEY", provider: "openrouter" };
-            }
-          } else {
-            const errText = await resp.text();
-            console.warn(`[Secondary AI Failover] OpenRouter (${model}) HTTP ${resp.status}:`, errText.substring(0, 100));
-          }
-        } catch (err: any) {
-          console.warn(`[Secondary AI Failover] OpenRouter (${model}) error:`, err.message || err);
-        }
+    const externalOrder = (registry.providerOrder || ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'])
+      .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini');
+
+    for (const providerId of externalOrder) {
+      const res = await callExternalFreeProvider(providerId, promptText, {
+        customKey: providerKeyMap[providerId],
+        registry
+      });
+      if (res && res.text) {
+        return res;
       }
     }
   } catch (outerErr: any) {
@@ -1298,12 +1341,8 @@ async function runAiSyncInternal(): Promise<any> {
     }
   ]`;
 
-  const modelsToTry = [
-    "gemini-3.8-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-3.1-pro-preview",
-    "gemini-flash-latest"
-  ];
+  const syncRegistry = loadAiModelRegistry();
+  const modelsToTry = getHealthyGeminiCandidates(undefined, syncRegistry);
 
   let success = false;
   let lastFailureReason = "";
@@ -1332,8 +1371,11 @@ async function runAiSyncInternal(): Promise<any> {
               config: { tools: [{ googleSearch: {} }] }
             });
           } catch (searchErr: any) {
-            const searchErrMsg = getCleanErrorMessage(searchErr);
-            console.warn(`[Engine Sync] Search grounding not available on ${modelName} (${searchErrMsg}). Fallback to direct generation...`);
+            const classifiedSearch = classifyAiError(searchErr);
+            if (classifiedSearch.type === 'MODEL_NOT_FOUND_404') {
+              throw searchErr;
+            }
+            console.warn(`[Engine Sync] Search grounding not available on ${modelName} (${classifiedSearch.message.substring(0, 100)}). Fallback to direct generation...`);
             result = await ai.models.generateContent({
               model: modelName,
               contents: fullPrompt
@@ -1353,6 +1395,7 @@ async function runAiSyncInternal(): Promise<any> {
             const issues = Array.isArray(parsedData) ? parsedData : (parsedData && Array.isArray((parsedData as any).issues) ? (parsedData as any).issues : []);
             if (Array.isArray(issues) && issues.length > 0) {
               const saveRes = await saveIssuesToServer(issues);
+              recordRegistryUsage('gemini', modelName, false);
               await logSyncEvent({ 
                 type: 'success', 
                 source: 'runAiSync', 
@@ -1379,25 +1422,25 @@ async function runAiSyncInternal(): Promise<any> {
         }
       } catch (genErr: any) {
         const cleanMsg = getCleanErrorMessage(genErr);
-        const lower = cleanMsg.toLowerCase();
+        const classified = classifyAiError(genErr);
         lastFailureReason = cleanMsg;
 
-        const isInvalidKey = lower.includes("api key not valid") || 
-                             lower.includes("api_key_invalid") || 
-                             lower.includes("invalid api key") ||
-                             lower.includes("api key expired");
-
-        if (isInvalidKey) {
-          keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
-          console.info(`[Engine Sync] Key '${k.name}' standby (unregistered or inactive API key). Serving queries via local database & GitOps cache.`);
-          break; // Stop testing other models with this invalid key immediately!
+        if (classified.type === 'MODEL_NOT_FOUND_404') {
+          tripCircuitBreaker(syncRegistry, modelName, 'gemini', 404, cleanMsg);
+          console.warn(`[Engine Sync] Model '${modelName}' returned 404 — circuit breaker tripped for 24h.`);
+          continue;
         }
 
-        const isQuota = lower.includes("resource_exhausted") || lower.includes("429") || lower.includes("quota");
-        if (isQuota) {
+        if (classified.type === 'INVALID_KEY') {
+          keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+          console.info(`[Engine Sync] Key '${k.name}' standby (unregistered or inactive API key). Serving queries via local database & GitOps cache.`);
+          break;
+        }
+
+        if (classified.type === 'QUOTA_EXHAUSTED_429') {
           keyThrottledUntil.set(k.name, now + 15 * 60 * 1000);
           console.log(`[Engine Sync] Key '${k.name}' quota limit reached. Cooldown for 15 minutes.`);
-          break; // Stop other models for this quota-exhausted key
+          break;
         }
 
         console.log(`[Engine Sync] Model '${modelName}' with '${k.name}' note:`, cleanMsg.substring(0, 100));
@@ -1406,9 +1449,10 @@ async function runAiSyncInternal(): Promise<any> {
   }
 
   if (!success || !syncDetails) {
-    console.log(`[Engine Sync] Primary Gemini attempt standby (${lastFailureReason || 'All models busy'}). Attempting Secondary Free AI Failover (Groq/OpenRouter)...`);
+    console.log(`[Engine Sync] Primary Gemini attempt standby (${lastFailureReason || 'All models busy'}). Attempting Multi-Provider Free-Tier Failover...`);
     const secResult = await callSecondaryFreeAiApi(fullPrompt);
     if (secResult && secResult.text) {
+      recordRegistryUsage(secResult.provider, secResult.modelUsed, true);
       try {
         const parsedData = parseAiJson(secResult.text);
         const issues = Array.isArray(parsedData) ? parsedData : (parsedData && Array.isArray((parsedData as any).issues) ? (parsedData as any).issues : []);
@@ -1482,6 +1526,14 @@ getMaintenanceSettings().then(settings => {
 }).catch(err => {
   console.error("Failed to load initial engine scheduling settings on startup:", err);
   setupEngineScheduler(60); // fallback to 60 mins
+});
+
+// Non-blocking periodic Live AI Model Discovery (40s after boot, then every 6 hours)
+setTimeout(() => {
+  discoverLiveModels().catch(() => {});
+}, 40000);
+cron.schedule("15 */6 * * *", () => {
+  discoverLiveModels().catch(() => {});
 });
 
 // Run on startup ONLY if database is likely empty or after a safe delay
@@ -1784,7 +1836,6 @@ async function startServer() {
   // [SECURITY HARDENING] Security HTTP Response Headers Middleware
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("X-XSS-Protection", "1; mode=block");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     next();
@@ -2187,11 +2238,12 @@ async function startServer() {
     try {
       if (targetPrompt) {
         const result = await executeServerGeminiCall(targetPrompt, {
-          model: model || "gemini-3.8-flash",
-          enableSearch: true
+          model: model || undefined,
+          enableSearch: true,
+          workloadType: 'heavy-grounded'
         });
         if (result && result.text) {
-          return res.json({ success: true, text: result.text });
+          return res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
         }
       }
       const fallback = findLocalDiagnosis(query || targetPrompt, version || "Windows 11");
@@ -2208,9 +2260,9 @@ async function startServer() {
       const { issue, prompt } = req.body;
       const targetPrompt = prompt || `Review this Windows issue and verify its technical accuracy:\n${JSON.stringify(issue, null, 2)}`;
       const result = await executeServerGeminiCall(targetPrompt, {
-        model: "gemini-3.8-flash"
+        workloadType: 'fast-diagnostic'
       });
-      res.json({ success: true, text: result.text });
+      res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
     } catch (err: any) {
       console.info("[API AI Verify Standby]:", getCleanErrorMessage(err));
       res.json({ 
@@ -2229,9 +2281,9 @@ async function startServer() {
       const { issuesChunk, prompt } = req.body;
       const targetPrompt = prompt || `Reclassify the following Windows troubleshooting issues with accuracy into standard categories and hardware component tags:\n${JSON.stringify(issuesChunk, null, 2)}`;
       const result = await executeServerGeminiCall(targetPrompt, {
-        model: "gemini-3.8-flash"
+        workloadType: 'classification'
       });
-      res.json({ success: true, text: result.text });
+      res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
     } catch (err: any) {
       console.info("[API AI Reclassify Standby]:", getCleanErrorMessage(err));
       res.json({ success: true, text: "[]", standby: true });
@@ -2242,9 +2294,9 @@ async function startServer() {
     try {
       const { prompt } = req.body;
       const result = await executeServerGeminiCall(prompt, {
-        model: "gemini-3.8-flash"
+        workloadType: 'fast-diagnostic'
       });
-      res.json({ success: true, text: result.text });
+      res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
     } catch (err: any) {
       console.info("[API AI Optimize Knowledge Standby]:", getCleanErrorMessage(err));
       res.json({ 
@@ -2260,10 +2312,10 @@ async function startServer() {
       const { prompt, batchSize } = req.body;
       const targetPrompt = prompt || `Search for ${batchSize || 3} recent Windows 10/11 troubleshooting guides and issues. Return raw JSON array.`;
       const result = await executeServerGeminiCall(targetPrompt, {
-        model: "gemini-3.8-flash",
-        enableSearch: true
+        enableSearch: true,
+        workloadType: 'heavy-grounded'
       });
-      res.json({ success: true, text: result.text });
+      res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
     } catch (err: any) {
       console.info("[API AI Search Trends Standby]:", getCleanErrorMessage(err));
       res.json({ success: true, text: "[]", standby: true });
@@ -2344,8 +2396,9 @@ async function startServer() {
           apiKey: trimmed, 
           httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
         });
+        const probeModel = getHealthyGeminiCandidates()[0] || 'gemini-4-hydrogen';
         await testAi.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: probeModel,
           contents: 'test',
           config: { maxOutputTokens: 2 }
         });
@@ -2429,6 +2482,204 @@ async function startServer() {
       return res.status(400).json({ success: false, error: "알 수 없는 제공자입니다." });
     } catch (e: any) {
       return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ==========================================
+  // ADAPTIVE AI MODEL RESILIENCE & FREE-TIER ROUTING ENDPOINTS
+  // ==========================================
+  app.get("/api/ai/resilience-status", requireAdmin, (req, res) => {
+    try {
+      const registry = loadAiModelRegistry();
+      if (pruneExpiredCircuitBreakers(registry)) {
+        saveAiModelRegistry(registry);
+      }
+      const readiness = getProviderServerReadiness();
+      res.json({
+        success: true,
+        registry,
+        readiness,
+        strategyCatalog: PROVIDER_STRATEGY_CATALOG
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/ai/discover-models", requireAdmin, async (req, res) => {
+    try {
+      const validKeys = getAllAvailableKeys().filter((k) => !k.isPlaceholder);
+      const discovery = await discoverLiveModels({
+        geminiApiKey: validKeys[0]?.value
+      });
+      await logSyncEvent({
+        type: 'info',
+        source: 'ai-model-discovery',
+        message: `AI 카탈로그 실시간 탐색 완료 (Gemini ${discovery.geminiDiscoveredCount}종 · OpenRouter :free ${discovery.openrouterDiscoveredCount}종)`
+      });
+      res.json({
+        success: true,
+        ...discovery,
+        readiness: getProviderServerReadiness()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/ai/resilience-config", requireAdmin, async (req, res) => {
+    try {
+      const { routingPolicy, providerOrder, geminiModels } = req.body || {};
+      const registry = loadAiModelRegistry();
+
+      if (routingPolicy === 'quota-split' || routingPolicy === 'gemini-first') {
+        registry.routingPolicy = routingPolicy;
+      }
+
+      const validProviders: ProviderId[] = ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'];
+      if (Array.isArray(providerOrder) && providerOrder.length > 0) {
+        const filtered = providerOrder.filter((p: any): p is ProviderId => validProviders.includes(p));
+        const missing = validProviders.filter((p) => !filtered.includes(p));
+        registry.providerOrder = [...filtered, ...missing];
+      }
+
+      if (Array.isArray(geminiModels) && geminiModels.length > 0) {
+        registry.geminiModels = geminiModels
+          .filter((m: any) => m && typeof m.id === 'string' && !isProhibitedGeminiModel(m.id))
+          .map((m: any, idx: number) => ({
+            id: String(m.id).trim(),
+            displayName: String(m.displayName || m.id),
+            tier: m.tier || 'other',
+            supportsGrounding: m.supportsGrounding !== false,
+            enabled: m.enabled !== false,
+            priority: idx + 1,
+            source: m.source === 'auto-discovered' ? 'auto-discovered' : 'default',
+            lastVerifiedAt: m.lastVerifiedAt
+          }));
+      }
+
+      saveAiModelRegistry(registry);
+      await logSyncEvent({
+        type: 'info',
+        source: 'ai-resilience-config',
+        message: `AI 라우팅 정책 업데이트 (${registry.routingPolicy}, 순서: ${registry.providerOrder.join(' -> ')})`
+      });
+      res.json({ success: true, registry });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/ai/circuit-breaker/reset", requireAdmin, async (req, res) => {
+    try {
+      const { modelId } = req.body || {};
+      const registry = loadAiModelRegistry();
+      if (modelId && typeof modelId === 'string') {
+        delete registry.circuitBreakers[modelId];
+      } else {
+        registry.circuitBreakers = {};
+      }
+      saveAiModelRegistry(registry);
+      res.json({ success: true, registry });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/ai/test-chain", requireAdmin, async (req, res) => {
+    try {
+      const { provider } = req.body || {};
+      const started = Date.now();
+      const probePrompt = 'Reply cleanly with OK.';
+
+      if (provider && provider !== 'gemini') {
+        const target = provider as Exclude<ProviderId, 'gemini'>;
+        const result = await callExternalFreeProvider(target, probePrompt, { maxTokens: 8 });
+        if (result && result.text) {
+          recordRegistryUsage(target, result.modelUsed, false);
+          return res.json({
+            success: true,
+            provider: target,
+            modelUsed: result.modelUsed,
+            latencyMs: Date.now() - started,
+            message: `${result.modelUsed} 응답 정상 (${Date.now() - started}ms)`
+          });
+        }
+        return res.json({
+          success: false,
+          provider: target,
+          latencyMs: Date.now() - started,
+          error: `${target.toUpperCase()} 서버 환경변수(Secret)가 미설정되었거나 호출에 실패했습니다.`
+        });
+      }
+
+      const result = await executeServerGeminiCall(probePrompt, {
+        workloadType: 'heavy-grounded',
+        config: { maxOutputTokens: 8 }
+      });
+      res.json({
+        success: true,
+        provider: result.keyUsed,
+        modelUsed: result.modelUsed,
+        latencyMs: Date.now() - started,
+        message: `${result.modelUsed} 체인 응답 정상 (${Date.now() - started}ms)`
+      });
+    } catch (err: any) {
+      res.json({ success: false, error: getCleanErrorMessage(err) });
+    }
+  });
+
+  app.post("/api/ai/push-registry", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch = 'main', token } = req.body || {};
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+
+      if (!authToken) {
+        return res.status(400).json({
+          success: false,
+          error: "GitHub 저장소에 AI 모델 레지스트리를 푸시하려면 PAT 토큰('repo' 권한)이 필요합니다."
+        });
+      }
+
+      const registry = loadAiModelRegistry();
+      const contentStr = JSON.stringify(registry, null, 2) + '\n';
+      const headers = {
+        Authorization: `Bearer ${authToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-App',
+        'Content-Type': 'application/json'
+      };
+      const filePath = 'data/ai-model-registry.json';
+      let sha: string | undefined;
+      const getRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`, { headers });
+      if (getRes.ok) {
+        const info: any = await getRes.json();
+        sha = info.sha;
+      }
+      const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          message: `🧠 [GitOps] Sync AI model registry & free-tier routing (${registry.geminiModels[0]?.id || 'gemini-4-hydrogen'})`,
+          content: Buffer.from(contentStr, 'utf8').toString('base64'),
+          branch,
+          ...(sha ? { sha } : {})
+        })
+      });
+      if (!putRes.ok) {
+        const errText = await putRes.text();
+        throw new Error(`GitHub 커밋 실패 (${putRes.status}): ${errText}`);
+      }
+      const putJson: any = await putRes.json();
+      res.json({
+        success: true,
+        commitSha: putJson?.commit?.sha,
+        message: `GitHub(${targetRepo}/data/ai-model-registry.json)에 모델 레지스트리 및 라우팅 정책을 반영했습니다!`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -4220,7 +4471,7 @@ async function startServer() {
     }
   });
 
-  // 1-1. Get GitHub feed metadata and issues count
+  // 1-1. Get GitHub feed metadata and issues count (including KST daily collection stats)
   app.get("/api/github/feed", async (req, res) => {
     try {
       const feedPath = path.join(DATA_DIR, 'github-feed.json');
@@ -4235,12 +4486,45 @@ async function startServer() {
         (i.source && String(i.source).toLowerCase().includes('github')) || 
         (i.id && (String(i.id).startsWith('gh-') || String(i.id).includes('github')))
       );
+
+      const nowMs = Date.now();
+      const todayKst = new Date(nowMs + 9 * 3600000).toISOString().slice(0, 10);
+      const dailyMap: Record<string, number> = {};
+      let latestMs = 0;
+      let dailyCount24h = 0;
+
+      for (const issue of githubIssues) {
+        const raw = issue.createdAt || issue.updatedAt;
+        if (!raw) continue;
+        const ms = new Date(raw).getTime();
+        if (isNaN(ms)) continue;
+        if (ms > latestMs) latestMs = ms;
+        if (nowMs - ms <= 86400000) dailyCount24h++;
+        const kstDate = new Date(ms + 9 * 3600000).toISOString().slice(0, 10);
+        dailyMap[kstDate] = (dailyMap[kstDate] || 0) + 1;
+      }
+
+      const dailyHistory = Object.keys(dailyMap)
+        .sort((a, b) => b.localeCompare(a))
+        .slice(0, 14)
+        .map(date => ({ date, count: dailyMap[date] }));
+
+      const latestCollectedDate = latestMs > 0
+        ? new Date(latestMs + 9 * 3600000).toISOString().slice(0, 10)
+        : (feedData?.lastCollectedAt ? new Date(new Date(feedData.lastCollectedAt).getTime() + 9 * 3600000).toISOString().slice(0, 10) : null);
+
       res.json({
         success: true,
         count: githubIssues.length || (feedData?.newlyAddedCount || 2),
         totalIssuesCount: issues.length,
         feed: feedData,
-        lastCollectedAt: feedData?.lastCollectedAt || null
+        lastCollectedAt: latestMs > 0 ? new Date(latestMs).toISOString() : (feedData?.lastCollectedAt || null),
+        latestCollectedDate,
+        latestDayCount: latestCollectedDate ? (dailyMap[latestCollectedDate] || 0) : 0,
+        todayDateKst: todayKst,
+        todayCount: dailyMap[todayKst] || 0,
+        dailyCount24h,
+        dailyHistory
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -4341,7 +4625,7 @@ async function startServer() {
   // 3. Dispatch a GitHub Actions workflow remotely from Admin UI
   app.post("/api/github/dispatch-workflow", requireAdmin, async (req, res) => {
     try {
-      const { repo, workflowId = 'windows-fix-collector.yml', branch = 'main', token, topic = 'all', batchSize = 2 } = req.body;
+      const { repo, workflowId = 'windows-fix-collector.yml', branch = 'main', token, topic = 'all', batchSize = 2, modelPreference = 'auto', targetWindows = '' } = req.body;
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = repo || ghConfig.repo;
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
@@ -4356,8 +4640,16 @@ async function startServer() {
         });
       }
 
+      const clampedBatch = Math.min(Math.max(parseInt(String(batchSize), 10) || 2, 1), 10);
+      const inputs: Record<string, string> = {
+        topic: String(topic || 'all'),
+        batch_size: String(clampedBatch),
+        model_preference: String(modelPreference || 'auto'),
+        target_windows: Array.isArray(targetWindows) ? targetWindows.join(',') : String(targetWindows || '')
+      };
+
       const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`;
-      console.log(`[GitHub Dispatch] Triggering workflow ${workflowId} on ${targetRepo} (ref: ${branch})...`);
+      console.log(`[GitHub Dispatch] Triggering workflow ${workflowId} on ${targetRepo} (ref: ${branch}) with inputs:`, inputs);
 
       const ghRes = await fetch(dispatchUrl, {
         method: 'POST',
@@ -4369,10 +4661,7 @@ async function startServer() {
         },
         body: JSON.stringify({
           ref: branch,
-          inputs: {
-            topic,
-            batch_size: String(batchSize)
-          }
+          inputs
         })
       });
 
@@ -4646,6 +4935,386 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5-1. GitHub Auto-Collection Advanced Options Helpers & Endpoints
+  const ALL_COLLECTOR_TOPICS = [
+    '업데이트', '네트워크', '시스템/블루스크린', '스토어/앱',
+    '정품인증', '보안/백신', '오디오/사운드', '디스플레이/그래픽'
+  ];
+
+  const getCollectorOptionsPath = () => path.join(DATA_DIR, 'github-collector-options.json');
+
+  const getDefaultCollectorOptions = () => {
+    const ghConfig = readLocalCollection('github_config')[0] || {};
+    let sysBatch = 2;
+    try {
+      const sysPath = path.join(DATA_DIR, 'system_config.json');
+      if (fs.existsSync(sysPath)) {
+        const parsed = JSON.parse(fs.readFileSync(sysPath, 'utf8'));
+        if (typeof parsed?.engineBatchSize === 'number') {
+          sysBatch = Math.min(Math.max(parsed.engineBatchSize, 1), 10);
+        }
+      }
+    } catch (_) {}
+
+    return {
+      enabled: true,
+      scheduleCron: '0 */6 * * *',
+      batchSize: sysBatch,
+      topicMode: 'all',
+      fixedTopic: 'all',
+      preferredTopics: ALL_COLLECTOR_TOPICS,
+      targetWindowsVersions: ['Windows 11', 'Windows 10'],
+      modelPreference: 'auto',
+      dedupStrictness: 'strict',
+      autoDeployPages: ghConfig.autoDeployPages !== false,
+      autoIntegrateSeed: true,
+      updatedAt: getKSTISOString()
+    };
+  };
+
+  const loadCollectorOptions = () => {
+    const defaults = getDefaultCollectorOptions();
+    const optPath = getCollectorOptionsPath();
+    if (fs.existsSync(optPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(optPath, 'utf8'));
+        return {
+          ...defaults,
+          ...parsed,
+          preferredTopics: Array.isArray(parsed?.preferredTopics) && parsed.preferredTopics.length > 0
+            ? parsed.preferredTopics
+            : defaults.preferredTopics,
+          targetWindowsVersions: Array.isArray(parsed?.targetWindowsVersions) && parsed.targetWindowsVersions.length > 0
+            ? parsed.targetWindowsVersions
+            : defaults.targetWindowsVersions
+        };
+      } catch (_) {}
+    }
+    return defaults;
+  };
+
+  const sanitizeCollectorOptions = (input: any) => {
+    const current = loadCollectorOptions();
+    const cronExpr = typeof input.scheduleCron === 'string' && input.scheduleCron.trim()
+      ? input.scheduleCron.trim()
+      : current.scheduleCron;
+
+    if (!cron.validate(cronExpr)) {
+      throw new Error(`유효하지 않은 Cron 스케줄 표현식입니다: "${cronExpr}" (예: "0 */6 * * *")`);
+    }
+
+    const batchParsed = parseInt(String(input.batchSize ?? current.batchSize), 10);
+    const batchSize = Math.min(Math.max(isNaN(batchParsed) ? 2 : batchParsed, 1), 10);
+    const topicMode = ['all', 'rotate', 'fixed'].includes(input.topicMode) ? input.topicMode : current.topicMode;
+    const fixedTopic = typeof input.fixedTopic === 'string' && (input.fixedTopic === 'all' || ALL_COLLECTOR_TOPICS.includes(input.fixedTopic))
+      ? input.fixedTopic
+      : 'all';
+    const preferredTopics = Array.isArray(input.preferredTopics)
+      ? input.preferredTopics.filter((t: string) => ALL_COLLECTOR_TOPICS.includes(t))
+      : current.preferredTopics;
+    const targetWindowsVersions = Array.isArray(input.targetWindowsVersions) && input.targetWindowsVersions.length > 0
+      ? input.targetWindowsVersions.map((v: any) => String(v).trim()).filter(Boolean)
+      : current.targetWindowsVersions;
+    const registryModels = loadAiModelRegistry().geminiModels.map((m) => m.id);
+    const allowedModels = Array.from(new Set([
+      'auto',
+      'gemini-4-hydrogen',
+      'gemini-4-argon',
+      'gemini-3.1-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-3.1-pro-preview',
+      'gemini-flash-latest',
+      ...registryModels
+    ]));
+    const modelPreference = allowedModels.includes(input.modelPreference) ? input.modelPreference : current.modelPreference;
+    const dedupStrictness = input.dedupStrictness === 'balanced' ? 'balanced' : 'strict';
+
+    return {
+      enabled: input.enabled !== undefined ? Boolean(input.enabled) : current.enabled,
+      scheduleCron: cronExpr,
+      batchSize,
+      topicMode,
+      fixedTopic,
+      preferredTopics: preferredTopics.length > 0 ? preferredTopics : ALL_COLLECTOR_TOPICS,
+      targetWindowsVersions,
+      modelPreference,
+      dedupStrictness,
+      autoDeployPages: input.autoDeployPages !== undefined ? Boolean(input.autoDeployPages) : current.autoDeployPages,
+      autoIntegrateSeed: input.autoIntegrateSeed !== undefined ? Boolean(input.autoIntegrateSeed) : current.autoIntegrateSeed,
+      updatedAt: getKSTISOString()
+    };
+  };
+
+  const buildCollectorWorkflowYamlFromOptions = (opts: any) => {
+    const defaultTopic = opts.topicMode === 'fixed' && opts.fixedTopic ? opts.fixedTopic : 'all';
+    return `name: Windows Fix Autonomous Collector & GitOps Sync
+
+on:
+  # Automated scheduled run (Configured via Admin GitOps Options: ${opts.scheduleCron} UTC)
+  schedule:
+    - cron: '${opts.scheduleCron}'
+
+  # Manual execution trigger from GitHub Web UI or API dispatch
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: 'Target Error Category (or all)'
+        required: false
+        default: '${defaultTopic}'
+        type: choice
+        options:
+          - 'all'
+          - '업데이트'
+          - '네트워크'
+          - '시스템/블루스크린'
+          - '스토어/앱'
+          - '정품인증'
+          - '보안/백신'
+          - '오디오/사운드'
+          - '디스플레이/그래픽'
+      batch_size:
+        description: 'Number of fixes to collect (1-10)'
+        required: false
+        default: ''
+      model_preference:
+        description: 'Preferred Gemini AI Model (auto or model ID)'
+        required: false
+        default: '${opts.modelPreference || 'auto'}'
+      target_windows:
+        description: 'Comma-separated Windows versions'
+        required: false
+        default: '${(opts.targetWindowsVersions || ['Windows 11', 'Windows 10']).join(',')}'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  collect-and-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Check out repository code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: ⚙️ Set up Node.js 22 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: 📦 Install project dependencies
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: 🤖 Run Autonomous Windows Fix Collector via Gemini AI
+        id: run-collector
+        env:
+          GEMINI_API_KEY: \${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: \${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: \${{ secrets.MISTRAL_API_KEY }}
+          OPENROUTER_API_KEY: \${{ secrets.OPENROUTER_API_KEY }}
+          CEREBRAS_API_KEY: \${{ secrets.CEREBRAS_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          APP_WEBHOOK_URL: \${{ secrets.APP_WEBHOOK_URL }}
+          CRON_SECRET: \${{ secrets.CRON_SECRET }}
+          INPUT_TOPIC: \${{ github.event.inputs.topic || '' }}
+          INPUT_BATCH_SIZE: \${{ github.event.inputs.batch_size || '' }}
+          INPUT_MODEL_PREFERENCE: \${{ github.event.inputs.model_preference || '' }}
+          INPUT_TARGET_WINDOWS: \${{ github.event.inputs.target_windows || '' }}
+          GITHUB_EVENT_NAME: \${{ github.event_name }}
+        run: |
+          npx tsx scripts/github-collector.ts
+
+      - name: 🚀 Commit & Push updated issues dataset (GitOps)
+        id: git-push-step
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json data/ai-model-registry.json src/data/knownIssues.ts)" ]; then
+            git add data/issues.json data/github-feed.json
+            if [ -f data/ai-model-registry.json ]; then
+              git add data/ai-model-registry.json || true
+            fi
+            if [ -f src/data/knownIssues.ts ]; then
+              git add src/data/knownIssues.ts || true
+            fi
+            TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
+            git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
+
+            for i in {1..3}; do
+              git pull --rebase origin \${{ github.ref_name }} || true
+              git push origin HEAD:\${{ github.ref_name }} && break || sleep 5
+            done
+            echo "✅ Successfully committed and pushed updated dataset to repository."
+            echo "dataset_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ No dataset changes to commit in this cycle."
+            echo "dataset_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🌐 Trigger GitHub Pages Deployment
+        if: steps.git-push-step.outputs.dataset_changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          AUTO_DEPLOY=$(node -e "try{const fs=require('fs');const o=JSON.parse(fs.readFileSync('data/github-collector-options.json','utf8'));console.log(o.autoDeployPages===false?'false':'true')}catch{console.log('true')}")
+          if [ "$AUTO_DEPLOY" = "false" ] && [ "\${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "⏸️ Auto-deploy Pages is disabled in data/github-collector-options.json. Skipping."
+            exit 0
+          fi
+          echo "Triggering deploy-pages.yml workflow for latest changes..."
+          gh workflow run deploy-pages.yml --ref \${{ github.ref_name }} || echo "Workflow dispatch skipped or not required"
+`;
+  };
+
+  app.get("/api/github/collector-options", requireAdmin, async (req, res) => {
+    try {
+      const options = loadCollectorOptions();
+      res.json({ success: true, options });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/github/collector-options", requireAdmin, async (req, res) => {
+    try {
+      const cleanOptions = sanitizeCollectorOptions(req.body || {});
+      fs.writeFileSync(getCollectorOptionsPath(), JSON.stringify(cleanOptions, null, 2), 'utf8');
+
+      // Synchronize engineBatchSize to system_config.json & maintenance_config.json, and autoDeployPages to github_config
+      try {
+        for (const cfgName of ['system_config.json', 'maintenance_config.json']) {
+          const p = path.join(DATA_DIR, cfgName);
+          if (fs.existsSync(p)) {
+            const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+            parsed.engineBatchSize = cleanOptions.batchSize;
+            parsed.updatedAt = cleanOptions.updatedAt;
+            fs.writeFileSync(p, JSON.stringify(parsed, null, 2), 'utf8');
+          }
+        }
+        const ghConfig = readLocalCollection('github_config')[0] || {};
+        ghConfig.autoDeployPages = cleanOptions.autoDeployPages;
+        ghConfig.updatedAt = cleanOptions.updatedAt;
+        writeLocalCollection('github_config', [ghConfig]);
+      } catch (_) {}
+
+      await logSyncEvent({
+        type: 'info',
+        source: 'github-collector-options',
+        message: `GitHub 자동수집 옵션 저장 (${cleanOptions.enabled ? '활성' : '일시중지'}, 주기: ${cleanOptions.scheduleCron}, 수량: ${cleanOptions.batchSize}개, 모드: ${cleanOptions.topicMode})`,
+        details: cleanOptions
+      });
+
+      res.json({ success: true, options: cleanOptions });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message || "옵션 저장 실패" });
+    }
+  });
+
+  app.post("/api/github/push-collector-options", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch = 'main', token, options: incomingOpts } = req.body || {};
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+
+      if (!targetRepo || !targetRepo.includes('/')) {
+        return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명')이 필요합니다." });
+      }
+      if (!authToken) {
+        return res.status(400).json({
+          success: false,
+          error: "GitHub 저장소에 수집 옵션과 워크플로(.yml)를 커밋하려면 PAT 토큰('repo', 'workflow' 권한)이 필요합니다."
+        });
+      }
+
+      const cleanOptions = sanitizeCollectorOptions(incomingOpts || loadCollectorOptions());
+      fs.writeFileSync(getCollectorOptionsPath(), JSON.stringify(cleanOptions, null, 2), 'utf8');
+
+      // Also sync local workflow file
+      const workflowYaml = buildCollectorWorkflowYamlFromOptions(cleanOptions);
+      try {
+        const localWfDir = path.join(process.cwd(), '.github', 'workflows');
+        if (fs.existsSync(localWfDir)) {
+          fs.writeFileSync(path.join(localWfDir, 'windows-fix-collector.yml'), workflowYaml, 'utf8');
+        }
+      } catch (_) {}
+
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${authToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-App',
+        'Content-Type': 'application/json'
+      };
+
+      const upsertGithubFile = async (filePath: string, contentStr: string, commitMessage: string) => {
+        const getUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
+        let sha: string | undefined;
+        const getRes = await fetch(getUrl, { headers });
+        if (getRes.status === 401) {
+          throw new Error("GitHub 인증 실패 (401): PAT 토큰('repo', 'workflow' 권한)을 확인하세요.");
+        }
+        if (getRes.ok) {
+          const info: any = await getRes.json();
+          sha = info.sha;
+        }
+        const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            message: commitMessage,
+            content: Buffer.from(contentStr, 'utf8').toString('base64'),
+            branch,
+            ...(sha ? { sha } : {})
+          })
+        });
+        if (!putRes.ok) {
+          const errText = await putRes.text();
+          throw new Error(`GitHub 파일(${filePath}) 반영 실패 (${putRes.status}): ${errText || putRes.statusText}`);
+        }
+        return await putRes.json();
+      };
+
+      const optionsJsonStr = JSON.stringify(cleanOptions, null, 2) + '\n';
+      const optPut: any = await upsertGithubFile(
+        'data/github-collector-options.json',
+        optionsJsonStr,
+        `⚙️ [GitOps] Update autonomous collector options (${cleanOptions.enabled ? 'active' : 'paused'}, batch=${cleanOptions.batchSize}, cron=${cleanOptions.scheduleCron})`
+      );
+
+      const wfPut: any = await upsertGithubFile(
+        '.github/workflows/windows-fix-collector.yml',
+        workflowYaml,
+        `🕒 [GitOps] Sync collector schedule & inputs (${cleanOptions.scheduleCron})`
+      );
+
+      await logSyncEvent({
+        type: 'success',
+        source: 'github-push-collector-options',
+        message: `GitHub(${targetRepo})에 자동수집 옵션 및 워크플로 스케줄(${cleanOptions.scheduleCron}, ${cleanOptions.batchSize}개) 커밋 반영 완료`,
+        details: { targetRepo, branch, cleanOptions }
+      });
+
+      res.json({
+        success: true,
+        options: cleanOptions,
+        message: `GitHub(${targetRepo})에 수집 옵션(data/github-collector-options.json)과 스케줄 워크플로(.github/workflows/windows-fix-collector.yml)를 성공적으로 반영했습니다!`,
+        commitSha: wfPut?.commit?.sha || optPut?.commit?.sha,
+        workflowUrl: `https://github.com/${targetRepo}/actions/workflows/windows-fix-collector.yml`
+      });
+    } catch (err: any) {
+      console.error("[GitHub Push Collector Options] Failed:", err);
+      res.status(500).json({ success: false, error: err.message || "GitHub 옵션 푸시 실패" });
     }
   });
 
@@ -5054,13 +5723,24 @@ async function startServer() {
     res.status(404).json({ success: false, error: `Route ${req.method} ${req.url} not found` });
   });
 
-  // Vite middleware for development
+  // Vite middleware for development (initialized asynchronously so port 3000 binds immediately)
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    const vitePromise = createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+    }).catch((err) => {
+      console.error("Failed to initialize Vite dev server:", err);
+      throw err;
     });
-    app.use(vite.middlewares);
+
+    app.use(async (req, res, next) => {
+      try {
+        const vite = await vitePromise;
+        vite.middlewares(req, res, next);
+      } catch (err) {
+        next(err);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -5071,6 +5751,7 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    void ensureIssuesSeeded();
   });
 }
 

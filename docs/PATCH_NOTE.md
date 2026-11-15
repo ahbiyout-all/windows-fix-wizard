@@ -1,6 +1,75 @@
-# Patch Note - System Update (v3.97.9)
+# Patch Note - System Update (v3.100.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.100.0] - 2026-11-15
+
+### 🚀 Major New Features & Integrations (지속적 AI 모델 변경 대응 및 멀티 무료 티어 라우팅 아키텍처)
+- **적응형 AI 모델 복원력 라우터 신설 (`lib/ai-resilience-router.ts`, `data/ai-model-registry.json`)**:
+  - `@google/genai` SDK를 최신 `v3.3.0`으로 업그레이드하고, `ai.models.list()` 및 OpenRouter 공개 `/api/v1/models`를 주기적으로(부팅 40초 후 + 6시간 cron) 탐색하여 구형(`gemini-1.x`, `gemini-2.0`, TTS/이미지/임베딩) 모델을 자동 제외하고 최신 Gemini 4(`gemini-4-hydrogen`, `gemini-4-argon`), `gemini-3.1-flash-lite`, `gemini-flash-latest` 후보군을 동적 갱신하도록 구축.
+  - **404 모델 단위 서킷 브레이커(24시간 TTL)**: 폐기된 모델 ID가 HTTP 404를 반환하면 즉시 24시간 동안 격리하고 다음 정상 모델로 우회하며, 전 모델 404 소진 시 요청 중간에 실시간 탐색을 재수행하여 자가 치유.
+- **6대 무료 티어 AI 프로바이더 통합 및 워크로드 분산(`quota-split`)**:
+  - **Google Gemini** (그라운딩·심층 수집 전용 보존), **Groq LPU** (단문 진단·이슈 재분류 초고속 분산), **Mistral AI Free Mode** (`mistral-small-latest` JSON 보강), **OpenRouter Dynamic `:free` Pool** (종료된 `google/gemini-2.0-flash-exp:free`를 동적 `:free` 슬러그 풀로 교체), **Cloudflare Workers AI** (일일 10,000 Neurons 리셋), **Cerebras Inference** (선택적 프로모션 크레딧 버스트) 지원.
+  - 2026년 공식 지원이 종료된 **GitHub Models (`models.github.ai`)** 추론 API는 실전 HTTP 호출에서 영구 제외하고 전략 리포트에 대체 안내 명시.
+- **관리자 콘솔 AI 모델 변경 대응 및 무료 티어 라우팅 허브 (`src/App.tsx`, `server.ts`, `.github/workflows/windows-fix-collector.yml`)**:
+  - 3개 탭(**1. 실시간 모델 탐색 & 404 서킷 브레이커**, **2. 멀티 프로바이더 무료 티어 라우터**, **3. 2026 모델 변경 대응 & 무료 티어 전략 연구**) 및 `/api/ai/resilience-status`, `/api/ai/discover-models`, `/api/ai/resilience-config`, `/api/ai/circuit-breaker/reset`, `/api/ai/test-chain`, `/api/ai/push-registry` 관리 API 신설.
+  - GitHub Actions 자율 수집 파이프라인(`scripts/github-collector.ts`, `.github/workflows/windows-fix-collector.yml`)에도 동일 라우터 및 다중 무료 티어 Secret 연동을 적용하고 `data/ai-model-registry.json` GitOps 커밋 반영 지원.
+
+### 🛡️ Security Hardening & Authentication
+- 모든 신규 외부 프로바이더 키(`MISTRAL_API_KEY`, `CEREBRAS_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`)를 서버 `.env` 및 GitHub Secrets 전용으로 격리하고 관리자 화면에는 서버 환경변수 준비 여부 배지만 표시하도록 구현.
+- 신규 관리자 라우팅·탐색·테스트 API 전체에 `requireAdmin` 인증 미들웨어 및 `User-Agent: aistudio-build` 헤더 규칙 적용.
+
+### 🔧 Bug Fixes & Stability Improvements
+- `server.ts` 및 `scripts/github-collector.ts`에서 존재하지 않거나 종료될 수 있는 하드코딩 OpenRouter 슬러그(`google/gemini-2.0-flash-exp:free`)를 제거하고 동적 레지스트리 기반 탐색으로 교체.
+- `sanitizeCollectorOptions` 및 `COLLECTOR_MODEL_OPTIONS`에 `gemini-4-hydrogen`, `gemini-4-argon` 옵션을 추가하여 GitHub Actions 수집기 모델 선택 정합성 확보.
+
+### 📈 UI/UX & Performance Optimizations
+- `[2등급] 성능 모니터링 & 트러블슈팅` 패널 내 단일 평면 구조(`1px` 보더, `tabular-nums`/`font-mono` 지표, 다크 모드 대응)의 AI 모델 복원력 허브를 배치하여 실시간 프로브 테스트 및 모델 승격 제어 제공.
+
+---
+
+
+## [v3.99.0] - 2026-11-14
+
+### ⚙️ GitHub Auto-Collection Options Enhancement (깃허브 자동수집 옵션 변경 기능 고도화)
+- **관리자 GitOps 자율 수집 옵션 설정 패널 신설 (`src/App.tsx`, `data/github-collector-options.json`)**:
+  - **정기 크론 일시중지/활성화 토글 (`enabled`)**: 정기 크론 자동 실행만 일시중지하고 필요 시 수동 원격 실행(Dispatch)만 가동할 수 있도록 지원.
+  - **수집 주기 (Cron 스케줄) 프리셋 & 커스텀 편집 + 예상 수집량 계산기**: `매 3시간`, `매 6시간(기본)`, `매 12시간`, `매일 1회(KST 09:00/00:00)`, `격일 1회`, `주 2회` 프리셋과 직접 입력(UTC↔KST 안내)을 지원하며, 일일·월간 예상 수집 건수를 실시간 계산 표시.
+  - **회당 수집 수량 확장 (`1~10개`) & 주제 선정 방식(`전체 혼합` · `시간대별 순환` · `고정 카테고리`)**: 8개 공식 카테고리(`업데이트`, `네트워크`, `시스템/블루스크린`, `스토어/앱`, `정품인증`, `보안/백신`, `오디오/사운드`, `디스플레이/그래픽`) 다중 선택 및 우선 대상 Windows OS(`Windows 11`, `Windows 10`, `Windows Server`, `Windows 8.1`) 지정 가능.
+  - **AI 모델 우선순위 & 중복 차단 강도 제어**: `Auto`, `gemini-3.8-flash`, `gemini-3.1-flash-lite`, `gemini-3.1-pro-preview`, `gemini-flash-latest` 선택 및 `엄격`/`표준` 중복 필터링 모드, `knownIssues.ts` 자동 통합 여부 및 GitHub Pages 자동 재배포 토글 제공.
+- **로컬/서버 저장 & 원격 GitHub 저장소(GitOps) 동시 반영 (`server.ts`, `.github/workflows/windows-fix-collector.yml`)**:
+  - `GET/POST /api/github/collector-options` 엔드포인트 신설: `node-cron` 기반 유효성 검증 후 `data/github-collector-options.json` 저장 및 `system_config.json`/`maintenance_config.json`의 `engineBatchSize` 자동 동기화.
+  - `POST /api/github/push-collector-options` (및 정적 GitHub Pages 호스팅용 클라이언트 직접 Contents API 폴백)으로 설정 파일과 동적 생성된 `.github/workflows/windows-fix-collector.yml`을 원격 저장소에 즉시 커밋 반영.
+- **수집 스크립트 및 원격 수동 실행 고도화 (`scripts/github-collector.ts`, `src/App.tsx`)**:
+  - 기존 워크플로가 `BATCH_SIZE`를 `2`로 강제 덮어쓰던 버그를 수정하여 저장된 `batchSize` 옵션이 정기 크론 실행 시 그대로 적용되도록 개선.
+  - 원격 수동 실행(`Trigger AI Fix Collector Run`) UI에서도 8개 전체 카테고리 선택 및 회당 수집 수량(`1~10개`) 지정 지원.
+
+---
+
+## [v3.98.0] - 2026-11-14
+
+### 🚀 GitHub (GitOps) Daily Collection Date & 24h Count Briefing (깃허브 수집 날짜 표시 및 하루 수집 건수 알림)
+- **사용자 가이드북 화면에 일일 자동 수집 브리핑 배너 추가 (`src/App.tsx`)**:
+  - 일반 사용자도 메인 `알려진 문제 가이드북` 진입 즉시 **최근 수집 날짜/시각(KST)**, **최근 하루(24시간) 수집 건수**, **오늘 및 직전 수집일 하루 수집 건수**, **누적 GitHub 수집량 및 일평균 수집량**을 한눈에 확인할 수 있도록 전용 브리핑 카드를 배치.
+  - 최근 7일간의 일자별 수집 건수 칩을 제공하여, 날짜를 클릭하면 해당 날짜에 수집된 Windows 오류 데이터만 즉시 필터링해 열람 가능하도록 개선.
+- **관리자 시스템 현황 및 GitOps 센터 날짜·일일 통계 표시 고도화 (`src/App.tsx`)**:
+  - `깃허브(GitHub Actions / GitOps) 수집 데이터` 항목 옆에 **최근 수집일(KST 시각)**, **전체 수집 기간**, **하루(24시간) 수집 건수 및 오늘/직전일 건수**를 실시간 표시.
+- **KST(`UTC+9`) 기준 일자 정규화 및 `/api/github/feed` 확장 (`src/App.tsx`, `server.ts`)**:
+  - `formatCollectionDate`를 KST 기준으로 보정하여 자정 전후 수집 이력이 정확한 한국 날짜에 집계되도록 개선하고, `/api/github/feed` 응답에도 `dailyCount24h`, `todayCount`, `latestCollectedDate`, `latestDayCount`, `dailyHistory` 필드를 추가.
+
+---
+
+## [v3.97.10] - 2026-11-14
+
+### 🔧 Dev Server Fast-Boot & Preview Iframe Compatibility (`server.ts`)
+- **3000번 포트 즉시 바인딩(Non-blocking Vite Middleware 초기화)**:
+  - 개발 서버 기동 시 `createViteServer(...)` 완료를 기다린 뒤에 `app.listen(3000)`을 호출하던 구조를 개선하여, HTTP 서버가 즉시 `0.0.0.0:3000`에 바인딩되고 `/api/health`·`/api/backend-health` 헬스체크가 즉시 응답하도록 변경(초기 라우트 요청은 비동기 `vitePromise` 완료 후 전달).
+- **부팅 시 440KB TypeScript 정적 파싱 제거 (`knownIssues.ts` 지연 로딩)**:
+  - `server.ts` 최상단의 `import { KNOWN_ISSUES } from "./src/data/knownIssues"` 정적 임포트를 제거하고, `data/issues.json`이 없을 때만 실행되는 비동기 `ensureIssuesSeeded()` 지연 로딩으로 전환하여 `tsx server.ts` 부팅 지연 병목을 해소.
+- **프리뷰 Iframe 차단 헤더(`X-Frame-Options: SAMEORIGIN`) 제거**:
+  - AI Studio 크로스-오리진 프리뷰 iframe 렌더링을 방해하던 `X-Frame-Options: SAMEORIGIN` 응답 헤더를 제거.
 
 ---
 

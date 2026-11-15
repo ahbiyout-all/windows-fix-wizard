@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "3.97.9",
+  "version": "3.100.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -14,7 +14,7 @@
     "collect:github": "tsx scripts/github-collector.ts"
   },
   "dependencies": {
-    "@google/genai": "^1.29.0",
+    "@google/genai": "^3.3.0",
     "@google/generative-ai": "^0.21.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/prismjs": "^1.26.6",
