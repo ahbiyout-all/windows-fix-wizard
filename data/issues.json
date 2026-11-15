@@ -6608,5 +6608,95 @@
     "updatedAt": "2026-11-14T22:04:45.484Z",
     "verifiedAt": "2026-11-14T22:04:45.484Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80073cf9-mwhdcv3j",
+    "category": "스토어/앱",
+    "code": "0x80073CF9",
+    "title": "Windows 스토어 앱 설치 실패 및 패키지 등록 오류",
+    "title_en": "Windows Store App Installation Failure and Package Registration Error",
+    "symptoms": "Windows 11 23H2/24H2 업데이트 이후 특정 앱 설치 시 '0x80073CF9' 오류 발생. 주로 앱 패키지 설치를 위한 대상 폴더인 AUInstallAgent 권한 문제나 캐시 손상으로 인해 발생함.",
+    "symptoms_en": "Occurs after Windows 11 23H2/24H2 updates when installing specific apps. Usually caused by insufficient permissions on the AUInstallAgent folder or corruption in the Microsoft Store cache.",
+    "script": "if (!(Test-Path -Path 'C:\\Windows\\AUInstallAgent')) { New-Item -Path 'C:\\Windows\\AUInstallAgent' -ItemType Directory }; Get-AppxPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register '$($_.InstallLocation)\\AppXManifest.xml'}",
+    "manualSteps": [
+      "윈도우 탐색기에서 C:\\Windows 폴더로 이동합니다.",
+      "새 폴더를 만들고 이름을 'AUInstallAgent'로 지정합니다.",
+      "명령 프롬프트(관리자 권한)를 열고 'wsreset.exe'를 실행하여 스토어 캐시를 초기화합니다.",
+      "컴퓨터를 재부팅하고 앱 설치를 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "Open File Explorer and navigate to C:\\Windows.",
+      "Create a new folder and name it 'AUInstallAgent'.",
+      "Open Command Prompt as administrator and run 'wsreset.exe' to clear the store cache.",
+      "Restart your computer and attempt the app installation again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/account-billing/fix-problems-with-apps-from-microsoft-store-93ed0bcf-9c12-3df6-6dda-92e5d041fe09"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80073CF9",
+      "스토어 설치 오류",
+      "AUInstallAgent",
+      "Store App Error",
+      "Package registration failure"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-15T05:03:25.038Z",
+    "updatedAt": "2026-11-15T05:03:25.038Z",
+    "verifiedAt": "2026-11-15T05:03:25.038Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070005-mwhdcv3j",
+    "category": "스토어/앱",
+    "code": "0x80070005",
+    "title": "Windows 스토어 앱 업데이트 액세스 거부 오류",
+    "title_en": "Windows Store App Update Access Denied Error",
+    "symptoms": "Windows 11에서 스토어 앱 업데이트 시 '액세스 거부(Access Denied)' 메시지와 함께 0x80070005 코드가 나타남. 소프트웨어 배포 폴더의 권한 문제로 인해 스토어 서비스가 파일 업데이트에 실패하는 증상.",
+    "symptoms_en": "Displays error code 0x80070005 with an 'Access Denied' message when updating Store apps on Windows 11. Caused by permission issues in the SoftwareDistribution folder, preventing the store service from updating files.",
+    "script": "Stop-Service -Name wuauserv,bits; Rename-Item -Path 'C:\\Windows\\SoftwareDistribution' -NewName 'SoftwareDistribution.old'; Start-Service -Name wuauserv,bits",
+    "manualSteps": [
+      "시작 메뉴에서 '서비스'를 검색하여 실행합니다.",
+      "Windows Update 서비스를 찾아 마우스 오른쪽 버튼으로 클릭하고 '중지'를 선택합니다.",
+      "C:\\Windows\\SoftwareDistribution 폴더로 이동하여 폴더 이름을 'SoftwareDistribution.old'로 변경합니다.",
+      "서비스 관리자에서 Windows Update 서비스를 다시 시작합니다."
+    ],
+    "manualSteps_en": [
+      "Search for 'Services' in the Start menu and open it.",
+      "Find the Windows Update service, right-click it, and select 'Stop'.",
+      "Navigate to C:\\Windows\\SoftwareDistribution and rename the folder to 'SoftwareDistribution.old'.",
+      "Restart the Windows Update service in the Services manager."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-resources"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x80070005",
+      "액세스 거부",
+      "스토어 업데이트 오류",
+      "Access Denied",
+      "Store Update Issue"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-15T05:03:25.038Z",
+    "updatedAt": "2026-11-15T05:03:25.038Z",
+    "verifiedAt": "2026-11-15T05:03:25.038Z",
+    "verificationStatus": "verified"
   }
 ]
