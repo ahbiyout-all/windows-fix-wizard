@@ -1,21 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-15T05:03:25.038Z",
-  "modelUsed": "gemini-3.1-flash-lite",
-  "targetCategory": "스토어/앱",
+  "lastCollectedAt": "2026-11-15T22:31:05.580Z",
+  "modelUsed": "gemini-4-hydrogen",
+  "targetCategory": "시스템/블루스크린",
   "newlyAddedCount": 2,
-  "totalIssuesCount": 148,
+  "totalIssuesCount": 150,
   "newIssues": [
     {
-      "id": "gh-0x80073cf9-mwhdcv3j",
-      "code": "0x80073CF9",
-      "title": "Windows 스토어 앱 설치 실패 및 패키지 등록 오류",
-      "category": "스토어/앱"
+      "id": "gh-0x000000d1--driver-irql-not-less-or-equal--mwies6lo",
+      "code": "0x000000D1 (DRIVER_IRQL_NOT_LESS_OR_EQUAL)",
+      "title": "Windows 10/11 드라이버 IRQL 메모리 충돌 블루스크린 (0x000000D1) 해결 방법",
+      "category": "시스템/블루스크린"
     },
     {
-      "id": "gh-0x80070005-mwhdcv3j",
-      "code": "0x80070005",
-      "title": "Windows 스토어 앱 업데이트 액세스 거부 오류",
-      "category": "스토어/앱"
+      "id": "gh-0x0000009f--driver-power-state-failure--mwies6lp",
+      "code": "0x0000009F (DRIVER_POWER_STATE_FAILURE)",
+      "title": "Windows 10/11 드라이버 전원 상태 전환 실패 블루스크린 (0x0000009F) 해결",
+      "category": "시스템/블루스크린"
     }
   ]
 }

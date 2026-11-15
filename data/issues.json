@@ -6698,5 +6698,99 @@
     "updatedAt": "2026-11-15T05:03:25.038Z",
     "verifiedAt": "2026-11-15T05:03:25.038Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x000000d1--driver-irql-not-less-or-equal--mwies6lo",
+    "category": "시스템/블루스크린",
+    "code": "0x000000D1 (DRIVER_IRQL_NOT_LESS_OR_EQUAL)",
+    "title": "Windows 10/11 드라이버 IRQL 메모리 충돌 블루스크린 (0x000000D1) 해결 방법",
+    "title_en": "Fix Windows 10/11 DRIVER_IRQL_NOT_LESS_OR_EQUAL BSOD (0x000000D1)",
+    "symptoms": "최근 Windows 11(23H2/24H2) 및 Windows 10 누적 업데이트 이후 커널 모드 드라이버(ndis.sys, stornvme.sys, tcpip.sys 등)가 높은 IRQL(인터럽트 요청 수준) 상태에서 잘못된 페이지 가능 메모리에 접근할 때 0x000000D1 블루스크린이 발생하며 시스템이 강제 재부팅됩니다. 주로 네트워크 어댑터, NVMe SSD 스토리지 컨트롤러, 구형 보안 솔루션 드라이버와의 호환성 문제로 나타납니다.",
+    "symptoms_en": "Following recent Windows 11 (23H2/24H2) and Windows 10 cumulative updates, a 0x000000D1 (DRIVER_IRQL_NOT_LESS_OR_EQUAL) BSOD occurs when a kernel-mode driver (such as ndis.sys, stornvme.sys, or tcpip.sys) attempts to access invalid pageable memory at an improperly high IRQL. This commonly causes unexpected reboots due to conflicts with network adapter, NVMe storage controller, or legacy security software drivers.",
+    "script": "Write-Host '=== 0x000000D1 Diagnostic & System Repair ===' -ForegroundColor Cyan\nGet-WinEvent -FilterHashtable @{LogName='System'; Id=1001} -MaxEvents 5 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Message | Format-List\nif (Test-Path 'C:\\Windows\\Minidump') { Get-ChildItem 'C:\\Windows\\Minidump\\*.dmp' | Sort-Object LastWriteTime -Descending | Select-Object -First 5 Name, LastWriteTime }\nWrite-Host 'Checking recent non-Microsoft signed drivers...' -ForegroundColor Yellow\nGet-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DriverProviderName -and $_.DriverProviderName -notmatch 'Microsoft' } | Sort-Object DriverDate -Descending | Select-Object -First 15 DeviceName, DriverProviderName, DriverVersion, DriverDate | Format-Table -AutoSize\nDISM.exe /Online /Cleanup-Image /RestoreHealth\nsfc /scannow",
+    "manualSteps": [
+      "블루스크린 화면 하단이나 C:\\Windows\\Minidump 덤프 파일에서 오류를 유발한 드라이버 파일명(예: ndis.sys, stornvme.sys, rtwlane.sys 등)을 확인합니다.",
+      "안전 모드(네트워킹 사용)로 부팅한 뒤 '장치 관리자'에서 해당 네트워크 어댑터, 저장소 컨트롤러 또는 그래픽 드라이버를 제조사 최신 버전으로 업데이트하거나 최근 업데이트 직후 발생했다면 이전 드라이버로 롤백합니다.",
+      "관리자 권한 PowerShell에서 DISM 및 SFC 검사를 실행하여 손상된 커널 시스템 파일을 복구하고, 서드파티 백신이나 VPN 가상 네트워크 드라이버가 충돌하는 경우 일시적으로 제거 후 증상을 확인합니다.",
+      "문제가 지속되면 'Windows 메모리 진단(mdsched.exe)'을 실행하여 RAM 하드웨어 오류 여부를 점검하고 BIOS/UEFI 및 칩셋 펌웨어를 최신 상태로 유지합니다."
+    ],
+    "manualSteps_en": [
+      "Identify the faulting driver filename (e.g., ndis.sys, stornvme.sys, rtwlane.sys) from the BSOD screen or minidump logs in C:\\Windows\\Minidump.",
+      "Boot into Safe Mode with Networking, open Device Manager, and update the corresponding network adapter, storage controller, or display driver to the latest vendor release—or roll back if the issue began right after an update.",
+      "Run DISM and SFC scans in an elevated PowerShell window to repair corrupted system files, and temporarily uninstall conflicting third-party antivirus or VPN virtual adapter drivers to isolate the cause.",
+      "If the issue persists, run Windows Memory Diagnostic (mdsched.exe) to rule out RAM faults and update your motherboard BIOS/UEFI and chipset drivers."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xd1--driver-irql-not-less-or-equal",
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-60b01860-58f2-be66-7516-5c45a66ae3c6"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x000000D1",
+      "DRIVER_IRQL_NOT_LESS_OR_EQUAL",
+      "블루스크린 드라이버 충돌",
+      "ndis.sys 블루스크린",
+      "stornvme.sys BSOD",
+      "Windows 11 24H2 BSOD"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-15T22:31:05.580Z",
+    "updatedAt": "2026-11-15T22:31:05.580Z",
+    "verifiedAt": "2026-11-15T22:31:05.580Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x0000009f--driver-power-state-failure--mwies6lp",
+    "category": "시스템/블루스크린",
+    "code": "0x0000009F (DRIVER_POWER_STATE_FAILURE)",
+    "title": "Windows 10/11 드라이버 전원 상태 전환 실패 블루스크린 (0x0000009F) 해결",
+    "title_en": "Fix Windows 10/11 DRIVER_POWER_STATE_FAILURE BSOD (0x0000009F)",
+    "symptoms": "Windows 11(23H2/24H2) 및 Windows 10에서 절전 모드, 최대 절전 모드, 모던 대기(Modern Standby) 진입 및 해제 또는 시스템 종료/재시작 중 특정 드라이버가 전원 상태 변경 요청(IRP)에 제한 시간 내 응답하지 않아 0x0000009F 블루스크린이 발생합니다. 특히 노트북의 하이브리드 GPU, USB-C 도크, Thunderbolt, Wi-Fi 어댑터 드라이버의 전원 관리 호환성 저하가 주요 원인입니다.",
+    "symptoms_en": "On Windows 11 (23H2/24H2) and Windows 10, a 0x0000009F (DRIVER_POWER_STATE_FAILURE) BSOD occurs during sleep, hibernation, Modern Standby transitions, or system shutdown when a device driver fails to complete a power IRP request within the timeout window. It is frequently triggered by power-management incompatibilities in hybrid GPU, USB-C dock, Thunderbolt, or Wi-Fi drivers.",
+    "script": "Write-Host '=== 0x0000009F Power State Diagnostic & Repair ===' -ForegroundColor Cyan\nGet-WinEvent -FilterHashtable @{LogName='System'; Id=41,1001} -MaxEvents 5 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message | Format-List\nWrite-Host 'Active Power Requests:' -ForegroundColor Yellow\npowercfg /requests\nWrite-Host 'Devices with Errors:' -ForegroundColor Yellow\nGet-PnpDevice -Status Error | Select-Object Class, FriendlyName, InstanceId | Format-Table -AutoSize\n$reportPath = \"$env:TEMP\\energy-report.html\"\npowercfg /energy /output $reportPath /duration 5\nWrite-Host \"Power efficiency report saved to: $reportPath\" -ForegroundColor Green\nDISM.exe /Online /Cleanup-Image /RestoreHealth\nsfc /scannow",
+    "manualSteps": [
+      "제어판 > 전원 옵션 > '전원 단추 작동 설정'에서 '빠른 시작 켜기(Fast Startup)'를 해제하여 전원 상태 전환 시 드라이버 교착 현상을 방지합니다.",
+      "장치 관리자에서 네트워크 어댑터, USB 루트 허브 및 PCI Express 장치의 속성 > '전원 관리' 탭으로 이동해 '전원을 절약하기 위해 컴퓨터가 이 장치를 끌 수 있음' 옵션을 일시 해제해 원인을 추적합니다.",
+      "노트북이나 듀얼 그래픽 환경에서는 내장(Intel/AMD) 및 외장(NVIDIA/AMD) 그래픽 드라이버와 칩셋/Thunderbolt 드라이버를 PC 제조사 또는 칩셋 제조사 최신 버전으로 함께 업데이트합니다.",
+      "불필요한 외장 USB-C 허브나 주변기기를 분리한 상태에서 절전 전환이 정상 작동하는지 테스트하고, 생성된 C:\\Users\\<사용자>\\AppData\\Local\\Temp\\energy-report.html 보고서의 오류 항목을 점검합니다."
+    ],
+    "manualSteps_en": [
+      "Open Control Panel > Power Options > Choose what the power buttons do, and disable 'Turn on fast startup' to prevent driver state deadlocks during shutdown and boot.",
+      "In Device Manager, open Properties > Power Management for Network adapters and USB Root Hubs, and uncheck 'Allow the computer to turn off this device to save power' to isolate the offending hardware.",
+      "Update both integrated (Intel/AMD) and discrete (NVIDIA/AMD) graphics drivers alongside chipset and Thunderbolt drivers to the latest OEM-certified versions.",
+      "Disconnect external USB-C docks or peripherals to test sleep transitions, and review the generated energy-report.html in your Temp folder for device power-state errors."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x9f--driver-power-state-failure",
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-60b01860-58f2-be66-7516-5c45a66ae3c6"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x0000009F",
+      "DRIVER_POWER_STATE_FAILURE",
+      "절전 모드 블루스크린",
+      "윈도우11 전원 상태 오류",
+      "빠른 시작 해제",
+      "BSOD sleep crash"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-15T22:31:05.580Z",
+    "updatedAt": "2026-11-15T22:31:05.580Z",
+    "verifiedAt": "2026-11-15T22:31:05.580Z",
+    "verificationStatus": "verified"
   }
 ]
