@@ -1,6 +1,6 @@
 {
   "version": "3.100.0",
-  "updatedAt": "2026-11-15T22:31:05.579Z",
+  "updatedAt": "2026-11-16T04:56:37.099Z",
   "lastDiscoveryAt": null,
   "routingPolicy": "quota-split",
   "providerOrder": [
@@ -81,16 +81,16 @@
   },
   "circuitBreakers": {},
   "telemetry": {
-    "totalRequests": 2,
-    "geminiRequests": 2,
+    "totalRequests": 3,
+    "geminiRequests": 3,
     "freeProviderRequests": 0,
     "failoverSaves": 0,
     "circuitTrips404": 0,
     "lastProviderUsed": "gemini",
     "lastModelUsed": "gemini-4-hydrogen",
-    "lastUpdatedAt": "2026-11-15T22:31:05.579Z",
+    "lastUpdatedAt": "2026-11-16T04:56:37.099Z",
     "perProviderUsage": {
-      "gemini": 2,
+      "gemini": 3,
       "groq": 0,
       "mistral": 0,
       "openrouter": 0,
