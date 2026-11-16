@@ -1,8 +1,158 @@
-# Patch Note - System Update (v3.100.0)
+# Patch Note - System Update (v3.103.4)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
 
 ---
+
+## [v3.103.4] - 2026-11-16
+
+### 🛡️ Security Hardening & Authentication (관리자 보안 및 API 인증 강화)
+- **관리자 전용 API 미들웨어 보강 및 클라이언트 토큰 연동 (`server.ts`, `src/App.tsx`, `DailyQuotaUsageChart.tsx`)**:
+  - `GET /api/visitor/autoblock-settings` 및 `GET /api/admin/daily-quota-stats` 라우트에 `requireAdmin` 인증 미들웨어를 적용하여 비인가 열람을 차단.
+  - 클라이언트 `fetchAutoBlockSettings`, `fetchVisitorLogs`, `DailyQuotaUsageChart` 조회 및 스냅샷 다운로드(`handleDownloadHistoricalSnapshot`) 시 `Authorization: Bearer ...` 인증 헤더를 일관되게 전송하도록 수정.
+- **패스키 로그인 오류 폴백 우회 취약점 제거 (`src/App.tsx`)**:
+  - `handlePasskeyLogin`에서 서버 HTTP 500 오류 또는 일반 네트워크 장애 시 `pk.length >= 3`만으로 로컬 검증 통과를 허용하던 보안 우회 경로를 제거하고, 순수 정적 호스팅 환경(`IS_GITHUB_PAGES` 또는 404)에서만 클라이언트 폴백을 허용하도록 강화.
+
+### 🔧 Bug Fixes & Stability Improvements (관리자 페이지 자아성찰 전수 감사 및 영속성 수정)
+- **`system_config.json` 병합 정규화 및 데이터 유실 방지 (`server.ts`)**:
+  - 배열/객체 혼재 가능성을 정규화하는 `readSystemConfigObject()` 및 부분 병합 저장 헬퍼 `writeSystemConfigObject()`를 도입.
+  - `POST /api/settings/maintenance`, `GET/POST /api/system_config*`, `getDefaultCollectorOptions`, `POST /api/github/collector-options`가 기존 `groqApiKey`, `openrouterApiKey`, `stagingAutomationConfig` 등 타 설정 키를 덮어써 유실하지 않도록 수정.
+- **이슈 수정·삭제·AI 재검증·재분류의 서버 영속성 복구 (`server.ts`, `src/App.tsx`)**:
+  - 서버에 `DELETE /api/issues/:id`(`requireAdmin`) 엔드포인트를 신설.
+  - 스텁 상태였던 Firestore 단독 호출에 머물던 `handleDeleteClick`, `handleUpdateIssue`, `handleStartVerification`, `handleApplyVerificationBatch`, `handleApplySingleVerificationStatus`, `reclassifyUncategorizedIssues`, `applyAISuggestions`가 실제 서버 API(`/api/issues`, `/api/issues/:id`) 및 `getFullUnfilteredIssuesPool()`, `fullIssuesPool`, IndexedDB 캐시와 일괄 동기화되도록 전면 개편.
+- **로그 초기화 및 정밀 백업 내보내기 실동작 복구 (`src/App.tsx`)**:
+  - `clearAdminLogs`, `clearSearchLogs`, `clearFeedbackLogs`, `clearAppErrorLogs`가 실제 `POST /api/logs/clear`를 호출하고 `fetchLogSummary()`를 즉시 갱신하도록 수정.
+  - `handleExecuteGranularExport`가 로그 컬렉션(`admin_logs`, `search_logs`, `feedback`, `app_error_logs`, `visitor_logs`, `backend_logs`)을 서버 API에서 실제로 로드해 내보내도록 수정.
+- **iframe 샌드박스 금지 다이얼로그 및 하드코딩 버전 제거 (`server.ts`, `src/App.tsx`, `MemberManagementPanel.tsx`, `HiddenLogArchiveModal.tsx`)**:
+  - `window.confirm` 및 `window.open` 호출을 인앱 React 확인 UI(`customConfirm` / 인라인 행 확인), 인증된 `Blob` 다운로드, 숨김 `<iframe>` 인쇄로 전면 교체.
+  - `MemberManagementPanel`의 API 실패 시 하드코딩된 가짜 관리자 행 폴백을 제거하고 명시적 오류 안내 UI를 표시하도록 수정.
+  - `server.ts` 내 하드코딩된 레거시 버전 문자열(`3.55.0`, `3.14.0`, `3.10.0`)을 `getAppVersion()` 동적 로더로 대체하고 `APP_VERSION` / `package.json` / `lib/ai-resilience-router.ts`를 `v3.103.4`로 일괄 동기화.
+
+### 📈 UI/UX & Performance Optimizations (대시보드 차트·타이포그래피·동적 텔레메트리 교정)
+- **Quota 차트 & 배포 위젯 Recharts 렌더링 버그 수정 (`DailyQuotaUsageChart.tsx`, `DashboardWidget.tsx`)**:
+  - `DailyQuotaUsageChart`의 `chartType` 토글이 실제 `<ComposedChart>` / `<BarChart>` / `<AreaChart>` 간 전환으로 동작하도록 구현하고, `Refresh` 버튼의 `forceRefresh` 캐시 우회, Y축 스케일 및 컬러 매핑 충돌 해소, `Estimated Monthly Savings` 동적 산출을 적용.
+  - `DashboardWidget`의 `<Area>` + `<Bar>` 혼합 차트 래퍼를 `<ComposedChart>`로 교정하여 워크플로우 실행 막대 그래프가 정상 표시되도록 수정.
+- **비표준 Tailwind 유틸리티 클래스 및 동적 수치 교정 (`src/App.tsx`, `GitHubWorkflowStatus.tsx`, `DailyQuotaUsageChart.tsx`, `DashboardWidget.tsx`)**:
+  - `py-0.2` -> `py-0.5`, `dark:text-slate-205` -> `dark:text-slate-200`, `text-slate-450` / `text-emerald-605` / `dark:text-rose-450` / `dark:text-slate-350` 등 미적용 비표준 클래스 및 `AI 데이터 재검증 진행 상황` 모달 헤더 아이콘 구조·오탈자(`총 실패 횟수`) 교정.
+  - 관리자 패널의 실행 주기(`maintenanceSettings.engineIntervalMin`), 전체 이슈 수/KB 용량(`fullIssuesPool`), 엔진 버전 배지(`v{APP_VERSION}`)가 필터나 과거 상수에 고정되지 않고 실시간 상태와 일치하도록 개선.
+
+---
+
+## [v3.103.3] - 2026-11-16
+
+### 🔧 Bug Fixes & Stability Improvements (자아성찰 전수 감사 및 동기화·통계 정합성 수정)
+- **카테고리/검색 필터 활성 상태에서 대기열 동기화 시 부분 DB 누락 및 중복 미검출 버그 수정 (`src/App.tsx`)**:
+  - 기존 `handleSyncStagedIssues`, `retryPendingGitOpsCommit` 및 대기열 사전 중복 판별 UI(`partitionStagedIssues`)가 화면에 필터링된 `dbIssues` 상태를 참조하던 문제를 수정.
+  - `KNOWN_ISSUES`, `fullIssuesPool`, IndexedDB(`winfix_merged_issues`), `localStorage`, 그리고 서버 전체 조회(`/api/issues?category=전체&version=전체&q=`)를 병합해 반환하는 `getFullUnfilteredIssuesPool()` 비동기 헬퍼를 도입하여 필터 적용 중에도 전체 통합 DB 기준 중복 스킵·병합·GitHub 커밋이 안전하게 실행되도록 개선.
+- **필터 상태에서의 출처별 통계 폴백 왜곡 해소 (`src/App.tsx`)**:
+  - `winfix_dataset_breakdown_cache` 로컬 캐시 하이드레이션 및 `fullIssuesPool` 상태를 추가하여, 초기 로딩 중이거나 검색/카테고리 필터가 켜진 상태에서 `dbSourceBreakdown` 및 `githubHarvestStats`가 전체 DB 개수(`total: 150`)와 필터링된 `githubCollected` 개수를 혼용해 불일치 수치를 계산하던 폴백 오류를 해결.
+- **레거시 네이티브 `alert()` 전면 제거 (`src/App.tsx`)**:
+  - AI Studio iframe 샌드박스 환경에서 차단될 수 있는 23건의 네이티브 `alert()` 호출을 비차단 인앱 모달 `customAlert()`로 일괄 교체.
+
+---
+
+## [v3.103.2] - 2026-11-16
+
+### 📈 UI/UX & Performance Optimizations
+- **알려진 문제 가이드북 내 GitHub 일일 자동 수집 현황 배너 제거 (`src/App.tsx`)**:
+  - 사용자용 알려진 문제 가이드북 상단에 노출되던 `깃허브(GitHub Actions / GitOps) 일일 자동 수집 현황` 배너를 제거하여 오류 검색·해결 가이드 본연의 화면 집중도와 깔끔한 레이아웃을 확보.
+  - 관리자 콘솔 내 통계 및 GitOps 수집 센터 모니터링 기능은 기존대로 유지.
+
+---
+
+## [v3.103.1] - 2026-11-16
+
+### 🔧 Bug Fixes & Stability Improvements (데이터 건수 합산 모호성 및 중복 표기 해소)
+- **전체 통합 DB vs 출처별 합산 내역 명확화 (`server.ts`, `src/App.tsx`)**:
+  - 기존 관리자 모니터링 카드에서 `총 등록된 오류 수: 150개` 하위에 `Jamstack 정적 데이터셋: 150개`와 `깃허브 수집 데이터: 128개`를 나란히 트리로 배치하고 바로 아래 동일한 숫자를 2회 중복 출력하여 `150 + 128`처럼 오해되던 문제를 해결.
+  - 상호 배타적 출처 분류(`GitHub Actions 자동 수집 128개` + `기본 시드·초기 내장 22개` [+ `로컬 AI/수동 등록 N개`] = `전체 통합 DB 150개`)와 비율 바, 합계 검산(`128 + 22 = 150개`)을 단일 패널로 통합 표시하고 중복 행을 제거.
+- **카테고리·검색 필터 시 통계 왜곡 방지 (`server.ts`, `src/App.tsx`)**:
+  - `/api/issues/counts` 엔드포인트가 전체 컬렉션(`data/issues.json`) 기준 `sourceBreakdown` 및 `harvestStats`를 직접 반환하도록 개선하여, 사용자가 카탈로그에서 검색어나 필터를 적용한 상태에서도 관리자 대시보드 및 상단 수집 현황 배너의 출처별 합계(`128 / 150개`)가 항상 전체 DB 기준으로 정확히 유지되도록 보완.
+
+---
+
+## [v3.103.0] - 2026-11-16
+
+### 🚀 Major New Features & Integrations (로컬 대기열 수집 ➔ GitOps 자동 동기화 파이프라인)
+- **수량 도달 & 설정 주기 기반 자동 동기화 트리거 (`src/App.tsx`)**:
+  - 로컬 대기열(`stagedIssues`)이 설정된 수량 임계치(`threshold`, 기본 5건)에 도달하거나 설정 주기(`intervalMinutes`, 기본 15분)가 만료되면 중복 실행 방지 뮤텍스 락하에 자동으로 동기화 파이프라인을 실행하도록 고도화.
+  - 서버 `/api/system_config` 및 브라우저 `localStorage`와 설정(`threshold`, `intervalMinutes`, `autoCommitGithub`, `triggerPagesDeploy`)을 실시간 양방향 동기화하고 독립 타이머 배지(`StagingCountdownBadge`)를 통해 다음 실행 카운트다운 표시.
+- **서버 DB 병합 ➔ GitHub 저장소 자동 커밋 파이프라인 (`server.ts`, `src/App.tsx`)**:
+  - 기존 Firestore 단독 저장에 머물던 `handleSyncStagedIssues`를 서버 파일 DB(`/api/issues/sync`, `data/issues.json`) 병합 후 GitHub Contents API(`/api/github/push-to-repo`) 자동 커밋까지 일괄 실행하도록 재설계.
+  - 정적 GitHub Pages 호스팅 환경(`IS_GITHUB_PAGES`)에서도 IndexedDB 병합 및 클라이언트 GitHub REST API 직접 커밋 폴백 지원.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **중복 데이터 자동 스킵 및 실패 항목만 대기열 보존 (`server.ts`, `src/App.tsx`)**:
+  - `saveIssuesToServer` 및 `/api/issues/sync`에 `skipDuplicates` 옵션을 신설하여 기존 DB 및 동일 배치 내 중복 이슈(`id`, `code+title`, `title` 정규화 매칭)를 덮어쓰지 않고 자동 스킵 처리.
+  - 비동기 동기화 도중 새로 유입된 항목이나 DB 병합 실패 항목만 대기열에 안전하게 남기고 성공·중복 스킵 항목만 제거하며, GitHub 커밋 일시 실패 시에는 `pendingGitOpsCommit` 상태로 분리 추적하여 원클릭/자동 재시도 제공.
+- **`saveIssuesToServer` 실행 시 `system_config.json` 기존 설정 보존 (`server.ts`)**:
+  - 동기화 타임스탬프 저장 시 `system_config.json` 전체를 덮어써 `groqApiKey`, `openrouterApiKey`, `stagingAutomationConfig`가 유실되던 버그를 병합 저장으로 수정.
+
+### 📈 UI/UX & Performance Optimizations
+- 관리자 콘솔 로컬 대기열 패널을 단일 평면 보더(`1px`), 임계치 진행률 게이지, 사전 중복/신규 판별 목록, 최근 실행 이력(`tabular-nums`, SHA 링크), `44px` 이상 터치 타겟 규격으로 개편.
+
+---
+
+## [v3.102.2] - 2026-11-16
+
+### 🔧 Bug Fixes & Stability Improvements (자아성찰 전수 감사 및 UI/서버 정합성 수정)
+- **PowerShell 샌드박스 가변 높이 클리핑 버그 수정 (`src/components/PowerShellSandbox.tsx`)**:
+  - 코드 편집기 내부 래퍼에 고정되어 있던 `min-h-[360px] max-h-[500px]` 제약을 제거하여 `컴팩트(260px)` 모드 하단 잘림 현상과 `확장(580px)` 모드 하단 여백 유휴 공간 발생 버그를 해결.
+  - 레이아웃 분할 툴바·에디터 타이틀 액션 바·인스펙터 탭 바에 반응형 `flex-wrap` 및 `min-w-0`를 보강해 375px 모바일 화면과 좌우 분할 모드에서도 버튼이 넘치지 않도록 개선하고 높이 라벨 다국어(`ko`/`en`) 지원 및 `localStorage` 상태 영속화 적용.
+  - `initialScript` 프롭 변경 시 실시간 동기화(`useEffect`) 및 샌드박스 iframe 환경을 고려한 안전 클립보드 복사 헬퍼 적용.
+- **시스템 버전 일원화 및 부팅 시 모델 탐색 키 연동 (`src/App.tsx`, `server.ts`, `lib/ai-resilience-router.ts`)**:
+  - `APP_VERSION`이 이전 버전(`3.101.0`)으로 고정되어 GitHub 업데이트 비교 시 오차가 발생하던 부분을 최신 버전(`3.102.2`)으로 동기화.
+  - 부팅 후 40초 및 6시간 주기 `discoverLiveModels()` 스케줄 실행 시 `getApiKeyInfo()`가 검증한 활성 Gemini 키(`CUSTOM_API_KEY` 등 포함)를 전달하도록 보완.
+
+---
+
+## [v3.102.1] - 2026-11-16
+
+### 🔧 Bug Fixes & Stability Improvements (Engine Sync API 키 필터링 및 Search Grounding 예외 전파 수정)
+- **비-Gemini 환경변수 키 혼입 차단 (`server.ts`)**:
+  - `getAllAvailableKeys()`가 `FIREBASE_*`, `VITE_*`, `GROQ_*`, `OPENROUTER_*`, `MISTRAL_*`, `CEREBRAS_*`, `CLOUDFLARE_*`, `MAPS_*` 등 타 서비스의 `*_API_KEY` 환경변수까지 Gemini 키 풀에 수집해 우선 호출하던 문제를 해결하여 Gemini 전용 키(`GEMINI_API_KEY`, `GOOGLE_API_KEY`, `CUSTOM_API_KEY` 등)만 안전하게 필터링하도록 개선.
+- **Search Grounding 예외 블록에서 `INVALID_KEY` / `QUOTA_EXHAUSTED_429` 즉시 전파 (`server.ts`, `scripts/github-collector.ts`, `lib/ai-resilience-router.ts`)**:
+  - `googleSearch` 그라운딩 호출 중 HTTP 400 `API key not valid`(`INVALID_KEY`) 또는 `429`(`QUOTA_EXHAUSTED_429`) 오류가 발생했을 때, 이를 그라운딩 미지원 오류로 오인해 경고 로그(`[Engine Sync] Search grounding not available...`)를 출력하고 무의미한 직접 생성 재시도를 수행하던 버그를 수정.
+  - 유효하지 않은 키 감지 시 즉시 격리 쿨다운(30분)을 적용하고 다음 정상 키 또는 멀티 프로바이더 무료 티어 폴백으로 신속히 전환되도록 개선.
+
+---
+
+## [v3.102.0] - 2026-11-16
+
+### 🚀 Major New Features & Integrations (PowerShell 샌드박스 편집기 및 실행창 상하 2단 가변창 구현)
+- **PowerShell 샌드박스 레이아웃 상하 2단 가변창(Stacked 2-Tier) 및 좌우 분할 모드 신설 (`src/components/PowerShellSandbox.tsx`)**:
+  - 기본 가시성 배치를 기존 단일 평면에서 **상단 스크립트 편집기 + 하단 터미널/가상 상태 검사기** 구조의 **상하 2단 가변창(`stacked`)** 모드로 개편하여 전문 IDE(VS Code 터미널 분할) 수준의 직관적이고 쾌적한 작업 공간 구축.
+  - 사용자의 취향에 따라 언제든지 **[상하 2단 가변창 (기본)]** 과 **[좌우 2단 분할창]** 모드를 원클릭으로 전환할 수 있는 레이아웃 제어 툴바 탑재.
+- **편집기 및 터미널 독립형 높이 가변 컨트롤 (`컴팩트`, `표준`, `확장`)**:
+  - 스크립트 편집기 헤더와 터미널 콘솔 헤더에 각각 높이 조절 버튼(`↕ 높이: 표준 / 확장 / 컴팩트`)을 배치하여 스크립트 길이와 로그 볼륨에 맞춰 창 크기를 동적으로 최적화 가능.
+
+### 📈 UI/UX & Performance Optimizations
+- 에디터와 터미널 간 여백 및 스크롤바 정합성을 보완하여 모바일 및 데스크톱 반응형 뷰포트에서 스크롤 겹침 현상 없이 쾌적한 가독성 제공.
+
+---
+
+## [v3.101.0] - 2026-11-15
+
+### 🚀 Major New Features & Integrations (모바일 장치 화면 개선 방향 연구 및 UX 전면 최적화)
+- **엄지손가락 존(Thumb-Zone) 기반 모바일 내비게이션 개편 (`src/App.tsx`)**:
+  - 스마트폰(`md` 미만)에서 상단 2단 가로 스크롤 탭을 제거하고 **52px 슬림 상단 헤더 + 하단 5슬롯 고정 탭 바(`오류 가이드북`, `위협 검증`, `PS 샌드박스`, `나의 실험실`, `전체 메뉴`)**로 재설계하여 상·하단 고정 영역 합계를 모바일 뷰포트의 15% 이내로 억제.
+  - 기존 상단 드롭다운 메뉴를 **슬라이드업 바텀 시트 드로어(`rounded-t-3xl`, 드래그 핸들, 배경 딤드 및 ESC/외부 터치 닫기)**로 전환하여 한 손 조작성 강화.
+- **44px 터치 타겟 확대 및 노치 Safe-Area 지원 (`index.html`, `src/index.css`, `src/App.tsx`)**:
+  - `viewport-fit=cover` 적용 및 `pt-safe`, `pb-safe`, `pl-safe`, `pr-safe` 유틸리티 도입으로 iPhone Dynamic Island·홈 인디케이터 및 Android 제스처 바 가림 현상 해소.
+  - 모바일 헤더 컨트롤, 하단 탭 버튼, 플로팅 스크롤 도크, 검색·필터·투표·북마크·PowerShell 실행 버튼에 최소 **44×44px**(`min-h-[44px]`) 터치 히트박스 적용.
+- **인앱 '모바일 화면 개선 방향 연구 리포트' 신설 (`src/App.tsx`)**:
+  - 모바일 바텀 시트, 관리자 `[2등급]` 대시보드, 푸터에서 열람 가능한 인터랙티브 리포트 모달을 통해 병목 진단, 터치 규격, Safe-Area 아키텍처, 향후 확장 방향을 제공.
+
+### 🔧 Bug Fixes & Stability Improvements
+- 모바일 iOS Safari 입력 포커스 시 발생하던 화면 강제 확대 버그를 `@media (max-width: 639px)` `16px` 입력 폰트 규격으로 근본 차단.
+- 모바일 루트 컨테이너 `overflow-x-clip` 및 하단 여백(`pb-24 md:pb-8`), 플로팅 스크롤 버튼 Safe-Area 오프셋 보정으로 하단 탭 바 및 카드 겹침 현상 해결.
+- 주요 모달(로그, 스키마 검증, 데이터 내보내기, 스냅샷 복원, 업데이트 안내, GitOps 가이드, 이슈 편집, 자동 차단 설정)을 모바일 바텀 시트형(`items-end sm:items-center`, `max-h-[90dvh]`)으로 전환.
+
+### 📈 UI/UX & Performance Optimizations
+- `@media (pointer: coarse)` 환경에서 `touch-action: manipulation` 및 `-webkit-tap-highlight-color: transparent`, `overscroll-behavior-y: contain`을 적용해 모바일 터치 반응 속도 개선.
+
+---
+
 
 ## [v3.100.0] - 2026-11-15
 

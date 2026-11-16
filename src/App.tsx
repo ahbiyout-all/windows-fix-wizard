@@ -592,7 +592,127 @@ const AdSense = ({ slot, client }: { slot: string, client?: string }) => {
   );
 };
 
-const APP_VERSION = "3.100.0";
+interface StagingAutomationConfig {
+  enabled: boolean;
+  threshold: number;
+  intervalMinutes: number;
+  autoCommitGithub: boolean;
+  triggerPagesDeploy: boolean;
+}
+
+interface StagingSyncHistoryItem {
+  id: string;
+  syncedAt: string;
+  triggerType: 'threshold' | 'interval' | 'manual' | 'retry';
+  mergedCount: number;
+  duplicateSkippedCount: number;
+  failedCount: number;
+  githubCommitted: boolean;
+  commitSha?: string;
+  commitUrl?: string;
+  error?: string;
+}
+
+const DEFAULT_STAGING_AUTOMATION: StagingAutomationConfig = {
+  enabled: true,
+  threshold: 5,
+  intervalMinutes: 15,
+  autoCommitGithub: true,
+  triggerPagesDeploy: false,
+};
+
+const isStagedIssueDuplicate = (
+  candidate: Partial<KnownIssue>,
+  existingList: KnownIssue[]
+): boolean => {
+  const cId = String(candidate?.id || '').trim();
+  const cCode = String(candidate?.code || '').toUpperCase().trim();
+  const cTitle = String(candidate?.title || '').toLowerCase().trim();
+
+  return existingList.some(item => {
+    if (!item) return false;
+    if (cId && !cId.startsWith('temp_') && !cId.startsWith('staged-') && item.id === cId) {
+      return true;
+    }
+    const iCode = String(item.code || '').toUpperCase().trim();
+    const iTitle = String(item.title || '').toLowerCase().trim();
+    if (cCode && cCode !== 'N/A' && cTitle && iCode === cCode && iTitle === cTitle) {
+      return true;
+    }
+    if (cTitle && iTitle === cTitle) {
+      return true;
+    }
+    return false;
+  });
+};
+
+const partitionStagedIssues = (
+  queue: KnownIssue[],
+  existingDbIssues: KnownIssue[]
+): { uniqueCandidates: KnownIssue[]; duplicateItems: KnownIssue[] } => {
+  const seenPool: KnownIssue[] = [...existingDbIssues];
+  const uniqueCandidates: KnownIssue[] = [];
+  const duplicateItems: KnownIssue[] = [];
+
+  for (const item of queue) {
+    if (!item || !item.title || !item.code || !item.category || !item.symptoms) {
+      uniqueCandidates.push(item);
+      continue;
+    }
+    if (isStagedIssueDuplicate(item, seenPool)) {
+      duplicateItems.push(item);
+    } else {
+      uniqueCandidates.push(item);
+      seenPool.push(item);
+    }
+  }
+  return { uniqueCandidates, duplicateItems };
+};
+
+const StagingCountdownBadge: React.FC<{
+  nextAutoSyncAt: number | null;
+  intervalMinutes: number;
+  enabled: boolean;
+  language: 'ko' | 'en';
+}> = ({ nextAutoSyncAt, intervalMinutes, enabled, language }) => {
+  const [remainingSec, setRemainingSec] = useState<number>(() => {
+    if (!nextAutoSyncAt || !enabled || intervalMinutes <= 0) return 0;
+    return Math.max(0, Math.ceil((nextAutoSyncAt - Date.now()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!enabled || intervalMinutes <= 0 || !nextAutoSyncAt) {
+      setRemainingSec(0);
+      return;
+    }
+    const update = () => {
+      setRemainingSec(Math.max(0, Math.ceil((nextAutoSyncAt - Date.now()) / 1000)));
+    };
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [nextAutoSyncAt, intervalMinutes, enabled]);
+
+  if (!enabled || intervalMinutes <= 0) {
+    return (
+      <span className="font-mono text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+        {language === 'en' ? 'Interval: Off' : '주기 실행: 꺼짐'}
+      </span>
+    );
+  }
+
+  const mins = Math.floor(remainingSec / 60).toString().padStart(2, '0');
+  const secs = (remainingSec % 60).toString().padStart(2, '0');
+
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-slate-600 dark:text-slate-300 tabular-nums">
+      <Clock className="w-3.5 h-3.5 text-slate-400" />
+      {language === 'en' ? `Next check ${mins}:${secs}` : `다음 주기 ${mins}:${secs}`}
+    </span>
+  );
+};
+
+const APP_VERSION = "3.103.4";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -700,6 +820,115 @@ const formatKSTDateTime = (rawDate: any): string => {
   } catch (_) {
     return '';
   }
+};
+
+interface DatabaseSourceBreakdown {
+  total: number;
+  githubCollected: number;
+  coreSeed: number;
+  localEngine: number;
+  nonGithub: number;
+}
+
+interface DatabaseHarvestStats {
+  totalCount: number;
+  todayKst: string;
+  todayCount: number;
+  rolling24hCount: number;
+  latestDate: string;
+  firstDate: string;
+  latestDayCount: number;
+  latestCollectedKstTime: string;
+  dailyHistory: Array<{ date: string; count: number }>;
+  activeDaysCount: number;
+  dailyAverage: number;
+  displayDailyCount: number;
+}
+
+const computeFullDatasetBreakdown = (
+  issuesList: any[],
+  fallbackLastSyncAt?: string | null
+): { sourceBreakdown: DatabaseSourceBreakdown; harvestStats: DatabaseHarvestStats } => {
+  const safeList = Array.isArray(issuesList) ? issuesList : [];
+  let githubCollected = 0;
+  let coreSeed = 0;
+  let localEngine = 0;
+
+  const nowMs = Date.now();
+  const todayKst = getKSTISOString().split('T')[0];
+  const dailyMap: Record<string, number> = {};
+  let latestMs = 0;
+  let firstMs = Infinity;
+  let rolling24hCount = 0;
+
+  for (const issue of safeList) {
+    if (!issue) continue;
+    const src = String(issue.source || '').toLowerCase();
+    const idStr = String(issue.id || '').toLowerCase();
+    const isGithub = src.includes('github') || idStr.startsWith('gh-') || idStr.includes('github');
+
+    if (isGithub) {
+      githubCollected++;
+      const raw = issue.createdAt || issue.updatedAt;
+      if (raw) {
+        const ms = typeof raw === 'number' ? raw : new Date(raw).getTime();
+        if (!isNaN(ms) && ms > 0) {
+          if (ms > latestMs) latestMs = ms;
+          if (ms < firstMs) firstMs = ms;
+          if (nowMs - ms <= 24 * 3600000) rolling24hCount++;
+          const dateKey = formatCollectionDate(raw);
+          if (dateKey) dailyMap[dateKey] = (dailyMap[dateKey] || 0) + 1;
+        }
+      }
+    } else if (!issue.source || src === 'seed' || src.includes('initial setup') || src.includes('system grounding')) {
+      coreSeed++;
+    } else {
+      localEngine++;
+    }
+  }
+
+  const dailyHistory = Object.keys(dailyMap)
+    .sort((a, b) => b.localeCompare(a))
+    .map(date => ({ date, count: dailyMap[date] }));
+
+  const latestDate = latestMs > 0
+    ? new Date(latestMs + 9 * 3600000).toISOString().slice(0, 10)
+    : (fallbackLastSyncAt ? formatCollectionDate(fallbackLastSyncAt) : '');
+  const firstDate = firstMs !== Infinity
+    ? new Date(firstMs + 9 * 3600000).toISOString().slice(0, 10)
+    : latestDate;
+  const latestCollectedKstTime = latestMs > 0
+    ? formatKSTDateTime(latestMs)
+    : (fallbackLastSyncAt ? formatKSTDateTime(fallbackLastSyncAt) : '');
+
+  const todayCount = dailyMap[todayKst] || 0;
+  const latestDayCount = latestDate ? (dailyMap[latestDate] || 0) : 0;
+  const activeDaysCount = dailyHistory.length;
+  const dailyAverage = activeDaysCount > 0 ? Math.max(1, Math.round((githubCollected / activeDaysCount) * 10) / 10) : 0;
+
+  return {
+    sourceBreakdown: {
+      total: safeList.length,
+      githubCollected,
+      coreSeed,
+      localEngine,
+      nonGithub: coreSeed + localEngine,
+    },
+    harvestStats: {
+      totalCount: githubCollected,
+      todayKst,
+      todayCount,
+      rolling24hCount,
+      latestDate,
+      firstDate,
+      latestDayCount,
+      latestCollectedKstTime,
+      dailyHistory,
+      activeDaysCount,
+      dailyAverage,
+      displayDailyCount: rolling24hCount > 0 ? rolling24hCount : latestDayCount,
+    },
+  };
 };
 
 const formatLogTimestamp = (rawDate: any): string => {
@@ -982,6 +1211,18 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'wizard' | 'guidebook' | 'admin' | 'library' | 'threat-verifier' | 'powershell-sandbox'>('guidebook');
   const [triggerAutoSearch, setTriggerAutoSearch] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showMobileUxReportModal, setShowMobileUxReportModal] = useState(false);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+        setShowMobileUxReportModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
   const [scriptSignedOverrides, setScriptSignedOverrides] = useState<Record<string, string>>({});
   const [dbMode, setDbMode] = useState<'server_file'>('server_file');
   
@@ -1323,7 +1564,7 @@ export default function App() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert(language === 'en' 
+      customAlert(language === 'en' 
         ? 'Voice dictation is not supported in this browser. Please try Google Chrome or Microsoft Edge.' 
         : '현재 브라우저에서는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge 브라우저를 사용해 주세요.');
       return;
@@ -1579,78 +1820,75 @@ export default function App() {
     return counts;
   });
 
-  const githubHarvestStats = useMemo(() => {
-    const ghIssues = dbIssues.filter(i =>
-      (i.source && String(i.source).toLowerCase().includes('github')) ||
-      (i.id && (String(i.id).startsWith('gh-') || String(i.id).includes('github')))
-    );
-
-    const nowMs = Date.now();
-    const todayKst = getKSTISOString().split('T')[0];
-    const dailyMap: Record<string, number> = {};
-    let latestMs = 0;
-    let firstMs = Infinity;
-    let rolling24hCount = 0;
-
-    for (const issue of ghIssues) {
-      const raw = issue.createdAt || issue.updatedAt;
-      if (!raw) continue;
-      const ms = typeof raw === 'number' ? raw : new Date(raw).getTime();
-      if (isNaN(ms) || ms <= 0) continue;
-
-      if (ms > latestMs) latestMs = ms;
-      if (ms < firstMs) firstMs = ms;
-      if (nowMs - ms <= 24 * 3600000) rolling24hCount++;
-
-      const dateKey = formatCollectionDate(raw);
-      if (dateKey) {
-        dailyMap[dateKey] = (dailyMap[dateKey] || 0) + 1;
+  const [fullDatasetBreakdown, setFullDatasetBreakdown] = useState<{
+    sourceBreakdown: DatabaseSourceBreakdown;
+    harvestStats: DatabaseHarvestStats;
+  } | null>(() => {
+    try {
+      const cached = localStorage.getItem('winfix_dataset_breakdown_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.sourceBreakdown?.total > 0 && parsed?.harvestStats) {
+          return parsed;
+        }
       }
-    }
+    } catch {}
+    return null;
+  });
 
-    const dailyHistory = Object.keys(dailyMap)
-      .sort((a, b) => b.localeCompare(a))
-      .map(date => ({ date, count: dailyMap[date] }));
+  const [fullIssuesPool, setFullIssuesPool] = useState<KnownIssue[]>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_db_issues_cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= KNOWN_ISSUES.length) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return KNOWN_ISSUES;
+  });
 
-    const latestDate = latestMs > 0
-      ? new Date(latestMs + 9 * 3600000).toISOString().slice(0, 10)
-      : (githubLastSync?.at ? formatCollectionDate(githubLastSync.at) : '');
+  const knownIssuesFallbackDataset = useMemo(() => {
+    return computeFullDatasetBreakdown(KNOWN_ISSUES, githubLastSync?.at);
+  }, [githubLastSync]);
 
-    const firstDate = firstMs !== Infinity
-      ? new Date(firstMs + 9 * 3600000).toISOString().slice(0, 10)
-      : latestDate;
-
-    const latestCollectedKstTime = latestMs > 0
-      ? formatKSTDateTime(latestMs)
-      : (githubLastSync?.at ? formatKSTDateTime(githubLastSync.at) : '');
-
-    const todayCount = dailyMap[todayKst] || 0;
-    const latestDayCount = latestDate ? (dailyMap[latestDate] || 0) : 0;
-    const activeDaysCount = dailyHistory.length;
-    const dailyAverage = activeDaysCount > 0 ? Math.max(1, Math.round((ghIssues.length / activeDaysCount) * 10) / 10) : 0;
-
-    return {
-      totalCount: ghIssues.length,
-      todayKst,
-      todayCount,
-      rolling24hCount,
-      latestDate,
-      firstDate,
-      latestDayCount,
-      latestCollectedKstTime,
-      dailyHistory,
-      activeDaysCount,
-      dailyAverage,
-      displayDailyCount: rolling24hCount > 0 ? rolling24hCount : latestDayCount,
-    };
+  const clientComputedDataset = useMemo(() => {
+    return computeFullDatasetBreakdown(dbIssues, githubLastSync?.at);
   }, [dbIssues, githubLastSync]);
 
-  const githubIssuesCount = githubHarvestStats.totalCount;
+  const dbSourceBreakdown = useMemo<DatabaseSourceBreakdown>(() => {
+    const totalFromCounts = categoryCounts['전체'] || 0;
+    if (fullDatasetBreakdown?.sourceBreakdown && fullDatasetBreakdown.sourceBreakdown.total >= dbIssues.length) {
+      return fullDatasetBreakdown.sourceBreakdown;
+    }
+    if (dbIssues.length >= totalFromCounts && dbIssues.length > 0) {
+      return clientComputedDataset.sourceBreakdown;
+    }
+    if (fullIssuesPool.length >= totalFromCounts && fullIssuesPool.length > 0) {
+      return computeFullDatasetBreakdown(fullIssuesPool, githubLastSync?.at).sourceBreakdown;
+    }
+    return knownIssuesFallbackDataset.sourceBreakdown;
+  }, [fullDatasetBreakdown, clientComputedDataset, knownIssuesFallbackDataset, categoryCounts, dbIssues.length, fullIssuesPool, githubLastSync]);
+
+  const githubHarvestStats = useMemo<DatabaseHarvestStats>(() => {
+    if (fullDatasetBreakdown?.harvestStats && fullDatasetBreakdown.sourceBreakdown.total >= dbIssues.length) {
+      return fullDatasetBreakdown.harvestStats;
+    }
+    if (dbIssues.length >= (categoryCounts['전체'] || 0) && dbIssues.length > 0) {
+      return clientComputedDataset.harvestStats;
+    }
+    if (fullIssuesPool.length >= (categoryCounts['전체'] || 0) && fullIssuesPool.length > 0) {
+      return computeFullDatasetBreakdown(fullIssuesPool, githubLastSync?.at).harvestStats;
+    }
+    return knownIssuesFallbackDataset.harvestStats;
+  }, [fullDatasetBreakdown, clientComputedDataset, knownIssuesFallbackDataset, categoryCounts, dbIssues.length, fullIssuesPool, githubLastSync]);
+
+  const githubIssuesCount = dbSourceBreakdown.githubCollected;
 
   const githubRepoTotalCount = useMemo(() => {
-    // In GitOps mode, the entire repository tracks all issues (Seed + Collected)
-    return categoryCounts['전체'] || dbIssues.length || 0;
-  }, [categoryCounts, dbIssues]);
+    return dbSourceBreakdown.total || categoryCounts['전체'] || fullIssuesPool.length || dbIssues.length || 0;
+  }, [dbSourceBreakdown.total, categoryCounts, fullIssuesPool.length, dbIssues.length]);
 
   const [showFeedbackModal, setShowFeedbackModal] = useState<string | null>(null);
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -1763,6 +2001,28 @@ export default function App() {
   const [isSyncingStaged, setIsSyncingStaged] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncTotal, setSyncTotal] = useState(0);
+  const [stagingAutomation, setStagingAutomation] = useState<StagingAutomationConfig>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_staging_automation');
+      if (saved) return { ...DEFAULT_STAGING_AUTOMATION, ...JSON.parse(saved) };
+    } catch {}
+    return DEFAULT_STAGING_AUTOMATION;
+  });
+  const [stagingSyncHistory, setStagingSyncHistory] = useState<StagingSyncHistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_staging_sync_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [pendingGitOpsCommit, setPendingGitOpsCommit] = useState<boolean>(() => localStorage.getItem('winfix_pending_gitops_commit') === 'true');
+  const [pendingGitOpsCount, setPendingGitOpsCount] = useState<number>(() => Number(localStorage.getItem('winfix_pending_gitops_count') || 0));
+  const [nextAutoSyncAt, setNextAutoSyncAt] = useState<number | null>(null);
+  const [stagingLastNotice, setStagingLastNotice] = useState<{ type: 'success' | 'warning' | 'error'; message: string; timestamp: string } | null>(null);
+  const syncStagedLockRef = useRef<boolean>(false);
+  const autoSyncCooldownUntilRef = useRef<number>(0);
+  const stagedIssuesRef = useRef<KnownIssue[]>(stagedIssues);
+  const pendingGitOpsRef = useRef<boolean>(pendingGitOpsCommit);
+  const handleSyncStagedIssuesRef = useRef<(triggerType?: 'threshold' | 'interval' | 'manual' | 'retry') => Promise<void>>(async () => {});
   const [maintenanceSettings, setMaintenanceSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('winfix_maintenance_settings');
@@ -1902,6 +2162,14 @@ export default function App() {
               if (data.config.openrouterApiKey && !localStorage.getItem('winfix_openrouter_api_key')) {
                 setOpenrouterKeyInput(data.config.openrouterApiKey);
                 localStorage.setItem('winfix_openrouter_api_key', data.config.openrouterApiKey);
+              }
+              if (data.config.stagingAutomationConfig && typeof data.config.stagingAutomationConfig === 'object') {
+                const syncedCfg: StagingAutomationConfig = {
+                  ...DEFAULT_STAGING_AUTOMATION,
+                  ...data.config.stagingAutomationConfig,
+                };
+                setStagingAutomation(syncedCfg);
+                localStorage.setItem('winfix_staging_automation', JSON.stringify(syncedCfg));
               }
             }
           }
@@ -2336,10 +2604,47 @@ export default function App() {
     localStorage.setItem('winfix_use_staging', useStaging.toString());
   }, [useStaging]);
 
-  // Save staged issues to localStorage
+  // Save staged issues to localStorage & sync ref
   useEffect(() => {
+    stagedIssuesRef.current = stagedIssues;
     localStorage.setItem('winfix_staged_issues', JSON.stringify(stagedIssues));
   }, [stagedIssues]);
+
+  // Save staging automation policy, sync history & pending commit flags
+  useEffect(() => {
+    localStorage.setItem('winfix_staging_automation', JSON.stringify(stagingAutomation));
+  }, [stagingAutomation]);
+
+  useEffect(() => {
+    localStorage.setItem('winfix_staging_sync_history', JSON.stringify(stagingSyncHistory));
+  }, [stagingSyncHistory]);
+
+  useEffect(() => {
+    pendingGitOpsRef.current = pendingGitOpsCommit;
+    localStorage.setItem('winfix_pending_gitops_commit', pendingGitOpsCommit.toString());
+    localStorage.setItem('winfix_pending_gitops_count', String(pendingGitOpsCount));
+  }, [pendingGitOpsCommit, pendingGitOpsCount]);
+
+  const updateStagingAutomationConfig = async (patch: Partial<StagingAutomationConfig>) => {
+    const nextConfig: StagingAutomationConfig = {
+      ...stagingAutomation,
+      ...patch,
+      threshold: Math.max(1, Math.min(100, Number(patch.threshold ?? stagingAutomation.threshold) || 5)),
+      intervalMinutes: Math.max(0, Math.min(1440, Number(patch.intervalMinutes ?? stagingAutomation.intervalMinutes) || 0)),
+    };
+    setStagingAutomation(nextConfig);
+    localStorage.setItem('winfix_staging_automation', JSON.stringify(nextConfig));
+    if (!IS_GITHUB_PAGES && isAdmin) {
+      try {
+        const authHeaders = await getAuthHeaders();
+        await fetch('/api/system_config/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ stagingAutomationConfig: nextConfig }),
+        });
+      } catch (_) {}
+    }
+  };
 
   const fetchMaintenanceSettings = async () => {
     if (!isAdmin) return;
@@ -3862,7 +4167,13 @@ export default function App() {
               }
             });
             if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
+            const pagesBreakdown = computeFullDatasetBreakdown(mergedIssues, githubLastSync?.at);
             setCategoryCounts(counts);
+            setFullDatasetBreakdown(pagesBreakdown);
+            setFullIssuesPool(mergedIssues);
+            try {
+              localStorage.setItem('winfix_dataset_breakdown_cache', JSON.stringify(pagesBreakdown));
+            } catch (_) {}
             localStorage.setItem('cached_category_counts', JSON.stringify(counts));
             localStorage.setItem('cached_category_counts_time', Date.now().toString());
 
@@ -3880,6 +4191,16 @@ export default function App() {
           if (data.success) {
             setCategoryCounts(data.counts);
             setCategories(data.categories);
+            if (data.sourceBreakdown && data.harvestStats) {
+              const serverBreakdown = {
+                sourceBreakdown: data.sourceBreakdown,
+                harvestStats: data.harvestStats,
+              };
+              setFullDatasetBreakdown(serverBreakdown);
+              try {
+                localStorage.setItem('winfix_dataset_breakdown_cache', JSON.stringify(serverBreakdown));
+              } catch (_) {}
+            }
             setDbStatus('connected');
             setLoadingDb(false);
             return;
@@ -3920,7 +4241,13 @@ export default function App() {
               }
             });
             if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
+            const staticBreakdown = computeFullDatasetBreakdown(staticIssues, githubLastSync?.at);
             setCategoryCounts(counts);
+            setFullDatasetBreakdown(staticBreakdown);
+            setFullIssuesPool(staticIssues);
+            try {
+              localStorage.setItem('winfix_dataset_breakdown_cache', JSON.stringify(staticBreakdown));
+            } catch (_) {}
             setCategories(['전체', ...officialNames]);
             setDbStatus('connected');
             setLoadingDb(false);
@@ -4421,7 +4748,7 @@ export default function App() {
         ...logData,
         timestamp: new Date()
       });
-      alert(language === 'en' ? "Feedback sent. Thank you!" : "피드백이 전송되었습니다. 감사합니다!");
+      customAlert(language === 'en' ? "Feedback sent. Thank you!" : "피드백이 전송되었습니다. 감사합니다!");
       setShowFeedbackModal(null);
       setFeedbackComment('');
       setFeedbackSolved(null);
@@ -4568,9 +4895,12 @@ export default function App() {
   const fetchAutoBlockSettings = async () => {
     if (IS_GITHUB_PAGES) return;
     try {
-      const resp = await fetch('/api/visitor/autoblock-settings');
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/visitor/autoblock-settings', {
+        headers: authHeaders
+      });
       if (resp.ok) {
-        const data = await resp.json();
+        const data = await parseJsonResponse(resp);
         if (data.success && data.settings) {
           setAutoBlockSettings(data.settings);
         }
@@ -4607,9 +4937,12 @@ export default function App() {
     setShowLogsModal('visitor');
     fetchAutoBlockSettings();
     try {
-      const resp = await fetch('/api/visitor/list');
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/visitor/list', {
+        headers: authHeaders
+      });
       if (resp.ok) {
-        const data = await resp.json();
+        const data = await parseJsonResponse(resp);
         if (data.success) {
           setVisitorLogs(data.logs || []);
           if (data.stats) setVisitorStats(data.stats);
@@ -4783,51 +5116,49 @@ export default function App() {
     }
     customConfirm(language === 'en' ? "Clear all admin activity logs?" : "모든 관리자 활동 로그를 삭제하시겠습니까?", async () => {
       setLoadingLogs(true);
-    const path = 'admin_logs';
-    try {
-      let deletedCount = 0;
-      let hasMore = true;
-      
-      while (hasMore) {
-        const q = firestoreQuery(collection(db, path), limit(500));
-        const snap = await getDocs(q);
-        
-        if (snap.empty) {
-          hasMore = false;
-          break;
+      const path = 'admin_logs';
+      try {
+        const deletedCount = logSummaryData?.summary?.find((s: any) => s.type === 'admin')?.count ?? adminLogs.length;
+
+        if (!IS_GITHUB_PAGES) {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch('/api/logs/clear', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...authHeaders
+            },
+            body: JSON.stringify({ type: 'admin' })
+          });
+          if (!resp.ok) {
+            const errData = await parseJsonResponse(resp).catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${resp.status}`);
+          }
         }
 
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        
-        deletedCount += snap.size;
-        // Increase safety break for logs
-        if (deletedCount > 50000) {
-           console.warn("Too many logs, stopping cleanup early.");
-           hasMore = false;
-        }
-      }
+        try {
+          const snap = await getDocs(firestoreQuery(collection(db, path), limit(500)));
+          if (!snap.empty) {
+            const batch = writeBatch(db);
+            snap.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+        } catch (_) {}
 
-      setAdminLogs([]);
-      setLogCursors(prev => ({ ...prev, admin: [] }));
-      setLogPages(prev => ({ ...prev, admin: 0 }));
-      setLogHasMore(prev => ({ ...prev, admin: false }));
-      
-      await logAdminAction('delete', 'system', `관리자 활동 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
-      customAlert(language === 'en' ? `Logs cleared (${deletedCount} deleted).` : `로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
-    } catch (e: any) {
-      if (e.message?.includes('Quota') || e.message?.includes('quota') || e.code === 'resource-exhausted') {
-        console.warn("Failed to clear admin logs: Quota Exceeded");
-        customAlert(language === 'en' ? "Failed: Database quota exceeded. Please try again tomorrow." : "삭제 실패: 데이터베이스 할당량이 초과되었습니다. 내일 다시 시도해주세요.");
-      } else {
+        setAdminLogs([]);
+        setLogCursors(prev => ({ ...prev, admin: [] }));
+        setLogPages(prev => ({ ...prev, admin: 0 }));
+        setLogHasMore(prev => ({ ...prev, admin: false }));
+
+        await logAdminAction('delete', 'system', `관리자 활동 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
+        fetchLogSummary();
+        customAlert(language === 'en' ? `Logs cleared (${deletedCount} deleted).` : `로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
+      } catch (e: any) {
         console.error("Failed to clear admin logs:", e);
-        customAlert(language === 'en' ? "Error clearing logs:" : "로그 삭제 오류:");
+        customAlert(language === 'en' ? `Error clearing logs: ${e.message}` : `로그 삭제 오류: ${e.message}`);
+      } finally {
+        setLoadingLogs(false);
       }
-      try { handleFirestoreError(e, OperationType.DELETE, path); } catch(err) {}
-    } finally {
-      setLoadingLogs(false);
-    }
     });
   };
 
@@ -5002,42 +5333,49 @@ export default function App() {
     }
     customConfirm(language === 'en' ? "Clear all search logs?" : "모든 검색 로그를 삭제하시겠습니까?", async () => {
       setLoadingLogs(true);
-    const path = 'search_logs';
-    try {
-      let deletedCount = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const q = firestoreQuery(collection(db, path), limit(500));
-        const snap = await getDocs(q);
-        if (snap.empty) {
-          hasMore = false;
-          break;
+      const path = 'search_logs';
+      try {
+        const deletedCount = logSummaryData?.summary?.find((s: any) => s.type === 'search')?.count ?? searchLogs.length;
+
+        if (!IS_GITHUB_PAGES) {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch('/api/logs/clear', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...authHeaders
+            },
+            body: JSON.stringify({ type: 'search' })
+          });
+          if (!resp.ok) {
+            const errData = await parseJsonResponse(resp).catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${resp.status}`);
+          }
         }
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        deletedCount += snap.size;
-        if (deletedCount > 50000) break;
-      }
-      setSearchLogs([]);
-      setLogCursors(prev => ({ ...prev, search: [] }));
-      setLogPages(prev => ({ ...prev, search: 0 }));
-      setLogHasMore(prev => ({ ...prev, search: false }));
-      
-      await logAdminAction('delete', 'system', `검색 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
-      customAlert(language === 'en' ? `Search logs cleared (${deletedCount} deleted).` : `검색 로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
-    } catch (e: any) {
-      if (e.message?.includes('Quota') || e.message?.includes('quota') || e.code === 'resource-exhausted') {
-        console.warn("Failed to clear search logs: Quota Exceeded");
-        customAlert(language === 'en' ? "Failed: Database quota exceeded. Please try again tomorrow." : "삭제 실패: 데이터베이스 할당량이 초과되었습니다. 내일 다시 시도해주세요.");
-      } else {
+
+        try {
+          const snap = await getDocs(firestoreQuery(collection(db, path), limit(500)));
+          if (!snap.empty) {
+            const batch = writeBatch(db);
+            snap.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+        } catch (_) {}
+
+        setSearchLogs([]);
+        setLogCursors(prev => ({ ...prev, search: [] }));
+        setLogPages(prev => ({ ...prev, search: 0 }));
+        setLogHasMore(prev => ({ ...prev, search: false }));
+
+        await logAdminAction('delete', 'system', `검색 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
+        fetchLogSummary();
+        customAlert(language === 'en' ? `Search logs cleared (${deletedCount} deleted).` : `검색 로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
+      } catch (e: any) {
         console.error("Failed to clear search logs:", e);
-        customAlert(language === 'en' ? "Error clearing logs:" : "로그 삭제 오류:");
+        customAlert(language === 'en' ? `Error clearing logs: ${e.message}` : `로그 삭제 오류: ${e.message}`);
+      } finally {
+        setLoadingLogs(false);
       }
-      try { handleFirestoreError(e, OperationType.DELETE, path); } catch(err) {}
-    } finally {
-      setLoadingLogs(false);
-    }
     });
   };
 
@@ -5048,42 +5386,49 @@ export default function App() {
     }
     customConfirm(language === 'en' ? "Clear all feedback logs?" : "모든 피드백 로그를 삭제하시겠습니까?", async () => {
       setLoadingLogs(true);
-    const path = 'feedback';
-    try {
-      let deletedCount = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const q = firestoreQuery(collection(db, path), limit(500));
-        const snap = await getDocs(q);
-        if (snap.empty) {
-          hasMore = false;
-          break;
+      const path = 'feedback';
+      try {
+        const deletedCount = logSummaryData?.summary?.find((s: any) => s.type === 'feedback')?.count ?? feedbackLogs.length;
+
+        if (!IS_GITHUB_PAGES) {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch('/api/logs/clear', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...authHeaders
+            },
+            body: JSON.stringify({ type: 'feedback' })
+          });
+          if (!resp.ok) {
+            const errData = await parseJsonResponse(resp).catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${resp.status}`);
+          }
         }
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        deletedCount += snap.size;
-        if (deletedCount > 50000) break;
-      }
-      setFeedbackLogs([]);
-      setLogCursors(prev => ({ ...prev, feedback: [] }));
-      setLogPages(prev => ({ ...prev, feedback: 0 }));
-      setLogHasMore(prev => ({ ...prev, feedback: false }));
-      
-      await logAdminAction('delete', 'system', `피드백 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
-      customAlert(language === 'en' ? `Feedback cleared (${deletedCount} deleted).` : `피드백 로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
-    } catch (e: any) {
-      if (e.message?.includes('Quota') || e.message?.includes('quota') || e.code === 'resource-exhausted') {
-        console.warn("Failed to clear feedback logs: Quota Exceeded");
-        customAlert(language === 'en' ? "Failed: Database quota exceeded. Please try again tomorrow." : "삭제 실패: 데이터베이스 할당량이 초과되었습니다. 내일 다시 시도해주세요.");
-      } else {
+
+        try {
+          const snap = await getDocs(firestoreQuery(collection(db, path), limit(500)));
+          if (!snap.empty) {
+            const batch = writeBatch(db);
+            snap.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+        } catch (_) {}
+
+        setFeedbackLogs([]);
+        setLogCursors(prev => ({ ...prev, feedback: [] }));
+        setLogPages(prev => ({ ...prev, feedback: 0 }));
+        setLogHasMore(prev => ({ ...prev, feedback: false }));
+
+        await logAdminAction('delete', 'system', `피드백 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
+        fetchLogSummary();
+        customAlert(language === 'en' ? `Feedback cleared (${deletedCount} deleted).` : `피드백 로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
+      } catch (e: any) {
         console.error("Failed to clear feedback logs:", e);
-        customAlert(language === 'en' ? "Error clearing logs:" : "로그 삭제 오류:");
+        customAlert(language === 'en' ? `Error clearing logs: ${e.message}` : `로그 삭제 오류: ${e.message}`);
+      } finally {
+        setLoadingLogs(false);
       }
-      try { handleFirestoreError(e, OperationType.DELETE, path); } catch(err) {}
-    } finally {
-      setLoadingLogs(false);
-    }
     });
   };
   const fetchEngineStatus = async () => {
@@ -5421,7 +5766,7 @@ export default function App() {
       } catch (localErr: any) {
         console.warn("Local backend logs fetch fallback skipped/failed:", localErr.message || localErr);
         if (isModal) {
-          alert(language === 'en' ? "Failed to load backend logs from all sources." : "모든 경로에서 엔진 로그를 불러오는데 실패했습니다.");
+          customAlert(language === 'en' ? "Failed to load backend logs from all sources." : "모든 경로에서 엔진 로그를 불러오는데 실패했습니다.");
         }
       }
     }
@@ -5752,102 +6097,29 @@ export default function App() {
 
       console.log("Detected 'Others' categories in DB:", actualOthersCategories);
 
-      const activeDbMode = (localStorage.getItem('winfix_db_mode') as 'server_file') || dbMode;
-      let docsToAnalyze: { id: string; title: string; title_en?: string; symptoms?: string; content?: string; description?: string; category?: string }[] = [];
-
-      if (activeDbMode === 'server_file') {
-        console.log("Fetching issues from server JSON for re-classification...");
-        try {
-          const resp = await fetch('/api/issues?category=전체');
-          const json = await parseJsonResponse(resp);
-          if (json.success && Array.isArray(json.issues)) {
-            const allIssues = json.issues;
-            docsToAnalyze = allIssues.filter((i: any) => {
-              const cat = i.category;
-              return !cat || 
-                cat === "" || 
-                othersVariations.some(v => String(cat).toLowerCase().includes(v.toLowerCase())) ||
-                !officialNames.includes(cat);
-            });
-          }
-        } catch (restErr: any) {
-          console.error("Local issues REST fetch failed:", restErr);
-        }
-      } else {
-        try {
-          let snapDocs: any[] = [];
-          // Step A: Fetch explicit 'Others' categories
-          if (actualOthersCategories.length > 0) {
-            const queryCategories = actualOthersCategories.slice(0, 10);
-            const q = firestoreQuery(
-              collection(db, path), 
-              where('category', 'in', queryCategories),
-              limit(200) 
-            );
-            const snap = await getDocs(q);
-            snapDocs = [...snap.docs];
-          }
-
-          // Step B: Fallback/Supplement for missing categories (where field is null or missing)
-          if (snapDocs.length < 50) {
-            console.log("Fetching recent docs to find missing categories...");
-            const qRecent = firestoreQuery(collection(db, path), orderBy('createdAt', 'desc'), limit(500));
-            const snapRecent = await getDocs(qRecent);
-            const missingCatDocs = snapRecent.docs.filter(d => {
-              const cat = d.data().category;
-              return !cat || 
-                cat === "" || 
-                othersVariations.some(v => String(cat).toLowerCase().includes(v.toLowerCase())) ||
-                !officialNames.includes(cat);
-            });
-            
-            const existingIds = new Set(snapDocs.map(d => d.id));
-            for (const doc of missingCatDocs) {
-              if (!existingIds.has(doc.id)) {
-                snapDocs.push(doc);
-                if (snapDocs.length >= 300) break;
-              }
-            }
-          }
-
-          docsToAnalyze = snapDocs.map(d => ({
-            id: d.id,
-            title: d.data().title,
-            title_en: d.data().title_en,
-            symptoms: d.data().symptoms,
-            content: d.data().content,
-            description: d.data().description,
-            category: d.data().category
-          }));
-        } catch (dbErr: any) {
-          console.warn("Firestore fetch for reclassify failed (likely quota limit), falling back to REST JSON source.");
-          setDbMode('server_file');
-          localStorage.setItem('winfix_db_mode', 'server_file');
-          localStorage.setItem('winfix_db_mode_fallback', 'true');
-          setDbStatus('quota');
-
-          try {
-            const resp = await fetch('/api/issues?category=전체');
-            const json = await parseJsonResponse(resp);
-            if (json.success && Array.isArray(json.issues)) {
-              docsToAnalyze = json.issues.filter((i: any) => {
-                const cat = i.category;
-                return !cat || 
-                  cat === "" || 
-                  othersVariations.some(v => String(cat).toLowerCase().includes(v.toLowerCase())) ||
-                  !officialNames.includes(cat);
-              });
-            }
-          } catch (restErr: any) {
-            console.error("Local issues REST fetch fallback failed:", restErr);
-          }
-        }
-      }
+      const allIssues = await getFullUnfilteredIssuesPool();
+      const docsToAnalyze = allIssues
+        .filter((i: any) => {
+          const cat = i.category;
+          return !cat ||
+            cat === "" ||
+            othersVariations.some(v => String(cat).toLowerCase().includes(v.toLowerCase())) ||
+            !officialNames.includes(cat);
+        })
+        .map((i: any) => ({
+          id: i.id,
+          title: i.title,
+          title_en: i.title_en,
+          symptoms: i.symptoms,
+          content: i.content,
+          description: i.description,
+          category: i.category
+        }));
 
       console.log(`Analyzing ${docsToAnalyze.length} candidate issues for re-classification.`);
 
       if (docsToAnalyze.length === 0) {
-        alert(language === 'en' ? "No issues found in 'Others' categories for re-classification." : "'기타/미분류'로 분류할 항목을 찾지 못했습니다. 이미 모두 분류되었거나 데이터가 없습니다.");
+        customAlert(language === 'en' ? "No issues found in 'Others' categories for re-classification." : "'기타/미분류'로 분류할 항목을 찾지 못했습니다. 이미 모두 분류되었거나 데이터가 없습니다.");
         setIsReclassifying(false);
         return;
       }
@@ -5908,7 +6180,7 @@ export default function App() {
       }
 
       if (allSuggestions.length === 0) {
-        alert(language === 'en' ? "AI did not find better categories." : "AI가 더 적합한 카테고리를 찾지 못했습니다.");
+        customAlert(language === 'en' ? "AI did not find better categories." : "AI가 더 적합한 카테고리를 찾지 못했습니다.");
       } else {
         setAiSuggestions(allSuggestions);
         setShowReviewModal(true);
@@ -5916,7 +6188,7 @@ export default function App() {
     } catch (err: any) {
       console.error("Analysis failed:", err);
       logAppError(err.message, 'error', 'AiReclassify', err.stack);
-      alert(language === 'en' ? "An error occurred during re-classification: " + err.message : "재분류 진행 중 오류가 발생했습니다: " + err.message);
+      customAlert(language === 'en' ? "An error occurred during re-classification: " + err.message : "재분류 진행 중 오류가 발생했습니다: " + err.message);
     } finally {
       setIsReclassifying(false);
     }
@@ -5925,91 +6197,66 @@ export default function App() {
   const applyAISuggestions = () => {
     const selected = aiSuggestions.filter(s => s.selected);
     if (selected.length === 0) return;
-    
+
     customConfirm(language === 'en' ? `Are you sure you want to apply the suggested categories to ${selected.length} items?` : `${selected.length}건의 항목에 대해 제안된 카테고리를 일괄 적용하시겠습니까?`, async () => {
       setIsReclassifying(true);
       try {
         console.log(`Starting patch application for ${selected.length} items...`);
-        const pathToken = 'issues';
-        
-        const activeDbMode = (localStorage.getItem('winfix_db_mode') as 'server_file') || dbMode;
-        if (activeDbMode === 'server_file') {
-          console.log("Applying updates to server file-based database...");
-          for (const s of selected) {
+        const authHeaders = await getAuthHeaders();
+        const suggestionMap = new Map(selected.map(s => [s.id, s.suggestedCategory]));
+        const nowIso = new Date().toISOString();
+
+        if (!IS_GITHUB_PAGES) {
+          for (let idx = 0; idx < selected.length; idx++) {
+            const s = selected[idx];
             try {
-              await fetch(`/api/issues/${s.id}`, {
+              const resp = await fetch(`/api/issues/${encodeURIComponent(s.id)}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
                 body: JSON.stringify({
                   category: s.suggestedCategory,
-                  updatedAt: new Date().toISOString(),
-                  _aiReclassifiedAt: new Date().toISOString(),
+                  updatedAt: nowIso,
+                  _aiReclassifiedAt: nowIso,
                   _reviewedByAdmin: true
                 })
               });
+              if (!resp.ok) {
+                console.warn(`Server PATCH failed for ${s.id}: HTTP ${resp.status}`);
+              }
             } catch (restErr: any) {
               console.error(`Failed to patch local issue ${s.id}:`, restErr);
             }
-          }
-        } else {
-          try {
-            // Process in chunks of 500 (Firestore batch limit)
-            for (let i = 0; i < selected.length; i += 500) {
-              const batch = writeBatch(db);
-              const chunk = selected.slice(i, i + 500);
-              
-              chunk.forEach(s => {
-                const docRef = doc(db, pathToken, s.id);
-                batch.update(docRef, {
-                  category: s.suggestedCategory,
-                  updatedAt: new Date(),
-                  _aiReclassifiedAt: new Date(),
-                  _reviewedByAdmin: true
-                });
-              });
-              
-              await batch.commit();
-              trackUsage(0, chunk.length);
-              
-              setReclassifyProgress({ current: Math.min(i + 500, selected.length), total: selected.length });
-            }
-          } catch (batchErr: any) {
-            console.warn("Firestore batch apply failed (likely quota limit), automatically switching to REST JSON apply.");
-            setDbMode('server_file');
-            localStorage.setItem('winfix_db_mode', 'server_file');
-            localStorage.setItem('winfix_db_mode_fallback', 'true');
-            setDbStatus('quota');
-
-            // Fallback REST PATCH updates
-            for (const s of selected) {
-              try {
-                await fetch(`/api/issues/${s.id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    category: s.suggestedCategory,
-                    updatedAt: new Date().toISOString(),
-                    _aiReclassifiedAt: new Date().toISOString(),
-                    _reviewedByAdmin: true
-                  })
-                });
-              } catch (restErr: any) {
-                console.error(`Failed to patch local issue ${s.id}:`, restErr);
-              }
-            }
+            setReclassifyProgress({ current: idx + 1, total: selected.length });
           }
         }
+
+        const applyMapToList = (list: KnownIssue[]) =>
+          list.map(item =>
+            suggestionMap.has(item.id)
+              ? { ...item, category: suggestionMap.get(item.id) as any, updatedAt: nowIso }
+              : item
+          );
+
+        setDbIssues(prev => {
+          const next = applyMapToList(prev);
+          syncItemsToLocalCache(next);
+          return next;
+        });
+        setFullIssuesPool(prev => {
+          const next = applyMapToList(prev);
+          idbSet('winfix_merged_issues', next).catch(() => {});
+          return next;
+        });
 
         customAlert(language === 'en' ? `Applied successfully: ${selected.length} items updated.` : `성공적으로 적용되었습니다: ${selected.length}개 항목 업데이트 완료.`);
         setShowReviewModal(false);
         setAiSuggestions([]);
-        
-        // Force refresh data
+
         await Promise.all([
           fetchCategoryCounts(true),
           fetchIssues(false, true)
         ]);
-        
+
         await logAdminAction('update', 'system', `관리자 검토 후 AI 재분류 결과를 ${selected.length}건 적용했습니다.`, 'info', 'SYSTEM');
       } catch (err: any) {
         console.error("Apply operation failed:", err);
@@ -6028,90 +6275,105 @@ export default function App() {
     }
     customConfirm(language === 'en' ? "Clear all app error logs?" : "모든 앱 에러 로그를 삭제하시겠습니까?", async () => {
       setLoadingLogs(true);
-    const path = 'app_error_logs';
-    try {
-      let deletedCount = 0;
-      let hasMore = true;
-      
-      while (hasMore) {
-        const q = firestoreQuery(collection(db, path), limit(500));
-        const snap = await getDocs(q);
-        
-        if (snap.empty) {
-          hasMore = false;
-          break;
-        }
-
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        
-        deletedCount += snap.size;
-        if (deletedCount > 50000) {
-           console.warn("Too many logs, stopping cleanup early.");
-           hasMore = false;
-        }
-      }
-
-      setAppErrorLogs([]);
-      setLogCursors(prev => ({ ...prev, error: [] }));
-      setLogPages(prev => ({ ...prev, error: 0 }));
-      setLogHasMore(prev => ({ ...prev, error: false }));
-      
+      const path = 'app_error_logs';
       try {
-        await logAdminAction('delete', 'system', `앱 에러 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
-      } catch (logErr) {
-        console.warn("Failed to log admin action for cleanup:", logErr);
-      }
-      customAlert(language === 'en' ? `Logs cleared (${deletedCount} deleted).` : `로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
-    } catch (e: any) {
-      if (e.message?.includes('Quota') || e.message?.includes('quota') || e.code === 'resource-exhausted') {
-        console.warn("Failed to clear app error logs: Quota Exceeded");
-        customAlert(language === 'en' ? "Failed: Database quota exceeded. Please try again tomorrow." : "삭제 실패: 데이터베이스 할당량이 초과되었습니다. 내일 다시 시도해주세요.");
-      } else {
+        const deletedCount = logSummaryData?.summary?.find((s: any) => s.type === 'error')?.count ?? appErrorLogs.length;
+
+        if (!IS_GITHUB_PAGES) {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch('/api/logs/clear', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...authHeaders
+            },
+            body: JSON.stringify({ type: 'error' })
+          });
+          if (!resp.ok) {
+            const errData = await parseJsonResponse(resp).catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${resp.status}`);
+          }
+        }
+
+        try {
+          const snap = await getDocs(firestoreQuery(collection(db, path), limit(500)));
+          if (!snap.empty) {
+            const batch = writeBatch(db);
+            snap.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+        } catch (_) {}
+
+        setAppErrorLogs([]);
+        setLogCursors(prev => ({ ...prev, error: [] }));
+        setLogPages(prev => ({ ...prev, error: 0 }));
+        setLogHasMore(prev => ({ ...prev, error: false }));
+
+        try {
+          await logAdminAction('delete', 'system', `앱 에러 로그가 시스템 관리자에 의해 초기화되었습니다. (${deletedCount}건)`, 'warning', 'SYSTEM');
+        } catch (logErr) {
+          console.warn("Failed to log admin action for cleanup:", logErr);
+        }
+        fetchLogSummary();
+        customAlert(language === 'en' ? `Logs cleared (${deletedCount} deleted).` : `로그가 삭제되었습니다. (${deletedCount}건 삭제됨)`);
+      } catch (e: any) {
         console.error("Failed to clear app error logs:", e);
-        customAlert(language === 'en' ? "Error clearing logs:" : "로그 삭제 오류:");
+        customAlert(language === 'en' ? `Error clearing logs: ${e.message}` : `로그 삭제 오류: ${e.message}`);
+      } finally {
+        setLoadingLogs(false);
       }
-      try { handleFirestoreError(e, OperationType.DELETE, path); } catch(err) {}
-    } finally {
-      setLoadingLogs(false);
-    }
     });
   };
 
   const handleDeleteClick = (issueId: string) => {
     customConfirm(language === 'en' ? "Are you sure you want to delete this issue?" : "정말로 이 이슈를 삭제하시겠습니까?", async () => {
-      const path = `issues/${issueId}`;
       try {
-        await deleteDoc(doc(db, 'issues', issueId));
+        if (!IS_GITHUB_PAGES) {
+          const authHeaders = await getAuthHeaders();
+          const resp = await fetch(`/api/issues/${encodeURIComponent(issueId)}`, {
+            method: 'DELETE',
+            headers: authHeaders
+          });
+          if (!resp.ok && resp.status !== 404) {
+            const errData = await parseJsonResponse(resp).catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${resp.status}`);
+          }
+        }
+        try { await deleteDoc(doc(db, 'issues', issueId)); } catch (_) {}
+
         await logAdminAction('delete', issueId, `Deleted issue: ${issueId}`, 'warning', 'ISSUE');
         setDbIssues(prev => {
           const filtered = prev.filter(i => i.id !== issueId);
           syncItemsToLocalCache(filtered);
           return filtered;
         });
+        setFullIssuesPool(prev => {
+          const filtered = prev.filter(i => i.id !== issueId);
+          idbSet('winfix_merged_issues', filtered).catch(() => {});
+          return filtered;
+        });
+        fetchCategoryCounts(true);
         customAlert(language === 'en' ? "Deleted successfully." : "삭제되었습니다.");
       } catch (error: any) {
-        handleFirestoreError(error, OperationType.DELETE, path);
+        console.error("Failed to delete issue:", error);
+        customAlert(language === 'en' ? `Delete failed: ${error.message}` : `이슈 삭제 실패: ${error.message}`);
       }
     });
   };
 
   const handleUpdateIssue = async () => {
     if (!editingIssue) return;
-    const path = `issues/${editingIssue.id}`;
     try {
-      const issueRef = doc(db, 'issues', editingIssue.id);
       const searchKeywords = generateSearchKeywords({ ...editingIssue, ...editForm });
       const updatedData = {
         ...editForm,
         searchKeywords,
         verifiedAt: getKSTISOString(),
+        updatedAt: getKSTISOString(),
         verificationStatus: 'verified',
         aiFeedback: "관리자에 의해 수동으로 검증 및 수정된 데이터입니다."
       };
 
-      // Calculate changes for logging
       const changes: Record<string, { old: any, new: any }> = {};
       const fieldsToTrack = ['title', 'code', 'symptoms', 'script', 'manualSteps', 'category', 'osVersion'];
       fieldsToTrack.forEach(field => {
@@ -6122,24 +6384,49 @@ export default function App() {
         }
       });
 
-      await updateDoc(issueRef, updatedData);
+      if (!IS_GITHUB_PAGES) {
+        const authHeaders = await getAuthHeaders();
+        const resp = await fetch(`/api/issues/${encodeURIComponent(editingIssue.id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify(updatedData)
+        });
+        if (!resp.ok) {
+          const errData = await parseJsonResponse(resp).catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${resp.status}`);
+        }
+      }
+
+      try {
+        await updateDoc(doc(db, 'issues', editingIssue.id), updatedData);
+      } catch (_) {}
+
       trackUsage(0, 1);
       await logAdminAction('update', editingIssue.id, `Updated issue: ${editingIssue.title}`, 'success', 'ISSUE', changes);
+
+      const targetId = editingIssue.id;
       setDbIssues(prev => {
-        const mapped = prev.map(i => i.id === editingIssue.id ? { ...i, ...updatedData } as KnownIssue : i);
+        const mapped = prev.map(i => i.id === targetId ? { ...i, ...updatedData } as KnownIssue : i);
         syncItemsToLocalCache(mapped);
         return mapped;
       });
+      setFullIssuesPool(prev => {
+        const mapped = prev.map(i => i.id === targetId ? { ...i, ...updatedData } as KnownIssue : i);
+        idbSet('winfix_merged_issues', mapped).catch(() => {});
+        return mapped;
+      });
+      fetchCategoryCounts(true);
       setEditingIssue(null);
-      alert(language === 'en' ? "Updated successfully." : "수정되었습니다.");
+      customAlert(language === 'en' ? "Updated successfully." : "수정되었습니다.");
     } catch (error: any) {
-      handleFirestoreError(error, OperationType.UPDATE, path);
+      console.error("Failed to update issue:", error);
+      customAlert(language === 'en' ? `Update failed: ${error.message}` : `이슈 수정 실패: ${error.message}`);
     }
   };
 
   const handleVote = async (issueId: string, voteType: 'up' | 'down') => {
     if (!user) {
-      alert(language === 'en' ? "Please log in to vote." : "투표하려면 로그인이 필요합니다.");
+      customAlert(language === 'en' ? "Please log in to vote." : "투표하려면 로그인이 필요합니다.");
       return;
     }
 
@@ -6282,7 +6569,7 @@ export default function App() {
       if (solvedPatterns.length === 0 && updatePatterns.length === 0) {
         const issuesSnap = await getDocs(firestoreQuery(collection(db, 'issues'), limit(20)));
         if (issuesSnap.empty) {
-          alert(language === 'en' ? "Insufficient data for optimization. No issues or feedback found." : "데이터가 부족합니다. 등록된 오류나 피드백이 없어 최적화할 수 없습니다.");
+          customAlert(language === 'en' ? "Insufficient data for optimization. No issues or feedback found." : "데이터가 부족합니다. 등록된 오류나 피드백이 없어 최적화할 수 없습니다.");
           setIsOptimizingAi(false);
           return;
         }
@@ -6331,11 +6618,11 @@ export default function App() {
       
       // Clear results message first if any, then show success
       setSyncResult(language === 'en' ? "AI Optimization successful!" : "AI 엔진 최적화 성공!");
-      alert(language === 'en' ? "AI Engine optimized with latest patterns!" : "AI 엔진이 최신 해결 패턴으로 최적화되었습니다.");
+      customAlert(language === 'en' ? "AI Engine optimized with latest patterns!" : "AI 엔진이 최신 해결 패턴으로 최적화되었습니다.");
       setTimeout(() => setSyncResult(null), 5000);
     } catch (error: any) {
       console.error("Optimization failed", error);
-      alert(language === 'en' ? `Optimization failed: ${error.message || "Unknown error"}` : `최적화 실패: ${error.message || "알 수 없는 오류"}`);
+      customAlert(language === 'en' ? `Optimization failed: ${error.message || "Unknown error"}` : `최적화 실패: ${error.message || "알 수 없는 오류"}`);
     } finally {
       setIsOptimizingAi(false);
     }
@@ -6709,18 +6996,18 @@ export default function App() {
     const confirmMsg = language === 'en'
       ? `Are you sure you want to remove all ${bookmarkedIds.size} saved issues from your profile bookmarks?`
       : `북마크된 ${bookmarkedIds.size}개 문제 항목을 모두 보관 해제하시겠습니까?`;
-    if (!window.confirm(confirmMsg)) return;
-
-    setBookmarkedIds(new Set());
-    try {
-      localStorage.removeItem('guest_bookmarks');
-      localStorage.removeItem('winfix_bookmarks');
-      if (user) {
-        localStorage.removeItem(`user_bookmarks_${user.uid}`);
-        idbRemove(`user_bookmarks_${user.uid}`);
-      }
-      idbRemove('winfix_bookmarks');
-    } catch (_) {}
+    customConfirm(confirmMsg, () => {
+      setBookmarkedIds(new Set());
+      try {
+        localStorage.removeItem('guest_bookmarks');
+        localStorage.removeItem('winfix_bookmarks');
+        if (user) {
+          localStorage.removeItem(`user_bookmarks_${user.uid}`);
+          idbRemove(`user_bookmarks_${user.uid}`);
+        }
+        idbRemove('winfix_bookmarks');
+      } catch (_) {}
+    });
   };
 
   const handleDeleteSingleActivity = async (activityToRemove: any, index: number) => {
@@ -7002,18 +7289,18 @@ export default function App() {
             setAdminPasskeyLoading(false);
             return;
           }
-        } else if (IS_GITHUB_PAGES || resp.status === 404 || resp.status === 500) {
+        } else if (IS_GITHUB_PAGES || resp.status === 404) {
           // Static hosting fallback (GitHub Pages has no Node backend server)
           isVerified = true;
           token = `passkey:${pk}`;
         } else {
           const result = await resp.json().catch(() => ({}));
-          setAdminPasskeyError(result.error || (language === 'en' ? 'Invalid admin passkey.' : '관리자 보안 패스키가 일치하지 않습니다.'));
+          setAdminPasskeyError(result.error || (language === 'en' ? 'Invalid admin passkey or server error.' : '관리자 보안 패스키가 일치하지 않거나 인증 서버 오류가 발생했습니다.'));
           setAdminPasskeyLoading(false);
           return;
         }
       } catch (netErr) {
-        if (IS_GITHUB_PAGES || pk.length >= 3) {
+        if (IS_GITHUB_PAGES) {
           isVerified = true;
           token = `passkey:${pk}`;
         } else {
@@ -7228,6 +7515,9 @@ export default function App() {
         const data = await parseJsonResponse(response);
         if (data.success) {
           setDbIssues(data.issues);
+          if (selectedCategory === '전체' && selectedVersionFilter === '전체' && !searchQuery && Array.isArray(data.issues) && data.issues.length > 0) {
+            setFullIssuesPool(data.issues);
+          }
           setHasMore(false);
           setDbStatus('connected');
           setSearchCache(prev => ({
@@ -7428,7 +7718,7 @@ export default function App() {
 
     if (Date.now() > batchEndTimeRef.current) {
       setBatchStatus(language === 'en' ? "Time limit reached." : "수집 시간 만료.");
-      alert(language === 'en' ? "Batch collection time limit reached." : "설정된 수집 시간이 만료되어 자동 수집을 종료합니다.");
+      customAlert(language === 'en' ? "Batch collection time limit reached." : "설정된 수집 시간이 만료되어 자동 수집을 종료합니다.");
       handleStopBatchCollection();
       return;
     }
@@ -7471,7 +7761,7 @@ export default function App() {
 
   const handleTriggerAiSearch = async (isAuto = false, count = 3): Promise<{ added: number, updated: number }> => {
     if (!isAuto && !user) {
-      alert(language === 'en' ? "Login required." : "로그인이 필요합니다.");
+      customAlert(language === 'en' ? "Login required." : "로그인이 필요합니다.");
       return { added: 0, updated: 0 };
     }
     
@@ -7680,7 +7970,7 @@ export default function App() {
       if (!isAuto) {
         fetchCategoryCounts(true);
         fetchIssues(false, true);
-        alert(`Sync successful: ${addedCount} added, ${updatedCount} updated`);
+        customAlert(`Sync successful: ${addedCount} added, ${updatedCount} updated`);
       } else {
         await logAdminAction('verify', 'ai_search', language === 'en' ? `Bulk Auto-Collection finished: ${addedCount} added, ${updatedCount} updated` : `대량 자동 수집 완료: ${addedCount}개 추가됨, ${updatedCount}개 업데이트됨`, 'success', 'AI');
       }
@@ -7726,7 +8016,7 @@ export default function App() {
       }
       
       if (!isAuto) {
-        alert("AI Sync: " + errorMsg);
+        customAlert("AI Sync: " + errorMsg);
       } else {
         await logAdminAction('verify', 'ai_search', language === 'en' ? `Auto-Collection standby: ${errorMsg}` : `자동 수집 대기 모드: ${errorMsg}`, 'info', 'AI');
       }
@@ -7736,115 +8026,483 @@ export default function App() {
     }
   };
 
-  const handleSyncStagedIssues = async () => {
-    if (stagedIssues.length === 0 || isSyncingStaged) return;
-    
-    setIsSyncingStaged(true);
-    setSyncTotal(stagedIssues.length);
-    setSyncProgress(0);
-    
-    let added = 0;
-    let updated = 0;
-    const issuesToSync = [...stagedIssues];
-    const path = 'issues';
-    
-    try {
-      // 1. Local Cache Deduplication Map 
-      const localExistingMap: Record<string, KnownIssue> = {};
-      dbIssues.forEach(iss => {
-        if (iss.code) localExistingMap[`code:${iss.code}`] = iss;
-        if (iss.title) localExistingMap[`title:${iss.title}`];
-      });
+  const executeGitHubDatabaseCommit = async (
+    issuesForCommit: KnownIssue[],
+    deployPages: boolean,
+    commitMessage: string
+  ): Promise<{ committed: boolean; commitSha?: string; commitUrl?: string; error?: string }> => {
+    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
+    const targetBranch = githubBranch.trim() || 'main';
+    const storedToken = (() => {
+      if (githubToken.trim()) return githubToken.trim();
+      try {
+        const local = localStorage.getItem('winfix_github_config');
+        return local ? (JSON.parse(local).token || '') : '';
+      } catch {
+        return '';
+      }
+    })();
 
-      // Efficiently process in chunks of 10 to manage reads
-      const chunkSize = 10;
-      for (let i = 0; i < issuesToSync.length; i += chunkSize) {
-        const chunk = issuesToSync.slice(i, i + chunkSize);
-        
-        // 2. Filter out what we already know from local memory
-        const subChunkToLookup = chunk.filter(iss => !(localExistingMap[`code:${iss.code}`] || localExistingMap[`title:${iss.title}`]));
-        
-        const codes = subChunkToLookup.map(iss => String(iss.code)).filter(Boolean);
-        const titles = subChunkToLookup.map(iss => String(iss.title)).filter(Boolean);
-        
-        const issuesRef = collection(db, path);
-        const dbExistingIds: Record<string, string> = {};
-
-        // 3. Batch checks for items NOT in local memory
-        if (codes.length > 0) {
-          try {
-            const qC = firestoreQuery(issuesRef, where("code", "in", codes));
-            const sC = await getDocs(qC);
-            sC.forEach(d => { dbExistingIds[`code:${d.data().code}`] = d.id; });
-          } catch (e) { console.warn("Code lookup failed for chunk", e); }
+    if (!IS_GITHUB_PAGES) {
+      try {
+        const authHeaders = await getAuthHeaders();
+        const resp = await fetch('/api/github/push-to-repo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({
+            repo: targetRepo,
+            branch: targetBranch,
+            token: storedToken || undefined,
+            commitMessage,
+            deployPages,
+          }),
+        });
+        const data = await parseJsonResponse(resp);
+        if (resp.ok && data.success) {
+          await fetchGithubConfig();
+          return {
+            committed: true,
+            commitSha: data.commitSha,
+            commitUrl: data.commitUrl,
+          };
         }
-        if (titles.length > 0) {
-          try {
-            const qT = firestoreQuery(issuesRef, where("title", "in", titles));
-            const sT = await getDocs(qT);
-            sT.forEach(d => { dbExistingIds[`title:${d.data().title}`] = d.id; });
-          } catch (e) { console.warn("Title lookup failed for chunk", e); }
+        if (resp.status !== 404) {
+          return {
+            committed: false,
+            error: data.error || `GitHub 커밋 API 오류 (${resp.status})`,
+          };
         }
-
-        for (const issue of chunk) {
-          const localMatch = localExistingMap[`code:${issue.code}`] || localExistingMap[`title:${issue.title}`];
-          const existingDocId = localMatch?.id || dbExistingIds[`code:${issue.code}`] || dbExistingIds[`title:${issue.title}`];
-
-          if (existingDocId) {
-            // Change Detection
-            let shouldUpdate = true;
-            if (localMatch) {
-              const hasChanges = 
-                issue.title !== localMatch.title ||
-                issue.symptoms !== localMatch.symptoms ||
-                issue.script !== localMatch.script ||
-                JSON.stringify(issue.manualSteps) !== JSON.stringify(localMatch.manualSteps) ||
-                issue.category !== localMatch.category;
-              
-              if (!hasChanges) {
-                shouldUpdate = false;
-                console.log(`Skipping manual sync update for [${issue.title}] - no changes.`);
-              }
-            }
-
-            if (shouldUpdate) {
-              await updateDoc(doc(db, path, existingDocId), {
-                ...issue,
-                updatedAt: getKSTISOString(),
-                id: existingDocId
-              });
-              updated++;
-            }
-          } else {
-            const newId = `ai-${Date.now()}-${added}`;
-            await setDoc(doc(db, path, newId), {
-              ...issue,
-              id: newId,
-              createdAt: getKSTISOString()
-            });
-            added++;
-          }
-          setSyncProgress(prev => prev + 1);
+      } catch (serverErr: any) {
+        if (!storedToken) {
+          return {
+            committed: false,
+            error: serverErr?.message || 'GitHub 커밋 서버 호출 실패',
+          };
         }
       }
-      
-      await logAdminAction('system', 'sync', language === 'en' ? `Local Staging GitOps Sync Completed: ${added} added, ${updated} updated` : `로컬 데이터 GitOps 라이브 동기화 완료: ${added}개 추가, ${updated}개 업데이트`, 'success', 'DATABASE');
-      setStagedIssues([]);
-      alert(language === 'en' ? `Sync Complete: ${added} added, ${updated} updated.` : `동기화 완료: ${added}개 추가, ${updated}개 업데이트되었습니다.`);
-      fetchCategoryCounts(true);
-    } catch (err: any) {
-      console.error("Sync error:", err);
-      const isQuota = err.message?.includes('Quota') || err.message?.includes('429');
-      alert(language === 'en' 
-        ? (isQuota ? "Database Quota Exceeded. Remaining items kept in local storage." : "An error occurred during sync.")
-        : (isQuota ? "데이터베이스 할당량이 초과되었습니다. 남은 항목은 로컬에 유지됩니다." : "동기화 중 오류가 발생했습니다."));
-      
-      // Remove successfully synced items from staged
-      setStagedIssues(prev => prev.slice(syncProgress));
-    } finally {
-      setIsSyncingStaged(false);
+    }
+
+    if (!storedToken) {
+      return {
+        committed: false,
+        error: language === 'en'
+          ? 'GitHub PAT token is not configured. Please save PAT in GitOps Settings.'
+          : 'GitHub PAT 토큰이 설정되지 않았습니다. GitOps 연동 설정에서 토큰을 저장해 주세요.',
+      };
+    }
+
+    try {
+      const filePath = 'data/issues.json';
+      const fileUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`;
+      const headers = {
+        'Authorization': `Bearer ${storedToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      };
+
+      let fileSha: string | undefined = undefined;
+      const getRes = await fetch(fileUrl, { headers });
+      if (getRes.status === 401 || getRes.status === 403) {
+        throw new Error('GitHub 인증 실패 (401/403): PAT 권한(repo)을 확인해 주세요.');
+      }
+      if (getRes.ok) {
+        const fileInfo = await getRes.json();
+        fileSha = fileInfo.sha;
+      }
+
+      const jsonStr = JSON.stringify(issuesForCommit, null, 2);
+      const encoder = new TextEncoder();
+      const dataBytes = encoder.encode(jsonStr);
+      let binaryStr = '';
+      for (let i = 0; i < dataBytes.length; i++) {
+        binaryStr += String.fromCharCode(dataBytes[i]);
+      }
+      const contentBase64 = btoa(binaryStr);
+
+      const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          message: commitMessage,
+          content: contentBase64,
+          branch: targetBranch,
+          ...(fileSha ? { sha: fileSha } : {}),
+        }),
+      });
+
+      if (!putRes.ok) {
+        const errText = await putRes.text();
+        throw new Error(`GitHub 커밋 실패 (${putRes.status}): ${errText || putRes.statusText}`);
+      }
+
+      const putData = await putRes.json();
+      if (deployPages) {
+        try {
+          await fetch(`https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ ref: targetBranch }),
+          });
+        } catch (_) {}
+      }
+
+      return {
+        committed: true,
+        commitSha: putData?.commit?.sha,
+        commitUrl: putData?.commit?.html_url,
+      };
+    } catch (clientErr: any) {
+      return {
+        committed: false,
+        error: clientErr?.message || 'GitHub REST API 커밋 실패',
+      };
     }
   };
+
+  const getFullUnfilteredIssuesPool = async (): Promise<KnownIssue[]> => {
+    let basePool: KnownIssue[] = mergeIssuesDeduplicated([...KNOWN_ISSUES, ...fullIssuesPool], dbIssues).merged;
+
+    try {
+      const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
+      if (Array.isArray(idbMerged) && idbMerged.length > 0) {
+        basePool = mergeIssuesDeduplicated(basePool, idbMerged).merged;
+      }
+    } catch (_) {}
+
+    try {
+      const localMerged = localStorage.getItem('winfix_github_pages_merged_issues');
+      if (localMerged) {
+        const parsed = JSON.parse(localMerged);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          basePool = mergeIssuesDeduplicated(basePool, parsed).merged;
+        }
+      }
+    } catch (_) {}
+
+    if (!IS_GITHUB_PAGES) {
+      try {
+        const resp = await fetch('/api/issues?category=%EC%A0%84%EC%B2%B4&version=%EC%A0%84%EC%B2%B4&q=');
+        const data = await parseJsonResponse(resp);
+        if (resp.ok && data.success && Array.isArray(data.issues) && data.issues.length > 0) {
+          basePool = mergeIssuesDeduplicated(data.issues, basePool).merged;
+          setFullIssuesPool(basePool);
+        }
+      } catch (_) {}
+    }
+
+    return basePool;
+  };
+
+  const retryPendingGitOpsCommit = async (
+    triggerType: 'threshold' | 'interval' | 'manual' | 'retry' = 'retry'
+  ) => {
+    if (syncStagedLockRef.current || isSyncingStaged) return;
+    syncStagedLockRef.current = true;
+    setIsSyncingStaged(true);
+    try {
+      const issuesPayload = await getFullUnfilteredIssuesPool();
+      const msg = `🚀 [GitOps Retry] Commit ${pendingGitOpsCount || 1} merged issues to repository`;
+      const commitRes = await executeGitHubDatabaseCommit(
+        issuesPayload,
+        stagingAutomation.triggerPagesDeploy,
+        msg
+      );
+      const nowIso = getKSTISOString();
+
+      if (commitRes.committed) {
+        const flushedCount = pendingGitOpsCount;
+        setPendingGitOpsCommit(false);
+        setPendingGitOpsCount(0);
+        autoSyncCooldownUntilRef.current = 0;
+
+        const noticeMsg = language === 'en'
+          ? `Pending GitHub commit succeeded (${commitRes.commitSha?.slice(0, 7) || 'OK'}).`
+          : `보류 중이던 GitHub 커밋(${flushedCount}건 반영분)이 성공적으로 푸시되었습니다.`;
+        setStagingLastNotice({ type: 'success', message: noticeMsg, timestamp: nowIso });
+        setStagingSyncHistory(prev => [{
+          id: `sync-${Date.now()}`,
+          syncedAt: nowIso,
+          triggerType,
+          mergedCount: 0,
+          duplicateSkippedCount: 0,
+          failedCount: 0,
+          githubCommitted: true,
+          commitSha: commitRes.commitSha,
+          commitUrl: commitRes.commitUrl,
+        }, ...prev].slice(0, 15));
+        await logAdminAction('system', 'gitops_retry', noticeMsg, 'success', 'DATABASE');
+        if (triggerType === 'manual' || triggerType === 'retry') {
+          customAlert(noticeMsg);
+        }
+      } else {
+        autoSyncCooldownUntilRef.current = Date.now() + 2 * 60 * 1000;
+        const errMsg = commitRes.error || (language === 'en' ? 'GitHub commit failed' : 'GitHub 커밋 실패');
+        setStagingLastNotice({ type: 'warning', message: errMsg, timestamp: nowIso });
+        if (triggerType === 'manual' || triggerType === 'retry') {
+          customAlert(errMsg);
+        }
+      }
+    } finally {
+      setIsSyncingStaged(false);
+      syncStagedLockRef.current = false;
+    }
+  };
+
+  const handleSyncStagedIssues = async (
+    triggerType: 'threshold' | 'interval' | 'manual' | 'retry' = 'manual'
+  ) => {
+    if (syncStagedLockRef.current || isSyncingStaged) return;
+    if (stagedIssues.length === 0) {
+      if (pendingGitOpsCommit) {
+        await retryPendingGitOpsCommit(triggerType === 'manual' ? 'retry' : triggerType);
+      }
+      return;
+    }
+
+    syncStagedLockRef.current = true;
+    setIsSyncingStaged(true);
+    const queueSnapshot = [...stagedIssues];
+    const snapshotSet = new Set<KnownIssue>(queueSnapshot);
+
+    const unfilteredPool = await getFullUnfilteredIssuesPool();
+    const { uniqueCandidates, duplicateItems } = partitionStagedIssues(queueSnapshot, unfilteredPool);
+    setSyncTotal(uniqueCandidates.length || queueSnapshot.length);
+    setSyncProgress(0);
+
+    let mergedAdded = 0;
+    let mergedUpdated = 0;
+    let serverDuplicateSkipped = 0;
+    const failedItems: KnownIssue[] = [];
+    const succeededItems: KnownIssue[] = [];
+    let dbErrorMsg = '';
+    let latestIssuesForCommit: KnownIssue[] = [...unfilteredPool];
+
+    try {
+      if (uniqueCandidates.length > 0) {
+        if (!IS_GITHUB_PAGES) {
+          const authHeaders = await getAuthHeaders();
+          const chunkSize = 20;
+          for (let i = 0; i < uniqueCandidates.length; i += chunkSize) {
+            const chunk = uniqueCandidates.slice(i, i + chunkSize);
+            try {
+              const resp = await fetch('/api/issues/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
+                body: JSON.stringify({ issues: chunk, skipDuplicates: true }),
+              });
+              const data = await parseJsonResponse(resp);
+              if (resp.ok && data.success) {
+                const resObj = data.result || data;
+                mergedAdded += Number(resObj.added || 0);
+                mergedUpdated += Number(resObj.updated || 0);
+                serverDuplicateSkipped += Number(resObj.duplicateSkipped || 0);
+                succeededItems.push(...chunk);
+              } else {
+                failedItems.push(...chunk);
+                if (!dbErrorMsg) dbErrorMsg = data.error || `HTTP ${resp.status}`;
+              }
+            } catch (chunkErr: any) {
+              failedItems.push(...chunk);
+              if (!dbErrorMsg) dbErrorMsg = chunkErr?.message || '서버 DB 동기화 네트워크 오류';
+            }
+            setSyncProgress(prev => Math.min(uniqueCandidates.length, prev + chunk.length));
+          }
+        } else {
+          try {
+            const mergeResult = mergeIssuesDeduplicated(unfilteredPool, uniqueCandidates);
+            latestIssuesForCommit = mergeResult.merged;
+            mergedAdded = mergeResult.addedCount;
+            mergedUpdated = mergeResult.updatedCount;
+            serverDuplicateSkipped = Math.max(0, uniqueCandidates.length - (mergedAdded + mergedUpdated));
+            succeededItems.push(...uniqueCandidates);
+
+            setFullIssuesPool(latestIssuesForCommit);
+            setDbIssues(latestIssuesForCommit);
+            await idbSet('winfix_merged_issues', latestIssuesForCommit);
+            try {
+              localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(latestIssuesForCommit));
+              localStorage.setItem('winfix_db_issues_cache', JSON.stringify(latestIssuesForCommit.slice(0, 200)));
+            } catch (_) {}
+            setSyncProgress(uniqueCandidates.length);
+          } catch (staticErr: any) {
+            failedItems.push(...uniqueCandidates);
+            dbErrorMsg = staticErr?.message || '로컬 IndexedDB 병합 오류';
+          }
+        }
+      } else {
+        setSyncProgress(queueSnapshot.length);
+      }
+
+      if (succeededItems.length > 0 && !IS_GITHUB_PAGES) {
+        const localMerge = mergeIssuesDeduplicated(unfilteredPool, succeededItems);
+        latestIssuesForCommit = localMerge.merged;
+        setFullIssuesPool(latestIssuesForCommit);
+      }
+
+      // Retain ONLY failed DB-merge items + any brand new items collected while async sync ran;
+      // Succeeded items and duplicate-skipped items are cleared cleanly from the queue.
+      setStagedIssues(prev => [
+        ...failedItems,
+        ...prev.filter(item => !snapshotSet.has(item)),
+      ]);
+
+      const totalDuplicateSkipped = duplicateItems.length + serverDuplicateSkipped;
+      const totalMerged = mergedAdded + mergedUpdated;
+
+      if (totalMerged > 0) {
+        await fetchCategoryCounts(true);
+        if (!IS_GITHUB_PAGES) {
+          await fetchIssues(false, true);
+        }
+      }
+
+      let githubCommitted = false;
+      let commitSha: string | undefined;
+      let commitUrl: string | undefined;
+      let githubError: string | undefined;
+
+      const shouldCommitGithub =
+        stagingAutomation.autoCommitGithub && (totalMerged > 0 || pendingGitOpsCommit);
+
+      if (shouldCommitGithub) {
+        const commitMsg = `🚀 [GitOps Auto] Merge ${mergedAdded} added (${totalDuplicateSkipped} dup-skipped) from Staging Queue`;
+        const commitRes = await executeGitHubDatabaseCommit(
+          latestIssuesForCommit,
+          stagingAutomation.triggerPagesDeploy,
+          commitMsg
+        );
+        if (commitRes.committed) {
+          githubCommitted = true;
+          commitSha = commitRes.commitSha;
+          commitUrl = commitRes.commitUrl;
+          setPendingGitOpsCommit(false);
+          setPendingGitOpsCount(0);
+        } else {
+          githubError = commitRes.error;
+          setPendingGitOpsCommit(true);
+          setPendingGitOpsCount(prev => prev + totalMerged);
+          autoSyncCooldownUntilRef.current = Date.now() + 2 * 60 * 1000;
+        }
+      }
+
+      if (failedItems.length > 0 && totalMerged === 0) {
+        autoSyncCooldownUntilRef.current = Date.now() + 2 * 60 * 1000;
+      } else if (!githubError) {
+        autoSyncCooldownUntilRef.current = 0;
+      }
+
+      if (stagingAutomation.enabled && stagingAutomation.intervalMinutes > 0) {
+        setNextAutoSyncAt(Date.now() + stagingAutomation.intervalMinutes * 60 * 1000);
+      }
+
+      const nowIso = getKSTISOString();
+      const historyItem: StagingSyncHistoryItem = {
+        id: `sync-${Date.now()}`,
+        syncedAt: nowIso,
+        triggerType,
+        mergedCount: totalMerged,
+        duplicateSkippedCount: totalDuplicateSkipped,
+        failedCount: failedItems.length,
+        githubCommitted,
+        commitSha,
+        commitUrl,
+        error: dbErrorMsg || githubError,
+      };
+      setStagingSyncHistory(prev => [historyItem, ...prev].slice(0, 15));
+
+      const triggerLabelKo =
+        triggerType === 'threshold' ? '수량 도달 자동' :
+        triggerType === 'interval' ? '주기 자동' :
+        triggerType === 'retry' ? '자동 재시도' : '수동';
+      const statusType: 'success' | 'warning' | 'error' =
+        failedItems.length > 0 && totalMerged === 0
+          ? 'error'
+          : (githubError || failedItems.length > 0 ? 'warning' : 'success');
+
+      const summaryMsg = language === 'en'
+        ? `[${triggerType.toUpperCase()}] Merged ${totalMerged}, skipped ${totalDuplicateSkipped} duplicates, ${failedItems.length} failed.${githubCommitted ? ` GitHub committed (${commitSha?.slice(0, 7) || 'OK'}).` : githubError ? ` GitHub commit deferred: ${githubError}` : ''}`
+        : `[${triggerLabelKo}] 서버 DB 병합 ${totalMerged}건, 중복 스킵 ${totalDuplicateSkipped}건, 실패 유지 ${failedItems.length}건.${githubCommitted ? ` GitHub 커밋 완료 (${commitSha?.slice(0, 7) || 'OK'}).` : githubError ? ` GitHub 커밋 보류: ${githubError}` : ''}`;
+
+      setStagingLastNotice({ type: statusType, message: summaryMsg, timestamp: nowIso });
+      await logAdminAction('system', 'sync', summaryMsg, statusType === 'error' ? 'error' : 'success', 'DATABASE');
+
+      if (triggerType === 'manual') {
+        customAlert(summaryMsg);
+      }
+    } finally {
+      setIsSyncingStaged(false);
+      syncStagedLockRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    handleSyncStagedIssuesRef.current = handleSyncStagedIssues;
+  });
+
+  // Auto-trigger 1: Threshold reached on local staging queue
+  useEffect(() => {
+    if (
+      !isAdmin ||
+      !useStaging ||
+      !stagingAutomation.enabled ||
+      stagedIssues.length < stagingAutomation.threshold ||
+      isSyncingStaged ||
+      syncStagedLockRef.current
+    ) {
+      return;
+    }
+    const now = Date.now();
+    const waitMs = now < autoSyncCooldownUntilRef.current
+      ? Math.max(800, autoSyncCooldownUntilRef.current - now)
+      : 700;
+
+    const timer = window.setTimeout(() => {
+      if (
+        !syncStagedLockRef.current &&
+        stagedIssuesRef.current.length >= stagingAutomation.threshold &&
+        Date.now() >= autoSyncCooldownUntilRef.current
+      ) {
+        handleSyncStagedIssuesRef.current('threshold');
+      }
+    }, waitMs);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    isAdmin,
+    useStaging,
+    stagingAutomation.enabled,
+    stagingAutomation.threshold,
+    stagedIssues.length,
+    isSyncingStaged,
+  ]);
+
+  // Auto-trigger 2: Periodic interval timer
+  useEffect(() => {
+    if (!isAdmin || !useStaging || !stagingAutomation.enabled || stagingAutomation.intervalMinutes <= 0) {
+      setNextAutoSyncAt(null);
+      return;
+    }
+    const intervalMs = stagingAutomation.intervalMinutes * 60 * 1000;
+    setNextAutoSyncAt(Date.now() + intervalMs);
+
+    const timer = window.setInterval(() => {
+      setNextAutoSyncAt(Date.now() + intervalMs);
+      if (
+        !syncStagedLockRef.current &&
+        Date.now() >= autoSyncCooldownUntilRef.current &&
+        (stagedIssuesRef.current.length > 0 || pendingGitOpsRef.current)
+      ) {
+        handleSyncStagedIssuesRef.current('interval');
+      }
+    }, intervalMs);
+
+    return () => window.clearInterval(timer);
+  }, [
+    isAdmin,
+    useStaging,
+    stagingAutomation.enabled,
+    stagingAutomation.intervalMinutes,
+  ]);
 
   const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
@@ -8076,8 +8734,28 @@ export default function App() {
     });
   };
 
-  const handleDownloadHistoricalSnapshot = (filename: string) => {
-    window.open(`/api/admin/last-known-good/download-snapshot/${encodeURIComponent(filename)}`, '_blank');
+  const handleDownloadHistoricalSnapshot = async (filename: string) => {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch(`/api/admin/last-known-good/download-snapshot/${encodeURIComponent(filename)}`, {
+        headers: authHeaders
+      });
+      if (!resp.ok) {
+        const errData = await parseJsonResponse(resp).catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      customAlert(language === 'en' ? `Snapshot download failed: ${e.message}` : `스냅샷 다운로드 실패: ${e.message}`);
+    }
   };
 
   const fetchLastKnownGoodStatus = useCallback(async () => {
@@ -8391,10 +9069,32 @@ export default function App() {
             { id: 'lkg_policy', retentionCount: lastKnownGoodInfo?.retentionCount || 7 }
           ];
         } else {
-          try {
-            const snap = await getDocs(firestoreQuery(collection(db, col), limit(250)));
-            colItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          } catch (_) {
+          const logEndpointMap: Record<string, { type: string; stateLogs: any[] }> = {
+            admin_logs: { type: 'admin', stateLogs: adminLogs },
+            search_logs: { type: 'search', stateLogs: searchLogs },
+            feedback: { type: 'feedback', stateLogs: feedbackLogs },
+            app_error_logs: { type: 'error', stateLogs: appErrorLogs },
+            visitor_logs: { type: 'visitor', stateLogs: visitorLogs },
+            backend_logs: { type: 'backend', stateLogs: backendLogs }
+          };
+          const mapped = logEndpointMap[col];
+          if (mapped && !IS_GITHUB_PAGES) {
+            try {
+              const authHeaders = await getAuthHeaders();
+              const endpoint = mapped.type === 'visitor' ? '/api/visitor/list' : `/api/logs/${mapped.type}`;
+              const resp = await fetch(endpoint, { headers: authHeaders });
+              const d = await parseJsonResponse(resp);
+              if (resp.ok && d.success && Array.isArray(d.logs)) {
+                colItems = d.logs;
+              } else {
+                colItems = mapped.stateLogs;
+              }
+            } catch (_) {
+              colItems = mapped.stateLogs;
+            }
+          } else if (mapped) {
+            colItems = mapped.stateLogs;
+          } else {
             colItems = [];
           }
         }
@@ -8408,7 +9108,7 @@ export default function App() {
       const checksum = exportIncludeChecksum ? await computeSha256(rawDataString) : undefined;
 
       const metadataObj = {
-        version: '3.52.0',
+        version: APP_VERSION,
         timestamp: getKSTISOString(),
         collections: exportSelectedCollections,
         totalRecords,
@@ -9529,9 +10229,9 @@ export default function App() {
         setDbIssues(prev => prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i));
         
         if (language === 'en') {
-          alert(`Verification complete: ${verdict.status}`);
+          customAlert(`Verification complete: ${verdict.status}`);
         } else {
-          alert(`검증이 완료되었습니다: ${verdict.status === 'verified' ? '정상' : verdict.status === 'needs_update' ? '업데이트 필요' : '폐기 권장'}`);
+          customAlert(`검증이 완료되었습니다: ${verdict.status === 'verified' ? '정상' : verdict.status === 'needs_update' ? '업데이트 필요' : '폐기 권장'}`);
         }
       } else {
         throw new Error("Invalid AI response format");
@@ -9555,7 +10255,7 @@ export default function App() {
       };
       await updateDoc(issueRef, updateData).catch(() => {});
       setDbIssues(prev => prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i));
-      alert(language === 'en' ? "Verification complete: verified (System Rule Engine)" : "검증이 완료되었습니다: 정상 (시스템 규칙 엔진)");
+      customAlert(language === 'en' ? "Verification complete: verified (System Rule Engine)" : "검증이 완료되었습니다: 정상 (시스템 규칙 엔진)");
     } finally {
       setVerifyingIssueId(null);
     }
@@ -9564,7 +10264,7 @@ export default function App() {
   const handleBatchVerifyCollectedIssues = async (onlyUnverified = false) => {
     if (verifyingData) return;
     if (dbIssues.length === 0) {
-      alert(language === 'en' ? "No issues in database to verify." : "데이터베이스에 수집된 이슈가 없습니다.");
+      customAlert(language === 'en' ? "No issues in database to verify." : "데이터베이스에 수집된 이슈가 없습니다.");
       return;
     }
 
@@ -9573,7 +10273,7 @@ export default function App() {
       : dbIssues;
 
     if (targetIssues.length === 0) {
-      alert(language === 'en' ? "All collected issues are already verified!" : "모든 수집 항목이 이미 검증 완료되었습니다.");
+      customAlert(language === 'en' ? "All collected issues are already verified!" : "모든 수집 항목이 이미 검증 완료되었습니다.");
       return;
     }
 
@@ -9588,7 +10288,7 @@ export default function App() {
       await logAdminAction('verify', 'batch_collected_end', `수집 항목 AI 일괄 검증 완료 (${targetIssues.length}개 항목)`, 'success', 'AI');
     } catch (error) {
       console.error("Batch verification failed", error);
-      alert(language === 'en' ? "An error occurred during batch verification." : "일괄 검증 처리 중 오류가 발생했습니다.");
+      customAlert(language === 'en' ? "An error occurred during batch verification." : "일괄 검증 처리 중 오류가 발생했습니다.");
     } finally {
       setVerifyingData(false);
     }
@@ -9622,69 +10322,50 @@ export default function App() {
       setIsApplyingBatch(true);
       try {
         const kstNow = getKSTISOString();
-        const activeDbMode = localStorage.getItem('winfix_db_mode') || 'server_file';
+        const authHeaders = await getAuthHeaders();
 
-        if (activeDbMode === 'server_file') {
+        if (!IS_GITHUB_PAGES) {
           for (const target of targets) {
             try {
               const isAppliedFix = target.status === 'needs_update' || !!target.revisedScript || (target.revisedManualSteps && target.revisedManualSteps.length > 0);
               const finalStatus = isAppliedFix ? 'verified' : target.status;
               const rawFb = target.feedback || '';
-              const finalFeedback = isAppliedFix 
+              const finalFeedback = isAppliedFix
                 ? (rawFb.startsWith('[AI 보완 적용 완료]') ? rawFb : `[AI 보완 적용 완료] ${rawFb}`)
                 : rawFb;
 
               const patchData: any = {
                 verificationStatus: finalStatus,
                 verifiedAt: kstNow,
+                updatedAt: kstNow,
                 aiFeedback: finalFeedback
               };
               if (target.revisedScript) patchData.script = target.revisedScript;
               if (target.revisedManualSteps && target.revisedManualSteps.length > 0) patchData.manualSteps = target.revisedManualSteps;
               if (target.revisedSymptoms) patchData.symptoms = target.revisedSymptoms;
 
-              await fetch(`/api/issues/${target.id}`, {
+              const resp = await fetch(`/api/issues/${encodeURIComponent(target.id)}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
                 body: JSON.stringify(patchData)
               });
+              if (!resp.ok) {
+                console.warn(`Failed to patch issue ${target.id}: HTTP ${resp.status}`);
+              }
             } catch (e) {
               console.error(`Failed to update issue ${target.id}`, e);
             }
           }
-        } else {
-          const batch = writeBatch(db);
-          targets.forEach(target => {
-            const docRef = doc(db, 'issues', target.id);
-            const isAppliedFix = target.status === 'needs_update' || !!target.revisedScript || (target.revisedManualSteps && target.revisedManualSteps.length > 0);
-            const finalStatus = isAppliedFix ? 'verified' : target.status;
-            const rawFb = target.feedback || '';
-            const finalFeedback = isAppliedFix 
-              ? (rawFb.startsWith('[AI 보완 적용 완료]') ? rawFb : `[AI 보완 적용 완료] ${rawFb}`)
-              : rawFb;
-
-            const patchData: any = {
-              verificationStatus: finalStatus,
-              verifiedAt: kstNow,
-              aiFeedback: finalFeedback
-            };
-            if (target.revisedScript) patchData.script = target.revisedScript;
-            if (target.revisedManualSteps && target.revisedManualSteps.length > 0) patchData.manualSteps = target.revisedManualSteps;
-            if (target.revisedSymptoms) patchData.symptoms = target.revisedSymptoms;
-
-            batch.set(docRef, patchData, { merge: true });
-          });
-          await batch.commit();
-          trackUsage(0, targets.length);
         }
 
-        setDbIssues(prev => prev.map(item => {
-          const match = targets.find(t => t.id === item.id);
-          if (match) {
+        const applyUpdatesToList = (list: KnownIssue[]) =>
+          list.map(item => {
+            const match = targets.find(t => t.id === item.id);
+            if (!match) return item;
             const isAppliedFix = match.status === 'needs_update' || !!match.revisedScript || (match.revisedManualSteps && match.revisedManualSteps.length > 0);
             const finalStatus = isAppliedFix ? 'verified' : match.status;
             const rawFb = match.feedback || '';
-            const finalFeedback = isAppliedFix 
+            const finalFeedback = isAppliedFix
               ? (rawFb.startsWith('[AI 보완 적용 완료]') ? rawFb : `[AI 보완 적용 완료] ${rawFb}`)
               : rawFb;
 
@@ -9692,15 +10373,25 @@ export default function App() {
               ...item,
               verificationStatus: finalStatus,
               verifiedAt: kstNow,
+              updatedAt: kstNow,
               aiFeedback: finalFeedback
             };
             if (match.revisedScript) updated.script = match.revisedScript;
             if (match.revisedManualSteps && match.revisedManualSteps.length > 0) updated.manualSteps = match.revisedManualSteps;
             if (match.revisedSymptoms) updated.symptoms = match.revisedSymptoms;
             return updated;
-          }
-          return item;
-        }));
+          });
+
+        setDbIssues(prev => {
+          const next = applyUpdatesToList(prev);
+          syncItemsToLocalCache(next);
+          return next;
+        });
+        setFullIssuesPool(prev => {
+          const next = applyUpdatesToList(prev);
+          idbSet('winfix_merged_issues', next).catch(() => {});
+          return next;
+        });
 
         setVerificationResults(prev => prev.filter(res => !targets.some(t => t.id === res.id)));
 
@@ -9723,51 +10414,63 @@ export default function App() {
     if (isApplyingBatch) return;
     setIsApplyingBatch(true);
     const kstNow = getKSTISOString();
-    const activeDbMode = localStorage.getItem('winfix_db_mode') || 'server_file';
 
     try {
       const isAppliedFix = item.status === 'needs_update' || !!item.revisedScript || (item.revisedManualSteps && item.revisedManualSteps.length > 0);
       const finalStatus = isAppliedFix ? 'verified' : item.status;
       const rawFb = item.feedback || '';
-      const finalFeedback = isAppliedFix 
+      const finalFeedback = isAppliedFix
         ? (rawFb.startsWith('[AI 보완 적용 완료]') ? rawFb : `[AI 보완 적용 완료] ${rawFb}`)
         : rawFb;
 
       const patchData: any = {
         verificationStatus: finalStatus,
         verifiedAt: kstNow,
+        updatedAt: kstNow,
         aiFeedback: finalFeedback
       };
       if (item.revisedScript) patchData.script = item.revisedScript;
       if (item.revisedManualSteps && item.revisedManualSteps.length > 0) patchData.manualSteps = item.revisedManualSteps;
       if (item.revisedSymptoms) patchData.symptoms = item.revisedSymptoms;
 
-      if (activeDbMode === 'server_file') {
-        await fetch(`/api/issues/${item.id}`, {
+      if (!IS_GITHUB_PAGES) {
+        const authHeaders = await getAuthHeaders();
+        const resp = await fetch(`/api/issues/${encodeURIComponent(item.id)}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify(patchData)
         });
-      } else {
-        const docRef = doc(db, 'issues', item.id);
-        await setDoc(docRef, patchData, { merge: true });
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
       }
 
-      setDbIssues(prev => prev.map(i => {
-        if (i.id === item.id) {
+      const applySingleToList = (list: KnownIssue[]) =>
+        list.map(i => {
+          if (i.id !== item.id) return i;
           const updated: any = {
             ...i,
             verificationStatus: finalStatus,
             verifiedAt: kstNow,
+            updatedAt: kstNow,
             aiFeedback: finalFeedback
           };
           if (item.revisedScript) updated.script = item.revisedScript;
           if (item.revisedManualSteps && item.revisedManualSteps.length > 0) updated.manualSteps = item.revisedManualSteps;
           if (item.revisedSymptoms) updated.symptoms = item.revisedSymptoms;
           return updated;
-        }
-        return i;
-      }));
+        });
+
+      setDbIssues(prev => {
+        const next = applySingleToList(prev);
+        syncItemsToLocalCache(next);
+        return next;
+      });
+      setFullIssuesPool(prev => {
+        const next = applySingleToList(prev);
+        idbSet('winfix_merged_issues', next).catch(() => {});
+        return next;
+      });
 
       setVerificationResults(prev => prev.filter(r => r.id !== item.id));
 
@@ -9783,134 +10486,104 @@ export default function App() {
 
   const handleStartVerification = async (months: number) => {
     if (verifyingData) return;
-    
+
     setVerifyingData(true);
     setVerificationProgress(0);
     setVerificationResults([]);
     setShowVerificationModal(true);
 
     try {
-      // 1. Fetch issues that need verification
-      const path = 'issues';
       const cutoffDate = new Date();
       cutoffDate.setMonth(cutoffDate.getMonth() - months);
-      
-      // We'll fetch issues that haven't been verified recently or at all
-      // Firestore doesn't support querying for missing fields easily,
-      // so we'll fetch a batch by verifiedAt (asc) and another by createdAt (asc)
-      // to catch both old verified issues and new unverified issues.
-      const issuesToVerify: KnownIssue[] = [];
-      const seenIds = new Set<string>();
 
-      // 1. Fetch issues with oldest verification dates
-      const qVerified = firestoreQuery(
-        collection(db, path),
-        orderBy('verifiedAt', 'asc'),
-        limit(20)
-      );
-      
-      const snapshotVerified = await getDocs(qVerified);
-      snapshotVerified.forEach(doc => {
-        const data = doc.data() as KnownIssue;
-        if (new Date(data.verifiedAt) < cutoffDate) {
-          issuesToVerify.push(data);
-          seenIds.add(data.id);
-        }
-      });
+      const getTs = (val: any) => {
+        if (!val) return 0;
+        if (typeof val?.toDate === 'function') return val.toDate().getTime();
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+      };
 
-      // 2. Fetch oldest issues that might not have been verified at all
-      // (If we still need more candidates)
-      if (issuesToVerify.length < 10) {
-        const qCreated = firestoreQuery(
-          collection(db, path),
-          orderBy('createdAt', 'asc'),
-          limit(30)
-        );
-        const snapshotCreated = await getDocs(qCreated);
-        snapshotCreated.forEach(doc => {
-          const data = doc.data() as KnownIssue;
-          if (!seenIds.has(data.id)) {
-            if (!data.verifiedAt || new Date(data.verifiedAt) < cutoffDate) {
-              issuesToVerify.push(data);
-              seenIds.add(data.id);
-            }
-          }
+      const unfilteredPool = await getFullUnfilteredIssuesPool();
+      const candidates = unfilteredPool
+        .filter(item => {
+          const verifiedTs = getTs(item.verifiedAt);
+          return verifiedTs === 0 || verifiedTs < cutoffDate.getTime();
+        })
+        .sort((a, b) => {
+          const vA = getTs(a.verifiedAt);
+          const vB = getTs(b.verifiedAt);
+          if (vA !== vB) return vA - vB;
+          return getTs(a.createdAt) - getTs(b.createdAt);
         });
-      }
 
-      // Limit to 10 for the actual verification batch
-      let finalBatch = issuesToVerify.slice(0, 10);
+      let finalBatch = candidates.slice(0, 10);
 
-      // --- INTEGRATED DUPLICATE CHECK ---
-      // Check if any of these are duplicates of each other or existing items
+      // Integrated Duplicate Check across the full pool
       const cleanedBatch: KnownIssue[] = [];
+      const removedIds: string[] = [];
+      const normalizeCode = (c?: string) => (c || '').trim().toLowerCase();
+      const normalizeTitle = (t?: string) => (t || '').trim().toLowerCase();
+      const authHeaders = !IS_GITHUB_PAGES ? await getAuthHeaders() : {};
+
       for (const issue of finalBatch) {
-        const qCode = firestoreQuery(collection(db, path), where('code', '==', issue.code), limit(2));
-        const qTitle = firestoreQuery(collection(db, path), where('title', '==', issue.title), limit(2));
-        
-        const [snapCode, snapTitle] = await Promise.all([getDocs(qCode), getDocs(qTitle)]);
-        
-        // If there's more than 1 document with the same code or title, it's a duplicate
-        // We'll keep the current one if it's the newest, otherwise we might delete it
-        // For simplicity in this batch, if we find another doc with same code/title that isn't this one, 
-        // and that doc was created/updated more recently, we'll skip this one.
-        let isDuplicate = false;
-        
-        const checkDuplicate = (snap: any) => {
-          for (const docSnap of snap.docs) {
-            if (docSnap.id !== issue.id) {
-              const otherData = docSnap.data();
-              
-              const getTs = (val: any) => {
-                if (!val) return 0;
-                if (typeof val.toDate === 'function') return val.toDate().getTime();
-                const d = new Date(val);
-                return isNaN(d.getTime()) ? 0 : d.getTime();
-              };
+        const issueCode = normalizeCode(issue.code);
+        const issueTitle = normalizeTitle(issue.title);
+        const currentTs = getTs(issue.createdAt);
 
-              const otherTs = getTs(otherData.createdAt);
-              const currentTs = getTs(issue.createdAt);
+        const hasNewerDup = unfilteredPool.some(other => {
+          if (other.id === issue.id || removedIds.includes(other.id)) return false;
+          const sameCode = issueCode && issueCode !== 'n/a' && issueCode !== '알 수 없음' && issueCode !== 'unknown' && normalizeCode(other.code) === issueCode;
+          const sameTitle = issueTitle && normalizeTitle(other.title) === issueTitle;
+          return (sameCode || sameTitle) && getTs(other.createdAt) > currentTs;
+        });
 
-              // If other doc is newer, this one is a duplicate to be removed
-              if (otherTs > currentTs) {
-                isDuplicate = true;
-                return;
-              }
-            }
-          }
-        };
-
-        if (issue.code && issue.code !== 'n/a' && issue.code !== '알 수 없음') checkDuplicate(snapCode);
-        if (!isDuplicate) checkDuplicate(snapTitle);
-
-        if (isDuplicate) {
+        if (hasNewerDup) {
           console.log(`Deleting duplicate found during verification: ${issue.id} (${issue.title})`);
-          await deleteDoc(doc(db, path, issue.id));
+          removedIds.push(issue.id);
+          if (!IS_GITHUB_PAGES) {
+            try {
+              await fetch(`/api/issues/${encodeURIComponent(issue.id)}`, {
+                method: 'DELETE',
+                headers: authHeaders
+              });
+            } catch (_) {}
+          }
           await logAdminAction('delete', issue.id, `재검증 중 중복 데이터 자동 삭제: ${issue.title}`, 'warning', 'DATABASE');
         } else {
           cleanedBatch.push(issue);
         }
       }
-      
+
+      if (removedIds.length > 0) {
+        const removedSet = new Set(removedIds);
+        setDbIssues(prev => {
+          const filtered = prev.filter(i => !removedSet.has(i.id));
+          syncItemsToLocalCache(filtered);
+          return filtered;
+        });
+        setFullIssuesPool(prev => {
+          const filtered = prev.filter(i => !removedSet.has(i.id));
+          idbSet('winfix_merged_issues', filtered).catch(() => {});
+          return filtered;
+        });
+        fetchCategoryCounts(true);
+      }
+
       finalBatch = cleanedBatch;
 
       if (finalBatch.length === 0) {
-        alert(language === 'en' ? "No data to verify after duplicate cleanup. Please try again." : "중복 정리 후 검증할 데이터가 없습니다. 다시 실행해 주세요.");
+        customAlert(language === 'en' ? "All issues are already verified within the selected period." : "선택한 기간 기준 검증이 필요한 대상이 없거나 이미 최신 검증 상태입니다.");
         setVerifyingData(false);
         setShowVerificationModal(false);
         return;
       }
-      // --- END DUPLICATE CHECK ---
 
       await logAdminAction('verify', 'batch_start', `AI 데이터 재검증 시작 (대상: ${finalBatch.length}개 항목, 범위: 최근 ${months}개월)`, 'info', 'AI');
-
-      // 2. Run AI verification
       await runAiVerification(finalBatch);
-      
       await logAdminAction('verify', 'batch_end', `AI 데이터 재검증 완료 (${finalBatch.length}개 항목 처리됨)`, 'success', 'AI');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'issues');
-      alert(language === 'en' ? "An error occurred during data verification." : "데이터 검증 중 오류가 발생했습니다.");
+    } catch (error: any) {
+      console.error("Verification error:", error);
+      customAlert(language === 'en' ? `An error occurred during data verification: ${error?.message || 'Unknown error'}` : `데이터 검증 중 오류가 발생했습니다: ${error?.message || '알 수 없는 오류'}`);
     } finally {
       setVerifyingData(false);
     }
@@ -10590,34 +11263,27 @@ export default function App() {
 </html>
     `;
 
-    const printWin = window.open('', '_blank', 'width=850,height=900,scrollbars=yes');
-    if (printWin) {
-      printWin.document.open();
-      printWin.document.write(pdfHtml);
-      printWin.document.close();
-    } else {
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
 
-      const doc = iframe.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        doc.write(pdfHtml);
-        doc.close();
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(pdfHtml);
+      doc.close();
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
         setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-          setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch (_) {}
-          }, 2000);
-        }, 500);
-      }
+          try { document.body.removeChild(iframe); } catch (_) {}
+        }, 2000);
+      }, 500);
     }
   };
 
@@ -10800,10 +11466,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-blue-200 dark:selection:bg-blue-900">
+    <div className="min-h-screen overflow-x-clip pb-20 md:pb-0 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-blue-200 dark:selection:bg-blue-900">
       {/* Header */}
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+      <header className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-xs pt-safe pl-safe pr-safe">
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 h-[52px] sm:h-16 flex items-center justify-between gap-2">
           {/* Logo & Brand Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
             <img src="./icon.svg" alt="WinFix Logo" className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 drop-shadow-xs" />
@@ -10875,7 +11541,7 @@ export default function App() {
                   >
                     <ShieldCheck className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
                     <span className="hidden sm:inline">{language === 'ko' ? "관리자 모드" : "Admin Mode"}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 bg-amber-500 text-white rounded font-black tracking-tight">SUPER</span>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-amber-500 text-white rounded font-black tracking-tight">SUPER</span>
                   </button>
                   <button 
                     onClick={handleLogout}
@@ -10916,284 +11582,46 @@ export default function App() {
             </div>
           </div>
 
-          {/* Mobile Quick Controls (visible only on mobile) */}
-          <div className="flex md:hidden items-center gap-1.5 shrink-0">
+          {/* Mobile Quick Controls (visible only on mobile, >=44px touch targets) */}
+          <div className="flex md:hidden items-center gap-1 shrink-0">
             <button
+              type="button"
               onClick={() => setLanguage(lang => lang === 'ko' ? 'en' : 'ko')}
-              className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+              className="min-h-[44px] min-w-[44px] px-2.5 flex items-center justify-center rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 active:scale-95 transition-transform"
               title={language === 'ko' ? 'Switch to English' : '한국어로 전환'}
             >
               {language === 'ko' ? 'EN' : 'KO'}
             </button>
 
             <button
+              type="button"
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 active:scale-95 transition-transform"
               title={isDarkMode ? '라이트 모드' : '다크 모드'}
+              aria-label={isDarkMode ? '라이트 모드' : '다크 모드'}
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-400" />}
             </button>
 
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`p-1.5 rounded-lg transition-colors border ${
+              className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl transition-all border active:scale-95 ${
                 mobileMenuOpen 
                   ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700' 
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
               }`}
               aria-label="Toggle mobile menu"
+              aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Dropdown Menu Drawer */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg overflow-hidden"
-            >
-              <div className="px-4 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
-                {/* User Account / Profile status */}
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isAdmin 
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' 
-                          : 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400'
-                      }`}>
-                        {isAdmin ? '👑' : (user ? (user.email?.[0]?.toUpperCase() || 'U') : 'G')}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                          {isAdmin 
-                            ? (adminSessionEmail || user?.email || 'Super Administrator')
-                            : (user ? user.email : (language === 'en' ? 'Guest User' : '게스트 사용자'))}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {isAdmin ? (
-                            <span className="px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                              {language === 'en' ? 'Super Admin' : '최고 관리자'}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                              {user ? (language === 'en' ? 'Online Account' : '로그인됨') : (language === 'en' ? 'Guest Mode' : '게스트 모드')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {user || isAdmin ? (
-                      <button
-                        onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-center gap-1 shrink-0"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? 'Logout' : '로그아웃'}</span>
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {!isAdmin && !user && (
-                    <div className="pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                      <button
-                        onClick={() => { handleLoginStatus('login'); setMobileMenuOpen(false); }}
-                        className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <LogIn className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? 'Sign In / Register' : '스마트 통합 로그인'}</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {isAdmin && (
-                    <div className="pt-1 border-t border-amber-200/50 dark:border-amber-800/50">
-                      <button
-                        onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
-                        className="w-full py-2 px-3 rounded-lg text-xs font-bold text-amber-900 dark:text-amber-100 bg-gradient-to-r from-amber-400/20 to-orange-400/20 hover:from-amber-400/30 hover:to-orange-400/30 border border-amber-300 dark:border-amber-700 shadow-xs flex items-center justify-center gap-1.5"
-                      >
-                        <Wrench className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                        <span>{language === 'ko' ? "관리자 대시보드 바로가기" : "Open Admin Dashboard"}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Navigation Menu Links */}
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 px-1">
-                    {language === 'en' ? 'Menu & Features' : '주요 기능 메뉴'}
-                  </p>
-                  <div className="space-y-1">
-                    {isAdmin && (
-                      <button
-                        onClick={() => { setActiveTab('wizard'); setMobileMenuOpen(false); }}
-                        className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
-                          activeTab === 'wizard'
-                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Search className="w-4 h-4 text-blue-500" />
-                          <span>{language === 'en' ? 'AI Error Diagnostic Wizard' : 'AI 오류 진단 마법사'}</span>
-                        </div>
-                        {activeTab === 'wizard' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => { setActiveTab('guidebook'); setMobileMenuOpen(false); }}
-                      className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
-                        activeTab === 'guidebook'
-                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <BookOpen className="w-4 h-4 text-emerald-500" />
-                        <span>{language === 'en' ? 'Known Issues Guidebook' : '알려진 문제 가이드북'}</span>
-                      </div>
-                      {activeTab === 'guidebook' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-                    </button>
-
-                    <button
-                      onClick={() => { setActiveTab('threat-verifier'); setMobileMenuOpen(false); }}
-                      className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
-                        activeTab === 'threat-verifier'
-                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <ShieldAlert className="w-4 h-4 text-indigo-500" />
-                        <span>{language === 'en' ? 'System Threat Verifier' : '지능형 위협 검증관'}</span>
-                      </div>
-                      {activeTab === 'threat-verifier' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-                    </button>
-
-                    <button
-                      onClick={() => { setActiveTab('powershell-sandbox'); setMobileMenuOpen(false); }}
-                      className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
-                        activeTab === 'powershell-sandbox'
-                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Cpu className="w-4 h-4 text-cyan-500" />
-                        <span>{language === 'en' ? 'PowerShell Sandbox' : 'PowerShell 샌드박스'}</span>
-                      </div>
-                      {activeTab === 'powershell-sandbox' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-                    </button>
-
-                    <button
-                      onClick={() => { setActiveTab('library'); setMobileMenuOpen(false); }}
-                      className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
-                        activeTab === 'library'
-                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Heart className="w-4 h-4 text-rose-500" />
-                        <span>{language === 'en' ? 'My Lab (Bookmarks & History)' : '나의 실험실 (북마크/기록)'}</span>
-                      </div>
-                      {activeTab === 'library' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-                    </button>
-
-                    {isAdmin && (
-                      <button
-                        onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
-                        className={`w-full p-2.5 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
-                          activeTab === 'admin'
-                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Database className="w-4 h-4 text-purple-500" />
-                          <span>{language === 'en' ? 'Admin Tools (AI Auto-Sync)' : '관리자 도구 (AI 자동 수집)'}</span>
-                        </div>
-                        {activeTab === 'admin' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Quick Utilities */}
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 px-1">
-                    {language === 'en' ? 'Quick Tools' : '빠른 도구'}
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => { handleInstallClick(); setMobileMenuOpen(false); }}
-                      className="p-2.5 rounded-xl bg-blue-50/70 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800/40 text-xs font-semibold flex items-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                      <span>{language === 'ko' ? "앱 설치 / 바로가기" : "Install / Shortcut"}</span>
-                    </button>
-
-                    <a
-                      href={GITHUB_PAGES_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 text-xs font-semibold flex items-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
-                    >
-                      <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>{language === 'ko' ? "GitHub Pages 열기" : "Open GitHub Pages"}</span>
-                    </a>
-
-                    <button
-                      onClick={() => { setShowQuickScanModal(true); setMobileMenuOpen(false); }}
-                      className="col-span-2 p-2.5 rounded-xl bg-gradient-to-r from-emerald-600/10 to-teal-600/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
-                    >
-                      <Activity className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
-                      <span>{language === 'ko' ? "⚡ 시스템 빠른 건강 진단 (Quick Health Scan)" : "⚡ Quick System Health Scan"}</span>
-                    </button>
-
-                    <button
-                      onClick={() => { setShowSystemRestoreModal(true); setMobileMenuOpen(false); }}
-                      className="col-span-2 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>{language === 'ko' ? "🛡️ 시스템 복원 지점 관리 (System Restore)" : "🛡️ System Restore Point Utility"}</span>
-                    </button>
-
-                    <button
-                      onClick={() => { checkForUpdates(true); setMobileMenuOpen(false); }}
-                      disabled={isCheckingUpdate}
-                      className="col-span-2 p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
-                      <span>{isCheckingUpdate ? (language === 'ko' ? "업데이트 확인 중..." : "Checking Updates...") : (language === 'ko' ? "새 버전 업데이트 확인" : "Check for Updates")}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Footer Info */}
-                <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/60 px-1">
-                  <div className="flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Gemini & MS Docs</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-600 dark:text-slate-400">v{APP_VERSION}</span>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        
-        {/* Horizontal Navigation Tabs Bar */}
+        {/* Desktop Horizontal Navigation Tabs Bar (Hidden on mobile where Bottom Tab Bar is active) */}
         {appUnlocked && (
-          <div className="border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70">
+          <div className="hidden md:block border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70">
             <div className="max-w-5xl mx-auto px-2 sm:px-6 lg:px-8">
               <nav 
                 className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-1.5 sm:py-2 scrollbar-none no-scrollbar"
@@ -11260,7 +11688,7 @@ export default function App() {
                   <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>{language === 'en' ? 'My Lab' : '나의 실험실'}</span>
                   {!user && (
-                    <span className="text-[9px] bg-slate-200/70 dark:bg-slate-800 px-1 py-0.2 rounded text-slate-500 ml-0.5">
+                    <span className="text-[9px] bg-slate-200/70 dark:bg-slate-800 px-1 py-0.5 rounded text-slate-500 ml-0.5">
                       Guest
                     </span>
                   )}
@@ -11284,6 +11712,292 @@ export default function App() {
           </div>
         )}
       </header>
+
+      {/* Mobile Slide-Up Bottom Sheet Menu Drawer (Thumb-Zone Ergonomic) */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <div
+            className="md:hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-xs"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: '100%' }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: '100%' }}
+              transition={{ type: 'spring', stiffness: 360, damping: 34 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl border-t border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85dvh] pb-safe"
+            >
+              {/* Drag Handle & Sheet Header */}
+              <div className="pt-2.5 pb-2 px-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                <div className="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-2.5" />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    {language === 'en' ? 'Menu & Quick Tools' : '전체 메뉴 및 빠른 도구'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    aria-label={language === 'en' ? 'Close menu' : '메뉴 닫기'}
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-4 py-4 space-y-4 overflow-y-auto flex-1">
+                {/* User Account / Profile status */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                        isAdmin 
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' 
+                          : 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400'
+                      }`}>
+                        {isAdmin ? 'ADMIN' : (user ? (user.email?.[0]?.toUpperCase() || 'U') : 'G')}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {isAdmin 
+                            ? (adminSessionEmail || user?.email || 'Super Administrator')
+                            : (user ? user.email : (language === 'en' ? 'Guest User' : '게스트 사용자'))}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={`text-[11px] font-medium ${isAdmin ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {isAdmin
+                              ? (language === 'en' ? 'Super Admin' : '최고 관리자')
+                              : (user ? (language === 'en' ? 'Online Account' : '로그인됨') : (language === 'en' ? 'Guest Mode' : '게스트 모드'))}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {user || isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                        className="min-h-[44px] px-3 rounded-xl text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-center gap-1.5 shrink-0"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Logout' : '로그아웃'}</span>
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {!isAdmin && !user && (
+                    <div className="pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                      <button
+                        type="button"
+                        onClick={() => { handleLoginStatus('login'); setMobileMenuOpen(false); }}
+                        className="w-full min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        <span>{language === 'en' ? 'Sign In / Register' : '스마트 통합 로그인'}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <div className="pt-1 border-t border-amber-200/50 dark:border-amber-800/50">
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className="w-full min-h-[44px] py-2 px-3 rounded-xl text-xs font-bold text-amber-900 dark:text-amber-100 bg-gradient-to-r from-amber-400/20 to-orange-400/20 hover:from-amber-400/30 hover:to-orange-400/30 border border-amber-300 dark:border-amber-700 shadow-xs flex items-center justify-center gap-1.5"
+                      >
+                        <Wrench className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        <span>{language === 'ko' ? "관리자 대시보드 바로가기" : "Open Admin Dashboard"}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Navigation Menu Links */}
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 px-1">
+                    {language === 'en' ? 'Menu & Features' : '주요 기능 메뉴'}
+                  </p>
+                  <div className="space-y-1.5">
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab('wizard'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className={`w-full min-h-[44px] p-2.5 px-3 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
+                          activeTab === 'wizard'
+                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Search className="w-4 h-4 text-blue-500" />
+                          <span>{language === 'en' ? 'AI Error Diagnostic Wizard' : 'AI 오류 진단 마법사'}</span>
+                        </div>
+                        {activeTab === 'wizard' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('guidebook'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className={`w-full min-h-[44px] p-2.5 px-3 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
+                        activeTab === 'guidebook'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <BookOpen className="w-4 h-4 text-emerald-500" />
+                        <span>{language === 'en' ? 'Known Issues Guidebook' : '알려진 문제 가이드북'}</span>
+                      </div>
+                      {activeTab === 'guidebook' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('threat-verifier'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className={`w-full min-h-[44px] p-2.5 px-3 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
+                        activeTab === 'threat-verifier'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <ShieldAlert className="w-4 h-4 text-indigo-500" />
+                        <span>{language === 'en' ? 'System Threat Verifier' : '지능형 위협 검증관'}</span>
+                      </div>
+                      {activeTab === 'threat-verifier' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('powershell-sandbox'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className={`w-full min-h-[44px] p-2.5 px-3 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
+                        activeTab === 'powershell-sandbox'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Cpu className="w-4 h-4 text-cyan-500" />
+                        <span>{language === 'en' ? 'PowerShell Sandbox' : 'PowerShell 샌드박스'}</span>
+                      </div>
+                      {activeTab === 'powershell-sandbox' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('library'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className={`w-full min-h-[44px] p-2.5 px-3 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
+                        activeTab === 'library'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Heart className="w-4 h-4 text-rose-500" />
+                        <span>{language === 'en' ? 'My Lab (Bookmarks & History)' : '나의 실험실 (북마크/기록)'}</span>
+                      </div>
+                      {activeTab === 'library' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                    </button>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className={`w-full min-h-[44px] p-2.5 px-3 rounded-xl text-sm font-medium flex items-center justify-between transition-colors ${
+                          activeTab === 'admin'
+                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold border border-blue-200 dark:border-blue-800'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Database className="w-4 h-4 text-purple-500" />
+                          <span>{language === 'en' ? 'Admin Tools (AI Auto-Sync)' : '관리자 도구 (AI 자동 수집)'}</span>
+                        </div>
+                        {activeTab === 'admin' && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Utilities */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 px-1">
+                    {language === 'en' ? 'Quick Tools' : '빠른 도구'}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { handleInstallClick(); setMobileMenuOpen(false); }}
+                      className="min-h-[44px] p-2.5 rounded-xl bg-blue-50/70 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                    >
+                      <Download className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span className="truncate">{language === 'ko' ? "앱 설치" : "Install App"}</span>
+                    </button>
+
+                    <a
+                      href={GITHUB_PAGES_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="min-h-[44px] p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                    >
+                      <Globe className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <span className="truncate">GitHub Pages</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => { setShowQuickScanModal(true); setMobileMenuOpen(false); }}
+                      className="col-span-2 min-h-[44px] p-2.5 rounded-xl bg-gradient-to-r from-emerald-600/10 to-teal-600/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                    >
+                      <Activity className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{language === 'ko' ? "시스템 빠른 건강 진단 (Quick Health Scan)" : "Quick System Health Scan"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setShowSystemRestoreModal(true); setMobileMenuOpen(false); }}
+                      className="col-span-2 min-h-[44px] p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                    >
+                      <RotateCcw className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <span>{language === 'ko' ? "시스템 복원 지점 관리 (System Restore)" : "System Restore Point Utility"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setShowMobileUxReportModal(true); setMobileMenuOpen(false); }}
+                      className="col-span-2 min-h-[44px] p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <Smartphone className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span>{language === 'ko' ? "모바일 화면 개선 방향 연구 리포트" : "Mobile UX Optimization Report"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { checkForUpdates(true); setMobileMenuOpen(false); }}
+                      disabled={isCheckingUpdate}
+                      className="col-span-2 min-h-[44px] p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800/40 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+                      <span>{isCheckingUpdate ? (language === 'ko' ? "업데이트 확인 중..." : "Checking Updates...") : (language === 'ko' ? "새 버전 업데이트 확인" : "Check for Updates")}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Footer Info */}
+                <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/60 px-1">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Gemini & MS Docs</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-600 dark:text-slate-400 tabular-nums">v{APP_VERSION}</span>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {!appUnlocked ? (
         <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -11324,7 +12038,7 @@ export default function App() {
           </div>
         </main>
       ) : (
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8">
         
         {/* WIZARD TAB */}
         {activeTab === 'wizard' && (
@@ -12019,107 +12733,6 @@ export default function App() {
               )}
             </AnimatePresence>
 
-            {/* GitHub Actions / GitOps Daily Collection Briefing Banner (User-facing) */}
-            {githubHarvestStats.totalCount > 0 && (
-              <div className="bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-slate-50 dark:from-indigo-950/35 dark:via-slate-900 dark:to-slate-900 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  <div className="flex items-start sm:items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs shrink-0">
-                      <Github className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {language === 'en' ? 'GitHub (GitOps) Daily Auto-Collected Data' : '깃허브(GitHub Actions / GitOps) 일일 자동 수집 현황'}
-                        </h3>
-                        {githubHarvestStats.latestDate && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/70">
-                            <Calendar className="w-3 h-3" />
-                            <span>
-                              {language === 'en' ? 'Latest: ' : '최근 수집일: '}
-                              {githubHarvestStats.latestCollectedKstTime || githubHarvestStats.latestDate}
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                        {language === 'en' ? (
-                          <>
-                            Collected <strong className="text-indigo-700 dark:text-indigo-300 font-bold">{githubHarvestStats.rolling24hCount} issues</strong> in the past 24 hours
-                            {githubHarvestStats.latestDate && ` (${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount} items)`}. Total <strong className="font-bold">{githubHarvestStats.totalCount}</strong> GitHub-collected solutions merged.
-                          </>
-                        ) : (
-                          <>
-                            최근 하루(24시간) 동안 <strong className="text-indigo-700 dark:text-indigo-300 font-bold">{githubHarvestStats.rolling24hCount}개</strong>의 Windows 오류 해결책이 새로 수집되었습니다
-                            {githubHarvestStats.todayKst === githubHarvestStats.latestDate
-                              ? ` (오늘 ${githubHarvestStats.todayKst} 수집: ${githubHarvestStats.todayCount}개)`
-                              : githubHarvestStats.latestDate
-                                ? ` (오늘 ${githubHarvestStats.todayKst}: ${githubHarvestStats.todayCount}개 · 직전 수집일 ${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount}개)`
-                                : ''}.
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
-                    <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-700/70 text-center shadow-2xs">
-                      <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                        {language === 'en' ? 'Collected (24h)' : '하루(24h) 수집'}
-                      </div>
-                      <div className="text-base font-extrabold font-mono text-indigo-600 dark:text-indigo-400">
-                        +{githubHarvestStats.rolling24hCount}{language === 'en' ? '' : '개'}
-                      </div>
-                    </div>
-                    <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-center shadow-2xs">
-                      <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                        {language === 'en' ? 'GitHub Total' : 'GitHub 누적'}
-                      </div>
-                      <div className="text-base font-extrabold font-mono text-slate-800 dark:text-slate-100">
-                        {githubHarvestStats.totalCount}{language === 'en' ? '' : '개'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recent 7 days collection breakdown (clickable date chips) */}
-                {githubHarvestStats.dailyHistory.length > 0 && (
-                  <div className="pt-2.5 border-t border-indigo-200/60 dark:border-indigo-800/40 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1 shrink-0">
-                      <Clock className="w-3 h-3 text-indigo-500" />
-                      {language === 'en' ? 'Daily Counts (Click date to filter):' : '일자별 수집 건수 (클릭 시 해당 날짜 필터):'}
-                    </span>
-                    {githubHarvestStats.dailyHistory.slice(0, 7).map((entry) => {
-                      const isActive = selectedDateFilter === entry.date;
-                      return (
-                        <button
-                          key={entry.date}
-                          type="button"
-                          onClick={() => setSelectedDateFilter(isActive ? 'all' : entry.date)}
-                          className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
-                            isActive
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                              : 'bg-white/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500'
-                          }`}
-                          title={language === 'en' ? `Filter issues collected on ${entry.date}` : `${entry.date} 수집 데이터만 보기`}
-                        >
-                          <span>{entry.date.slice(5)}</span>
-                          <span className={`font-bold ${isActive ? 'text-indigo-100' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                            {entry.count}{language === 'en' ? '' : '개'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                    {githubHarvestStats.firstDate && githubHarvestStats.latestDate && (
-                      <span className="ml-auto text-[10px] font-mono text-slate-400 dark:text-slate-500">
-                        {githubHarvestStats.firstDate} ~ {githubHarvestStats.latestDate} ({language === 'en' ? `avg ${githubHarvestStats.dailyAverage}/day` : `일평균 ${githubHarvestStats.dailyAverage}개`})
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* System Info Auto-Detector Widget */}
             <SystemInfoWidget
               language={language}
@@ -12132,7 +12745,7 @@ export default function App() {
 
             {/* Guidebook Search Bar */}
             <div className="flex gap-2 mb-6">
-              <div className="relative flex-grow">
+              <div className="relative flex-grow min-w-0">
                 <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                   <Search className="w-5 h-5 text-slate-400" />
                 </div>
@@ -12141,13 +12754,13 @@ export default function App() {
                   value={guidebookQuery}
                   onChange={(e) => setGuidebookQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && fetchIssues(false)}
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 p-3 shadow-sm placeholder-slate-400 dark:placeholder-slate-500"
+                  className="min-h-[44px] bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 p-3 shadow-sm placeholder-slate-400 dark:placeholder-slate-500"
                   placeholder={language === 'en' ? "Search by error code, symptoms, or title..." : "오류 코드, 증상 또는 제목으로 검색..."}
                 />
               </div>
               <button
                 onClick={() => fetchIssues(false)}
-                className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
+                className="min-h-[44px] min-w-[44px] px-4 sm:px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm whitespace-nowrap shrink-0"
               >
                 <Search className="w-4 h-4" />
                 <span className="hidden sm:inline">검색</span>
@@ -12156,7 +12769,7 @@ export default function App() {
               <button
                 onClick={() => fetchIssues(false, true)}
                 title={language === 'en' ? "Force Refresh Cache" : "데이터 수동 갱신 (캐시 무시)"}
-                className="p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-blue-600 hover:border-blue-300 dark:hover:border-blue-700 rounded-xl transition-all shadow-sm"
+                className="min-h-[44px] min-w-[44px] p-2.5 sm:p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-blue-600 hover:border-blue-300 dark:hover:border-blue-700 rounded-xl transition-all shadow-sm flex items-center justify-center shrink-0"
               >
                 <RefreshCw className={`w-5 h-5 ${(loadingDb || loadingMore) ? 'animate-spin' : ''}`} />
               </button>
@@ -12168,7 +12781,7 @@ export default function App() {
                   <button
                     key={category}
                     onClick={() => setSelectedCategory(category)}
-                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 shrink-0 whitespace-nowrap transition-colors ${
+                    className={`min-h-[44px] sm:min-h-0 px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 shrink-0 whitespace-nowrap transition-colors ${
                       selectedCategory === category
                         ? 'bg-slate-800 dark:bg-slate-700 text-white'
                         : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -12190,7 +12803,7 @@ export default function App() {
                 <button
                   key={v}
                   onClick={() => setSelectedVersionFilter(v)}
-                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold shrink-0 whitespace-nowrap transition-all ${
+                  className={`min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 whitespace-nowrap transition-all ${
                     selectedVersionFilter === v
                       ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-500/20'
                       : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
@@ -12262,7 +12875,7 @@ export default function App() {
                         {getCompIcon(comp.iconName)}
                       </span>
                       <span>{language === 'en' ? comp.nameEn : comp.nameKo}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/60 dark:bg-black/30 font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/60 dark:bg-black/30 font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
                         {count}
                       </span>
                     </button>
@@ -12599,7 +13212,7 @@ export default function App() {
                             <div className="flex items-center gap-1 sm:gap-1.5">
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleVote(issue.id, 'up'); }}
-                                className={`flex items-center justify-center px-2.5 py-1.5 border rounded-lg text-xs font-semibold transition-all active:scale-95 ${
+                                className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center px-2.5 py-1.5 border rounded-lg text-xs font-semibold transition-all active:scale-95 ${
                                   issue.upvotedBy?.includes(user?.uid || '')
                                     ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800 shadow-xs'
                                     : 'text-slate-600 dark:text-slate-400 border-slate-200/70 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400'
@@ -12607,12 +13220,12 @@ export default function App() {
                                 title={language === 'en' ? 'Upvote' : '추천하기'}
                               >
                                 <ThumbsUp className={`w-3.5 h-3.5 ${issue.upvotedBy?.includes(user?.uid || '') ? 'fill-current' : ''}`} />
-                                <span className="ml-1 font-mono">{issue.upvotedBy?.length || 0}</span>
+                                <span className="ml-1 font-mono tabular-nums">{issue.upvotedBy?.length || 0}</span>
                               </button>
                               
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleVote(issue.id, 'down'); }}
-                                className={`flex items-center justify-center px-2.5 py-1.5 border rounded-lg text-xs font-semibold transition-all active:scale-95 ${
+                                className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center px-2.5 py-1.5 border rounded-lg text-xs font-semibold transition-all active:scale-95 ${
                                   issue.downvotedBy?.includes(user?.uid || '')
                                     ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800 shadow-xs'
                                     : 'text-slate-600 dark:text-slate-400 border-slate-200/70 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-600 dark:hover:text-rose-400'
@@ -12620,12 +13233,12 @@ export default function App() {
                                 title={language === 'en' ? 'Downvote' : '비추천하기'}
                               >
                                 <ThumbsDown className={`w-3.5 h-3.5 ${issue.downvotedBy?.includes(user?.uid || '') ? 'fill-current' : ''}`} />
-                                <span className="ml-1 font-mono">{issue.downvotedBy?.length || 0}</span>
+                                <span className="ml-1 font-mono tabular-nums">{issue.downvotedBy?.length || 0}</span>
                               </button>
 
                               <button
                                 onClick={(e) => handleToggleBookmark(issue.id, e)}
-                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all duration-200 active:scale-95 border text-xs font-semibold select-none shadow-xs ${
+                                className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all duration-200 active:scale-95 border text-xs font-semibold select-none shadow-xs ${
                                   bookmarkedIds.has(issue.id) 
                                     ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/80 ring-1 ring-amber-400/20 shadow-amber-500/10' 
                                     : 'text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-slate-800 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800/60'
@@ -12722,11 +13335,11 @@ export default function App() {
                                             window.dispatchEvent(event);
                                             setActiveTab('threat-verifier');
                                           }}
-                                          className="text-indigo-300 hover:text-white hover:bg-indigo-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-indigo-950/40 border border-indigo-900/50 px-2.5 py-1 rounded-md"
+                                          className="min-h-[44px] sm:min-h-0 text-indigo-300 hover:text-white hover:bg-indigo-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-indigo-950/40 border border-indigo-900/50 px-3 sm:px-2.5 py-1.5 sm:py-1 rounded-md whitespace-nowrap"
                                           title={language === 'ko' ? '이 해결 스크립트를 안심 검사소 가상 편집기로 즉시 보내 검증 및 롤백 스크립트를 컴파일합니다.' : 'Transmit this resolution script straight to the secure sandbox verifier code block.'}
                                         >
-                                          <ShieldAlert className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                                          <span>{language === 'ko' ? '🛡️ 안심 검사소' : '🛡️ Verifier'}</span>
+                                          <ShieldAlert className="w-3.5 h-3.5 text-indigo-400" />
+                                          <span>{language === 'ko' ? '안심 검사소' : 'Verifier'}</span>
                                         </button>
                                         <button
                                           onClick={() => {
@@ -12737,15 +13350,15 @@ export default function App() {
                                             window.dispatchEvent(event);
                                             setActiveTab('powershell-sandbox');
                                           }}
-                                          className="text-cyan-300 hover:text-white hover:bg-cyan-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-cyan-950/40 border border-cyan-900/50 px-2.5 py-1 rounded-md"
+                                          className="min-h-[44px] sm:min-h-0 text-cyan-300 hover:text-white hover:bg-cyan-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-cyan-950/40 border border-cyan-900/50 px-3 sm:px-2.5 py-1.5 sm:py-1 rounded-md whitespace-nowrap"
                                           title={language === 'ko' ? '이 해결 스크립트를 격리된 WebAssembly 가상 환경에서 모의 실행하고 시스템 상태 변화를 관찰합니다.' : 'Transmit this resolution script to the isolated WebAssembly sandbox to simulate execution.'}
                                         >
                                           <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                                          <span>{language === 'ko' ? '⚡ 샌드박스 실행' : '⚡ Test in Sandbox'}</span>
+                                          <span>{language === 'ko' ? '샌드박스 실행' : 'Test in Sandbox'}</span>
                                         </button>
                                         <button
                                           onClick={() => copyToClipboard(scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title'))), issue.id)}
-                                          className="text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium bg-slate-700/50 hover:bg-slate-700 px-2.5 py-1 rounded-md"
+                                          className="min-h-[44px] sm:min-h-0 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium bg-slate-700/50 hover:bg-slate-700 px-3 sm:px-2.5 py-1.5 sm:py-1 rounded-md whitespace-nowrap"
                                         >
                                           {copiedScript === issue.id ? (
                                             <>
@@ -12761,8 +13374,8 @@ export default function App() {
                                         </button>
                                       </div>
                                     </div>
-                                    <div className="p-4 overflow-x-auto">
-                                      <pre className="text-sm font-mono text-blue-300 leading-relaxed">
+                                    <div className="p-3 sm:p-4 overflow-x-auto max-w-full">
+                                      <pre className="text-xs sm:text-sm font-mono text-blue-300 leading-relaxed">
                                         <code>{scriptSignedOverrides[issue.id] || ((issue.script && typeof issue.script === 'string' && issue.script.trim().length >= 15) ? issue.script : generateDefaultPowerShellScript(issue.code, issue.category, getLocalizedText(issue, 'title')))}</code>
                                       </pre>
                                     </div>
@@ -13515,11 +14128,19 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowMobileUxReportModal(true)}
+                  className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
+                >
+                  <Smartphone className="w-4 h-4 text-blue-500" />
+                  <span>{language === 'en' ? 'Mobile UX Report' : '모바일 UX 연구'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setAllAdminTiersCollapsed(false)}
-                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
                 >
                   <ChevronsDown className="w-4 h-4 text-emerald-500" />
                   {language === 'en' ? 'Expand All' : '모두 펼치기'}
@@ -13527,10 +14148,10 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAllAdminTiersCollapsed(true)}
-                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                  className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
                 >
                   <ChevronsUp className="w-4 h-4 text-slate-400" />
-                  {language === 'en' ? '모두 접기' : 'Collapse All'}
+                  {language === 'en' ? 'Collapse All' : '모두 접기'}
                 </button>
               </div>
             </div>
@@ -13660,9 +14281,9 @@ export default function App() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
-                 {language === 'en' 
-                  ? 'GitOps Autonomous Engine: Active. Automatically monitoring Windows error trends and syncing static feeds (10m intervals).' 
-                  : 'GitOps 자율 수집 엔진 가동 중: 10분 간격으로 최신 Windows 오류 트렌드를 자동 수집하여 Jamstack 정적 데이터셋에 동기화합니다.'}
+                 {language === 'en'
+                  ? `GitOps Autonomous Engine: Active. Automatically monitoring Windows error trends and syncing static feeds (${maintenanceSettings.engineIntervalMin || 60}m intervals).`
+                  : `GitOps 자율 수집 엔진 가동 중: ${maintenanceSettings.engineIntervalMin || 60}분 간격으로 최신 Windows 오류 트렌드를 자동 수집하여 Jamstack 정적 데이터셋에 동기화합니다.`}
               </p>
               
 
@@ -13692,7 +14313,7 @@ export default function App() {
                       {language === 'en' ? 'IndexedDB Local Search' : 'IndexedDB 로컬 인메모리 엔진'}
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Uses browser IndexedDB cache for sub-10ms instantaneous category filtering.' : '브라우저 IndexedDB 기반으로 1,300개 이상의 지침을 서브 10ms 초고속 필터링합니다.'}
+                      {language === 'en' ? 'Uses browser IndexedDB cache for sub-10ms instantaneous category filtering.' : `브라우저 IndexedDB 기반으로 ${(dbSourceBreakdown.total || KNOWN_ISSUES.length).toLocaleString()}개 이상의 지침을 서브 10ms 초고속 필터링합니다.`}
                     </p>
                   </div>
 
@@ -13865,85 +14486,168 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2.5">
-                  <li>
-                    <div className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-200">
-                      <span>• {language === 'en' ? 'Total registered issues:' : '총 등록된 오류 수:'}</span>
-                      <span className="font-bold text-slate-900 dark:text-slate-100">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
-                    </div>
-                    <div className="ml-4 mt-1.5 space-y-1 text-xs">
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                        <span className="text-slate-400 font-mono">├─</span>
-                        <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'Jamstack Static Dataset:' : 'Jamstack 정적 데이터셋 (data/issues.json):'}</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-400">
-                        <span className="text-slate-400 font-mono">└─</span>
-                        <span className="font-medium text-slate-700 dark:text-slate-300">{language === 'en' ? 'GitHub (GitOps) Harvested Data:' : '깃허브(GitHub Actions / GitOps) 수집 데이터:'}</span>
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/40">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</span>
-                        {githubHarvestStats.latestDate && (
-                          <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                            {language === 'en' ? 'Latest: ' : '최근 수집일: '}
-                            {githubHarvestStats.latestCollectedKstTime || githubHarvestStats.latestDate}
-                            {githubHarvestStats.firstDate && githubHarvestStats.firstDate !== githubHarvestStats.latestDate
-                              ? ` (${githubHarvestStats.firstDate} ~ ${githubHarvestStats.latestDate})`
-                              : ''}
+                {(() => {
+                  const totalCount = dbSourceBreakdown.total;
+                  const ghCount = dbSourceBreakdown.githubCollected;
+                  const seedCount = dbSourceBreakdown.coreSeed;
+                  const localCount = dbSourceBreakdown.localEngine;
+                  const ghPct = totalCount > 0 ? Math.round((ghCount / totalCount) * 1000) / 10 : 0;
+                  const seedPct = totalCount > 0 ? Math.round((seedCount / totalCount) * 1000) / 10 : 0;
+                  const localPct = totalCount > 0 ? Math.round((localCount / totalCount) * 1000) / 10 : 0;
+
+                  return (
+                    <div className="space-y-3 text-xs">
+                      {/* Unified Additive Dataset Composition Box */}
+                      <div className="bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                              {language === 'en'
+                                ? 'Total Registered Issues (data/issues.json)'
+                                : '전체 통합 등록 오류 (data/issues.json)'}
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {language === 'en'
+                                ? 'All mutually exclusive sources below sum to 100% of the Jamstack dataset.'
+                                : '아래 출처별 건수의 합계가 Jamstack 정적 데이터셋 전체 수량과 정확히 일치합니다.'}
+                            </div>
+                          </div>
+                          <div className="font-mono tabular-nums text-base font-extrabold text-slate-900 dark:text-slate-100">
+                            {totalCount}{language === 'en' ? ' items' : '개'}
+                          </div>
+                        </div>
+
+                        {/* Proportional Composition Bar */}
+                        <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
+                          {ghCount > 0 && (
+                            <div
+                              className="h-full bg-indigo-500 dark:bg-indigo-400 transition-all duration-300"
+                              style={{ width: `${ghPct}%` }}
+                              title={`GitHub Actions: ${ghCount}`}
+                            />
+                          )}
+                          {seedCount > 0 && (
+                            <div
+                              className="h-full bg-emerald-500 dark:bg-emerald-400 transition-all duration-300"
+                              style={{ width: `${seedPct}%` }}
+                              title={`Core Seed: ${seedCount}`}
+                            />
+                          )}
+                          {localCount > 0 && (
+                            <div
+                              className="h-full bg-amber-500 dark:bg-amber-400 transition-all duration-300"
+                              style={{ width: `${localPct}%` }}
+                              title={`Local Engine: ${localCount}`}
+                            />
+                          )}
+                        </div>
+
+                        {/* Mutually Exclusive Additive Rows */}
+                        <div className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                          <div className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                              <span className="w-2 h-2 rounded-xs bg-indigo-500 dark:bg-indigo-400 shrink-0" />
+                              <span className="font-medium">
+                                {language === 'en' ? 'GitHub Actions (GitOps) Auto-Collected' : 'GitHub Actions (GitOps) 자동 수집분'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono tabular-nums text-slate-600 dark:text-slate-400 pl-4 sm:pl-0">
+                              <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{ghCount}{language === 'en' ? '' : '개'}</strong>
+                              <span>({ghPct}%)</span>
+                              {githubHarvestStats.latestDate && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="text-[11px]">
+                                    {language === 'en' ? 'Latest ' : '최근 '}
+                                    {githubHarvestStats.latestCollectedKstTime || githubHarvestStats.latestDate}
+                                    {githubHarvestStats.firstDate && githubHarvestStats.firstDate !== githubHarvestStats.latestDate
+                                      ? ` (${githubHarvestStats.firstDate} ~ ${githubHarvestStats.latestDate})`
+                                      : ''}
+                                  </span>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                    {language === 'en'
+                                      ? `24h +${githubHarvestStats.rolling24hCount}`
+                                      : `24h +${githubHarvestStats.rolling24hCount}개`}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                              <span className="w-2 h-2 rounded-xs bg-emerald-500 dark:bg-emerald-400 shrink-0" />
+                              <span className="font-medium">
+                                {language === 'en' ? 'Core Seed & Initial Grounding' : '기본 시드 · 초기 내장 데이터'}
+                              </span>
+                            </div>
+                            <div className="font-mono tabular-nums text-slate-600 dark:text-slate-400 pl-4 sm:pl-0">
+                              <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{seedCount}{language === 'en' ? '' : '개'}</strong>
+                              {' '}({seedPct}%)
+                            </div>
+                          </div>
+
+                          {localCount > 0 && (
+                            <div className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                                <span className="w-2 h-2 rounded-xs bg-amber-500 dark:bg-amber-400 shrink-0" />
+                                <span className="font-medium">
+                                  {language === 'en' ? 'Local AI Engine & Manual Staging' : '로컬 AI 엔진 · 대기열 수동 등록분'}
+                                </span>
+                              </div>
+                              <div className="font-mono tabular-nums text-slate-600 dark:text-slate-400 pl-4 sm:pl-0">
+                                <strong className="text-amber-600 dark:text-amber-400 font-bold">{localCount}{language === 'en' ? '' : '개'}</strong>
+                                {' '}({localPct}%)
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                          <span>
+                            {language === 'en' ? 'Sum Verification:' : '합계 검산:'}{' '}
+                            {ghCount} + {seedCount}{localCount > 0 ? ` + ${localCount}` : ''} = {ghCount + seedCount + localCount}{language === 'en' ? ' items' : '개'}
                           </span>
-                        )}
-                        <span className="font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">
-                          {language === 'en'
-                            ? `24h Daily: +${githubHarvestStats.rolling24hCount} items (Today ${githubHarvestStats.todayKst}: ${githubHarvestStats.todayCount})`
-                            : `하루(24h) 수집: +${githubHarvestStats.rolling24hCount}개 · 오늘(${githubHarvestStats.todayKst}): ${githubHarvestStats.todayCount}개${
-                                githubHarvestStats.latestDate && githubHarvestStats.latestDate !== githubHarvestStats.todayKst
-                                  ? ` · 직전일(${githubHarvestStats.latestDate}): ${githubHarvestStats.latestDayCount}개`
-                                  : ''
-                              }`}
-                        </span>
+                          {githubHarvestStats.latestDate && (
+                            <span>
+                              {language === 'en'
+                                ? `Today(${githubHarvestStats.todayKst}): ${githubHarvestStats.todayCount} · Avg ${githubHarvestStats.dailyAverage}/day`
+                                : `오늘(${githubHarvestStats.todayKst}): ${githubHarvestStats.todayCount}개 · 일평균 ${githubHarvestStats.dailyAverage}개`}
+                            </span>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Connection & Schedule Metadata */}
+                      <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2 pt-1">
+                        <li>• {language === 'en' ? 'Database connection (Browser):' : '데이터베이스 연결 (브라우저):'} {
+                          dbStatus === 'checking' ? (
+                            <span className="text-yellow-500 inline-flex items-center gap-1.5">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              {language === 'en' ? 'Checking...' : '확인 중...'}
+                            </span>
+                          ) :
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> {language === 'en' ? 'Normal (Static JSON / IndexedDB)' : '정상 (Static JSON / IndexedDB)'}</span>
+                        }</li>
+                        <li>• {language === 'en' ? 'Backend Autonomous Engine (Cron):' : '백엔드 자율 엔진 (Cron):'} {
+                          backendStatus === 'checking' ? (
+                            <span className="text-yellow-500 inline-flex items-center gap-1.5">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              {language === 'en' ? 'Monitoring...' : '모니터링 중...'}
+                            </span>
+                          ) :
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {language === 'en' ? 'GitOps & Local Engine Active (24/7)' : 'GitOps & 로컬 자율 수집 활성 상태 (24/7)'}
+                          </span>
+                        }</li>
+                        <li>• {language === 'en' ? 'Last auto-sync:' : '마지막 자동 수집:'} <span className="font-mono text-xs font-medium text-slate-900 dark:text-slate-100 tabular-nums">{lastSyncAt ? lastSyncAt.toLocaleString() : (language === 'en' ? 'No record' : '기록 없음')}</span></li>
+                        <li>• {language === 'en' ? 'Next scheduled sync:' : '다음 자동 수집 예정:'} <span className="font-mono text-xs font-medium text-slate-900 dark:text-slate-100 tabular-nums">{lastSyncAt ? new Date(lastSyncAt.getTime() + (maintenanceSettings.engineIntervalMin || 60) * 60 * 1000).toLocaleString() : (language === 'en' ? 'Immediately' : `${maintenanceSettings.engineIntervalMin || 60}분 이내 예정`)}</span></li>
+                      </ul>
                     </div>
-                  </li>
-                  <li className="flex flex-wrap items-center gap-2">
-                    <span>• {language === 'en' ? 'GitHub (GitOps) Total Harvested Data:' : '깃허브(GitHub Actions / GitOps) 수집 총 데이터:'}</span>
-                    <span className="font-bold text-slate-900 dark:text-slate-100">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</span>
-                    {githubHarvestStats.latestDate && (
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                        ({language === 'en'
-                          ? `Latest ${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount} | 24h: +${githubHarvestStats.rolling24hCount}`
-                          : `최신일 ${githubHarvestStats.latestDate}: ${githubHarvestStats.latestDayCount}개 · 하루(24h): +${githubHarvestStats.rolling24hCount}개`})
-                      </span>
-                    )}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span>• {language === 'en' ? 'Jamstack Static Total Stored Data:' : 'Jamstack 정적 DB 보관 총 데이터:'}</span>
-                    <span className="font-bold text-slate-900 dark:text-slate-100">{(categoryCounts['전체'] || dbIssues.length || 0)}{language === 'en' ? ' items' : '개'}</span>
-                  </li>
-                  <li>• {language === 'en' ? 'Database connection (Browser):' : '데이터베이스 연결 (브라우저):'} {
-                    dbStatus === 'checking' ? (
-                      <span className="text-yellow-500 flex items-center gap-1.5 inline-flex">
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        {language === 'en' ? 'Checking...' : '확인 중...'}
-                      </span>
-                    ) :
-                    <span className="text-emerald-500 font-medium flex items-center gap-1.5 inline-flex"><CheckCircle2 className="w-3 h-3" /> {language === 'en' ? 'Normal (Static JSON / IndexedDB)' : '정상 (Static JSON / IndexedDB)'}</span>
-                  }</li>
-                  <li>• {language === 'en' ? 'Backend Autonomous Engine (Cron):' : '백엔드 자율 엔진 (Cron):'} {
-                    backendStatus === 'checking' ? (
-                      <span className="text-yellow-500 flex items-center gap-1.5 inline-flex">
-                        <RefreshCw className="w-3" />
-                        {language === 'en' ? 'Monitoring...' : '모니터링 중...'}
-                      </span>
-                    ) :
-                    <span className="text-emerald-500 font-medium flex items-center gap-1.5 inline-flex">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                      </span>
-                      {language === 'en' ? 'GitOps & Local Engine Active (24/7)' : 'GitOps & 로컬 자율 수집 활성 상태 (24/7)'}
-                    </span>
-                  }</li>
-                  <li>• {language === 'en' ? 'Last auto-sync:' : '마지막 자동 수집:'} <span className="font-medium text-slate-900 dark:text-slate-100">{lastSyncAt ? lastSyncAt.toLocaleString() : (language === 'en' ? 'No record' : '기록 없음')}</span></li>
-                  <li>• {language === 'en' ? 'Next scheduled sync:' : '다음 자동 수집 예정:'} <span className="font-medium text-slate-900 dark:text-slate-100">{lastSyncAt ? new Date(lastSyncAt.getTime() + 10 * 60 * 1000).toLocaleString() : (language === 'en' ? 'Immediately' : '10분 이내 예정')}</span></li>
-                </ul>
+                  );
+                })()}
 
                 {/* Backend Engine Logs Display */}
                 <div className="mt-6 border-t border-slate-200 dark:border-slate-700 pt-6">
@@ -13998,7 +14702,7 @@ export default function App() {
                         </span>
                         <span className="flex items-center gap-1.5 text-blue-400">
                           <Clock className="w-3 h-3" />
-                          {language === 'en' ? '30m Interval' : '30분 주기'}
+                          {language === 'en' ? `${maintenanceSettings.engineIntervalMin || 60}m Interval` : `${maintenanceSettings.engineIntervalMin || 60}분 주기`}
                         </span>
                         {backendLogs.length > 0 && (
                           <span className={`flex items-center gap-1.5 ${backendLogs[0].type === 'failure' ? 'text-rose-400' : 'text-emerald-400'}`}>
@@ -14107,9 +14811,12 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                    <span className="px-2.5 py-1 text-xs rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 font-medium">
+                    <span className="px-2.5 py-1 text-xs rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 font-medium font-mono tabular-nums">
                       <Github className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>{language === 'en' ? 'GitHub Issues:' : 'GitHub 수집 데이터:'} <strong className="font-bold">{githubIssuesCount}{language === 'en' ? ' items' : '개'}</strong></span>
+                      <span>
+                        {language === 'en' ? 'GitHub Collected:' : 'GitHub 수집:'}{' '}
+                        <strong className="font-bold">{githubIssuesCount}</strong> / {dbSourceBreakdown.total}{language === 'en' ? '' : '개'}
+                      </span>
                     </span>
                     <span className="px-2.5 py-1 text-xs rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 flex items-center gap-1.5 font-medium">
                       <Calendar className="w-3.5 h-3.5 text-blue-500" />
@@ -14263,12 +14970,12 @@ export default function App() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-700/60 text-xs">
                     <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
                       <div className="text-[10px] text-slate-400 uppercase font-semibold">이슈 수량</div>
-                      <div className="text-sm font-bold text-indigo-300">{dbIssues.length || KNOWN_ISSUES.length}개</div>
+                      <div className="text-sm font-bold text-indigo-300 tabular-nums">{(fullIssuesPool.length > 0 ? fullIssuesPool.length : dbSourceBreakdown.total || dbIssues.length || KNOWN_ISSUES.length)}개</div>
                     </div>
                     <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
                       <div className="text-[10px] text-slate-400 uppercase font-semibold">데이터 용량</div>
-                      <div className="text-sm font-bold text-purple-300">
-                        ~{((JSON.stringify(dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES).length) / 1024).toFixed(1)} KB
+                      <div className="text-sm font-bold text-purple-300 tabular-nums">
+                        ~{((JSON.stringify(fullIssuesPool.length > 0 ? fullIssuesPool : (dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES)).length) / 1024).toFixed(1)} KB
                       </div>
                     </div>
                     <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
@@ -15975,7 +16682,7 @@ export default function App() {
                     <div className="space-y-3 flex flex-col justify-center">
                       <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
                         <div>
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-205">이메일 알림 연동 기능 활성화</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">이메일 알림 연동 기능 활성화</span>
                           <p className="text-[10px] text-slate-500">지정된 관리 수신함으로 자동 메일 통지를 시행합니다.</p>
                         </div>
                         <input
@@ -15988,7 +16695,7 @@ export default function App() {
 
                       <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
                         <div>
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-205">할당량 완전 소진(RESOURCE_EXHAUSTED) 통지</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">할당량 완전 소진(RESOURCE_EXHAUSTED) 통지</span>
                           <p className="text-[10px] text-slate-500">API 사용 한도 초과(429) 감지 시 즉각 통보합니다.</p>
                         </div>
                         <input
@@ -16001,7 +16708,7 @@ export default function App() {
 
                       <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
                         <div>
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-205">서버 네트워크 타임아웃 감지 경보</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">서버 네트워크 타임아웃 감지 경보</span>
                           <p className="text-[10px] text-slate-500">외부 수집망 타임아웃 상황을 격리 통보합니다.</p>
                         </div>
                         <input
@@ -16411,7 +17118,7 @@ export default function App() {
                         {apiKeyStatus?.throttleRemainingSeconds ? (
                           <span className="text-amber-600 dark:text-amber-400 font-bold">쿨다운 잔여: {apiKeyStatus.throttleRemainingSeconds}초</span>
                         ) : null}
-                        <span className="text-emerald-600 dark:text-emerald-400">HA 로컬 지식베이스: 가동중 (1,300+ 이슈)</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">HA 로컬 지식베이스: 가동중 ({(dbSourceBreakdown.total || KNOWN_ISSUES.length).toLocaleString()}+ 이슈)</span>
                       </div>
                     </div>
                   </div>
@@ -16426,7 +17133,7 @@ export default function App() {
                     <div>
                       <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                         <span>{language === 'en' ? 'Browser Permanent Storage (Zero Cloud DB / No Quota)' : '브라우저 영구 보관 (클라우드 DB 미사용 / 쿼터 0)'}</span>
-                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                           {language === 'en' ? 'Protected' : '영구 보존 활성'}
                         </span>
                       </div>
@@ -16561,7 +17268,7 @@ export default function App() {
                             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">
                               <span>{k.key.substring(0, 6)}...{k.key.substring(k.key.length - 4)}</span>
                               {testResult && (
-                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
                                   testResult.status === 'active'
                                     ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
                                     : testResult.status === 'throttled'
@@ -17016,7 +17723,7 @@ export default function App() {
                       <Archive className="w-3.5 h-3.5" />
                       <span>{language === 'en' ? 'Hidden ZIP Vault' : '은닉 ZIP 보관함'}</span>
                       {hiddenArchiveCount > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-white text-indigo-700 font-extrabold ml-0.5">
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-white text-indigo-700 font-extrabold ml-0.5">
                           {hiddenArchiveCount}
                         </span>
                       )}
@@ -17384,7 +18091,7 @@ export default function App() {
                         <div className="flex items-center gap-1.5">
                           <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{language === 'en' ? 'Data Backup & Restore Engine' : '데이터 백업 및 복원 고도화 엔진'}</h4>
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                            v3.52
+                            v{APP_VERSION}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -17546,7 +18253,7 @@ export default function App() {
                         <div className="text-[10px] text-slate-600 dark:text-slate-400 flex items-center justify-between">
                           <span>{lastKnownGoodInfo.totalRecords}개 레코드 보관 중</span>
                           {lastKnownGoodInfo.checksum && (
-                            <span className="font-mono text-[9px] bg-amber-100 dark:bg-amber-900/60 px-1 py-0.2 rounded text-amber-800 dark:text-amber-200 flex items-center gap-0.5">
+                            <span className="font-mono text-[9px] bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded text-amber-800 dark:text-amber-200 flex items-center gap-0.5">
                               <Hash className="w-2.5 h-2.5" />
                               {lastKnownGoodInfo.checksum.substring(0, 8)}...
                             </span>
@@ -17686,95 +18393,360 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Staging Control UI */}
-                <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-700">
-                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                {/* Staging Control & Automation UI */}
+                <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <Flame className="w-5 h-5 text-orange-500" />
-                        {language === 'en' ? 'Local Staging & GitOps Sync' : '로컬 대기열 수집 ➔ GitOps 동기화'}
+                      <h4 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-orange-500" />
+                        {language === 'en' ? 'Local Staging Queue ➔ Automated GitOps Sync' : '로컬 대기열 수집 ➔ GitOps 자동 동기화'}
                       </h4>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        {language === 'en' 
-                          ? 'Collect items to local browser queue first, then push to GitHub repository for instant live deployment.' 
-                          : '데이터를 내 브라우저 대기열(Staging Queue)에 수집한 뒤, 1-Click GitOps로 GitHub 저장소 및 웹사이트에 라이브 반영합니다.'}
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        {language === 'en'
+                          ? 'Auto-merges queued items into server DB (skipping duplicates) and commits data/issues.json to GitHub when threshold or interval triggers.'
+                          : '대기열 수량 도달 또는 설정 주기마다 중복을 자동 스킵하여 서버 DB에 병합하고, GitHub 저장소(data/issues.json)까지 자동 커밋합니다.'}
                       </p>
                     </div>
-                    
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={useStaging} 
+
+                    <label className="relative inline-flex items-center cursor-pointer min-h-[44px] shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={useStaging}
                         onChange={(e) => setUseStaging(e.target.checked)}
-                        className="sr-only peer" 
+                        className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none dark:bg-slate-700 peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:width-5 after:transition-all peer-checked:bg-orange-500"></div>
+                      <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[12px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
                       <span className="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-                        {language === 'en' ? 'Use Local Staging Queue' : '로컬 대기열(스테이징) 수집 모드'}
+                        {language === 'en' ? 'Staging Mode' : '로컬 대기열 수집 모드'}
                       </span>
                     </label>
                   </div>
 
-                  {stagedIssues.length > 0 && (
-                    <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/40 rounded-2xl p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg">
-                            <Sparkles className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                          </div>
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-slate-100">
-                              {language === 'en' ? 'Staging Queue' : '수집 대기열'}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {language === 'en' ? `${stagedIssues.length} items waiting for sync` : `${stagedIssues.length}개의 항목이 동기화 대기 중입니다.`}
-                            </div>
-                          </div>
-                        </div>
+                  {/* Automation Policy Controls (Flat Single-Elevation Border) */}
+                  <div className="bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <label className="inline-flex items-center gap-2.5 cursor-pointer min-h-[44px]">
+                        <input
+                          type="checkbox"
+                          checked={stagingAutomation.enabled}
+                          onChange={(e) => updateStagingAutomationConfig({ enabled: e.target.checked })}
+                          className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          {language === 'en' ? 'Auto-Sync Engine Enabled' : '수량/주기 자동 동기화 활성화'}
+                        </span>
+                      </label>
 
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setStagedIssues([])}
-                            disabled={isSyncingStaged}
-                            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-red-600 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg transition-colors"
+                      <div className="flex flex-wrap items-center gap-4 text-xs">
+                        <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                          <span className="font-medium">{language === 'en' ? 'Threshold' : '수량 기준'}</span>
+                          <select
+                            value={stagingAutomation.threshold}
+                            onChange={(e) => updateStagingAutomationConfig({ threshold: Number(e.target.value) })}
+                            className="px-2.5 py-1.5 min-h-[44px] sm:min-h-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg font-mono tabular-nums text-xs text-slate-800 dark:text-slate-200"
                           >
-                            {language === 'en' ? 'Clear List' : '목록 초기화'}
-                          </button>
-                          <button
-                            onClick={handleSyncStagedIssues}
-                            disabled={isSyncingStaged}
-                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-300 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-2 transition-all"
+                            {[3, 5, 10, 20, 30, 50].map(val => (
+                              <option key={val} value={val}>{val}{language === 'en' ? ' items' : '개'}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                          <span className="font-medium">{language === 'en' ? 'Interval' : '실행 주기'}</span>
+                          <select
+                            value={stagingAutomation.intervalMinutes}
+                            onChange={(e) => updateStagingAutomationConfig({ intervalMinutes: Number(e.target.value) })}
+                            className="px-2.5 py-1.5 min-h-[44px] sm:min-h-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg font-mono tabular-nums text-xs text-slate-800 dark:text-slate-200"
                           >
-                            {isSyncingStaged ? (
-                              <>
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                                {language === 'en' ? `Syncing (${syncProgress}/${syncTotal})` : `동기화 중 (${syncProgress}/${syncTotal})`}
-                              </>
-                            ) : (
-                              <>
-                                <GitBranch className="w-4 h-4" />
-                                {language === 'en' ? 'Sync All to GitOps Repository' : '저장소(GitOps)로 모두 동기화'}
-                              </>
-                            )}
-                          </button>
-                        </div>
+                            <option value={0}>{language === 'en' ? 'Disabled' : '주기 사용 안 함'}</option>
+                            <option value={5}>{language === 'en' ? 'Every 5m' : '5분마다'}</option>
+                            <option value={15}>{language === 'en' ? 'Every 15m' : '15분마다'}</option>
+                            <option value={30}>{language === 'en' ? 'Every 30m' : '30분마다'}</option>
+                            <option value={60}>{language === 'en' ? 'Every 60m' : '60분마다'}</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <label className="inline-flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300 min-h-[44px] sm:min-h-0">
+                          <input
+                            type="checkbox"
+                            checked={stagingAutomation.autoCommitGithub}
+                            onChange={(e) => updateStagingAutomationConfig({ autoCommitGithub: e.target.checked })}
+                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-orange-600 focus:ring-orange-500"
+                          />
+                          <span>{language === 'en' ? 'Auto-commit GitHub after DB merge' : '서버 DB 병합 후 GitHub 자동 커밋'}</span>
+                        </label>
+
+                        {stagingAutomation.autoCommitGithub && (
+                          <label className="inline-flex items-center gap-2 cursor-pointer text-slate-500 dark:text-slate-400 min-h-[44px] sm:min-h-0">
+                            <input
+                              type="checkbox"
+                              checked={stagingAutomation.triggerPagesDeploy}
+                              onChange={(e) => updateStagingAutomationConfig({ triggerPagesDeploy: e.target.checked })}
+                              className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-orange-600 focus:ring-orange-500"
+                            />
+                            <span>{language === 'en' ? 'Also trigger Pages deploy' : 'Pages 배포 워크플로우 동시 실행'}</span>
+                          </label>
+                        )}
                       </div>
 
-                      <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                        {stagedIssues.slice(0, 20).map((issue, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-3 bg-white/50 dark:bg-slate-900/50 border border-orange-100 dark:border-orange-900/20 rounded-xl text-xs">
-                             <div className="flex items-center gap-3 truncate">
-                               <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-md font-bold text-[10px]">{issue.category}</span>
-                               <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">{issue.title}</span>
-                             </div>
-                             <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">{issue.code}</span>
+                      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                        <span>{language === 'en' ? 'Policy: Skip duplicates · Keep failures only' : '정책: 중복 자동 스킵 · 실패 항목만 보존'}</span>
+                        <StagingCountdownBadge
+                          nextAutoSyncAt={nextAutoSyncAt}
+                          intervalMinutes={stagingAutomation.intervalMinutes}
+                          enabled={useStaging && stagingAutomation.enabled}
+                          language={language}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pending GitOps Commit Retry Banner */}
+                  {pendingGitOpsCommit && (
+                    <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-semibold">
+                            {language === 'en'
+                              ? `Server DB merged (${pendingGitOpsCount} issues), awaiting GitHub repository commit.`
+                              : `서버 DB 병합은 완료되었으나 GitHub 저장소 커밋(${pendingGitOpsCount}건)이 보류 중입니다.`}
                           </div>
-                        ))}
-                        {stagedIssues.length > 20 && (
-                          <div className="text-center py-2 text-xs text-slate-400 italic">
-                            ... {language === 'en' ? `and ${stagedIssues.length - 20} more items` : `외 ${stagedIssues.length - 20}개의 항목이 더 있습니다`}
+                          <div className="text-[11px] opacity-80 mt-0.5">
+                            {language === 'en'
+                              ? 'Verify PAT settings and click Retry Commit or wait for next cycle.'
+                              : 'GitOps PAT 설정 확인 후 재시도 버튼을 누르거나 다음 주기에 자동 재시도됩니다.'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => retryPendingGitOpsCommit('retry')}
+                        disabled={isSyncingStaged}
+                        className="px-3.5 py-2 min-h-[44px] bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 shrink-0 transition-colors"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 ${isSyncingStaged ? 'animate-spin' : ''}`} />
+                        {language === 'en' ? 'Retry GitHub Commit' : 'GitHub 커밋 재시도'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Last Execution Notice */}
+                  {stagingLastNotice && (
+                    <div
+                      className={`border rounded-xl px-3.5 py-2.5 text-xs flex items-center justify-between gap-3 ${
+                        stagingLastNotice.type === 'error'
+                          ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300'
+                          : stagingLastNotice.type === 'warning'
+                            ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300'
+                            : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{stagingLastNotice.message}</span>
+                      </div>
+                      <span className="font-mono text-[11px] tabular-nums opacity-75 shrink-0">
+                        {stagingLastNotice.timestamp.slice(11, 19)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Queue Panel */}
+                  {(() => {
+                    const previewBase = fullIssuesPool.length >= dbIssues.length ? fullIssuesPool : dbIssues;
+                    const previewPartition = partitionStagedIssues(stagedIssues, previewBase);
+                    const progressPct = Math.min(100, Math.round((stagedIssues.length / Math.max(1, stagingAutomation.threshold)) * 100));
+
+                    return (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-5 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                                {language === 'en' ? 'Staging Queue' : '수집 대기열 현황'}
+                              </span>
+                              <span className="font-mono text-xs font-semibold text-orange-600 dark:text-orange-400 tabular-nums">
+                                {stagedIssues.length} / {stagingAutomation.threshold}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                              {stagedIssues.length === 0
+                                ? (language === 'en' ? 'Queue empty · Auto-sync standby' : '대기 항목 없음 · 자동 동기화 대기 중')
+                                : (language === 'en'
+                                    ? `New: ${previewPartition.uniqueCandidates.length} · Dup-skip: ${previewPartition.duplicateItems.length}`
+                                    : `신규 반영 예정 ${previewPartition.uniqueCandidates.length}건 · 중복 스킵 예정 ${previewPartition.duplicateItems.length}건`)}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            {stagedIssues.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setStagedIssues([])}
+                                disabled={isSyncingStaged}
+                                className="px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors"
+                              >
+                                {language === 'en' ? 'Clear Queue' : '목록 초기화'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleSyncStagedIssues('manual')}
+                              disabled={isSyncingStaged || (stagedIssues.length === 0 && !pendingGitOpsCommit)}
+                              className="px-4 py-2 min-h-[44px] bg-orange-600 hover:bg-orange-700 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 text-white text-xs font-semibold rounded-lg flex items-center gap-2 transition-colors"
+                            >
+                              {isSyncingStaged ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span className="font-mono tabular-nums">
+                                    {language === 'en' ? `Syncing (${syncProgress}/${syncTotal})` : `동기화 중 (${syncProgress}/${syncTotal})`}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <GitBranch className="w-3.5 h-3.5" />
+                                  {language === 'en' ? 'Sync Now (DB + GitHub)' : '지금 즉시 동기화 (DB+GitHub)'}
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Threshold Progress Bar */}
+                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-orange-500 transition-all duration-300"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+
+                        {stagedIssues.length > 0 && (
+                          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg custom-scrollbar">
+                            {stagedIssues.slice(0, 25).map((issue, idx) => {
+                              const isDup = isStagedIssueDuplicate(issue, previewBase) ||
+                                isStagedIssueDuplicate(issue, stagedIssues.slice(0, idx));
+                              return (
+                                <div
+                                  key={issue.id || `${issue.code}-${idx}`}
+                                  className="flex items-center justify-between gap-3 px-3 py-2 text-xs bg-white dark:bg-slate-900"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="font-mono text-[11px] text-slate-400 shrink-0 tabular-nums">
+                                      {issue.code || 'N/A'}
+                                    </span>
+                                    <span className="text-slate-500 dark:text-slate-400 shrink-0">·</span>
+                                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 shrink-0">
+                                      {issue.category}
+                                    </span>
+                                    <span className="text-slate-500 dark:text-slate-400 shrink-0">·</span>
+                                    <span className="font-medium text-slate-800 dark:text-slate-100 truncate">
+                                      {issue.title}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className={`font-mono text-[11px] font-medium ${isDup ? 'text-slate-400 dark:text-slate-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                      {isDup
+                                        ? (language === 'en' ? 'Dup Skip' : '중복 스킵')
+                                        : (language === 'en' ? 'New' : '신규 반영')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setStagedIssues(prev => prev.filter((_, pIdx) => pIdx !== idx))}
+                                      disabled={isSyncingStaged}
+                                      title={language === 'en' ? 'Remove from queue' : '대기열에서 제거'}
+                                      className="p-1.5 min-h-[36px] min-w-[36px] text-slate-400 hover:text-red-500 rounded-md flex items-center justify-center transition-colors"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {stagedIssues.length > 25 && (
+                              <div className="text-center py-2 text-xs text-slate-400 font-mono">
+                                ... {language === 'en' ? `${stagedIssues.length - 25} more items queued` : `외 ${stagedIssues.length - 25}건 대기 중`}
+                              </div>
+                            )}
                           </div>
                         )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Recent Auto-Sync History */}
+                  {stagingSyncHistory.length > 0 && (
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          {language === 'en' ? 'Recent GitOps Sync Runs' : '최근 자동/수동 동기화 실행 이력'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setStagingSyncHistory([])}
+                          className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                          {language === 'en' ? 'Clear history' : '이력 비우기'}
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+                              <th className="py-1.5 pr-3 font-medium">{language === 'en' ? 'Time' : '시각'}</th>
+                              <th className="py-1.5 pr-3 font-medium">{language === 'en' ? 'Trigger' : '트리거'}</th>
+                              <th className="py-1.5 pr-3 font-medium">{language === 'en' ? 'Merged / Dup / Fail' : '병합 / 중복 / 실패'}</th>
+                              <th className="py-1.5 font-medium">{language === 'en' ? 'GitHub Commit' : 'GitHub 커밋'}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                            {stagingSyncHistory.slice(0, 6).map(item => (
+                              <tr key={item.id} className="text-slate-700 dark:text-slate-300">
+                                <td className="py-1.5 pr-3 font-mono text-[11px] tabular-nums whitespace-nowrap">
+                                  {item.syncedAt.slice(5, 19).replace('T', ' ')}
+                                </td>
+                                <td className="py-1.5 pr-3 whitespace-nowrap">
+                                  {item.triggerType === 'threshold' ? (language === 'en' ? 'Threshold' : '수량 도달')
+                                    : item.triggerType === 'interval' ? (language === 'en' ? 'Interval' : '정기 주기')
+                                    : item.triggerType === 'retry' ? (language === 'en' ? 'Retry' : '자동 재시도')
+                                    : (language === 'en' ? 'Manual' : '수동 실행')}
+                                </td>
+                                <td className="py-1.5 pr-3 font-mono text-[11px] tabular-nums whitespace-nowrap">
+                                  <span className="text-emerald-600 dark:text-emerald-400">+{item.mergedCount}</span>
+                                  {' / '}
+                                  <span className="text-slate-500">{item.duplicateSkippedCount}</span>
+                                  {' / '}
+                                  <span className={item.failedCount > 0 ? 'text-red-500 font-semibold' : 'text-slate-400'}>{item.failedCount}</span>
+                                </td>
+                                <td className="py-1.5 font-mono text-[11px] whitespace-nowrap">
+                                  {item.githubCommitted ? (
+                                    item.commitUrl ? (
+                                      <a
+                                        href={item.commitUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline"
+                                      >
+                                        {item.commitSha?.slice(0, 7) || 'Committed'}
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    ) : (
+                                      <span className="text-emerald-600 dark:text-emerald-400">{item.commitSha?.slice(0, 7) || 'Committed'}</span>
+                                    )
+                                  ) : (
+                                    <span className="text-slate-400" title={item.error || ''}>
+                                      {item.error ? (language === 'en' ? 'Deferred' : '보류됨') : '-'}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}
@@ -18102,11 +19074,11 @@ export default function App() {
 
         {/* Edit Modal */}
         {editingIssue && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-800"
+              className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto pb-safe border border-slate-200 dark:border-slate-800"
             >
               <div className="sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between z-10">
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -18253,12 +19225,12 @@ export default function App() {
         {/* Feedback Modal */}
         <AnimatePresence>
           {showFeedbackModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800"
+                className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-md max-h-[90dvh] overflow-y-auto pb-safe border border-slate-200 dark:border-slate-800"
               >
                 <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">상세 피드백 남기기</h3>
@@ -18322,12 +19294,12 @@ export default function App() {
         {/* Auth Modal */}
         <AnimatePresence>
           {showAuthModal && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-md">
+            <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/75 backdrop-blur-md">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
+                className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[90dvh] overflow-y-auto pb-safe shadow-2xl border border-slate-200 dark:border-slate-800"
               >
                 {/* Modal Header & Tabs */}
                 <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -18736,16 +19708,19 @@ export default function App() {
         {/* AI Data Verification Modal */}
         <AnimatePresence>
           {showVerificationModal && (
-            <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-md">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9, y: 30 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 30 }}
-                className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col"
+                className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-hidden pb-safe border border-slate-200 dark:border-slate-800 flex flex-col"
               >
                 <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 sticky top-0 z-10">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                    <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 rounded-xl shrink-0">
+                      <FileCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
                       <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{language === 'en' ? 'AI Data Re-verification Progress' : 'AI 데이터 재검증 진행 상황'}</h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{language === 'en' ? 'AI is re-evaluating the validity of collected data.' : '수집된 데이터의 유효성을 AI가 다시 검토합니다.'}</p>
                     </div>
@@ -19025,12 +20000,12 @@ export default function App() {
         {/* Gemini API Key Status Modal */}
         <AnimatePresence>
           {showKeyStatusModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col"
+                className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto pb-safe border border-slate-200 dark:border-slate-800 flex flex-col"
               >
                 {/* Header */}
                 <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -19135,7 +20110,7 @@ export default function App() {
                       <span className="text-slate-500 dark:text-slate-400 font-medium">{language === 'en' ? 'Local DB HA Fallback' : '고가용성 로컬 DB 대체'}</span>
                       <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        {language === 'en' ? 'Active (1,300+ Issues Ready)' : '항상 대기중 (1,300+ 해결 가이드)'}
+                        {language === 'en' ? `Active (${(dbSourceBreakdown.total || KNOWN_ISSUES.length).toLocaleString()}+ Issues Ready)` : `항상 대기중 (${(dbSourceBreakdown.total || KNOWN_ISSUES.length).toLocaleString()}+ 해결 가이드)`}
                       </span>
                     </div>
 
@@ -19195,12 +20170,12 @@ export default function App() {
         {/* Logs Modal */}
         <AnimatePresence>
           {showLogsModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col"
+                className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90dvh] overflow-hidden pb-safe border border-slate-200 dark:border-slate-800 flex flex-col"
               >
                 <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
                   {/* Top Bar: Title & Desktop Actions & Close Button */}
@@ -19647,11 +20622,11 @@ export default function App() {
 
                       {/* Auto-Block Security Rules Configuration Modal */}
                       {showAutoBlockSettingsModal && (
-                        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-md">
                           <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-lg w-full shadow-2xl space-y-5"
+                            className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 pb-safe max-w-lg w-full max-h-[90dvh] overflow-y-auto shadow-2xl space-y-5"
                           >
                             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
                               <div className="flex items-center gap-2">
@@ -20302,12 +21277,12 @@ export default function App() {
 
         <AnimatePresence>
           {showReviewModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-md">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col"
+                className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90dvh] overflow-hidden pb-safe border border-slate-200 dark:border-slate-800 flex flex-col"
               >
                 <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
                   <div className="flex items-center gap-3">
@@ -20463,17 +21438,26 @@ export default function App() {
               </a>
             </div>
 
-            <div className="flex items-center justify-center gap-2 pt-1">
-              <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold">
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+              <span className="font-mono text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold tabular-nums">
                 v{APP_VERSION}
               </span>
               <button
+                type="button"
                 onClick={() => checkForUpdates(true)}
                 disabled={isCheckingUpdate}
-                className="px-2.5 py-0.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-full border border-blue-200 dark:border-blue-900/50 flex items-center gap-1 transition-colors"
+                className="min-h-[44px] sm:min-h-0 px-3 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-full border border-blue-200 dark:border-blue-900/50 flex items-center gap-1 transition-colors"
               >
                 <RefreshCw className={`w-3 h-3 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
                 <span>{isCheckingUpdate ? "확인 중" : "업데이트 확인"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMobileUxReportModal(true)}
+                className="min-h-[44px] sm:min-h-0 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition-colors"
+              >
+                <Smartphone className="w-3 h-3 text-blue-500" />
+                <span>{language === 'en' ? 'Mobile UX Study' : '모바일 UX 연구'}</span>
               </button>
             </div>
 
@@ -20487,12 +21471,12 @@ export default function App() {
 
       <AnimatePresence>
         {uiDialog.isOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col"
+              className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden pb-safe border border-slate-200 dark:border-slate-800 flex flex-col"
             >
               <div className="p-6">
                 <div className="flex items-center gap-4 mb-4">
@@ -20536,12 +21520,12 @@ export default function App() {
 
       <AnimatePresence>
         {!hasAcceptedTos && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]"
+              className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden pb-safe border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90dvh]"
             >
               <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
                 <div className="flex items-center gap-3">
@@ -20669,8 +21653,8 @@ export default function App() {
 
       {/* Schema Validation Report Modal */}
       {validationReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90dvh] pb-safe flex flex-col overflow-hidden animate-scale-up">
             {/* Header */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
               <div className="flex items-center gap-3">
@@ -20783,8 +21767,8 @@ export default function App() {
           Enterprise Granular Data Export Modal (v3.52.0)
           ========================================================================= */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-xl w-full max-h-[90dvh] pb-safe flex flex-col overflow-hidden animate-scale-up">
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-blue-50/50 dark:bg-blue-950/20">
               <div className="flex items-center gap-3">
@@ -20963,8 +21947,8 @@ export default function App() {
           Interactive Dry-Run Pre-Import Simulation Modal (v3.52.0)
           ========================================================================= */}
       {showDryRunModal && dryRunReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90dvh] pb-safe flex flex-col overflow-hidden animate-scale-up">
             {/* Header */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-950/20">
               <div className="flex items-center gap-3">
@@ -21196,8 +22180,8 @@ export default function App() {
           Multi-Snapshot Explorer & Rollback Modal (v3.52.0)
           ========================================================================= */}
       {(showSnapshotExplorerModal || showLkgDetailsModal) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90dvh] pb-safe flex flex-col overflow-hidden animate-scale-up">
             {/* Header */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/20">
               <div className="flex items-center gap-3">
@@ -21574,13 +22558,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Scroll Top/Bottom Buttons (compact floating at bottom corner to prevent covering card content) */}
-      <div className="fixed bottom-20 right-2 sm:bottom-24 sm:right-4 md:bottom-8 md:right-6 z-40 flex flex-col items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-lg transition-all duration-200 hover:shadow-xl">
+      {/* Scroll Top/Bottom Buttons (positioned safely above mobile Bottom Tab Bar & Safe-Area) */}
+      <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-2.5 sm:bottom-24 sm:right-4 md:bottom-8 md:right-6 z-30 flex flex-col items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-lg transition-all duration-200 hover:shadow-xl">
         <button
+          type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           title={language === 'en' ? 'Scroll to Top' : '최상단으로 이동'}
           aria-label={language === 'en' ? 'Scroll to Top' : '최상단으로 이동'}
-          className="p-2 sm:p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/70 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 text-slate-600 dark:text-slate-300 transition-all duration-200 shadow-xs active:scale-95 group relative"
+          className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 sm:p-2.5 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700/70 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 text-slate-600 dark:text-slate-300 transition-all duration-200 shadow-xs active:scale-95 group relative"
         >
           <ChevronsUp className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-y-0.5" />
           <span className="hidden sm:block absolute right-full mr-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-slate-900/90 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-bold rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none shadow-md border border-slate-700 dark:border-slate-300">
@@ -21591,10 +22576,11 @@ export default function App() {
         <div className="w-3.5 sm:w-4 h-[1px] bg-slate-200 dark:bg-slate-700/80" />
 
         <button
+          type="button"
           onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight || document.body.scrollHeight, behavior: 'smooth' })}
           title={language === 'en' ? 'Scroll to Bottom' : '최하단으로 이동'}
           aria-label={language === 'en' ? 'Scroll to Bottom' : '최하단으로 이동'}
-          className="p-2 sm:p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/70 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 text-slate-600 dark:text-slate-300 transition-all duration-200 shadow-xs active:scale-95 group relative"
+          className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 sm:p-2.5 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700/70 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 text-slate-600 dark:text-slate-300 transition-all duration-200 shadow-xs active:scale-95 group relative"
         >
           <ChevronsDown className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-y-0.5" />
           <span className="hidden sm:block absolute right-full mr-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-slate-900/90 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-bold rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none shadow-md border border-slate-700 dark:border-slate-300">
@@ -21608,12 +22594,12 @@ export default function App() {
           ========================================================================= */}
       <AnimatePresence>
         {updateModalOpen && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-md">
             <motion.div
               initial={{ opacity: 0, scale: 0.92, y: 25 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 25 }}
-              className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200/90 dark:border-slate-800 flex flex-col max-h-[92vh]"
+              className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden pb-safe border border-slate-200/90 dark:border-slate-800 flex flex-col max-h-[90dvh]"
             >
               {/* Header */}
               <div className="p-5 sm:p-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white relative">
@@ -21762,12 +22748,12 @@ export default function App() {
 
         {/* GITOPS AUTONOMOUS DATA HARVESTING FULL GUIDEBOOK MODAL */}
         {showGitOpsGuideModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-5 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden text-slate-800 dark:text-slate-100"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90dvh] pb-safe flex flex-col overflow-hidden text-slate-800 dark:text-slate-100"
             >
               {/* Modal Header */}
               <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-indigo-900/60 shrink-0">
@@ -22116,7 +23102,316 @@ npm run collect:github`}
             </motion.div>
           </div>
         )}
+
+        {/* Mobile Screen Improvement Study Report Modal (v3.101.0) */}
+        {showMobileUxReportModal && (
+          <div
+            className="fixed inset-0 z-[95] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/65 backdrop-blur-sm"
+            onClick={() => setShowMobileUxReportModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90dvh] flex flex-col overflow-hidden pb-safe"
+            >
+              {/* Drag handle on mobile */}
+              <div className="sm:hidden pt-2.5 shrink-0">
+                <div className="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto" />
+              </div>
+
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+                      {language === 'en' ? 'Mobile Screen Improvement Research Report' : '모바일 화면 개선 방향 연구 보고서'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      {language === 'en'
+                        ? `v${APP_VERSION} · Thumb-Zone Ergonomics & Safe-Area Audit`
+                        : `v${APP_VERSION} · 엄지 영역 내비게이션 · 44px 터치 규격 · Safe-Area 실구현 내역`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMobileUxReportModal(false)}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+                  aria-label="Close report"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 text-xs sm:text-sm">
+                {/* Live Device Telemetry */}
+                {(() => {
+                  const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+                  const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+                  const isCoarse = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+                  const maxTouch = typeof navigator !== 'undefined' ? (navigator.maxTouchPoints || 0) : 0;
+                  const deviceLabel = vw < 768
+                    ? (language === 'en' ? 'Mobile Viewport (<768px)' : '모바일 뷰포트 (하단 탭 바 활성)')
+                    : vw < 1024
+                      ? (language === 'en' ? 'Tablet Viewport' : '태블릿 뷰포트')
+                      : (language === 'en' ? 'Desktop Viewport' : '데스크톱 뷰포트 (상단 탭 활성)');
+                  return (
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                          {vw < 768 ? <Smartphone className="w-4 h-4 text-blue-500" /> : vw < 1024 ? <Tablet className="w-4 h-4 text-indigo-500" /> : <Laptop className="w-4 h-4 text-emerald-500" />}
+                          {language === 'en' ? 'Current Runtime Viewport Diagnosis' : '현재 접속 환경 실시간 뷰포트 진단'}
+                        </span>
+                        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                          {deviceLabel}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2.5 text-center">
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700">
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? 'Viewport Size' : '화면 해상도'}
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums mt-0.5 block">
+                            {vw}×{vh}px
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700">
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? 'Input Pointer' : '터치 포인터'}
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums mt-0.5 block">
+                            {isCoarse || maxTouch > 0 ? (language === 'en' ? `Touch (${maxTouch})` : `터치 (${maxTouch}pt)`) : (language === 'en' ? 'Mouse / Fine' : '마우스 (정밀)')}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700">
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? 'Sticky Ratio' : '고정 UI 점유율'}
+                          </span>
+                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5 block">
+                            {vh > 0 ? `${(((52 + 64) / vh) * 100).toFixed(1)}%` : '~13.7%'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* AS-IS vs TO-BE Comparison */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    {language === 'en' ? '1. Structural Bottleneck Diagnosis (Before vs After)' : '1. 모바일 구조적 병목 진단 및 개선 비교 (Before → After)'}
+                  </h4>
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <th className="p-3 font-bold">{language === 'en' ? 'Area' : '개선 영역'}</th>
+                          <th className="p-3 font-bold">{language === 'en' ? 'AS-IS Bottleneck' : '기존 한계점'}</th>
+                          <th className="p-3 font-bold text-blue-600 dark:text-blue-400">{language === 'en' ? 'TO-BE Implemented' : 'v3.101.0 적용 결과'}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <tr>
+                          <td className="p-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            {language === 'en' ? 'Primary Nav' : '메인 내비게이션'}
+                          </td>
+                          <td className="p-3 text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? '2-row top header (~100px) + horizontal scroll tabs' : '상단 2중 헤더(약 100px) + 가로 스크롤 탭'}
+                          </td>
+                          <td className="p-3 text-slate-800 dark:text-slate-200 font-medium">
+                            {language === 'en' ? '52px Slim Top Bar + 5-slot Fixed Bottom Tab Bar' : '52px 슬림 상단바 + 5슬롯 하단 고정 탭 바'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="p-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            {language === 'en' ? 'Mobile Drawer' : '전체 메뉴 서랍'}
+                          </td>
+                          <td className="p-3 text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? 'Top-down accordion hard to reach with one hand' : '상단 내려오기 방식 (한 손 엄지 도달 어려움)'}
+                          </td>
+                          <td className="p-3 text-slate-800 dark:text-slate-200 font-medium">
+                            {language === 'en' ? 'Slide-up Bottom Sheet + Drag handle + Backdrop tap close' : '하단 슬라이드업 바텀 시트 + 배경 탭 닫기 + ESC 지원'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="p-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            {language === 'en' ? 'Touch & Notch' : '터치 · 노치 대응'}
+                          </td>
+                          <td className="p-3 text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? '28~34px small buttons · no safe-area insets' : '28~34px 소형 버튼 · 아이폰 홈바/노치 여백 미지원'}
+                          </td>
+                          <td className="p-3 text-slate-800 dark:text-slate-200 font-medium">
+                            {language === 'en' ? 'min-h-[44px] touch targets · viewport-fit=cover · env(safe-area)' : '최소 44×44px 터치 보장 · viewport-fit=cover · Safe-Area'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="p-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            {language === 'en' ? 'Modals & Inputs' : '모달 · 입력 폼'}
+                          </td>
+                          <td className="p-3 text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? 'Centered popup dialogs · 14px iOS Safari auto-zoom' : 'PC형 중앙 모달 · 14px 입력 시 iOS 강제 확대'}
+                          </td>
+                          <td className="p-3 text-slate-800 dark:text-slate-200 font-medium">
+                            {language === 'en' ? 'Mobile Bottom Sheet modals · 16px mobile input font' : '모바일 바텀 시트 전환 · 16px 자동 확대 방지 · 가로 오버플로우 차단'}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Implemented Checklist */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    {language === 'en' ? '2. Verified Mobile UX Engineering Standards' : '2. 적용 완료된 모바일 UI/UX 엔지니어링 표준'}
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {[
+                      {
+                        titleKo: '엄지 손가락 영역(Thumb-Zone) 5탭 구성',
+                        titleEn: 'Thumb-Zone 5-Slot Bottom Tab Bar',
+                        descKo: '가이드북 · 위협 검증 · 샌드박스 · 실험실 · 전체 메뉴 1탭 이동 (≤15% 고정 UI 예산 준수)',
+                        descEn: 'Direct 1-tap access to Guidebook, Verifier, Sandbox, My Lab, and All Menu.'
+                      },
+                      {
+                        titleKo: 'Apple / Google 44px 터치 타겟 표준',
+                        titleEn: 'WCAG / Apple 44×44px Touch Targets',
+                        descKo: '헤더 빠른 제어, 검색/필터 칩, 카드 추천·북마크, 스크립트 복사 및 플로팅 독 전수 확대',
+                        descEn: 'Enforced min-h-[44px] min-w-[44px] across mobile interactive buttons & chips.'
+                      },
+                      {
+                        titleKo: '노치·다이내믹 아일랜드 Safe-Area 완비',
+                        titleEn: 'Full Notch & Home-Indicator Safe-Area',
+                        descKo: 'viewport-fit=cover 및 .pt-safe / .pb-safe 유틸리티로 하단 바 및 모달 겹침 Zero화',
+                        descEn: 'viewport-fit=cover + env(safe-area-inset-*) applied to header, bottom nav & sheets.'
+                      },
+                      {
+                        titleKo: 'iOS 16px 줌 방지 & 가로 잘림 제거',
+                        titleEn: 'iOS Focus Zoom Guard & Overflow Clip',
+                        descKo: '모바일 입력창 16px 고정, overflow-x-clip 및 코드블록 내부 스크롤 격리 적용',
+                        descEn: '16px mobile input font size, touch-action: manipulation, and contained code scrolling.'
+                      }
+                    ].map((item, idx) => (
+                      <div key={idx} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-1">
+                        <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100 text-xs">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span>{language === 'en' ? item.titleEn : item.titleKo}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed pl-6">
+                          {language === 'en' ? item.descEn : item.descKo}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 flex items-center justify-between gap-3 shrink-0">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {language === 'en' ? 'Desktop (md+) retains full horizontal navigation.' : '데스크톱(768px 이상)에서는 기존 상단 내비게이션이 그대로 유지됩니다.'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowMobileUxReportModal(false)}
+                  className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors shrink-0"
+                >
+                  {language === 'en' ? 'Close' : '확인 및 닫기'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
+
+      {/* Mobile Fixed Bottom Tab Navigation Bar (< md, visible after ToS unlock) */}
+      {appUnlocked && (
+        <nav
+          aria-label={language === 'en' ? 'Mobile Bottom Navigation' : '모바일 하단 내비게이션'}
+          className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/90 dark:border-slate-800 pb-safe pl-safe pr-safe shadow-[0_-4px_20px_rgba(15,23,42,0.08)]"
+        >
+          <div className="grid grid-cols-5 h-16 max-w-lg mx-auto">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('guidebook'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-1 transition-colors relative active:scale-95 ${
+                activeTab === 'guidebook'
+                  ? 'text-blue-600 dark:text-blue-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+              }`}
+            >
+              {activeTab === 'guidebook' && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
+              <BookOpen className="w-5 h-5" />
+              <span className="text-[11px] leading-tight whitespace-nowrap">{language === 'en' ? 'Issues' : '가이드북'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('threat-verifier'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-1 transition-colors relative active:scale-95 ${
+                activeTab === 'threat-verifier'
+                  ? 'text-blue-600 dark:text-blue-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+              }`}
+            >
+              {activeTab === 'threat-verifier' && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
+              <ShieldAlert className="w-5 h-5" />
+              <span className="text-[11px] leading-tight whitespace-nowrap">{language === 'en' ? 'Verifier' : '위협 검증'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('powershell-sandbox'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-1 transition-colors relative active:scale-95 ${
+                activeTab === 'powershell-sandbox'
+                  ? 'text-blue-600 dark:text-blue-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+              }`}
+            >
+              {activeTab === 'powershell-sandbox' && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
+              <Cpu className="w-5 h-5" />
+              <span className="text-[11px] leading-tight whitespace-nowrap">{language === 'en' ? 'Sandbox' : '샌드박스'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('library'); setMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-1 transition-colors relative active:scale-95 ${
+                activeTab === 'library'
+                  ? 'text-blue-600 dark:text-blue-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+              }`}
+            >
+              {activeTab === 'library' && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
+              <Heart className="w-5 h-5" />
+              <span className="text-[11px] leading-tight whitespace-nowrap">{language === 'en' ? 'My Lab' : '실험실'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-1 transition-colors relative active:scale-95 ${
+                mobileMenuOpen || activeTab === 'admin' || activeTab === 'wizard'
+                  ? 'text-blue-600 dark:text-blue-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+              }`}
+              aria-label={language === 'en' ? 'Open full menu' : '전체 메뉴 열기'}
+            >
+              {(mobileMenuOpen || activeTab === 'admin' || activeTab === 'wizard') && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+              )}
+              <Menu className="w-5 h-5" />
+              <span className="text-[11px] leading-tight whitespace-nowrap">{language === 'en' ? 'Menu' : '전체 메뉴'}</span>
+            </button>
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

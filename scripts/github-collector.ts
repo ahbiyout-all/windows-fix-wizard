@@ -270,10 +270,14 @@ JSON Schema:
           });
         } catch (groundingErr: any) {
           const classifiedGround = classifyAiError(groundingErr);
-          if (classifiedGround.type === 'MODEL_NOT_FOUND_404') {
+          if (
+            classifiedGround.type === 'MODEL_NOT_FOUND_404' ||
+            classifiedGround.type === 'INVALID_KEY' ||
+            classifiedGround.type === 'QUOTA_EXHAUSTED_429'
+          ) {
             throw groundingErr;
           }
-          console.warn(`⚠️ Search grounding not available for ${model} (${classifiedGround.message.substring(0, 120)}). Retrying standard generation...`);
+          console.info(`ℹ️ Search grounding skipped for ${model} (${classifiedGround.message.substring(0, 120)}). Retrying standard generation...`);
           response = await ai.models.generateContent({
             model,
             contents: prompt

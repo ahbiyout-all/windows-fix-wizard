@@ -129,7 +129,7 @@ export const DEFAULT_GEMINI_MODELS: DiscoveredGeminiModel[] = [
 ];
 
 export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
-  version: '3.100.0',
+  version: '3.103.4',
   updatedAt: new Date().toISOString(),
   lastDiscoveryAt: null,
   routingPolicy: 'quota-split',
@@ -392,11 +392,16 @@ export function classifyAiError(err: any): { type: ErrorClassification; message:
     lower.includes('api_key_invalid') ||
     lower.includes('invalid api key') ||
     lower.includes('api key expired') ||
+    (lower.includes('invalid_argument') && lower.includes('api key')) ||
     lower.includes('permission_denied') ||
     statusCode === 401 ||
     statusCode === 403
   ) {
-    return { type: 'INVALID_KEY', message: raw, statusCode: statusCode === 401 ? 401 : 403 };
+    return {
+      type: 'INVALID_KEY',
+      message: raw,
+      statusCode: statusCode === 400 ? 400 : statusCode === 401 ? 401 : 403
+    };
   }
 
   if (

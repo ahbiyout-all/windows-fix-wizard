@@ -295,6 +295,44 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
   // Syntax highlighting & Editor view state
   const [syntaxHighlightEnabled, setSyntaxHighlightEnabled] = useState(true);
   const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
+
+  // Split pane / variable height states (v3.102.0 - Stacked 2-tier variable window)
+  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split'>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_sandbox_layout_mode');
+      if (saved === 'stacked' || saved === 'split') return saved;
+    } catch (_) {}
+    return 'stacked';
+  });
+  const [editorHeightMode, setEditorHeightMode] = useState<'compact' | 'standard' | 'expanded'>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_sandbox_editor_height');
+      if (saved === 'compact' || saved === 'standard' || saved === 'expanded') return saved;
+    } catch (_) {}
+    return 'standard';
+  });
+  const [consoleHeightMode, setConsoleHeightMode] = useState<'compact' | 'standard' | 'expanded'>(() => {
+    try {
+      const saved = localStorage.getItem('winfix_sandbox_console_height');
+      if (saved === 'compact' || saved === 'standard' || saved === 'expanded') return saved;
+    } catch (_) {}
+    return 'standard';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('winfix_sandbox_layout_mode', layoutMode);
+      localStorage.setItem('winfix_sandbox_editor_height', editorHeightMode);
+      localStorage.setItem('winfix_sandbox_console_height', consoleHeightMode);
+    } catch (_) {}
+  }, [layoutMode, editorHeightMode, consoleHeightMode]);
+
+  useEffect(() => {
+    if (initialScript && initialScript.trim()) {
+      setScriptText(initialScript);
+    }
+  }, [initialScript]);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -804,9 +842,16 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
     executeSingleCommandLine(cmd);
   };
 
+  // Safe clipboard helper
+  const safeCopyText = (text: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+  };
+
   // Copy helpers
   const handleCopyScript = () => {
-    navigator.clipboard.writeText(scriptText);
+    safeCopyText(scriptText);
     setCopiedScript(true);
     setTimeout(() => setCopiedScript(false), 2000);
   };
@@ -882,7 +927,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
 
   const handleCopyTerminal = () => {
     const allText = terminalLines.map(l => `[${l.timestamp}] ${l.text}`).join('\n');
-    navigator.clipboard.writeText(allText);
+    safeCopyText(allText);
     setCopiedLog(true);
     setTimeout(() => setCopiedLog(false), 2000);
   };
@@ -1004,10 +1049,42 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
         </div>
       </div>
 
-      {/* Main Dual-Pane Layout: Editor (Left) & Sandbox Inspectors (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Pane: Code Editor & Execution Controls (5 cols on lg) */}
-        <div className="lg:col-span-5 space-y-4">
+      {/* Layout Mode Toolbar: Stacked (상하 2단) vs Split (좌우 2단) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-2xl shadow-sm text-xs">
+        <div className="flex items-center gap-2 text-slate-300 font-semibold">
+          <Sliders className="w-4 h-4 text-indigo-400 shrink-0" />
+          <span>{language === 'en' ? 'Sandbox Layout & Window Splitter' : '샌드박스 화면 레이아웃 및 2단 분할 제어'}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setLayoutMode('stacked')}
+            className={`px-3 py-1.5 min-h-[36px] rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              layoutMode === 'stacked'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <span>{language === 'en' ? 'Stacked (2-Tier)' : '상하 2단 가변창 (기본)'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLayoutMode('split')}
+            className={`px-3 py-1.5 min-h-[36px] rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              layoutMode === 'split'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <span>{language === 'en' ? 'Side-by-Side (Split)' : '좌우 2단 분할창'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Layout Container: Stacked (상하 2단) or Split (좌우 2단) */}
+      <div className={layoutMode === 'stacked' ? 'flex flex-col gap-6' : 'grid grid-cols-1 lg:grid-cols-12 gap-6'}>
+        {/* Upper / Left Pane: Code Editor & Execution Controls */}
+        <div className={layoutMode === 'stacked' ? 'w-full space-y-4' : 'lg:col-span-5 space-y-4'}>
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm flex flex-col">
             {/* Editor Title Bar */}
             <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
@@ -1041,7 +1118,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {/* Version History Toggle Button */}
                 <button
                   type="button"
@@ -1094,6 +1171,21 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                 </button>
 
                 <button
+                  type="button"
+                  onClick={() => {
+                    setEditorHeightMode(prev => prev === 'standard' ? 'expanded' : prev === 'expanded' ? 'compact' : 'standard');
+                  }}
+                  className="px-2.5 py-1 text-xs rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                  title={language === 'en' ? 'Adjust editor height (Standard / Expanded / Compact)' : '편집기 높이 조절 (표준 / 확장 / 컴팩트)'}
+                >
+                  <span>
+                    {language === 'en'
+                      ? `↕ Height: ${editorHeightMode === 'standard' ? 'Standard' : editorHeightMode === 'expanded' ? 'Expanded' : 'Compact'}`
+                      : `↕ 높이: ${editorHeightMode === 'standard' ? '표준' : editorHeightMode === 'expanded' ? '확장' : '컴팩트'}`}
+                  </span>
+                </button>
+
+                <button
                   onClick={handleCopyScript}
                   className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
                   title={language === 'en' ? 'Copy Script' : '스크립트 복사'}
@@ -1111,7 +1203,10 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
             </div>
 
             {/* Syntax-Highlighted Code Editor with Line Numbers Gutter */}
-            <div className="relative flex bg-slate-950 font-mono text-xs border-y border-slate-800/80 min-h-[360px] max-h-[500px] overflow-hidden">
+            <div className={`relative flex bg-slate-950 font-mono text-xs border-y border-slate-800/80 ${
+              editorHeightMode === 'compact' ? 'h-[260px]' :
+              editorHeightMode === 'expanded' ? 'h-[580px]' : 'h-[400px]'
+            } overflow-hidden`}>
               {/* Line Numbers Gutter with Real-Time Linter Diagnostic Indicators */}
               <div
                 ref={gutterRef}
@@ -1144,7 +1239,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
               </div>
 
               {/* Editor Workspace: Dual-Layer (Underlay Pre + Overlay Textarea) */}
-              <div className="relative flex-1 h-full min-h-[360px] max-h-[500px] overflow-hidden">
+              <div className="relative flex-1 h-full overflow-hidden">
                 {editorMode === 'edit' ? (
                   <>
                     {/* Layer 1: Prism Syntax-Highlighted HTML (Underlay) */}
@@ -1256,12 +1351,15 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
           </div>
         </div>
 
-        {/* Right Pane: Interactive Terminal & Virtual State Inspectors (7 cols on lg) */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm flex flex-col h-[520px]">
+        {/* Lower / Right Pane: Interactive Terminal & Virtual State Inspectors */}
+        <div className={layoutMode === 'stacked' ? 'w-full space-y-4' : 'lg:col-span-7 space-y-4'}>
+          <div className={`bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm flex flex-col ${
+            consoleHeightMode === 'compact' ? 'h-[340px]' :
+            consoleHeightMode === 'expanded' ? 'h-[700px]' : 'h-[520px]'
+          }`}>
             {/* Inspector Tab Bar */}
             <div className="bg-slate-950 px-3 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+              <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar">
                 <button
                   onClick={() => setActiveInspectorTab('terminal')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
@@ -1348,32 +1446,49 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                 </button>
               </div>
 
-              {/* Console Action Buttons */}
-              {activeInspectorTab === 'terminal' && (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={handleCopyTerminal}
-                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                    title="콘솔 로그 복사"
-                  >
-                    {copiedLog ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                  <button
-                    onClick={handleExportLogFile}
-                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                    title="로그 파일 내보내기 (.log)"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={handleClearTerminal}
-                    className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
-                    title="콘솔 화면 지우기 (cls)"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
+              {/* Console Action Buttons & Height Toggle */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConsoleHeightMode(prev => prev === 'standard' ? 'expanded' : prev === 'expanded' ? 'compact' : 'standard');
+                  }}
+                  className="px-2.5 py-1 text-xs rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                  title={language === 'en' ? 'Adjust console height (Standard / Expanded / Compact)' : '실행창 높이 조절 (표준 / 확장 / 컴팩트)'}
+                >
+                  <span>
+                    {language === 'en'
+                      ? `↕ Height: ${consoleHeightMode === 'standard' ? 'Standard' : consoleHeightMode === 'expanded' ? 'Expanded' : 'Compact'}`
+                      : `↕ 높이: ${consoleHeightMode === 'standard' ? '표준' : consoleHeightMode === 'expanded' ? '확장' : '컴팩트'}`}
+                  </span>
+                </button>
+
+                {activeInspectorTab === 'terminal' && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={handleCopyTerminal}
+                      className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                      title="콘솔 로그 복사"
+                    >
+                      {copiedLog ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={handleExportLogFile}
+                      className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                      title="로그 파일 내보내기 (.log)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={handleClearTerminal}
+                      className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
+                      title="콘솔 화면 지우기 (cls)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Inspector Content Body */}
@@ -1939,7 +2054,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
 
                               <button
                                 onClick={() => {
-                                  navigator.clipboard.writeText(ver.script);
+                                  safeCopyText(ver.script);
                                   setVersionToast(language === 'en' ? 'Script copied' : '스크립트가 복사되었습니다');
                                   setTimeout(() => setVersionToast(null), 2000);
                                 }}

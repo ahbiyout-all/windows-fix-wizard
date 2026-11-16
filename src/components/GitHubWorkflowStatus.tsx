@@ -325,7 +325,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                 {title || workflowFile}
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
                 {workflowFile}
               </span>
             </div>
@@ -381,7 +381,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
               </span>
 
               {lastRun?.run_number && (
-                <span className="px-1.5 py-0.2 rounded font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
+                <span className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
                   #{lastRun.run_number}
                 </span>
               )}

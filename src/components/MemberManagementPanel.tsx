@@ -38,40 +38,39 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'member'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
   const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const getAuthHeader = (): Record<string, string> => {
+    const token = localStorage.getItem('winfix_admin_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
 
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('winfix_admin_token') || 'local-admin-token';
       const res = await fetch('/api/admin/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: getAuthHeader()
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.users)) {
-          setUsers(data.users);
-          setIsLoading(false);
-          return;
-        }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && Array.isArray(data.users)) {
+        setUsers(data.users);
+        setActionMessage(null);
+        setIsLoading(false);
+        return;
       }
-    } catch (e) {
+      setActionMessage({
+        text: data?.error || (res.status === 401
+          ? (isEn ? 'Admin authentication required to view members.' : '회원 목록을 조회하려면 관리자 인증이 필요합니다.')
+          : (isEn ? `Failed to load members (HTTP ${res.status}).` : `회원 목록 조회 실패 (HTTP ${res.status})`)),
+        type: 'error'
+      });
+    } catch (e: any) {
       console.warn("Failed to fetch users from server DB:", e);
+      setActionMessage({
+        text: isEn ? 'Unable to reach member database API.' : '서버 회원 데이터베이스에 연결할 수 없습니다.',
+        type: 'error'
+      });
     }
-    // Fallback default admin user display
-    setUsers([
-      {
-        id: 'usr-admin-default',
-        email: 'ahbiyoutwinfix@gmail.com',
-        displayName: 'AhBiYout Administrator',
-        role: 'admin',
-        authProvider: 'google',
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      }
-    ]);
     setIsLoading(false);
   };
 
@@ -81,16 +80,15 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
 
   const handleUpdateStatus = async (user: MemberUser, newStatus: 'active' | 'blocked') => {
     try {
-      const token = localStorage.getItem('winfix_admin_token') || 'local-admin-token';
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...getAuthHeader()
         },
         body: JSON.stringify({ status: newStatus })
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus } : u));
         setActionMessage({
@@ -107,18 +105,13 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   };
 
   const handleDeleteUser = async (user: MemberUser) => {
-    if (!window.confirm(isEn ? `Are you sure you want to delete ${user.email}?` : `정말로 회원 (${user.email}) 계정을 영구 삭제하시겠습니까?`)) {
-      return;
-    }
+    setConfirmDeleteId(null);
     try {
-      const token = localStorage.getItem('winfix_admin_token') || 'local-admin-token';
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: getAuthHeader()
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setUsers(prev => prev.filter(u => u.id !== user.id));
         setActionMessage({
@@ -381,13 +374,30 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
                               <Ban className="w-3.5 h-3.5" />
                             </button>
 
-                            <button
-                              onClick={() => handleDeleteUser(u)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                              title="계정 삭제"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {confirmDeleteId === u.id ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleDeleteUser(u)}
+                                  className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[10px] font-bold cursor-pointer"
+                                >
+                                  {isEn ? 'Confirm' : '삭제'}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-md text-[10px] font-semibold cursor-pointer"
+                                >
+                                  {isEn ? 'Cancel' : '취소'}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteId(u.id)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                                title="계정 삭제"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </>
                         )}
                         {u.role === 'admin' && (

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
+  BarChart,
+  AreaChart,
   Bar,
   Line,
   Area,
@@ -116,25 +118,29 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
     return list;
   }, []);
 
-  const fetchDailyUsage = useCallback(async () => {
+  const fetchDailyUsage = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
-    // Instant Cache Hydration: Check sessionStorage for 0ms tab transitions
+    // Instant Cache Hydration: Check sessionStorage for 0ms tab transitions unless force-refreshed
     const cacheKey = `winfix_daily_quota_${timeRange}`;
-    try {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && Array.isArray(parsed.records) && (Date.now() - parsed.timestamp < 10 * 60 * 1000)) {
-          setRecords(parsed.records);
-          setLastRefreshed(parsed.lastRefreshed || new Date().toLocaleTimeString());
-          setIsLoading(false);
-          return;
+    if (!forceRefresh) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed.records) && (Date.now() - parsed.timestamp < 10 * 60 * 1000)) {
+            setRecords(parsed.records);
+            setLastRefreshed(parsed.lastRefreshed || new Date().toLocaleTimeString());
+            setIsLoading(false);
+            return;
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     try {
-      const res = await fetch(`/api/admin/daily-quota-stats?days=${timeRange}`);
+      const adminToken = typeof window !== 'undefined' ? localStorage.getItem('winfix_admin_token') : null;
+      const headers: Record<string, string> = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
+      const res = await fetch(`/api/admin/daily-quota-stats?days=${timeRange}`, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data && data.success && Array.isArray(data.records) && data.records.length > 0) {
@@ -286,7 +292,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
           </div>
 
           <button
-            onClick={fetchDailyUsage}
+            onClick={() => fetchDailyUsage(true)}
             disabled={isLoading}
             className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
             title="최신 사용량 동기화"
@@ -369,20 +375,31 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
         </div>
 
         <div className="p-5 rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/20 dark:bg-emerald-950/10 flex flex-col justify-center">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
-            <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              {language === 'en' ? 'Estimated Monthly Savings' : '예상 월간 비용 절감액'}
-            </h5>
-          </div>
-          <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono mb-1">
-            $428.50
-          </div>
-          <p className="text-[10px] text-slate-500 leading-relaxed">
-            {language === 'en' 
-              ? 'Projected based on 1.4M+ monthly local queries bypassing Google Cloud billable tiers.' 
-              : 'Google Cloud 유료 티어를 우회하는 월간 140만 건 이상의 로컬 쿼리를 기반으로 계산된 수치입니다.'}
-          </p>
+          {(() => {
+            const count = filteredRecords.length || 1;
+            const avgDailyLocal = filteredRecords.reduce((acc, r) => acc + (r.indexedDbQueries || 0) + (r.jamstackReads || 0), 0) / count;
+            const monthlyQueries = avgDailyLocal * 30;
+            const monthlyMillions = (monthlyQueries / 1_000_000).toFixed(2);
+            const estimatedUsd = ((avgDailyLocal / 67920) * 428.5).toFixed(2);
+            return (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-500" />
+                  <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    {language === 'en' ? 'Estimated Monthly Savings' : '예상 월간 비용 절감액'}
+                  </h5>
+                </div>
+                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono mb-1">
+                  ${estimatedUsd}
+                </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  {language === 'en'
+                    ? `Projected from ${monthlyMillions}M+ monthly local/CDN queries bypassing paid cloud tiers.`
+                    : `유료 클라우드 티어를 우회하는 월간 약 ${monthlyMillions}M건의 로컬·CDN 쿼리 실측치 기반 추정 절감액입니다.`}
+                </p>
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -415,7 +432,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                 <Globe className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 Jamstack Feed Reads
               </span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                 ● ZERO QUOTA
               </span>
             </div>
@@ -444,7 +461,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                 <Database className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                 Server DB Operations
               </span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/30 font-mono">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/30 font-mono">
                 ● LOCAL FILE
               </span>
             </div>
@@ -511,7 +528,7 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                 <Github className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                 GitOps Auto-Collector
               </span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30">
                 6h Cron
               </span>
             </div>
@@ -629,142 +646,152 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
         {/* Recharts Container */}
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={filteredRecords} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
-              <defs>
-                <linearGradient id="colorJamstack" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="colorIndexedDb" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="colorGemini" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
+            {(() => {
+              const showJamstack = serviceView === 'all' || serviceView === 'jamstack';
+              const showDatabase = serviceView === 'all' || serviceView === 'database';
+              const showGemini = serviceView === 'all' || serviceView === 'gemini';
+              const showSecondaryAxis = serviceView === 'all' || serviceView === 'gemini';
+              const dbAxisId = serviceView === 'database' ? 'primary' : 'secondary';
 
-              <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.15} />
-              <XAxis dataKey="dayLabel" stroke="#94a3b8" fontSize={10} tickLine={false} />
-              
-              {/* Dual Y-Axes */}
-              <YAxis
-                yAxisId="primary"
-                orientation="left"
-                stroke="#10b981"
-                fontSize={10}
-                tickLine={false}
-                domain={[0, (dataMax: number) => Math.max(5000, dataMax * 1.1)]}
-                tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
-              />
-
-              {(serviceView === 'all' || serviceView === 'gemini' || serviceView === 'database') && (
-                <YAxis
-                  yAxisId="secondary"
-                  orientation="right"
-                  stroke="#6366f1"
-                  fontSize={10}
-                  tickLine={false}
-                  domain={[0, (dataMax: number) => Math.max(1800, dataMax * 1.2)]}
-                  tickFormatter={(val) => `${val}`}
-                />
-              )}
-
-              <Tooltip
-                contentStyle={{
-                  borderRadius: '12px',
-                  backgroundColor: 'rgba(15, 23, 42, 0.96)',
-                  borderColor: '#334155',
-                  color: '#ffffff',
-                  fontSize: '11px',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
-                }}
-                formatter={(value: any, name: any) => {
-                  const num = Number(value) || 0;
-                  return [num.toLocaleString(), name];
-                }}
-                labelFormatter={(label) => `날짜: ${label}`}
-              />
-
-              <Legend verticalAlign="top" height={36} iconSize={10} wrapperStyle={{ fontSize: '11px' }} />
-
-              {/* Reference Lines */}
-              {(serviceView === 'all' || serviceView === 'gemini') && (
-                <ReferenceLine
-                  yAxisId="secondary"
-                  y={GEMINI_REQUESTS_QUOTA}
-                  stroke="#6366f1"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: 'Gemini Quota (1.5k)',
-                    fill: '#818cf8',
-                    fontSize: 9,
-                    position: 'insideTopRight'
-                  }}
-                />
-              )}
-              
-              {/* Data Series Elements */}
-              {(serviceView === 'all' || serviceView === 'jamstack') && (
+              const sharedChildren = (
                 <>
-                  <Area
+                  <defs>
+                    <linearGradient id="colorJamstack" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.28} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="colorIndexedDb" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="colorServerReads" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="colorGemini" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.28} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.15} />
+                  <XAxis dataKey="dayLabel" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <YAxis
                     yAxisId="primary"
-                    type="monotone"
-                    dataKey="jamstackReads"
-                    name={language === 'en' ? 'Jamstack Reads' : 'Jamstack 정적 피드'}
+                    orientation="left"
                     stroke="#10b981"
-                    fillOpacity={1}
-                    fill="url(#colorJamstack)"
-                    strokeWidth={2}
-                    hide={serviceView === 'database'}
+                    fontSize={10}
+                    tickLine={false}
+                    domain={[0, (dataMax: number) => Math.max(serviceView === 'database' ? 1000 : 5000, dataMax * 1.15)]}
+                    tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`}
                   />
-                  <Bar
-                    yAxisId="primary"
-                    dataKey="indexedDbQueries"
-                    name={language === 'en' ? 'IndexedDB Queries' : 'IndexedDB 로컬 검색'}
-                    fill="#3b82f6"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={16}
-                    hide={serviceView === 'database'}
+                  {showSecondaryAxis && (
+                    <YAxis
+                      yAxisId="secondary"
+                      orientation="right"
+                      stroke="#6366f1"
+                      fontSize={10}
+                      tickLine={false}
+                      domain={[0, (dataMax: number) => Math.max(1800, dataMax * 1.2)]}
+                      tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(1)}k` : `${val}`}
+                    />
+                  )}
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '12px',
+                      backgroundColor: 'rgba(15, 23, 42, 0.96)',
+                      borderColor: '#334155',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
+                    }}
+                    formatter={(value: any, name: any) => [(Number(value) || 0).toLocaleString(), name]}
+                    labelFormatter={(label) => `날짜: ${label}`}
                   />
+                  <Legend verticalAlign="top" height={36} iconSize={10} wrapperStyle={{ fontSize: '11px' }} />
+                  {showGemini && (
+                    <ReferenceLine
+                      yAxisId="secondary"
+                      y={GEMINI_REQUESTS_QUOTA}
+                      stroke="#6366f1"
+                      strokeDasharray="4 4"
+                      label={{
+                        value: 'Gemini Quota (1.5k)',
+                        fill: '#818cf8',
+                        fontSize: 9,
+                        position: 'insideTopRight'
+                      }}
+                    />
+                  )}
                 </>
-              )}
+              );
 
-              {(serviceView === 'all' || serviceView === 'database') && (
-                <>
-                  <Bar
-                    yAxisId="primary"
-                    dataKey="serverDbReads"
-                    name={language === 'en' ? 'Server DB Reads' : '서버 DB 읽기연산'}
-                    fill="#3b82f6"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={16}
-                  />
-                  <Bar
-                    yAxisId="primary"
-                    dataKey="serverDbWrites"
-                    name={language === 'en' ? 'Server DB Writes' : '서버 DB 쓰기연산'}
-                    fill="#60a5fa"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={16}
-                  />
-                </>
-              )}
+              if (chartType === 'bar') {
+                return (
+                  <BarChart data={filteredRecords} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+                    {sharedChildren}
+                    {showJamstack && (
+                      <>
+                        <Bar yAxisId="primary" dataKey="jamstackReads" name={language === 'en' ? 'Jamstack Reads' : 'Jamstack 정적 피드'} fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                        <Bar yAxisId="primary" dataKey="indexedDbQueries" name={language === 'en' ? 'IndexedDB Queries' : 'IndexedDB 로컬 검색'} fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                      </>
+                    )}
+                    {showDatabase && (
+                      <>
+                        <Bar yAxisId={dbAxisId} dataKey="serverDbReads" name={language === 'en' ? 'Server DB Reads' : '서버 DB 읽기연산'} fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                        <Bar yAxisId={dbAxisId} dataKey="serverDbWrites" name={language === 'en' ? 'Server DB Writes' : '서버 DB 쓰기연산'} fill="#a855f7" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                      </>
+                    )}
+                    {showGemini && (
+                      <Bar yAxisId="secondary" dataKey="geminiRequests" name={language === 'en' ? 'Gemini AI Calls' : 'Gemini AI 진단 호출'} fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                    )}
+                  </BarChart>
+                );
+              }
 
-              {(serviceView === 'all' || serviceView === 'gemini') && (
-                <Line
-                  yAxisId="secondary"
-                  type="monotone"
-                  dataKey="geminiRequests"
-                  name={language === 'en' ? 'Gemini AI Calls' : 'Gemini AI 진단 호출'}
-                  stroke="#6366f1"
-                  strokeWidth={3}
-                  dot={{ r: 3, fill: '#6366f1' }}
-                  activeDot={{ r: 6 }}
-                />
-              )}
-            </ComposedChart>
+              if (chartType === 'area') {
+                return (
+                  <AreaChart data={filteredRecords} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+                    {sharedChildren}
+                    {showJamstack && (
+                      <>
+                        <Area yAxisId="primary" type="monotone" dataKey="jamstackReads" name={language === 'en' ? 'Jamstack Reads' : 'Jamstack 정적 피드'} stroke="#10b981" fillOpacity={1} fill="url(#colorJamstack)" strokeWidth={2} />
+                        <Area yAxisId="primary" type="monotone" dataKey="indexedDbQueries" name={language === 'en' ? 'IndexedDB Queries' : 'IndexedDB 로컬 검색'} stroke="#06b6d4" fillOpacity={1} fill="url(#colorIndexedDb)" strokeWidth={2} />
+                      </>
+                    )}
+                    {showDatabase && (
+                      <>
+                        <Area yAxisId={dbAxisId} type="monotone" dataKey="serverDbReads" name={language === 'en' ? 'Server DB Reads' : '서버 DB 읽기연산'} stroke="#f59e0b" fillOpacity={1} fill="url(#colorServerReads)" strokeWidth={2} />
+                        <Area yAxisId={dbAxisId} type="monotone" dataKey="serverDbWrites" name={language === 'en' ? 'Server DB Writes' : '서버 DB 쓰기연산'} stroke="#a855f7" fillOpacity={0.15} fill="#a855f7" strokeWidth={2} />
+                      </>
+                    )}
+                    {showGemini && (
+                      <Area yAxisId="secondary" type="monotone" dataKey="geminiRequests" name={language === 'en' ? 'Gemini AI Calls' : 'Gemini AI 진단 호출'} stroke="#6366f1" fillOpacity={1} fill="url(#colorGemini)" strokeWidth={2.5} />
+                    )}
+                  </AreaChart>
+                );
+              }
+
+              return (
+                <ComposedChart data={filteredRecords} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+                  {sharedChildren}
+                  {showJamstack && (
+                    <>
+                      <Area yAxisId="primary" type="monotone" dataKey="jamstackReads" name={language === 'en' ? 'Jamstack Reads' : 'Jamstack 정적 피드'} stroke="#10b981" fillOpacity={1} fill="url(#colorJamstack)" strokeWidth={2} />
+                      <Bar yAxisId="primary" dataKey="indexedDbQueries" name={language === 'en' ? 'IndexedDB Queries' : 'IndexedDB 로컬 검색'} fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                    </>
+                  )}
+                  {showDatabase && (
+                    <>
+                      <Bar yAxisId={dbAxisId} dataKey="serverDbReads" name={language === 'en' ? 'Server DB Reads' : '서버 DB 읽기연산'} fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                      <Bar yAxisId={dbAxisId} dataKey="serverDbWrites" name={language === 'en' ? 'Server DB Writes' : '서버 DB 쓰기연산'} fill="#a855f7" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                    </>
+                  )}
+                  {showGemini && (
+                    <Line yAxisId="secondary" type="monotone" dataKey="geminiRequests" name={language === 'en' ? 'Gemini AI Calls' : 'Gemini AI 진단 호출'} stroke="#6366f1" strokeWidth={3} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 6 }} />
+                  )}
+                </ComposedChart>
+              );
+            })()}
           </ResponsiveContainer>
         </div>
 

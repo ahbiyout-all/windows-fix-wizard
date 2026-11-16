@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ResponsiveContainer,
-  AreaChart,
+  ComposedChart,
   Area,
   BarChart,
   Bar,
@@ -270,10 +270,10 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
           </div>
           {/* Sentinel Runtime */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-            <Activity className="w-4 h-4 text-slate-450 dark:text-slate-400" />
+            <Activity className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             <div className="flex flex-col text-[10px]">
               <span className="text-slate-400 font-bold uppercase">{language === 'en' ? 'SENTINEL RUNTIME' : '센티넬 무중단 비행'}</span>
-              <span className="font-mono font-bold text-slate-800 dark:text-slate-250 text-xs">{uptimeStr}</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-xs">{uptimeStr}</span>
             </div>
           </div>
         </div>
@@ -286,7 +286,7 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
         <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-450">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {language === 'en' ? 'Runtime Outage Audit' : '동기화 결과 분포 및 상시 가동도'}
               </h4>
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
@@ -324,7 +324,7 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
                 <span className="text-2xl font-mono font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
                   {uptimePct}%
                 </span>
-                <span className="text-[9px] text-slate-450 uppercase font-semibold">
+                <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold">
                   {language === 'en' ? 'UPTIME' : '정상 통제 모델'}
                 </span>
               </div>
@@ -333,12 +333,12 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
 
           <div className="pt-3 border-t border-slate-200/50 dark:border-slate-800/100 grid grid-cols-2 gap-2 text-center text-xs">
             <div className="p-2 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
-              <p className="text-slate-450 text-[10px] uppercase font-bold">{language === 'en' ? 'SUCCEEDED' : '총 성공 횟수'}</p>
-              <p className="text-base font-bold font-mono text-emerald-605 dark:text-emerald-400">{successCount}회</p>
+              <p className="text-slate-500 dark:text-slate-400 text-[10px] uppercase font-bold">{language === 'en' ? 'SUCCEEDED' : '총 성공 횟수'}</p>
+              <p className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">{successCount}회</p>
             </div>
             <div className="p-2 bg-rose-500/5 rounded-lg border border-rose-500/10">
-              <p className="text-slate-450 text-[10px] uppercase font-bold">{language === 'en' ? 'FAILED' : '총 실패 횟'}</p>
-              <p className="text-base font-bold font-mono text-rose-600 dark:text-rose-450">{failureCount}회</p>
+              <p className="text-slate-500 dark:text-slate-400 text-[10px] uppercase font-bold">{language === 'en' ? 'FAILED' : '총 실패 횟수'}</p>
+              <p className="text-base font-bold font-mono text-rose-600 dark:text-rose-400">{failureCount}회</p>
             </div>
           </div>
         </div>
@@ -347,7 +347,7 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
         <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 lg:col-span-2 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-450">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {language === 'en' ? 'API Provider Usage & Quota Safety' : 'API 공급 키 및 할당량 분배 통계'}
               </h4>
               <Key className="w-4 h-4 text-indigo-500" />
@@ -390,18 +390,18 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-emerald-500" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-450">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               {language === 'en' ? 'Telemetry Timeline: Latency & Ingestion Volume' : '센티넬 실시간 타임라인: 동기화 지연 및 데이터 가집계'}
             </h4>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-350 rounded-full">
+          <span className="text-[10px] font-mono px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-300 rounded-full">
             {language === 'en' ? 'Recent 10 Executions' : '최근 10회 가동 추이'}
           </span>
         </div>
 
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trendsData.slice(-10)} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+            <ComposedChart data={trendsData.slice(-10)} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
               <defs>
                 <linearGradient id="colorDuration" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
@@ -425,7 +425,7 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
               <Legend verticalAlign="top" height={36} iconSize={10} wrapperStyle={{ fontSize: '10px' }} />
               <Area yAxisId="left" type="monotone" dataKey="durationSec" name={language === 'en' ? 'Latency (Seconds)' : '가동 소요 시간 (초)'} stroke="#6366f1" fillOpacity={1} fill="url(#colorDuration)" strokeWidth={2} />
               <Bar yAxisId="right" dataKey="items" name={language === 'en' ? 'Synced Issues (Qty)' : '수집 전송된 이슈 개수 (건)'} fill="#10b981" maxBarSize={30} radius={[3, 3, 0, 0]} opacity={0.8} />
-            </AreaChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
@@ -435,7 +435,7 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-indigo-500" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-450">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               {language === 'en' ? '24-Hour Sync Performance & Resilience Trends' : '지난 24시간 동기화 성능 동향 및 안정성 지표'}
             </h4>
           </div>

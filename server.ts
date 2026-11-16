@@ -121,6 +121,45 @@ function getJsonFilePath(collection: string): string {
   return path.join(DATA_DIR, `${collection}.json`);
 }
 
+function getAppVersion(): string {
+  try {
+    const pkgPath = path.join(process.cwd(), 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg?.version) return String(pkg.version).trim();
+    }
+  } catch (_) {}
+  return '3.103.4';
+}
+
+function readSystemConfigObject(): Record<string, any> {
+  const sysPath = path.join(DATA_DIR, 'system_config.json');
+  if (!fs.existsSync(sysPath)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(sysPath, 'utf8'));
+    if (Array.isArray(parsed)) {
+      const firstObj = parsed.find((item) => item && typeof item === 'object' && !Array.isArray(item));
+      return firstObj ? { ...firstObj } : {};
+    }
+    if (parsed && typeof parsed === 'object') {
+      return { ...parsed };
+    }
+  } catch (_) {}
+  return {};
+}
+
+function writeSystemConfigObject(updates: Record<string, any>): Record<string, any> {
+  const current = readSystemConfigObject();
+  const merged = {
+    ...current,
+    ...updates,
+    updatedAt: updates.updatedAt || getKSTISOString()
+  };
+  const sysPath = path.join(DATA_DIR, 'system_config.json');
+  fs.writeFileSync(sysPath, JSON.stringify(merged, null, 2), 'utf8');
+  return merged;
+}
+
 function generateInitialSystemEventLogs(limit: number = 50): any[] {
   const providers = [
     { provider: "Service Control Manager", channel: "System", eventId: 7036, source: "System Core" },
@@ -547,16 +586,18 @@ function generateDefaultPowerShellScript(code: string = '', category: string = '
   return `# Windows System Integrity Repair Script (${codeUpper || 'System Fix'})\r\n# Target: SFC System File Checker & DISM Image Servicing\r\n\r\nWrite-Host "[1/3] Running System File Checker (SFC)..." -ForegroundColor Cyan\r\nsfc /scannow\r\n\r\nWrite-Host "[2/3] Checking Component Store Health via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /CheckHealth\r\n\r\nWrite-Host "[3/3] Restoring Component Store Corruption via DISM..." -ForegroundColor Cyan\r\ndism /Online /Cleanup-Image /RestoreHealth\r\n\r\nWrite-Host "[+] System file integrity repair complete. Please restart your system." -ForegroundColor Green`;
 }
 
-async function saveIssuesToServer(issuesData: any[]) {
-  console.log(`Server-side sync: attempt to save ${issuesData.length} issues`);
+async function saveIssuesToServer(issuesData: any[], options: { skipDuplicates?: boolean } = {}) {
+  const skipDuplicates = Boolean(options?.skipDuplicates);
+  console.log(`Server-side sync: attempt to save ${issuesData.length} issues (skipDuplicates=${skipDuplicates})`);
   let addedCount = 0;
   let updatedCount = 0;
   let skippedCount = 0;
+  let duplicateSkippedCount = 0;
 
   await logSyncEvent({ 
     type: 'info', 
     source: 'saveIssuesToServer', 
-    message: `동기화 데이터 처리 시작 (항목: ${issuesData.length}개)` 
+    message: `동기화 데이터 처리 시작 (항목: ${issuesData.length}개${skipDuplicates ? ', 중복 스킵 활성' : ''})` 
   });
 
   const localIssues = readLocalCollection('issues');
@@ -572,24 +613,30 @@ async function saveIssuesToServer(issuesData: any[]) {
         continue;
       }
 
-      // Guarantee PowerShell script is populated
-      if (!issueData.script || typeof issueData.script !== 'string' || issueData.script.trim().length < 15) {
-        issueData.script = generateDefaultPowerShellScript(issueData.code, issueData.category, issueData.title);
-      }
-
       // Check duplicates in local array database
       let matchedLocalIdx = -1;
-      if (issueData.id && typeof issueData.id === 'string' && !issueData.id.startsWith('temp_')) {
+      if (issueData.id && typeof issueData.id === 'string' && !issueData.id.startsWith('temp_') && !issueData.id.startsWith('staged-')) {
         matchedLocalIdx = localIssues.findIndex(i => i.id === issueData.id);
       }
       if (matchedLocalIdx === -1 && issueData.code && issueData.code !== 'N/A' && issueData.title) {
         matchedLocalIdx = localIssues.findIndex(i => 
-          i.code?.toUpperCase() === issueData.code?.toUpperCase() && 
+          i.code?.toUpperCase().trim() === issueData.code?.toUpperCase().trim() && 
           i.title?.toLowerCase().trim() === issueData.title?.toLowerCase().trim()
         );
       }
       if (matchedLocalIdx === -1 && issueData.title) {
         matchedLocalIdx = localIssues.findIndex(i => i.title?.toLowerCase().trim() === issueData.title?.toLowerCase().trim());
+      }
+
+      if (matchedLocalIdx !== -1 && skipDuplicates) {
+        duplicateSkippedCount++;
+        skippedCount++;
+        continue;
+      }
+
+      // Guarantee PowerShell script is populated
+      if (!issueData.script || typeof issueData.script !== 'string' || issueData.script.trim().length < 15) {
+        issueData.script = generateDefaultPowerShellScript(issueData.code, issueData.category, issueData.title);
       }
 
       let issueId = `ai-cron-${Date.now()}-${addedCount}`;
@@ -604,8 +651,8 @@ async function saveIssuesToServer(issuesData: any[]) {
         updatedCount++;
       } else {
         localIssues.push({
-          id: issueId,
           ...issueData,
+          id: issueId,
           source: issueData.source || "Automated AI Search (Autonomous Engine)",
           createdAt: issueData.createdAt || getKSTISOString()
         });
@@ -617,11 +664,16 @@ async function saveIssuesToServer(issuesData: any[]) {
     }
   }
 
-  // Persist local issues back to memory file
-  writeLocalCollection('issues', localIssues);
+  // Persist local issues back to memory file if modified
+  if (addedCount > 0 || updatedCount > 0) {
+    writeLocalCollection('issues', localIssues);
+  }
 
-  // Update last sync status into local system configuration file
-  const lastSyncStatus = { 
+  // Merge last sync status into existing local system configuration file
+  const existingSysConfigs = readLocalCollection('system_config');
+  const existingSysConfig = (existingSysConfigs && existingSysConfigs[0]) || {};
+  const lastSyncStatus = {
+    ...existingSysConfig,
     lastSyncAt: getKSTISOString(),
     lastCronResult: `Completed: ${addedCount} added, ${updatedCount} updated, ${skippedCount} skipped`
   };
@@ -630,11 +682,11 @@ async function saveIssuesToServer(issuesData: any[]) {
   await logSyncEvent({ 
     type: 'success', 
     source: 'saveIssuesToServer', 
-    message: `서버측 파일-DB 동기화 완료: ${addedCount}개 추가, ${updatedCount}개 업데이트, ${skippedCount}개 제외`,
-    details: { added: addedCount, updated: updatedCount, skipped: skippedCount }
+    message: `서버측 파일-DB 동기화 완료: ${addedCount}개 추가, ${updatedCount}개 업데이트, ${skippedCount}개 제외 (중복 스킵: ${duplicateSkippedCount}개)`,
+    details: { added: addedCount, updated: updatedCount, skipped: skippedCount, duplicateSkipped: duplicateSkippedCount, totalCount: localIssues.length }
   });
 
-  return { added: addedCount, updated: updatedCount, skipped: skippedCount };
+  return { added: addedCount, updated: updatedCount, skipped: skippedCount, duplicateSkipped: duplicateSkippedCount, totalCount: localIssues.length };
 }
 
 // AI Auto-Sync Scheduler: Runs periodically to find new Windows trends
@@ -697,10 +749,18 @@ function getAllAvailableKeys(extraKey?: string) {
     keys.push({ name: 'Client_Supplied_Key', value: extraKey.trim() });
   }
   
-  // Dynamically collect anything with API_KEY in the name that isn't standard
+  // Collect only Gemini-related API keys (exclude non-Gemini service keys like Firebase, Maps, Groq, etc.)
+  const nonGeminiPrefixes = ['FIREBASE', 'VITE_', 'GROQ_', 'MISTRAL_', 'OPENROUTER_', 'CEREBRAS_', 'CLOUDFLARE_', 'MAPS_', 'GOOGLE_MAPS_', 'GITHUB_', 'SMTP_', 'YOUTUBE_', 'ADSENSE_'];
   for (const [key, value] of Object.entries(process.env)) {
     if (!value) continue;
-    if (key.includes("API_KEY") || customNames.includes(key) || defaultNames.includes(key)) {
+    const upperKey = key.toUpperCase();
+    if (nonGeminiPrefixes.some(prefix => upperKey.includes(prefix))) continue;
+    const isGeminiEnvKey =
+      customNames.includes(key) ||
+      defaultNames.includes(key) ||
+      (upperKey.includes('GEMINI') && upperKey.includes('API_KEY')) ||
+      (upperKey.includes('GOOGLE_AI') && upperKey.includes('API_KEY'));
+    if (isGeminiEnvKey) {
       if (!keys.find(k => k.name === key)) {
          keys.push({ name: key, value: value.trim() });
       }
@@ -898,7 +958,12 @@ async function executeServerGeminiCall(
             } catch (firstTryErr: any) {
               const firstClass = classifyAiError(firstTryErr);
               if (firstClass.type === 'INVALID_KEY') {
-                keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+                keyInvalidUntil.set(k.value, now + 30 * 60 * 1000);
+                lastError = firstTryErr;
+                break;
+              }
+              if (firstClass.type === 'QUOTA_EXHAUSTED_429') {
+                keyThrottledUntil.set(k.name, now + 15 * 60 * 1000);
                 lastError = firstTryErr;
                 break;
               }
@@ -932,7 +997,7 @@ async function executeServerGeminiCall(
             continue; // Advance to next healthy model on SAME key!
           }
           if (classified.type === 'INVALID_KEY') {
-            keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+            keyInvalidUntil.set(k.value, now + 30 * 60 * 1000);
             break;
           }
           if (classified.type === 'QUOTA_EXHAUSTED_429') {
@@ -1372,10 +1437,14 @@ async function runAiSyncInternal(): Promise<any> {
             });
           } catch (searchErr: any) {
             const classifiedSearch = classifyAiError(searchErr);
-            if (classifiedSearch.type === 'MODEL_NOT_FOUND_404') {
+            if (
+              classifiedSearch.type === 'MODEL_NOT_FOUND_404' ||
+              classifiedSearch.type === 'INVALID_KEY' ||
+              classifiedSearch.type === 'QUOTA_EXHAUSTED_429'
+            ) {
               throw searchErr;
             }
-            console.warn(`[Engine Sync] Search grounding not available on ${modelName} (${classifiedSearch.message.substring(0, 100)}). Fallback to direct generation...`);
+            console.info(`[Engine Sync] Search grounding skipped on ${modelName} (${getCleanErrorMessage(searchErr).substring(0, 100)}). Fallback to direct generation...`);
             result = await ai.models.generateContent({
               model: modelName,
               contents: fullPrompt
@@ -1432,7 +1501,7 @@ async function runAiSyncInternal(): Promise<any> {
         }
 
         if (classified.type === 'INVALID_KEY') {
-          keyInvalidUntil.set(k.value, now + 3 * 60 * 1000);
+          keyInvalidUntil.set(k.value, now + 30 * 60 * 1000);
           console.info(`[Engine Sync] Key '${k.name}' standby (unregistered or inactive API key). Serving queries via local database & GitOps cache.`);
           break;
         }
@@ -1529,11 +1598,17 @@ getMaintenanceSettings().then(settings => {
 });
 
 // Non-blocking periodic Live AI Model Discovery (40s after boot, then every 6 hours)
+const runScheduledModelDiscovery = () => {
+  const keyInfo = getApiKeyInfo();
+  return discoverLiveModels({
+    geminiApiKey: !keyInfo.isPlaceholder && keyInfo.apiKey ? keyInfo.apiKey : undefined
+  }).catch(() => {});
+};
 setTimeout(() => {
-  discoverLiveModels().catch(() => {});
+  void runScheduledModelDiscovery();
 }, 40000);
 cron.schedule("15 */6 * * *", () => {
-  discoverLiveModels().catch(() => {});
+  void runScheduledModelDiscovery();
 });
 
 // Run on startup ONLY if database is likely empty or after a safe delay
@@ -2043,14 +2118,109 @@ async function startServer() {
     try {
       const list = readLocalCollection('issues');
       const counts: Record<string, number> = { '전체': list.length };
-      
-      list.forEach(i => {
+
+      let githubCollected = 0;
+      let coreSeed = 0;
+      let localEngine = 0;
+
+      const nowMs = Date.now();
+      const todayKst = getKSTISOString().split('T')[0];
+      const dailyMap: Record<string, number> = {};
+      let latestMs = 0;
+      let firstMs = Infinity;
+      let rolling24hCount = 0;
+
+      const formatServerKstDate = (raw: any): string => {
+        if (!raw) return '';
+        const d = new Date(raw);
+        if (!isNaN(d.getTime())) {
+          return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10);
+        }
+        return typeof raw === 'string' ? raw.slice(0, 10) : '';
+      };
+
+      const formatServerKstDateTime = (ms: number): string => {
+        if (!ms || ms <= 0) return '';
+        const kst = new Date(ms + 9 * 3600000).toISOString();
+        return `${kst.slice(0, 10)} ${kst.slice(11, 16)} KST`;
+      };
+
+      list.forEach((i: any) => {
         const cat = i.category || '기타';
         counts[cat] = (counts[cat] || 0) + 1;
+
+        const src = String(i.source || '').toLowerCase();
+        const idStr = String(i.id || '').toLowerCase();
+        const isGithub = src.includes('github') || idStr.startsWith('gh-') || idStr.includes('github');
+
+        if (isGithub) {
+          githubCollected++;
+          const rawDate = i.createdAt || i.updatedAt;
+          if (rawDate) {
+            const ms = typeof rawDate === 'number' ? rawDate : new Date(rawDate).getTime();
+            if (!isNaN(ms) && ms > 0) {
+              if (ms > latestMs) latestMs = ms;
+              if (ms < firstMs) firstMs = ms;
+              if (nowMs - ms <= 24 * 3600000) rolling24hCount++;
+              const dateKey = formatServerKstDate(rawDate);
+              if (dateKey) dailyMap[dateKey] = (dailyMap[dateKey] || 0) + 1;
+            }
+          }
+        } else if (!i.source || src === 'seed' || src.includes('initial setup') || src.includes('system grounding')) {
+          coreSeed++;
+        } else {
+          localEngine++;
+        }
       });
 
+      const ghConfigs = readLocalCollection('github_config');
+      const lastSyncAt = ghConfigs?.[0]?.lastSyncAt || null;
+
+      const dailyHistory = Object.keys(dailyMap)
+        .sort((a, b) => b.localeCompare(a))
+        .map(date => ({ date, count: dailyMap[date] }));
+
+      const latestDate = latestMs > 0
+        ? new Date(latestMs + 9 * 3600000).toISOString().slice(0, 10)
+        : (lastSyncAt ? formatServerKstDate(lastSyncAt) : '');
+      const firstDate = firstMs !== Infinity
+        ? new Date(firstMs + 9 * 3600000).toISOString().slice(0, 10)
+        : latestDate;
+      const latestCollectedKstTime = latestMs > 0
+        ? formatServerKstDateTime(latestMs)
+        : (lastSyncAt ? formatServerKstDateTime(new Date(lastSyncAt).getTime()) : '');
+      const todayCount = dailyMap[todayKst] || 0;
+      const latestDayCount = latestDate ? (dailyMap[latestDate] || 0) : 0;
+      const activeDaysCount = dailyHistory.length;
+      const dailyAverage = activeDaysCount > 0 ? Math.max(1, Math.round((githubCollected / activeDaysCount) * 10) / 10) : 0;
+
       const categories = ['전체', ...Object.keys(counts).filter(c => c !== '전체')];
-      res.json({ success: true, counts, categories });
+      res.json({
+        success: true,
+        counts,
+        categories,
+        sourceBreakdown: {
+          total: list.length,
+          githubCollected,
+          coreSeed,
+          localEngine,
+          nonGithub: coreSeed + localEngine,
+        },
+        harvestStats: {
+          totalCount: githubCollected,
+          todayKst,
+          todayCount,
+          rolling24hCount,
+          latestDate,
+          firstDate,
+          latestDayCount,
+          latestCollectedKstTime,
+          dailyHistory,
+          activeDaysCount,
+          dailyAverage,
+          displayDailyCount: rolling24hCount > 0 ? rolling24hCount : latestDayCount,
+        },
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -2697,12 +2867,12 @@ async function startServer() {
 
   app.post("/api/issues/sync", requireAdmin, async (req, res) => {
     try {
-      const { issues } = req.body;
+      const { issues, skipDuplicates } = req.body;
       if (!Array.isArray(issues)) {
         return res.status(400).json({ success: false, error: "Issues payload must be an array" });
       }
-      const result = await saveIssuesToServer(issues);
-      res.json({ success: true, result });
+      const result = await saveIssuesToServer(issues, { skipDuplicates: Boolean(skipDuplicates) });
+      res.json({ success: true, ...result, result });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -2721,6 +2891,21 @@ async function startServer() {
       } else {
         res.status(404).json({ success: false, error: "Issue not found in local DB" });
       }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/issues/:id", requireAdmin, (req, res) => {
+    try {
+      const { id } = req.params;
+      const list = readLocalCollection('issues');
+      const filtered = list.filter((i: any) => i.id !== id);
+      if (filtered.length === list.length) {
+        return res.status(404).json({ success: false, error: "Issue not found in local DB" });
+      }
+      writeLocalCollection('issues', filtered);
+      res.json({ success: true, deletedId: id, remainingCount: filtered.length });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -2941,7 +3126,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/visitor/autoblock-settings", (req, res) => {
+  app.get("/api/visitor/autoblock-settings", requireAdmin, (req, res) => {
     try {
       const settings = getAutoBlockSettings();
       const logs = readLocalCollection("logs_visitor");
@@ -2973,7 +3158,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/admin/daily-quota-stats", (req, res) => {
+  app.get("/api/admin/daily-quota-stats", requireAdmin, (req, res) => {
     try {
       const days = parseInt(req.query.days as string, 10) || 14;
       let list = readLocalCollection('quota_usage_stats');
@@ -3503,7 +3688,7 @@ async function startServer() {
         counts,
         checksum,
         algorithm: 'SHA-256',
-        systemVersion: '3.55.0'
+        systemVersion: getAppVersion()
       };
 
       rootFolder.file('metadata.json', JSON.stringify(meta, null, 2));
@@ -4315,33 +4500,33 @@ async function startServer() {
 
   app.post("/api/settings/maintenance", requireAdmin, async (req, res) => {
     try {
-      const settings = req.body;
+      const settings = req.body || {};
+      const existingMaint = await getMaintenanceSettings();
       const cleanSettings = {
-        cleanupMonths: settings.cleanupMonths !== undefined ? parseInt(settings.cleanupMonths) : 1,
-        linkVerifyFrequencyDays: settings.linkVerifyFrequencyDays !== undefined ? parseInt(settings.linkVerifyFrequencyDays) : 7,
-        engineIntervalMin: settings.engineIntervalMin !== undefined ? parseInt(settings.engineIntervalMin) : 60,
-        engineBatchSize: settings.engineBatchSize !== undefined ? parseInt(settings.engineBatchSize) : 4,
-        alertEmail: settings.alertEmail !== undefined ? String(settings.alertEmail).trim() : (process.env.ALERT_EMAIL || "admin@cisnet.co.kr"),
-        enableAlerts: settings.enableAlerts !== undefined ? Boolean(settings.enableAlerts) : true,
-        alertOnApiExhaustion: settings.alertOnApiExhaustion !== undefined ? Boolean(settings.alertOnApiExhaustion) : true,
-        alertOnTimeout: settings.alertOnTimeout !== undefined ? Boolean(settings.alertOnTimeout) : true,
-        consecutiveFailuresLimit: settings.consecutiveFailuresLimit !== undefined ? parseInt(settings.consecutiveFailuresLimit) : 3,
-        smtpHost: settings.smtpHost !== undefined ? String(settings.smtpHost).trim() : "",
-        smtpPort: settings.smtpPort !== undefined ? (parseInt(settings.smtpPort) || 587) : 587,
-        smtpUser: settings.smtpUser !== undefined ? String(settings.smtpUser).trim() : "",
-        smtpPass: settings.smtpPass !== undefined ? String(settings.smtpPass).trim() : "",
-        adsenseClientId: settings.adsenseClientId !== undefined ? String(settings.adsenseClientId).trim() : "",
-        lastMaintenanceAt: settings.lastMaintenanceAt || null,
+        cleanupMonths: settings.cleanupMonths !== undefined ? parseInt(settings.cleanupMonths, 10) : (existingMaint.cleanupMonths ?? 1),
+        linkVerifyFrequencyDays: settings.linkVerifyFrequencyDays !== undefined ? parseInt(settings.linkVerifyFrequencyDays, 10) : (existingMaint.linkVerifyFrequencyDays ?? 7),
+        engineIntervalMin: settings.engineIntervalMin !== undefined ? parseInt(settings.engineIntervalMin, 10) : (existingMaint.engineIntervalMin ?? 60),
+        engineBatchSize: settings.engineBatchSize !== undefined ? parseInt(settings.engineBatchSize, 10) : (existingMaint.engineBatchSize ?? 4),
+        alertEmail: settings.alertEmail !== undefined ? String(settings.alertEmail).trim() : (existingMaint.alertEmail || process.env.ALERT_EMAIL || "admin@cisnet.co.kr"),
+        enableAlerts: settings.enableAlerts !== undefined ? Boolean(settings.enableAlerts) : (existingMaint.enableAlerts ?? true),
+        alertOnApiExhaustion: settings.alertOnApiExhaustion !== undefined ? Boolean(settings.alertOnApiExhaustion) : (existingMaint.alertOnApiExhaustion ?? true),
+        alertOnTimeout: settings.alertOnTimeout !== undefined ? Boolean(settings.alertOnTimeout) : (existingMaint.alertOnTimeout ?? true),
+        consecutiveFailuresLimit: settings.consecutiveFailuresLimit !== undefined ? parseInt(settings.consecutiveFailuresLimit, 10) : (existingMaint.consecutiveFailuresLimit ?? 3),
+        smtpHost: settings.smtpHost !== undefined ? String(settings.smtpHost).trim() : (existingMaint.smtpHost ?? ""),
+        smtpPort: settings.smtpPort !== undefined ? (parseInt(settings.smtpPort, 10) || 587) : (existingMaint.smtpPort ?? 587),
+        smtpUser: settings.smtpUser !== undefined ? String(settings.smtpUser).trim() : (existingMaint.smtpUser ?? ""),
+        smtpPass: settings.smtpPass !== undefined ? String(settings.smtpPass).trim() : (existingMaint.smtpPass ?? ""),
+        adsenseClientId: settings.adsenseClientId !== undefined ? String(settings.adsenseClientId).trim() : (existingMaint.adsenseClientId ?? ""),
+        lastMaintenanceAt: settings.lastMaintenanceAt || existingMaint.lastMaintenanceAt || null,
         updatedAt: settings.updatedAt || getKSTISOString()
       };
 
-      // 1. Write to local config unconditionally
+      // 1. Write to local maintenance_config.json
       const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
       fs.writeFileSync(localPath, JSON.stringify(cleanSettings, null, 2), 'utf8');
 
-      // 2. Also save to system_config.json for GitHub Actions GitOps collector synchronization
-      const sysConfigPath = path.join(process.cwd(), 'data', 'system_config.json');
-      fs.writeFileSync(sysConfigPath, JSON.stringify(cleanSettings, null, 2), 'utf8');
+      // 2. Safely merge into system_config.json without wiping groqApiKey/openrouterApiKey/stagingAutomationConfig
+      writeSystemConfigObject(cleanSettings);
 
       // 3. Reschedule active background scheduler in real-time
       try {
@@ -4384,8 +4569,7 @@ async function startServer() {
 
   app.get("/api/system_config", requireAdmin, async (req, res) => {
     try {
-      const configs = readLocalCollection('system_config');
-      res.json({ success: true, config: (configs && configs[0]) || {} });
+      res.json({ success: true, config: readSystemConfigObject() });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -4394,10 +4578,7 @@ async function startServer() {
   app.post("/api/system_config/update", requireAdmin, async (req, res) => {
     try {
       const updates = req.body || {};
-      const configs = readLocalCollection('system_config');
-      const currentConfig = (configs && configs[0]) || {};
-      const newConfig = { ...currentConfig, ...updates, updatedAt: getKSTISOString() };
-      writeLocalCollection('system_config', [newConfig]);
+      const newConfig = writeSystemConfigObject({ ...updates, updatedAt: getKSTISOString() });
       res.json({ success: true, config: newConfig });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -4755,11 +4936,11 @@ async function startServer() {
   // 3-2. Push local database directly to GitHub repository & optionally auto-deploy Pages
   app.post("/api/github/push-to-repo", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch = 'main', token, commitMessage } = req.body;
+      const { repo, branch = 'main', token, commitMessage, deployPages } = req.body;
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
-      const shouldAutoDeploy = ghConfig.autoDeployPages !== false;
+      const shouldAutoDeploy = typeof deployPages === 'boolean' ? deployPages : (ghConfig.autoDeployPages !== false);
 
       if (!targetRepo || !targetRepo.includes('/')) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
@@ -4950,12 +5131,9 @@ async function startServer() {
     const ghConfig = readLocalCollection('github_config')[0] || {};
     let sysBatch = 2;
     try {
-      const sysPath = path.join(DATA_DIR, 'system_config.json');
-      if (fs.existsSync(sysPath)) {
-        const parsed = JSON.parse(fs.readFileSync(sysPath, 'utf8'));
-        if (typeof parsed?.engineBatchSize === 'number') {
-          sysBatch = Math.min(Math.max(parsed.engineBatchSize, 1), 10);
-        }
+      const parsed = readSystemConfigObject();
+      if (typeof parsed?.engineBatchSize === 'number') {
+        sysBatch = Math.min(Math.max(parsed.engineBatchSize, 1), 10);
       }
     } catch (_) {}
 
@@ -5193,14 +5371,16 @@ jobs:
 
       // Synchronize engineBatchSize to system_config.json & maintenance_config.json, and autoDeployPages to github_config
       try {
-        for (const cfgName of ['system_config.json', 'maintenance_config.json']) {
-          const p = path.join(DATA_DIR, cfgName);
-          if (fs.existsSync(p)) {
-            const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
-            parsed.engineBatchSize = cleanOptions.batchSize;
-            parsed.updatedAt = cleanOptions.updatedAt;
-            fs.writeFileSync(p, JSON.stringify(parsed, null, 2), 'utf8');
-          }
+        writeSystemConfigObject({
+          engineBatchSize: cleanOptions.batchSize,
+          updatedAt: cleanOptions.updatedAt
+        });
+        const maintPath = path.join(DATA_DIR, 'maintenance_config.json');
+        if (fs.existsSync(maintPath)) {
+          const parsedMaint = JSON.parse(fs.readFileSync(maintPath, 'utf8'));
+          parsedMaint.engineBatchSize = cleanOptions.batchSize;
+          parsedMaint.updatedAt = cleanOptions.updatedAt;
+          fs.writeFileSync(maintPath, JSON.stringify(parsedMaint, null, 2), 'utf8');
         }
         const ghConfig = readLocalCollection('github_config')[0] || {};
         ghConfig.autoDeployPages = cleanOptions.autoDeployPages;
@@ -5334,11 +5514,7 @@ jobs:
         return res.json(cachedReleaseData.response);
       }
 
-      let currentVersion = "3.14.0";
-      try {
-        const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
-        if (pkg.version) currentVersion = pkg.version;
-      } catch (e) {}
+      const currentVersion = getAppVersion();
 
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
@@ -5422,11 +5598,12 @@ jobs:
       res.json(responsePayload);
     } catch (err: any) {
       console.warn("[Check Update Error]:", err);
+      const fallbackVer = getAppVersion();
       res.json({
         success: true,
         hasUpdate: false,
-        currentVersion: "3.10.0",
-        latestVersion: "3.10.0",
+        currentVersion: fallbackVer,
+        latestVersion: fallbackVer,
         repoUrl: "https://github.com/AhBiYout-all/windows-fix-wizard",
         author: "AhBiYout",
         developerAccount: "AhBiYout-all",

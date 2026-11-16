@@ -1,0 +1,18 @@
+{
+  "updatedAt": "2026-11-16T20:22:09.024+09:00",
+  "cleanupMonths": 1,
+  "linkVerifyFrequencyDays": 7,
+  "engineIntervalMin": 60,
+  "engineBatchSize": 4,
+  "alertEmail": "admin@cisnet.co.kr",
+  "enableAlerts": true,
+  "alertOnApiExhaustion": true,
+  "alertOnTimeout": true,
+  "consecutiveFailuresLimit": 3,
+  "smtpHost": "",
+  "smtpPort": 587,
+  "smtpUser": "",
+  "smtpPass": "",
+  "adsenseClientId": "",
+  "lastMaintenanceAt": null
+}

@@ -44,6 +44,8 @@ export const HiddenLogArchiveModal: React.FC<HiddenLogArchiveModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const loadArchives = async () => {
@@ -80,9 +82,7 @@ export const HiddenLogArchiveModal: React.FC<HiddenLogArchiveModalProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(language === 'en' ? 'Delete this hidden archive permanently?' : '이 은닉 압축 아카이브를 브라우저에서 영구 삭제하시겠습니까?')) {
-      return;
-    }
+    setConfirmDeleteId(null);
     setDeletingId(id);
     try {
       await deleteHiddenArchive(id);
@@ -96,9 +96,7 @@ export const HiddenLogArchiveModal: React.FC<HiddenLogArchiveModalProps> = ({
 
   const handleClearAll = async () => {
     if (archives.length === 0) return;
-    if (!window.confirm(language === 'en' ? 'Delete ALL hidden browser archives? This cannot be undone.' : '모든 브라우저 은닉 아카이브를 영구 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
-      return;
-    }
+    setConfirmClearAll(false);
     setIsLoading(true);
     try {
       await clearAllHiddenArchives();
@@ -237,14 +235,33 @@ export const HiddenLogArchiveModal: React.FC<HiddenLogArchiveModalProps> = ({
           </div>
 
           {archives.length > 0 && (
-            <button
-              onClick={handleClearAll}
-              disabled={isLoading}
-              className="px-3 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>{language === 'en' ? 'Clear Entire Vault' : '보관함 전체 비우기'}</span>
-            </button>
+            confirmClearAll ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleClearAll}
+                  disabled={isLoading}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  {language === 'en' ? 'Confirm Clear All' : '전체 영구 삭제 확인'}
+                </button>
+                <button
+                  onClick={() => setConfirmClearAll(false)}
+                  disabled={isLoading}
+                  className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                >
+                  {language === 'en' ? 'Cancel' : '취소'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmClearAll(true)}
+                disabled={isLoading}
+                className="px-3 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{language === 'en' ? 'Clear Entire Vault' : '보관함 전체 비우기'}</span>
+              </button>
+            )
           )}
         </div>
 
@@ -373,14 +390,32 @@ export const HiddenLogArchiveModal: React.FC<HiddenLogArchiveModalProps> = ({
                       <span>{downloadingId === archive.id ? (language === 'en' ? 'Downloading...' : '다운로드 중...') : (language === 'en' ? 'Download ZIP' : 'ZIP 다운로드')}</span>
                     </button>
 
-                    <button
-                      onClick={() => handleDelete(archive.id)}
-                      disabled={deletingId === archive.id}
-                      className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
-                      title={language === 'en' ? 'Delete from browser' : '브라우저에서 영구 삭제'}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {confirmDeleteId === archive.id ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleDelete(archive.id)}
+                          disabled={deletingId === archive.id}
+                          className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                        >
+                          {language === 'en' ? 'Delete' : '삭제'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                        >
+                          {language === 'en' ? 'Cancel' : '취소'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteId(archive.id)}
+                        disabled={deletingId === archive.id}
+                        className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+                        title={language === 'en' ? 'Delete from browser' : '브라우저에서 영구 삭제'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

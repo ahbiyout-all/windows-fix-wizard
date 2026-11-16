@@ -204,8 +204,8 @@ Start-Process "rstrui.exe"`;
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-5 bg-slate-950/80 backdrop-blur-md overflow-y-auto animate-fade-in">
+      <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden pb-safe flex flex-col mt-auto sm:my-auto max-h-[90dvh]">
         {/* Modal Top Header */}
         <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-sm flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
