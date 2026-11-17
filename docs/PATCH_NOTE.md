@@ -1,6 +1,146 @@
-# Patch Note - System Update (v3.103.4)
+# Patch Note - System Update (v3.105.5)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.105.5] - 2026-11-17
+
+### 🛡️ Security Hardening & Authentication (4차 심층 자아성찰 클라이언트 사칭 차단·SSRF 방어)
+- **클라이언트 Google OAuth 스텁 관리자 사칭 제거 및 세션 검증 (`src/App.tsx`, `server.ts`)**:
+  - `signInWithPopup` 로컬 스텁이 임의 방문자를 하드코딩된 관리자(`ahbiyoutwinfix@gmail.com`) 및 `'local-admin-token'`으로 자동 상승시키던 치명적 사칭 결함을 제거하고, 독립 실행 모드에서는 정직한 안내(`auth/oauth-not-configured`)를 표시해 이메일 로그인 또는 마스터 패스키를 사용하도록 개선.
+  - `getAuthHeaders()` 및 마운트 복구 로직이 `'local-admin-token'` 및 토큰 없는 로컬 플래그를 거부하도록 수정하고, `GET /api/admin/session` (`requireAdmin`) 엔드포인트를 신설해 만료·무효 세션 시 클라이언트 `isAdmin` 상태를 자동 해제하도록 보강.
+  - `handlePasskeyLogin`에서 Node 백엔드 404 응답 시 관리자 권한을 부여하던 우회 분기(`resp.status === 404`)를 제거(`IS_GITHUB_PAGES` 정적 호스팅 전용으로 한정).
+- **유지보수 링크 검사 SSRF 차단 및 입력값 검증 강화 (`server.ts`)**:
+  - `runMaintenance()`의 외부 참조 URL 검사 전 `isSafeExternalHttpUrl()` 검증을 적용해 `http`/`https` 외 프로토콜 및 `localhost`, `127.0.0.0/8`, `169.254.0.0/16`, 사설 대역(`10.*`, `172.16-31.*`, `192.168.*`) SSRF 호출을 선제 차단.
+  - `POST /api/visitor/log`의 `visitorId` 문자열 타입/길이 상한 검증과 `POST /api/github/config`·`dispatch-workflow`·`deploy-pages`·`push-to-repo`의 `repo`, `branch`, `workflowId` Git 참조 형식(`isValidGitRef`) 검증 추가.
+
+### 🔧 Bug Fixes & Stability Improvements
+- **대시보드 엔진 가동 시간 `NaN` 렌더링 방어 (`DashboardWidget.tsx`)**:
+  - `engineStartTime` 파싱 실패(`isNaN(startMs)`) 시 `NaN:NaN:NaN`이 노출되지 않고 `00:00:00`으로 안전하게 폴백되도록 방어.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`)**:
+  - 전체 모듈 기본 버전 표기를 `v3.105.5`로 통일.
+
+---
+
+## [v3.105.4] - 2026-11-17
+
+### 🛡️ Security Hardening & Authentication (3차 심층 자아성찰 보안·인증 무결성 강화)
+- **관리자 토큰/패스키/JWT 검증 및 세션 발급 보안 보강 (`server.ts`, `src/App.tsx`)**:
+  - `verifyAdminAuthHeader`에서 `ADMIN_PASSKEY` 미설정 시 임의의 4자 이상 토큰을 통과시키던 우회 경로를 제거하고, 서버 발급 난수 세션 맵(`issuedAdminSessions`), 상수 시간 SHA-256 다이제스트 비교(`timingSafeEqualStrings`), 비-만료(`exp > nowSec - 60`) 및 `alg !== 'none'` 기반 JWT 검증으로 통일.
+  - `/api/admin/verify-passkey`에서 서버 `ADMIN_PASSKEY` 미설정 시 `403`으로 거부하도록 강화하고, `/api/auth/login` 관리자 로그인 시 추적 가능한 관리자 세션 토큰을 발급하도록 수정.
+  - `POST /api/auth/google-sync`에 이메일 형식 검증, 차단(`blocked`) 계정 `403` 거부, 비인가 `admin` 역할 승격 차단을 적용하고 클라이언트 `handleGoogleAuth` 팝업 실패 시 관리자 폴백 로그인 제거.
+  - `/api/cron-sync` 시크릿 검증을 상수 시간 비교로 교체하고, `/api/admin/smtp/verify` 호스트/포트(`1~65535`) 입력 유효성 검증 추가.
+- **이메일 HTML 이스케이프·ReDoS 제거·PowerShell 인젝션 방어 (`server.ts`, `src/utils/psVerifier.ts`, `SystemRestoreUtility.tsx`)**:
+  - 알림 메일 HTML 템플릿(`sendEmailAlert`, `/api/engine/test-alert`)의 오류 메시지/수신자/호스트 값에 `escapeHtml()` 적용.
+  - PowerShell 검증기(`psVerifier.ts`, `/api/scripts/verify`)의 중첩 수량자 ReDoS 백틱 정규식(`/(\w+\`\w+)+/`)과 비이스케이프 문자 클래스 `[char]` 오탐(`sha256`, `error1` 등)을 `[char]` 리터럴 매칭으로 수정하고 비문자열 `script` 입력 `400` 처리 추가.
+  - `SystemRestoreUtility`의 복원 지점 이름(`customName`)에 PowerShell 이스케이프 처리 적용.
+
+### 🔧 Bug Fixes & Stability Improvements (시간대·백업 복원·GitOps·프론트엔드 정합성 수정)
+- **KST 타임존 오프셋 및 엔진 업타임 계산 버그 수정 (`server.ts`, `src/App.tsx`)**:
+  - `getKSTISOString`이 OS 로컬 타임존에 따라 시간이 어긋나던 결함을 UTC 기반 오프셋 계산으로 교체하고, `/api/engine/status` 및 `/api/engine/alert-logs`의 타임스탬프 이중 `+9시간`(`Z` 표기)을 표준 UTC ISO로 교정해 대시보드 가동 시간(Uptime)이 정상 카운트되도록 수정.
+- **Last-Known-Good `system_config` 객체 스키마 백업/복원 및 콜드 부트 시딩 레이스 해결 (`server.ts`)**:
+  - 객체형 JSON(`system_config.json`)이 배열 길이 계산(`undefined` -> `NaN`)으로 스냅샷에 누락되고 복원 시 건너뛰어지던 문제를 객체 스키마 전용 분기로 해결.
+  - 서버 시작 시 `await ensureIssuesSeeded()` 완료 후 포트를 리슨하도록 변경해 초기 부팅 직후 `/api/issues` 빈 응답 레이스 제거 및 `nodeLogs` 200건 상한 적용.
+- **GitOps 원클릭 동기화·내역 가져오기·My Lab 필터 분리 및 수집기 중복 제거 (`src/App.tsx`, `scripts/github-collector.ts`)**:
+  - `handleInstantSync`가 서버 `GITHUB_TOKEN` 보유 시 빈 클라이언트 토큰으로 GitHub API를 직접 호출하지 않고 `/api/github/push-to-repo`를 우선 경유하도록 개선.
+  - `handleImportHistory`의 `newItemsCount`/`newBookmarksCount` 비동기 `setState` 합산 버그를 동기 계산으로 수정하고 `fetchIssues` 로컬 캐시 `JSON.parse` 예외 방어 추가.
+  - `My Lab` 탭의 북마크·최근 조회 내역이 가이드북 필터링(`dbIssues`)에 영향받지 않도록 비필터링 통합 풀(`myLabIssuesPool`)을 사용하도록 교정.
+  - `github-collector.ts`의 동일 배치 내 정규화 제목 중복 차단 및 웹훅 JSON 안전 파싱 보강.
+
+### 📈 UI/UX & Performance Optimizations (아이프레임 샌드박스 호환성·Tailwind v4 정합성)
+- **금지 다이얼로그(`window.prompt`) 제거 및 샌드박스 클립보드·CSV 내보내기 개선 (`src/components/*`, `src/App.tsx`)**:
+  - `PowerShellVerifierPanel`과 `InteractiveRoadmap`의 `window.prompt` 폴백을 인라인 붙여넣기 에디터 UI로 교체하고, 전체 컴포넌트의 `navigator.clipboard.writeText` 호출에 `textarea` 폴백 가드 적용.
+  - `SystemEventLogPanel` CSV 내보내기를 UTF-8 BOM(`\uFEFF`) 기반 `Blob` 다운로드 + `URL.revokeObjectURL` 해제로 업그레이드하고 `DailyQuotaUsageChart`의 `0` 수치 폴백을 `??` 연산자로 교정.
+- **비표준 Tailwind CSS 클래스 전수 교정**:
+  - Tailwind v4에서 무시되던 `py-0.2`, `slate-850`, `slate-750`, `slate-450`, `slate-250`, `rose-955`, `rose-910`, `indigo-55`, `amber-605` 등 비표준 색상/간격 유틸리티를 표준 스케일로 일괄 교정.
+
+---
+
+## [v3.105.3] - 2026-11-17
+
+### 🛡️ Security Hardening & Authentication (2차 심층 자아성찰 보안 강화)
+- **회원가입 관리자 이메일 사칭·권한 상승 차단 및 상수 시간 해시 비교 (`server.ts`)**:
+  - `POST /api/auth/register`에서 시스템 최고 관리자 이메일 목록에 포함된 주소로 신규 가입을 시도할 경우 `403`으로 차단하고 신규 가입자 역할을 `member`로 고정.
+  - `verifyPasswordWithSalt`, `verify-passkey`, `/api/github/sync` (`CRON_SECRET`/`ADMIN_PASSKEY`) 비밀값 검증을 `crypto.timingSafeEqual` 상수 시간 비교로 통일.
+- **관리자 전용 AI·GitHub 프록시 엔드포인트 인증 및 강제 동기화 남용 차단 (`server.ts`, `src/App.tsx`)**:
+  - `/api/ai/verify-issue`, `/api/ai/reclassify-chunk`, `/api/ai/optimize-knowledge`, `/api/ai/search-trends`, `/api/ai/validate-key`에 `requireAdmin` 미들웨어(및 `validate-key` 레이트 리미터)를 적용하고 클라이언트 키 검증 호출에 관리자 `Authorization` 헤더를 포함.
+  - `/api/github/auto-integrate`의 `force: true` 우회 옵션이 관리자 인증을 통과한 요청에서만 적용되도록 제한.
+  - `PATCH /api/issues/:id`에서 `id` 필드 덮어쓰기 및 비정상 배열 페이로드를 차단.
+
+### 🔧 Bug Fixes & Stability Improvements (단건 AI 검증 영속화 및 리소스 누수 완전 해소)
+- **단건 AI 검증(`verifySingleIssueWithAI`) 서버 파일 DB·캐시 동기화 누락 수정 (`src/App.tsx`)**:
+  - 개별 이슈 AI 검증 및 자율 보완 폴백 결과가 Firestore뿐 아니라 Node 서버 파일 DB(`PATCH /api/issues/:id`), `fullIssuesPool`, `localStorage`, IndexedDB에도 즉시 영속화되도록 수정.
+- **잔여 Blob ObjectURL 및 UI 컴포넌트 타입 정합성 교정 (`InteractiveRoadmap.tsx`, `SystemInfoWidget.tsx`)**:
+  - 롤백 스크립트 다운로드 시 생성된 `Blob` URL이 다운로드 후 `URL.revokeObjectURL`로 해제되도록 수정.
+  - `SystemInfoWidget`의 `language` 타입에 `'ko'`를 정식 허용하고 클립보드 복사 실패 시 예외 처리 가드를 추가.
+
+---
+
+## [v3.105.2] - 2026-11-17
+
+### 🛡️ Security Hardening & Authentication (심층 보안 점검 및 인증 정합성 강화)
+- **로그 엔드포인트 경로 순회(Path Traversal) 및 비인가 로그 주입 차단 (`server.ts`)**:
+  - `GET /api/logs/:type`, `POST /api/logs/clear`에 엄격한 로그 타입 화이트리스트 검증(`admin`, `search`, `feedback`, `error`, `backend`, `visitor`, `script_rating`)을 적용하고 비정상 경로 파라미터를 `400`으로 차단.
+  - `POST /api/logs/add`에서 비공개 운영 로그(`admin`, `backend`, `visitor`) 기록 시 관리자 토큰(`verifyAdminAuthHeader`) 검증을 강제하고, `log` 페이로드의 Plain Object 유효성 검증을 추가.
+- **GitHub 프록시 SSRF/경로 조작 방어 및 패스키 인증 보강 (`server.ts`)**:
+  - `isValidGithubRepo` 검증(`^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$`)과 `pull-from-repo`의 `filePath` 상위 디렉터리(`..`) 이동 차단을 전체 GitHub API 프록시 라우트에 적용.
+  - `ADMIN_PASSKEY` 비교에 `crypto.timingSafeEqual` 적용 및 `/api/admin/event-logs`의 `limit` 쿼리 상한 클램핑(`1~500`) 적용.
+- **PDF 진단 리포트 HTML/URL XSS 이스케이프 (`src/App.tsx`)**:
+  - `handleGeneratePdfReport` 내 `escapeHtml()` 및 `sanitizeHttpUrl()`(`http:`/`https:` 프로토콜 전용) 유틸리티를 적용하여 사용자 질의, 진단 본문, 스크립트, 참고 링크의 스크립트 삽입 위험을 차단.
+
+### 🔧 Bug Fixes & Stability Improvements (자아성찰 풀스택 결함 수정)
+- **`system_config.json` 스키마 충돌 및 키 유실 버그 해결 (`server.ts`)**:
+  - `saveIssuesToServer()`가 `system_config.json`을 배열로 덮어써 저장된 `groqApiKey`·`openrouterApiKey`·유지보수 설정이 유실되던 결함을 `writeSystemConfigObject()` 병합 방식으로 수정.
+  - `getLkgRetentionCount()`와 `callSecondaryFreeAiApi()`가 객체 스키마를 직접 읽도록 `readSystemConfigObject()` 기반으로 통일.
+- **2차 AI 페일오버 키 오염 차단 (`server.ts`)**:
+  - `executeServerGeminiCall()`에서 Gemini 커스텀 키(`AIza...`)가 Groq/OpenRouter 키로 잘못 전달되던 문제를 접두사(`gsk_`, `sk-or-`) 검증 분기로 해결.
+- **관리자 중복 정리 엔드포인트·패스키 관리자 권한·AI 일괄 영속화 수정 (`src/App.tsx`)**:
+  - `handleCleanupDuplicates`가 존재하지 않던 `/api/admin/collections/import` 대신 `/api/admin/restore`를 호출하고 응답 검증 및 `fullIssuesPool` 동기화를 수행하도록 수정.
+  - `logAdminAction`, `optimizeAiModel`, `handleTriggerAiSearch`가 Google OAuth 세션뿐 아니라 패스키 기반 관리자(`isAdmin`)에서도 정상 작동하도록 개선하고 `logAdminAction`에 관리자 `Authorization` 헤더를 포함.
+  - `runAiVerification` 및 `handleBulkTranslate`가 Firestore 외에 서버 파일 DB(`/api/issues/:id` PATCH)와 로컬 상태·IndexedDB(`fullIssuesPool`)에도 즉시 영속화하도록 보완.
+
+### 📈 UI/UX & Performance Optimizations (메모리·타이머 누수 차단 및 버전 동기화)
+- **인메모리 맵/타이머/ObjectURL 누수 제거 (`server.ts`, `src/components/*`)**:
+  - `rateLimitStore`와 `visitorRequestRateMap`에 크기 임계치(1,000건 초과) 만료 엔트리 정리 로직을 추가하여 장기 가동 시 메모리 누수 방지.
+  - `InteractiveRoadmap`과 `QuickSystemScanUtility`의 `setInterval`/`setTimeout` 핸들을 `useRef`로 관리하여 언마운트 및 모달 닫힘 시 즉시 해제.
+  - `QuickSystemScanUtility`, `MemberManagementPanel`, `SystemEventLogPanel` 파일 다운로드 후 `URL.revokeObjectURL` 호출로 Blob 메모리 누수 제거.
+  - `PowerShellSandbox`의 `highlightPowerShell`에 `Prism?.languages?.powershell` 가드 추가 및 전체 시스템 버전을 `v3.105.2`로 동기화.
+
+---
+
+## [v3.105.1] - 2026-11-17
+
+### 🔧 Bug Fixes & Stability Improvements (관리자 페이지 중복·불필요 UI 및 데드코드 제거)
+- **미사용 위젯 임포트 및 중복 푸시 핸들러 정리 (`src/App.tsx`)**:
+  - 상단 대시보드 위젯(`DashboardWidget`) 내부와 중복 렌더링되던 별도 `DeploymentDashboardWidget` 임포트를 제거하고 경량 2카드 워크플로 스트립(`GitHubWorkflowStatus`)으로 통합.
+  - 히어로 카드의 원클릭 동기화·배포(`handleInstantSync`)와 기능이 중복되던 `isPushingGithub` 상태 및 `handlePushToGithub` 핸들러를 제거.
+- **Tier 네비게이션 및 레이블 정합성 보강 (`src/App.tsx`)**:
+  - 관리자 콘솔 Tier 바에 중복 배치되어 있던 `모바일 UX 연구` 버튼을 제거(모바일 퀵 메뉴 및 푸터에서 계속 접근 가능).
+  - Tier 4 영역의 구식 이전 안내 배너(`실험실 이전 기능`)를 제거하고 실제 기능에 맞게 `[4등급] 이슈 DB 검수 & 관리`로 명칭을 교정.
+
+### 📈 UI/UX & Performance Optimizations (모듈러 카드 밀도 최적화 및 중복 안내 제거)
+- **Tier 1 / Tier 2 정적·홍보성 블록 제거 및 정보 계층 정비 (`src/App.tsx`)**:
+  - `DailyQuotaUsageChart` 상단의 정적 장식 배너(`독립형 Jamstack & GitOps 무과금 데이터 엔진`)와 텔레메트리 카드 내 6카드 마케팅 그리드(`Jamstack 정적 데이터 보호 전략`) 및 하단 중복 각주 박스를 제거하여 실시간 지표 집중도 향상.
+  - GitOps 패널(`#github-actions-gitops-panel`)의 중복 상태 뱃지, 중복 `autoDeployPages` 스위치(상단 Collector 옵션과 통합), 135줄 규모의 중복 안내 블록(`GitHub Pages 공식 웹사이트 대용 운영 센터`)을 정리하고 3열 액션 툴바로 압축.
+  - AI Resilience Hub `strategy` 탭의 반복 요약 카드 4종을 제거하여 실시간 프로바이더 비교표가 즉시 노출되도록 개선.
+- **Tier 3 API 키·로그 관리·AI 도구 카드 통합 (`src/App.tsx`)**:
+  - API 키 저장 영역 하단의 중복 설명 문구(`브라우저 영구 저장소 / Zero Cloud DB`)를 제거.
+  - `#log-files-management-center`의 `visitor` 카드에 실시간 온라인 접속자 수(`activeNowCount`) 및 금일/누적 방문자 지표를 병합하고, 하단에 중복 배치되어 있던 5카드 로그 버튼 그리드를 제거.
+  - 고아 배치(3+1) 상태였던 `AI 자동 카테고리 분류` 카드를 4열 AI 데이터 운영 그리드(`lg:grid-cols-4`)로 통합하고, `데이터 백업 및 복원 고도화 엔진`을 독립 전폭 카드로 정돈.
+
+---
+
+## [v3.105.0] - 2026-11-16
+
+### 🚀 Major New Features & Integrations (관리자 페이지 리뉴얼 및 실시간 모듈러 카드 개편)
+- **모듈러 카드 레이아웃 및 실시간 차트 대시보드 구축 (`src/App.tsx`, `DailyQuotaUsageChart.tsx`, `DashboardWidget.tsx`)**:
+  - 관리자 콘솔 전반에 걸쳐 모듈러 카드 그리드와 실시간 인터랙티브 차트(ComposedChart, BarChart, AreaChart)를 통합 배치하여 가독성과 사용자 경험을 극대화.
+  - API 할당량 소진율 및 다중 모델(Gemini / Groq / OpenRouter 등) 헬스 모니터링 위젯을 실시간 갱신형으로 고도화.
+- **GitOps 자율 동기화 및 커밋 로그 모니터링 강화 (`src/App.tsx`, `GitHubWorkflowStatus.tsx`)**:
+  - GitHub Actions 워크플로 런너 상태, 24시간 수집 롤링 통계, 자동 동기화 카운트다운 타이머, 원클릭 정적 데이터셋 푸시 및 Pages 배포 패널을 유기적으로 연동.
+- **방문자 보안 및 자동 차단 규칙 실시간 모니터링 (`src/App.tsx`)**:
+  - 실시간 세션/접속자 통계, 디바이스/OS 분포, 비정상 방문자 자동 차단(Auto-block) 룰 설정을 모듈러 카드 형태로 직관적으로 관리.
 
 ---
 

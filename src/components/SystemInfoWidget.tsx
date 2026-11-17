@@ -38,7 +38,7 @@ export interface SystemInfoData {
 }
 
 interface SystemInfoWidgetProps {
-  language: 'en' | 'kr';
+  language: 'ko' | 'en' | 'kr';
   selectedVersionFilter: string;
   onApplyVersionFilter: (version: string) => void;
   guidebookQuery: string;
@@ -200,7 +200,7 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
 
   if (!sysInfo) return null;
 
-  const handleCopyDiagnostics = () => {
+  const handleCopyDiagnostics = async () => {
     const diagText = [
       `=== WinFix Diagnostic System Context ===`,
       `OS: ${sysInfo.osName} ${sysInfo.osVersion}`.trim(),
@@ -214,9 +214,25 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
       `=======================================`
     ].join('\n');
 
-    navigator.clipboard.writeText(diagText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(diagText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = diagText;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        if (document.execCommand('copy')) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }
+      } catch {}
+      document.body.removeChild(textarea);
+    }
   };
 
   const handleAppendOsToSearch = () => {

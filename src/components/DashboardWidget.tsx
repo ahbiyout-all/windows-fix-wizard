@@ -71,7 +71,7 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
     
     const updateUptime = () => {
       const diffMs = Date.now() - startMs;
-      if (diffMs <= 0) {
+      if (isNaN(startMs) || diffMs <= 0) {
         setUptimeStr('00:00:00');
         return;
       }

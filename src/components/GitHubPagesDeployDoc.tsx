@@ -311,14 +311,31 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
     runOneClickVerification();
   }, []);
 
+  const copySafe = async (text: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+    } catch (_) {}
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(textarea);
+  };
+
   const handleCopyYaml = () => {
-    navigator.clipboard.writeText(activeYaml);
+    void copySafe(activeYaml);
     setCopiedYaml(true);
     setTimeout(() => setCopiedYaml(false), 2500);
   };
 
   const handleCopyBadgeMd = () => {
-    navigator.clipboard.writeText(badgeMarkdownSnippet);
+    void copySafe(badgeMarkdownSnippet);
     setCopiedBadgeMd(true);
     setTimeout(() => setCopiedBadgeMd(false), 2500);
   };

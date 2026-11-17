@@ -156,6 +156,8 @@ export function InteractiveRoadmap({ language }: Props) {
   const [decodedPayload, setDecodedPayload] = useState<string>('');
   const [editorCopied, setEditorCopied] = useState<boolean>(false);
   const [editorPasted, setEditorPasted] = useState<boolean>(false);
+  const [showManualPasteBox, setShowManualPasteBox] = useState<boolean>(false);
+  const [manualPasteDraft, setManualPasteDraft] = useState<string>('');
 
   const handleEditorCopy = async () => {
     try {
@@ -199,24 +201,16 @@ export function InteractiveRoadmap({ language }: Props) {
       if (text !== undefined && text !== null && text.trim() !== '') {
         setActiveScript(text);
         runLiveDeepDiagnostics(text);
+        setShowManualPasteBox(false);
         setEditorPasted(true);
         setTimeout(() => setEditorPasted(false), 2000);
         return;
       }
     } catch (err) {
       console.warn("Clipboard read blocked (normal iframe behavior):", err);
-      const manualText = window.prompt(
-        language === 'ko' 
-          ? "보안 정책으로 웹페이지에서 직접 붙여넣기가 제한되어 있습니다.\n아래 입력 상자에 코드(Ctrl+V)를 붙여넣은 뒤 [확인]을 클릭해 주세요:" 
-          : "Web browser safety policy restricts direct clipboard pasting.\nPlease paste (Ctrl+V) the script content in the input box below:"
-      );
-      if (manualText !== null) {
-        setActiveScript(manualText);
-        runLiveDeepDiagnostics(manualText);
-        setEditorPasted(true);
-        setTimeout(() => setEditorPasted(false), 2000);
-      }
     }
+    setManualPasteDraft('');
+    setShowManualPasteBox(true);
   };
 
   // Phase 6 Multi-Terminal / Cloud Vault Sync states with real Backend API Integration
@@ -236,6 +230,8 @@ export function InteractiveRoadmap({ language }: Props) {
   ]);
 
   const intervalRef = useRef<any>(null);
+  const simIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reflectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Poll real-time Multi-Node telemetry and Sentinel logs from Backend API
   useEffect(() => {
@@ -292,12 +288,19 @@ export function InteractiveRoadmap({ language }: Props) {
         }
       } else {
         // Client-side local simulation fallback when viewing unauthenticated
+        if (simIntervalRef.current) {
+          clearInterval(simIntervalRef.current);
+          simIntervalRef.current = null;
+        }
         let simProgress = 0;
-        const simInterval = setInterval(() => {
+        simIntervalRef.current = setInterval(() => {
           simProgress += 20;
           setRecoveryProgress(simProgress);
           if (simProgress >= 100) {
-            clearInterval(simInterval);
+            if (simIntervalRef.current) {
+              clearInterval(simIntervalRef.current);
+              simIntervalRef.current = null;
+            }
             setIsRecovering(false);
             setNodes(prev => prev.map(n => ({ ...n, status: 'healthy' })));
           }
@@ -332,8 +335,13 @@ export function InteractiveRoadmap({ language }: Props) {
       const resp = await fetch("/api/audit/self-reflection", { method: "POST", headers });
       const data = await parseJsonResponse(resp);
       
+      if (reflectionIntervalRef.current) {
+        clearInterval(reflectionIntervalRef.current);
+        reflectionIntervalRef.current = null;
+      }
+
       let step = 0;
-      const interval = setInterval(() => {
+      reflectionIntervalRef.current = setInterval(() => {
         step += 25;
         setReflectionProgress(step);
 
@@ -362,7 +370,10 @@ export function InteractiveRoadmap({ language }: Props) {
             setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-3' ? data.auditResults[2] : item));
           }
         } else if (step === 100) {
-          clearInterval(interval);
+          if (reflectionIntervalRef.current) {
+            clearInterval(reflectionIntervalRef.current);
+            reflectionIntervalRef.current = null;
+          }
           setIsSelfReflecting(false);
           setReflectionLogs(prev => [
             ...prev,
@@ -384,13 +395,18 @@ export function InteractiveRoadmap({ language }: Props) {
     }
   };
 
-  const intervalRefRaw = useRef<any>(null); // renamed just in case to avoid conflict but can keep original if unused
-
-
   useEffect(() => {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+      }
+      if (simIntervalRef.current) {
+        clearInterval(simIntervalRef.current);
+        simIntervalRef.current = null;
+      }
+      if (reflectionIntervalRef.current) {
+        clearInterval(reflectionIntervalRef.current);
+        reflectionIntervalRef.current = null;
       }
     };
   }, []);
@@ -717,8 +733,28 @@ export function InteractiveRoadmap({ language }: Props) {
     }, 450);
   };
 
-  const handleCopyText = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyText = async (text: string, id: string) => {
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch (_) {
+      copied = false;
+    }
+    if (!copied) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+      } catch (_) {}
+      document.body.removeChild(textarea);
+    }
     setCopiedStates(prev => ({ ...prev, [id]: true }));
     setTimeout(() => {
       setCopiedStates(prev => ({ ...prev, [id]: false }));
@@ -747,7 +783,7 @@ export function InteractiveRoadmap({ language }: Props) {
       {/* Main Content Pane */}
       <div className="p-6 flex flex-col gap-6">
         {/* Beginner Mode Toggle Pill Banner */}
-        <div className="p-4 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-150/60 dark:border-indigo-900 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="p-4 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="bg-indigo-100 dark:bg-indigo-900 p-2 rounded-lg text-indigo-700 dark:text-indigo-300 shrink-0 mt-0.5 sm:mt-0">
               <HelpCircle className="w-5 h-5 animate-pulse" />
@@ -769,7 +805,7 @@ export function InteractiveRoadmap({ language }: Props) {
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-2 shrink-0 self-stretch sm:self-auto justify-center cursor-pointer ${
               isBeginnerMode 
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 text-white' 
-                : 'bg-slate-200 hover:bg-slate-350 dark:bg-slate-800 dark:hover:bg-slate-705 text-slate-700 dark:text-slate-300'
+                : 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
             }`}
           >
             <span>
@@ -782,17 +818,17 @@ export function InteractiveRoadmap({ language }: Props) {
 
         {/* Beautifully simplified 3-step numbered sequence guide */}
         {isBeginnerMode && (
-          <div className="bg-slate-50/50 dark:bg-slate-950/30 p-5 rounded-2xl border border-slate-150 dark:border-slate-850/65 text-left animate-fade-in shadow-xs">
+          <div className="bg-slate-50/50 dark:bg-slate-950/30 p-5 rounded-2xl border border-slate-200 dark:border-slate-800/65 text-left animate-fade-in shadow-xs">
             <div className="flex items-center gap-2 mb-4">
               <span className="text-lg">📢</span>
-              <span className="text-xs font-extrabold text-blue-650 dark:text-blue-400 uppercase tracking-wider">
+              <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                 {language === 'ko' ? '초보자 이용 방법: 3단계 걱정 없는 수리 비결' : 'Easy 3-Step Verification Guide'}
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-150 dark:border-slate-800 relative">
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 relative">
                 <span className="absolute right-3 top-2 text-xl font-bold font-mono text-slate-200 dark:text-slate-800">1</span>
-                <span className="text-xs font-bold text-slate-850 dark:text-slate-205 block mb-1">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
                   {language === 'ko' ? '1. 수리 명령어 가볍게 누르기' : '1. Choose Repair Preset'}
                 </span>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
@@ -802,9 +838,9 @@ export function InteractiveRoadmap({ language }: Props) {
                 </p>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-150 dark:border-slate-800 relative">
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 relative">
                 <span className="absolute right-3 top-2 text-xl font-bold font-mono text-slate-200 dark:text-slate-800">2</span>
-                <span className="text-xs font-bold text-slate-850 dark:text-slate-205 block mb-1">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
                   {language === 'ko' ? '2. 가상 컴퓨터로 모의 검사하기' : '2. Run Safe Simulation'}
                 </span>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
@@ -814,9 +850,9 @@ export function InteractiveRoadmap({ language }: Props) {
                 </p>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-150 dark:border-slate-800 relative">
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 relative">
                 <span className="absolute right-3 top-2 text-xl font-bold font-mono text-slate-200 dark:text-slate-800">3</span>
-                <span className="text-xs font-bold text-slate-850 dark:text-slate-205 block mb-1">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
                   {language === 'ko' ? '3. 되돌리기 안심 스크립트 챙기기' : '3. Capture Safety Insurance'}
                 </span>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
@@ -885,7 +921,7 @@ export function InteractiveRoadmap({ language }: Props) {
                       className={`flex-1 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg border transition-all cursor-pointer ${
                         isAdminElevated 
                           ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' 
-                          : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-205 dark:border-slate-800'
+                          : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
                       }`}
                     >
                       👑 Admin Elevated
@@ -899,7 +935,7 @@ export function InteractiveRoadmap({ language }: Props) {
                       className={`flex-1 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg border transition-all cursor-pointer ${
                         !isAdminElevated 
                           ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900' 
-                          : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-205 dark:border-slate-800'
+                          : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
                       }`}
                     >
                       👤 Standard User
@@ -937,12 +973,12 @@ export function InteractiveRoadmap({ language }: Props) {
 
               {/* Beginner Active Preset Explanation Card */}
               {isBeginnerMode && (
-                <div className="mb-4 bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-550/20 p-4 rounded-xl flex flex-col gap-1.5 animate-fade-in text-left">
+                <div className="mb-4 bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex flex-col gap-1.5 animate-fade-in text-left">
                   <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4" />
                     {language === 'ko' ? '💡 초보자 안심 해설: 이 명령어는 내 컴퓨터에 어떤 영향을 주나요?' : '💡 Easy Explanation: What does this command do?'}
                   </span>
-                  <p className="text-xs sm:text-sm text-slate-650 dark:text-slate-300 leading-relaxed font-normal">
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
                     {activeScript === SCRIPTS_PRESETS[0].code ? (
                       language === 'ko' 
                         ? "컴퓨터가 백그라운드에서 윈도우 업데이트 파일을 몰래 다른 컴퓨터와 공유하며 내 소중한 인터넷 속도(대역폭)를 뺏어 먹는 최적화 기능(Delivery Optimization)을 꺼두어 컴퓨터 속도를 얌전하게 회복시키는 안전한 세팅법입니다."
@@ -979,7 +1015,7 @@ export function InteractiveRoadmap({ language }: Props) {
                     <button
                       type="button"
                       onClick={handleEditorCopy}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 dark:active:bg-slate-900 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[11px] font-semibold border border-slate-250 dark:border-slate-700/60 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 dark:active:bg-slate-900 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[11px] font-semibold border border-slate-200 dark:border-slate-700/60 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
                       title={language === 'ko' ? '코드 복사' : 'Copy Code'}
                     >
                       <Copy className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -990,7 +1026,7 @@ export function InteractiveRoadmap({ language }: Props) {
                     <button
                       type="button"
                       onClick={handleEditorPaste}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 dark:active:bg-slate-900 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[11px] font-semibold border border-slate-250 dark:border-slate-700/60 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 dark:active:bg-slate-900 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[11px] font-semibold border border-slate-200 dark:border-slate-700/60 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
                       title={language === 'ko' ? '클립보드 내용 붙여넣기' : 'Paste from Clipboard'}
                     >
                       <Clipboard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
@@ -1004,7 +1040,7 @@ export function InteractiveRoadmap({ language }: Props) {
                         setActiveScript('');
                         setSafetyScore(null);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 active:bg-rose-200 dark:active:bg-rose-955/60 text-rose-600 dark:text-rose-300 hover:text-rose-800 dark:hover:text-rose-100 text-[11px] font-semibold border border-rose-200 dark:border-rose-900/40 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 active:bg-rose-200 dark:active:bg-rose-950/60 text-rose-600 dark:text-rose-300 hover:text-rose-800 dark:hover:text-rose-100 text-[11px] font-semibold border border-rose-200 dark:border-rose-900/40 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
                       title={language === 'ko' ? '스크립트 전체 비우기' : 'Clear All'}
                     >
                       <Trash2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
@@ -1012,6 +1048,46 @@ export function InteractiveRoadmap({ language }: Props) {
                     </button>
                   </div>
                 </div>
+                {showManualPasteBox && (
+                  <div className="mb-2.5 p-3 rounded-lg bg-slate-900 border border-slate-700 space-y-2">
+                    <p className="text-[11px] text-amber-300">
+                      {language === 'ko'
+                        ? '브라우저 정책으로 자동 읽기가 제한되었습니다. 아래 입력창에 Ctrl+V 후 [적용]을 클릭하세요.'
+                        : 'Clipboard auto-read is restricted. Paste (Ctrl+V) below and click Apply.'}
+                    </p>
+                    <textarea
+                      className="w-full h-20 p-2 font-mono text-xs bg-slate-950 text-slate-200 rounded border border-slate-700 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                      value={manualPasteDraft}
+                      onChange={(e) => setManualPasteDraft(e.target.value)}
+                      placeholder={language === 'ko' ? '여기에 Ctrl+V로 붙여넣으세요...' : 'Paste (Ctrl+V) here...'}
+                      autoFocus
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowManualPasteBox(false)}
+                        className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                      >
+                        {language === 'ko' ? '취소' : 'Cancel'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (manualPasteDraft.trim() !== '') {
+                            setActiveScript(manualPasteDraft);
+                            runLiveDeepDiagnostics(manualPasteDraft);
+                            setEditorPasted(true);
+                            setTimeout(() => setEditorPasted(false), 2000);
+                          }
+                          setShowManualPasteBox(false);
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                      >
+                        {language === 'ko' ? '적용' : 'Apply'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <textarea
                   className="w-full h-36 p-3.5 font-mono text-sm bg-slate-950 text-slate-200 rounded-lg border border-slate-800 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   value={activeScript}
@@ -1048,14 +1124,14 @@ export function InteractiveRoadmap({ language }: Props) {
               {/* Beginner Jargon Buster Glossary */}
               {isBeginnerMode && (
                 <div className="mb-4 p-5 bg-indigo-50/30 dark:bg-indigo-950/10 border border-indigo-100/30 dark:border-indigo-900/30 rounded-xl text-left animate-fade-in">
-                  <span className="text-xs sm:text-sm font-bold text-indigo-650 dark:text-indigo-400 block mb-3 flex items-center gap-1.5">
-                    <HelpCircle className="w-4 h-4 text-indigo-505" />
+                  <span className="text-xs sm:text-sm font-bold text-indigo-600 dark:text-indigo-400 block mb-3 flex items-center gap-1.5">
+                    <HelpCircle className="w-4 h-4 text-indigo-500" />
                     {language === 'ko' ? '🎓 초보자용 핵심 용어 돋보기 사전' : '🎓 Absolute Beginner Jargon Glossary'}
                   </span>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {JARGON_DICTIONARY.map((item, idx) => (
-                      <div key={idx} className="p-3.5 bg-white dark:bg-slate-900/50 rounded-lg border border-slate-150 dark:border-slate-800/80 hover:border-indigo-150 dark:hover:border-indigo-950 transition-colors flex flex-col gap-1.5">
-                        <span className="text-xs sm:text-[13px] font-bold text-indigo-650 dark:text-indigo-400 block">
+                      <div key={idx} className="p-3.5 bg-white dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-800/80 hover:border-indigo-200 dark:hover:border-indigo-950 transition-colors flex flex-col gap-1.5">
+                        <span className="text-xs sm:text-[13px] font-bold text-indigo-600 dark:text-indigo-400 block">
                           {language === 'ko' ? item.termKo : item.term}
                         </span>
                         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
@@ -1098,7 +1174,7 @@ export function InteractiveRoadmap({ language }: Props) {
                   {/* Left Column (Score Card) */}
                   <div className="col-span-1 lg:col-span-4 flex flex-col gap-4">
                     {/* Rating Index card */}
-                    <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-150 dark:border-slate-800/80 shadow-xs h-full flex flex-col justify-center">
+                    <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-xs h-full flex flex-col justify-center">
                       <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase font-mono block mb-3">
                         {language === 'ko' ? '파이프라인 종합 정합성 부적합 분석' : 'ACC_PRIVILEGE QUALITY DIAGNOSIS'}
                       </span>
@@ -1137,17 +1213,17 @@ export function InteractiveRoadmap({ language }: Props) {
                   {/* Right Column (Heuristics Checklist) */}
                   <div className="col-span-1 lg:col-span-8 flex flex-col gap-4">
                     {/* Preflight Heuristics checklist (Phase 3 step 2 / step 3 realized!) */}
-                    <div className="bg-slate-50/50 dark:bg-slate-950/30 border border-slate-150 dark:border-slate-800/60 rounded-xl p-4 flex-1">
+                    <div className="bg-slate-50/50 dark:bg-slate-950/30 border border-slate-200 dark:border-slate-800/60 rounded-xl p-4 flex-1">
                       <h6 className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block mb-3 font-mono">
                         {language === 'ko' ? '1단계: 환경별 레지스트리 정합성 및 위험 체크' : 'Phase 3 Checkpoints Profile'}
                       </h6>
 
                       <div className="space-y-2.5">
                         {/* OS target aligned checklist item */}
-                        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200/50 dark:border-slate-850 flex items-start gap-2.5">
+                        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200/50 dark:border-slate-800 flex items-start gap-2.5">
                           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                           <div>
-                            <span className="text-[11px] font-bold text-slate-755 dark:text-slate-300">
+                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                               {language === 'ko' ? '운영체제 아키텍처 지원 정합성 통과' : 'OS Build Architecture Alignment'}
                             </span>
                             <p className="text-[10px] text-slate-400 dark:text-slate-500">
@@ -1157,14 +1233,14 @@ export function InteractiveRoadmap({ language }: Props) {
                         </div>
 
                         {/* Admin validation item */}
-                        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200/50 dark:border-slate-850 flex items-start gap-2.5">
+                        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200/50 dark:border-slate-800 flex items-start gap-2.5">
                           {isAdminElevated ? (
                             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                           ) : (
                             <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                           )}
                           <div>
-                            <span className="text-[11px] font-bold text-slate-755 dark:text-slate-300">
+                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                               {language === 'ko' ? '커널 권한 보안 채널 검정 완료' : 'Preflight Kernel Exception Check'}
                             </span>
                             <p className="text-[10px] text-slate-400 dark:text-slate-500">
@@ -1183,7 +1259,7 @@ export function InteractiveRoadmap({ language }: Props) {
                               <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
                                 {language === 'ko' ? '오타 및 상태 비호환 위협 가이드' : 'Configuration Constraint Detected'}
                               </span>
-                              <p className="text-[10px] text-amber-600/90 dark:text-amber-350/90 mt-0.5 leading-normal">
+                              <p className="text-[10px] text-amber-600/90 dark:text-amber-300/90 mt-0.5 leading-normal">
                                 {warn}
                               </p>
                             </div>
@@ -1216,7 +1292,7 @@ export function InteractiveRoadmap({ language }: Props) {
 
                 {/* Row 2/Bottom Block: Safe rollback synthesis (Phase 4 outputs) in full-width ("한줄창") */}
                 <div id="rollback-result-section" className="col-span-12 flex flex-col gap-4 scroll-mt-12">
-                  <div className="bg-slate-950 border border-slate-850 rounded-xl p-5 md:p-6 shadow-inner relative overflow-hidden">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 md:p-6 shadow-inner relative overflow-hidden">
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2">
                         <div className="flex items-center gap-2">
@@ -1252,7 +1328,7 @@ export function InteractiveRoadmap({ language }: Props) {
                       </p>
 
                       {isBeginnerMode && (
-                        <div className="mb-3 bg-sky-500/10 border border-sky-550/20 p-4 rounded-xl flex flex-col gap-1.5 text-left text-slate-300 animate-fade-in">
+                        <div className="mb-3 bg-sky-500/10 border border-sky-500/20 p-4 rounded-xl flex flex-col gap-1.5 text-left text-slate-300 animate-fade-in">
                           <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
                             <ShieldCheck className="w-4 h-4 text-sky-400" />
                             {language === 'ko' ? '🛡️ 초보자 안심 요약 보험 카드' : '🛡️ Absolute Safe-Rollback Card'}
@@ -1272,7 +1348,7 @@ export function InteractiveRoadmap({ language }: Props) {
                     </div>
 
                     {/* Registry restoration card download helper */}
-                    <div className="mt-4 pt-3.5 border-t border-slate-850 flex flex-wrap gap-2.5 items-center justify-between">
+                    <div className="mt-4 pt-3.5 border-t border-slate-800 flex flex-wrap gap-2.5 items-center justify-between">
                       <div className="flex items-center gap-2 text-[10px] text-slate-400">
                         <Database className="w-3.5 h-3.5 text-blue-500" />
                         <span>{language === 'ko' ? '.REG 자동 압축 준비 완료' : 'Local REG binary available'}</span>
@@ -1282,11 +1358,13 @@ export function InteractiveRoadmap({ language }: Props) {
                         onClick={() => {
                           const element = document.createElement("a");
                           const file = new Blob([rollbackScript], {type: 'text/plain'});
-                          element.href = URL.createObjectURL(file);
+                          const url = URL.createObjectURL(file);
+                          element.href = url;
                           element.download = "UWES_Secure_Rollback_Surcharge.ps1";
                           document.body.appendChild(element);
                           element.click();
                           document.body.removeChild(element);
+                          setTimeout(() => URL.revokeObjectURL(url), 1000);
                         }}
                         className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                       >

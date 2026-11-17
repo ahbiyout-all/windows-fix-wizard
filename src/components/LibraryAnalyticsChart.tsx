@@ -343,7 +343,7 @@ export const LibraryAnalyticsChart: React.FC<LibraryAnalyticsChartProps> = ({
 
       {/* Bento KPI Summary Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-850/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
+        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
             <span>{language === 'en' ? 'Top Category' : '최다 진단 카테고리'}</span>
             <Layers className="w-3.5 h-3.5 text-indigo-500" />
@@ -360,7 +360,7 @@ export const LibraryAnalyticsChart: React.FC<LibraryAnalyticsChartProps> = ({
           </div>
         </div>
 
-        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-850/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
+        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
             <span>{language === 'en' ? 'Total Queries' : '총 누적 쿼리 빈도'}</span>
             <Activity className="w-3.5 h-3.5 text-blue-500" />
@@ -373,7 +373,7 @@ export const LibraryAnalyticsChart: React.FC<LibraryAnalyticsChartProps> = ({
           </div>
         </div>
 
-        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-850/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
+        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
             <span>{language === 'en' ? 'AI Diagnosis Rate' : 'AI 해결 진단 비중'}</span>
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
@@ -390,7 +390,7 @@ export const LibraryAnalyticsChart: React.FC<LibraryAnalyticsChartProps> = ({
           </div>
         </div>
 
-        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-850/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
+        <div className="p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
             <span>{language === 'en' ? 'Frequent Keyword' : '주요 빈발 오류 코드'}</span>
             <Zap className="w-3.5 h-3.5 text-rose-500" />

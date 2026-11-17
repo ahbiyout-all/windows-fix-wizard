@@ -53,14 +53,16 @@ import { analyzePowerShellScript, autoFixDiagnostic, autoFixAllFixable, PowerShe
  */
 export function highlightPowerShell(code: string): string {
   try {
-    return Prism.highlight(code || '', Prism.languages.powershell, 'powershell');
+    if (Prism?.languages?.powershell) {
+      return Prism.highlight(code || '', Prism.languages.powershell, 'powershell');
+    }
   } catch (err) {
     console.warn("Prism PowerShell syntax highlight fallback:", err);
-    return (code || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
   }
+  return (code || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 export interface ScriptVersion {
@@ -843,10 +845,23 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
   };
 
   // Safe clipboard helper
-  const safeCopyText = (text: string) => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {});
-    }
+  const safeCopyText = async (text: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+    } catch {}
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+    } catch {}
+    document.body.removeChild(textarea);
   };
 
   // Copy helpers
@@ -1037,7 +1052,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-blue-500 bg-slate-50 dark:bg-slate-800/40 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 text-left transition-all group cursor-pointer"
             >
               <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
-                <span className="px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                   {preset.category}
                 </span>
               </div>
@@ -1128,7 +1143,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                 >
                   <History className="w-3.5 h-3.5 text-indigo-400" />
                   <span>{language === 'en' ? 'Versions' : '버전 관리'}</span>
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-indigo-900 text-indigo-200">
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-900 text-indigo-200">
                     {versions.length}
                   </span>
                 </button>
@@ -1382,7 +1397,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                 >
                   <Activity className="w-3.5 h-3.5" />
                   <span>{language === 'en' ? 'V-Services' : '가상 서비스'}</span>
-                  <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-300">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">
                     {services.filter(s => s.status === 'Running').length}/{services.length}
                   </span>
                 </button>
@@ -1435,11 +1450,11 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                   <Sliders className="w-3.5 h-3.5 text-emerald-400" />
                   <span>{language === 'en' ? 'Rule Linter' : '실시간 린터'}</span>
                   {(lintReport.errorCount > 0 || lintReport.warningCount > 0) ? (
-                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${lintReport.errorCount > 0 ? 'bg-rose-900 text-rose-200' : 'bg-amber-900 text-amber-200'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${lintReport.errorCount > 0 ? 'bg-rose-900 text-rose-200' : 'bg-amber-900 text-amber-200'}`}>
                       {lintReport.errorCount + lintReport.warningCount}
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800/40">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800/40">
                       100/100
                     </span>
                   )}
@@ -1673,7 +1688,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                       <div>
                         <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
                           <span>{language === 'en' ? 'PowerShell Best-Practices Quality Score' : 'PowerShell 룰 기반 스크립트 품질 점수'}</span>
-                          <span className="px-2 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300">
                             PSScriptAnalyzer
                           </span>
                         </h4>

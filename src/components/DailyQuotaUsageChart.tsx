@@ -349,7 +349,13 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                   {language === 'en' ? 'Local Cache Hits' : '로컬 캐시 처리 (저비용)'}
                 </p>
                 <div className="text-lg font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {Math.round(((todayRecord.indexedDbQueries || 48500) / ((todayRecord.indexedDbQueries || 48500) + (todayRecord.serverDbReads || 1200) + (todayRecord.geminiRequests || 300))) * 100)}%
+                  {(() => {
+                    const idb = todayRecord.indexedDbQueries ?? 48500;
+                    const reads = todayRecord.serverDbReads ?? 1200;
+                    const ai = todayRecord.geminiRequests ?? 300;
+                    const total = idb + reads + ai;
+                    return total > 0 ? Math.round((idb / total) * 100) : 100;
+                  })()}%
                 </div>
                 <p className="text-[9px] text-slate-500">Served by IndexedDB</p>
               </div>
@@ -358,7 +364,13 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
                   {language === 'en' ? 'AI Calls' : 'AI 진단 호출'}
                 </p>
                 <div className="text-lg font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {100 - Math.round(((todayRecord.indexedDbQueries || 48500) / ((todayRecord.indexedDbQueries || 48500) + (todayRecord.serverDbReads || 1200) + (todayRecord.geminiRequests || 300))) * 100)}%
+                  {(() => {
+                    const idb = todayRecord.indexedDbQueries ?? 48500;
+                    const reads = todayRecord.serverDbReads ?? 1200;
+                    const ai = todayRecord.geminiRequests ?? 300;
+                    const total = idb + reads + ai;
+                    return total > 0 ? 100 - Math.round((idb / total) * 100) : 0;
+                  })()}%
                 </div>
                 <p className="text-[9px] text-slate-500">Gemini AI Engine</p>
               </div>

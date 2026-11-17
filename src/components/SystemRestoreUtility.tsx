@@ -84,6 +84,7 @@ export const SystemRestoreUtility: React.FC<SystemRestoreUtilityProps> = ({
 
   // Generated PowerShell Script for 1-Click System Restore Point Creation
   const creationScript = useMemo(() => {
+    const safeName = customName.replace(/[\r\n]+/g, ' ').replace(/[`"$]/g, '`$&');
     return `# ==============================================================================
 # Windows Fix Wizard - Safe System Restore Point Creator
 # Target Drive: C:\\ | Type: ${restorePointType}
@@ -109,13 +110,13 @@ if (Test-Path $regPath) {
 }
 
 Write-Host ""
-Write-Host ">>> [3/3] Creating System Restore Point [${customName}]..." -ForegroundColor Cyan
+Write-Host ">>> [3/3] Creating System Restore Point [${safeName}]..." -ForegroundColor Cyan
 try {
-    Checkpoint-Computer -Description "${customName}" -RestorePointType "${restorePointType}" -ErrorAction Stop
+    Checkpoint-Computer -Description "${safeName}" -RestorePointType "${restorePointType}" -ErrorAction Stop
     Write-Host ""
     Write-Host "==============================================================================" -ForegroundColor Green
     Write-Host " [SUCCESS] System Restore Point created successfully!" -ForegroundColor Green
-    Write-Host " Description: ${customName}" -ForegroundColor White
+    Write-Host " Description: ${safeName}" -ForegroundColor White
     Write-Host " Type       : ${restorePointType}" -ForegroundColor White
     Write-Host " Timestamp  : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor White
     Write-Host " You can now execute repair scripts with 100% rollback guarantee." -ForegroundColor Green
@@ -168,8 +169,26 @@ Start-Process "rstrui.exe"`;
   }, [selectedPointForRollback]);
 
   // Copy to clipboard helper
-  const copyScript = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+  const copyScript = async (text: string, id: string) => {
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(textarea);
+    }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2500);
   };

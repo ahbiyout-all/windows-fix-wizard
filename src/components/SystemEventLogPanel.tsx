@@ -165,7 +165,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
 • 화면 해상도: 1920 x 1080 (DPI 1.25x, 24-bit)
 • 네트워크 상태: 온라인 정상 연결
 • 모드: 가상 참조 시뮬레이션`;
-      navigator.clipboard.writeText(win11Spec);
+      void copyTextSafe(win11Spec);
       setCopiedSpec(true);
       setTimeout(() => setCopiedSpec(false), 2000);
       return;
@@ -181,14 +181,31 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
 • 브라우저 환경: ${systemInfo.browserName} v${systemInfo.browserVersion}
 • 네트워크 상태: ${systemInfo.isOnline ? '온라인 연결됨' : '오프라인'}
 • 시간대 및 로캘: ${systemInfo.timezone} (${systemInfo.language})`;
-    navigator.clipboard.writeText(specText);
+    void copyTextSafe(specText);
     setCopiedSpec(true);
     setTimeout(() => setCopiedSpec(false), 2000);
   };
 
+  const copyTextSafe = async (text: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+    } catch (_) {}
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(textarea);
+  };
+
   const handleCopyPowerShellCommand = () => {
     const psCmd = `Get-WinEvent -LogName System,Application -MaxEvents 50 | Select-Object TimeCreated, Id, LevelDisplayName, ProviderName, Message | ConvertTo-Json -Depth 2 | Out-File -FilePath "$HOME\\Desktop\\MyWindowsLogs.json" -Encoding utf8; Write-Host "내 PC 이벤트 로그 50건이 바탕화면 MyWindowsLogs.json 파일로 저장되었습니다!" -ForegroundColor Green`;
-    navigator.clipboard.writeText(psCmd);
+    void copyTextSafe(psCmd);
     setCopiedPsScript(true);
     setTimeout(() => setCopiedPsScript(false), 2500);
   };
@@ -206,7 +223,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
         // user cancelled or share failed, fallback to copy
       }
     }
-    navigator.clipboard.writeText(psCmd);
+    void copyTextSafe(psCmd);
     setCopiedShareLink(true);
     setTimeout(() => setCopiedShareLink(false), 3000);
   };
@@ -385,6 +402,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
     a.href = url;
     a.download = `Windows_Event_Logs_${selectedLevel}_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleExportCsv = () => {
@@ -399,17 +417,21 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
       `"${l.source.replace(/"/g, '""')}"`,
       `"${l.message.replace(/"/g, '""')}"`
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvString = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = encodedUri;
+    a.href = url;
     a.download = `Windows_Event_Logs_${selectedLevel}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleCopyXml = (xml?: string) => {
     if (!xml) return;
-    navigator.clipboard.writeText(xml);
+    void copyTextSafe(xml);
     setCopiedXml(true);
     setTimeout(() => setCopiedXml(false), 2000);
   };

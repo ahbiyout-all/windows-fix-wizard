@@ -28,13 +28,26 @@ import {
   type WorkloadType
 } from "./lib/ai-resilience-router";
 
-const getKSTISOString = () => {
-  const now = new Date();
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const kst = new Date(utc + (9 * 3600000));
+const getKSTISOString = (ts: number = Date.now()) => {
+  const kst = new Date(ts + 9 * 3600000);
   const pad = (n: number) => n.toString().padStart(2, '0');
   const msPad = (n: number) => n.toString().padStart(3, '0');
-  return `${kst.getFullYear()}-${pad(kst.getMonth() + 1)}-${pad(kst.getDate())}T${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}.${msPad(kst.getMilliseconds())}+09:00`;
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}T${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}:${pad(kst.getUTCSeconds())}.${msPad(kst.getUTCMilliseconds())}+09:00`;
+};
+
+const escapeHtml = (value: unknown): string => {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+const timingSafeEqualStrings = (a: string, b: string): boolean => {
+  const hashA = crypto.createHash('sha256').update(a, 'utf8').digest();
+  const hashB = crypto.createHash('sha256').update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(hashA, hashB);
 };
 
 // Global inline cache and throttling configurations to self-heal and avoid 429 quota exhaustion
@@ -121,6 +134,47 @@ function getJsonFilePath(collection: string): string {
   return path.join(DATA_DIR, `${collection}.json`);
 }
 
+function isValidGithubRepo(repo: unknown): repo is string {
+  if (typeof repo !== 'string') return false;
+  const trimmed = repo.trim();
+  if (!trimmed || trimmed.includes('..')) return false;
+  return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(trimmed);
+}
+
+function isValidGitRef(ref: unknown): ref is string {
+  if (typeof ref !== 'string') return false;
+  const trimmed = ref.trim();
+  if (!trimmed || trimmed.length > 120 || trimmed.includes('..') || /[\s\\?*]/.test(trimmed)) return false;
+  return /^[a-zA-Z0-9_.\-/]+$/.test(trimmed);
+}
+
+function isSafeExternalHttpUrl(rawUrl: unknown): boolean {
+  if (typeof rawUrl !== 'string') return false;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host === '[::1]' ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getAppVersion(): string {
   try {
     const pkgPath = path.join(process.cwd(), 'package.json');
@@ -129,7 +183,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.103.4';
+  return '3.105.5';
 }
 
 function readSystemConfigObject(): Record<string, any> {
@@ -304,11 +358,8 @@ function generateInitialQuotaRecords(days: number = 30): any[] {
   const list: any[] = [];
   const now = Date.now();
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now - i * 86400000);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const dateStr = getKSTISOString(now - i * 86400000).slice(0, 10);
+    const [, mm, dd] = dateStr.split('-');
     const dayLabel = `${mm}/${dd}`;
 
     const dayCycle = (days - i) % 7;
@@ -418,10 +469,10 @@ const LKG_SNAPSHOTS_DIR = path.join(DATA_DIR, "last_known_good_snapshots");
 
 function getLkgRetentionCount(): number {
   try {
-    const configs = readLocalCollection('system_config');
-    const maint = configs.find((c: any) => c.id === 'maintenance');
-    if (maint && typeof maint.lkgRetentionCount === 'number' && maint.lkgRetentionCount > 0) {
-      return maint.lkgRetentionCount;
+    const config = readSystemConfigObject();
+    const maintCount = config?.maintenance?.lkgRetentionCount ?? config?.lkgRetentionCount;
+    if (typeof maintCount === 'number' && maintCount > 0) {
+      return maintCount;
     }
   } catch (_) {}
   return 7; // Default to keeping 7 most recent snapshots
@@ -467,15 +518,24 @@ function createLastKnownGoodBackupSync(customReason?: string): { success: boolea
     }
 
     const collectionsToBackup = ['issues', 'feedback', 'bookmarks', 'admin_logs', 'system_config'];
-    const snapshotData: Record<string, any[]> = {};
+    const snapshotData: Record<string, any> = {};
     const collectionsCount: Record<string, number> = {};
     let totalRecords = 0;
 
     for (const col of collectionsToBackup) {
-      const list = readLocalCollection(col);
-      snapshotData[col] = list;
-      collectionsCount[col] = list.length;
-      totalRecords += list.length;
+      if (col === 'system_config') {
+        const sysObj = readSystemConfigObject();
+        snapshotData[col] = sysObj;
+        const count = Object.keys(sysObj).length > 0 ? 1 : 0;
+        collectionsCount[col] = count;
+        totalRecords += count;
+      } else {
+        const list = readLocalCollection(col);
+        const safeList = Array.isArray(list) ? list : [];
+        snapshotData[col] = safeList;
+        collectionsCount[col] = safeList.length;
+        totalRecords += safeList.length;
+      }
     }
 
     const createdAt = getKSTISOString();
@@ -669,15 +729,11 @@ async function saveIssuesToServer(issuesData: any[], options: { skipDuplicates?:
     writeLocalCollection('issues', localIssues);
   }
 
-  // Merge last sync status into existing local system configuration file
-  const existingSysConfigs = readLocalCollection('system_config');
-  const existingSysConfig = (existingSysConfigs && existingSysConfigs[0]) || {};
-  const lastSyncStatus = {
-    ...existingSysConfig,
+  // Merge last sync status into existing local system configuration object without overwriting saved keys/settings
+  writeSystemConfigObject({
     lastSyncAt: getKSTISOString(),
     lastCronResult: `Completed: ${addedCount} added, ${updatedCount} updated, ${skippedCount} skipped`
-  };
-  writeLocalCollection('system_config', [lastSyncStatus]);
+  });
 
   await logSyncEvent({ 
     type: 'success', 
@@ -1030,9 +1086,10 @@ async function executeServerGeminiCall(
   }
 
   // Secondary multi-provider free-tier AI failover (Groq / Mistral / OpenRouter :free / Cerebras / Cloudflare)
+  const customKeyStr = (options.customApiKey || '').trim();
   const secondaryRes = await callSecondaryFreeAiApi(promptString, {
-    groqKey: options.customApiKey,
-    openrouterKey: options.customApiKey
+    groqKey: customKeyStr.startsWith('gsk_') ? customKeyStr : undefined,
+    openrouterKey: customKeyStr.startsWith('sk-or-') ? customKeyStr : undefined
   });
 
   if (secondaryRes) {
@@ -1063,8 +1120,7 @@ async function executeServerGeminiCall(
 async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey?: string; openrouterKey?: string }) {
   try {
     const registry = loadAiModelRegistry();
-    const configs = readLocalCollection('system_config');
-    const config = (configs && configs[0]) || {};
+    const config = readSystemConfigObject();
 
     const providerKeyMap: Partial<Record<Exclude<ProviderId, 'gemini'>, string>> = {
       groq: customKeys?.groqKey || process.env.GROQ_API_KEY || config.groqApiKey || "",
@@ -1243,11 +1299,11 @@ async function runAiSync() {
             </tr>
             <tr>
               <th style="padding: 10px; text-align: left; font-weight: bold; border-top: 1px solid #f1f5f9;">최종 미수 에러</th>
-              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace; color: #475569; word-break: break-all;">${err.message || 'Unknown network error or API key rotation exhausted'}</td>
+              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace; color: #475569; word-break: break-all;">${escapeHtml(err?.message || 'Unknown network error or API key rotation exhausted')}</td>
             </tr>
             <tr style="background: #fafafa;">
               <th style="padding: 10px; text-align: left; font-weight: bold; border-top: 1px solid #f1f5f9;">감지 시간 (KST)</th>
-              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace;">${new Date(now + 9*3600000).toISOString().replace('T', ' ').substring(0, 19)}</td>
+              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace;">${getKSTISOString(now).replace('T', ' ').substring(0, 19)}</td>
             </tr>
           </table>
 
@@ -1309,7 +1365,7 @@ async function getMaintenanceSettings(): Promise<any> {
 async function runAiSyncInternal(): Promise<any> {
   const now = Date.now();
   let syncDetails: any = null;
-  console.log(`[${new Date(now + 9*3600000).toISOString()}] [ENGINE] runAiSync triggered.`);
+  console.log(`[${getKSTISOString(now)}] [ENGINE] runAiSync triggered.`);
   
   const engineSettings = await getMaintenanceSettings();
   const batchSize = engineSettings.engineBatchSize || 1;
@@ -1666,6 +1722,10 @@ async function runMaintenance() {
         checkedCount++;
         
         for (const url of urls) {
+          if (!isSafeExternalHttpUrl(url)) {
+            brokenLinks.push(url);
+            continue;
+          }
           try {
             const resp = await fetch(url, { 
               method: 'HEAD', 
@@ -1756,9 +1816,10 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
   isGithubAutoIntegrateRunning = true;
   try {
     const ghConfig = readLocalCollection('github_config')[0] || {};
-    const targetRepo = (ghConfig.repo && String(ghConfig.repo).includes('/'))
-      ? ghConfig.repo
-      : (process.env.GITHUB_REPO || 'AhBiYout-all/windows-fix-wizard');
+    const rawCandidateRepo = typeof ghConfig.repo === 'string' ? ghConfig.repo.trim() : '';
+    const targetRepo = isValidGithubRepo(rawCandidateRepo)
+      ? rawCandidateRepo
+      : (process.env.GITHUB_REPO && isValidGithubRepo(process.env.GITHUB_REPO) ? process.env.GITHUB_REPO.trim() : 'AhBiYout-all/windows-fix-wizard');
     const targetBranch = ghConfig.branch || 'main';
     const authToken = ghConfig.token || process.env.GITHUB_TOKEN;
 
@@ -1927,6 +1988,11 @@ async function startServer() {
       const ip = (req.ip || req.socket.remoteAddress || "unknown").toString();
       const key = `${actionName}:${ip}`;
       const now = Date.now();
+      if (rateLimitStore.size > 1000) {
+        for (const [k, v] of rateLimitStore.entries()) {
+          if (now >= v.resetAt) rateLimitStore.delete(k);
+        }
+      }
       const record = rateLimitStore.get(key);
 
       if (record && now < record.resetAt) {
@@ -1947,77 +2013,105 @@ async function startServer() {
   const rateLimitSmtp = createRateLimiter(10, 60000, "SMTP_VERIFY");
   const rateLimitVisitorLog = createRateLimiter(60, 60000, "VISITOR_LOG");
   const rateLimitPasskeyVerify = createRateLimiter(5, 60000, "PASSKEY_VERIFY");
+  const rateLimitValidateKey = createRateLimiter(20, 60000, "VALIDATE_KEY");
 
   // Seed database on startup (Removed to save quota)
   // await seedDatabase();
 
-  // Admin Auth Middleware
-  const requireAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const authHeader = req.headers.authorization;
+  // Admin Auth Helper & Middleware
+  const ADMIN_EMAILS = new Set([
+    'redmunlight@gmail.com',
+    'ahbiyout@gmail.com',
+    'ahbiyoutwinfixwizard@gmail.com',
+    'ahbiyoutwinfix@gmail.com'
+  ]);
+
+  const verifyAdminAuthHeader = (authHeader?: string): { ok: boolean; status: number; error?: string } => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: No token provided' });
+      return { ok: false, status: 401, error: 'Unauthorized: No token provided' };
     }
-    
+
     let token = authHeader.split('Bearer ')[1]?.trim() || '';
     if (token.startsWith('"') && token.endsWith('"')) {
       token = token.slice(1, -1).trim();
     }
     if (!token) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Empty token' });
+      return { ok: false, status: 401, error: 'Unauthorized: Empty token' };
+    }
+
+    // 0. Check active server-issued admin session token
+    const session = issuedAdminSessions.get(token);
+    if (session) {
+      if (session.expiresAt > Date.now()) {
+        return { ok: true, status: 200 };
+      }
+      issuedAdminSessions.delete(token);
     }
 
     const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
 
-    // 1. Check Admin Passkey (with or without 'passkey:' prefix)
+    // 1. Check Admin Passkey (with or without 'passkey:' prefix) using constant-time comparison
     let candidatePasskey = token;
     if (token.startsWith('passkey:')) {
       candidatePasskey = token.replace('passkey:', '').trim();
     }
-    
-    if (configuredPasskey && candidatePasskey === configuredPasskey) {
-      return next();
-    }
-    // If configuredPasskey is not set in environment, allow valid passkey format (length >= 4)
-    if (!configuredPasskey && candidatePasskey && candidatePasskey.length >= 4) {
-      console.log("[Admin Auth] Passkey accepted (no ADMIN_PASSKEY env configured, allowed length >= 4)");
-      return next();
+
+    if (configuredPasskey && candidatePasskey && timingSafeEqualStrings(candidatePasskey, configuredPasskey)) {
+      return { ok: true, status: 200 };
     }
 
-    const adminEmails = [
-      'redmunlight@gmail.com', 
-      'ahbiyout@gmail.com', 
-      'ahbiyoutwinfixwizard@gmail.com',
-      'ahbiyoutwinfix@gmail.com'
-    ].map(e => e.toLowerCase().trim());
-
-    // 2. Check if it's a valid 3-part JWT
-    // JWT format: [header].[payload].[signature]
+    // 2. Check if it's a valid 3-part Google/Firebase JWT (non-expired, non-'none' alg)
     const jwtParts = token.split('.');
-    if (jwtParts.length === 3) {
-      // Resilient JWT Payload Fallback:
-      // Firebase tokens are signed by Google. We decode the payload and verify the admin email.
+    if (jwtParts.length === 3 && jwtParts[2]) {
       try {
+        const headerJson = Buffer.from(jwtParts[0], 'base64url').toString('utf8');
+        const header = JSON.parse(headerJson);
         const payloadJson = Buffer.from(jwtParts[1], 'base64url').toString('utf8');
         const payload = JSON.parse(payloadJson);
         const email = (payload.email || '').toLowerCase().trim();
         const iss = payload.iss || '';
         const isGoogleOrFirebase = iss.startsWith('https://securetoken.google.com/') || iss.includes('accounts.google.com');
+        const nowSec = Math.floor(Date.now() / 1000);
+        const exp = typeof payload.exp === 'number' ? payload.exp : 0;
 
-        if (email && adminEmails.includes(email) && isGoogleOrFirebase) {
-          const nowSec = Math.floor(Date.now() / 1000);
-          const exp = payload.exp || 0;
-          // Allow up to 14 days grace period for verified admin Google tokens
-          if (!exp || exp === 0 || (nowSec - exp) < 1209600) {
-            console.log(`[Admin Auth] Verified admin ${email} authenticated via payload check.`);
-            return next();
-          }
+        if (
+          header?.alg &&
+          String(header.alg).toLowerCase() !== 'none' &&
+          email &&
+          ADMIN_EMAILS.has(email) &&
+          payload.email_verified !== false &&
+          isGoogleOrFirebase &&
+          exp > nowSec - 60
+        ) {
+          return { ok: true, status: 200 };
         }
       } catch (jwtErr) {
         console.warn("[Admin Auth] Failed to decode JWT payload:", jwtErr);
       }
     }
 
-    return res.status(401).json({ success: false, error: 'Unauthorized: Invalid token' });
+    return { ok: false, status: 401, error: 'Unauthorized: Invalid token' };
+  };
+
+  const issuedAdminSessions = new Map<string, { email: string; expiresAt: number }>();
+  const issueAdminSessionToken = (email: string): string => {
+    const now = Date.now();
+    if (issuedAdminSessions.size > 200) {
+      for (const [k, v] of issuedAdminSessions.entries()) {
+        if (v.expiresAt <= now) issuedAdminSessions.delete(k);
+      }
+    }
+    const token = `adm_sess_${crypto.randomBytes(24).toString('hex')}`;
+    issuedAdminSessions.set(token, { email, expiresAt: now + 24 * 60 * 60 * 1000 });
+    return token;
+  };
+
+  const requireAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const result = verifyAdminAuthHeader(req.headers.authorization);
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, error: result.error });
+    }
+    return next();
   };
 
   // API Routes
@@ -2025,39 +2119,37 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  // Validate active admin session token
+  app.get("/api/admin/session", requireAdmin, (req, res) => {
+    res.json({ success: true, authenticated: true });
+  });
+
   // Verify Admin Passkey Endpoint (Protected with Brute-Force Rate Limiting)
   app.post("/api/admin/verify-passkey", rateLimitPasskeyVerify, (req, res) => {
     try {
-      const { passkey } = req.body;
+      const { passkey } = req.body || {};
       const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
-      if (!passkey) {
+      if (!configuredPasskey) {
+        return res.status(403).json({
+          success: false,
+          error: "서버에 ADMIN_PASSKEY 환경 변수가 설정되지 않았습니다. Secrets에 ADMIN_PASSKEY를 등록하거나 관리자 이메일/비밀번호로 로그인하세요."
+        });
+      }
+      if (!passkey || typeof passkey !== 'string') {
         return res.status(400).json({ success: false, error: "관리자 보안 패스키를 입력해주세요." });
       }
       const trimmed = passkey.trim();
-      if (configuredPasskey) {
-        if (trimmed === configuredPasskey) {
-          return res.json({ 
-            success: true, 
-            token: `passkey:${trimmed}`,
-            adminEmail: "ahbiyoutwinfix@gmail.com",
-            role: "super_admin",
-            authenticatedAt: new Date().toISOString()
-          });
-        }
-        return res.status(401).json({ success: false, error: "관리자 마스터 패스키가 일치하지 않습니다. 다시 확인해주세요." });
-      }
-      
-      // If configuredPasskey is empty on server, accept valid passkey of 4+ characters
-      if (trimmed.length >= 4) {
-        return res.json({ 
-          success: true, 
-          token: `passkey:${trimmed}`,
+      if (timingSafeEqualStrings(trimmed, configuredPasskey)) {
+        const sessionToken = issueAdminSessionToken("ahbiyoutwinfix@gmail.com");
+        return res.json({
+          success: true,
+          token: sessionToken,
           adminEmail: "ahbiyoutwinfix@gmail.com",
           role: "super_admin",
           authenticatedAt: new Date().toISOString()
         });
       }
-      return res.status(400).json({ success: false, error: "보안 패스키는 4자리 이상이어야 합니다." });
+      return res.status(401).json({ success: false, error: "관리자 마스터 패스키가 일치하지 않습니다. 다시 확인해주세요." });
     } catch (e: any) {
       return res.status(500).json({ success: false, error: e.message || "Passkey verification failed" });
     }
@@ -2425,7 +2517,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/ai/verify-issue", async (req, res) => {
+  app.post("/api/ai/verify-issue", requireAdmin, async (req, res) => {
     try {
       const { issue, prompt } = req.body;
       const targetPrompt = prompt || `Review this Windows issue and verify its technical accuracy:\n${JSON.stringify(issue, null, 2)}`;
@@ -2446,7 +2538,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/ai/reclassify-chunk", async (req, res) => {
+  app.post("/api/ai/reclassify-chunk", requireAdmin, async (req, res) => {
     try {
       const { issuesChunk, prompt } = req.body;
       const targetPrompt = prompt || `Reclassify the following Windows troubleshooting issues with accuracy into standard categories and hardware component tags:\n${JSON.stringify(issuesChunk, null, 2)}`;
@@ -2460,7 +2552,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/ai/optimize-knowledge", async (req, res) => {
+  app.post("/api/ai/optimize-knowledge", requireAdmin, async (req, res) => {
     try {
       const { prompt } = req.body;
       const result = await executeServerGeminiCall(prompt, {
@@ -2477,7 +2569,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/ai/search-trends", async (req, res) => {
+  app.post("/api/ai/search-trends", requireAdmin, async (req, res) => {
     try {
       const { prompt, batchSize } = req.body;
       const targetPrompt = prompt || `Search for ${batchSize || 3} recent Windows 10/11 troubleshooting guides and issues. Return raw JSON array.`;
@@ -2549,7 +2641,7 @@ async function startServer() {
     });
   });
 
-  app.post("/api/ai/validate-key", async (req, res) => {
+  app.post("/api/ai/validate-key", requireAdmin, rateLimitValidateKey, async (req, res) => {
     try {
       const { key } = req.body;
       if (!key || typeof key !== 'string') {
@@ -2803,8 +2895,12 @@ async function startServer() {
     try {
       const { repo, branch = 'main', token } = req.body || {};
       const ghConfig = readLocalCollection('github_config')[0] || {};
-      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효한 GitHub 저장소 이름('소유자/저장소명')이 필요합니다." });
+      }
 
       if (!authToken) {
         return res.status(400).json({
@@ -2881,11 +2977,14 @@ async function startServer() {
   app.patch("/api/issues/:id", requireAdmin, (req, res) => {
     try {
       const { id } = req.params;
-      const patchData = req.body;
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+        return res.status(400).json({ success: false, error: "Invalid issue patch payload" });
+      }
+      const { id: _ignoredId, ...patchData } = req.body;
       const list = readLocalCollection('issues');
       const idx = list.findIndex((i: any) => i.id === id);
       if (idx !== -1) {
-        list[idx] = { ...list[idx], ...patchData };
+        list[idx] = { ...list[idx], ...patchData, id };
         writeLocalCollection('issues', list);
         res.json({ success: true, issue: list[idx] });
       } else {
@@ -2911,9 +3010,15 @@ async function startServer() {
     }
   });
 
+  const ALLOWED_PUBLIC_LOG_TYPES = new Set(['search', 'feedback', 'error', 'script_rating']);
+  const ALLOWED_ALL_LOG_TYPES = new Set(['admin', 'search', 'feedback', 'error', 'backend', 'visitor', 'script_rating']);
+
   app.get("/api/logs/:type", requireAdmin, (req, res) => {
     try {
       const { type } = req.params;
+      if (!type || !ALLOWED_ALL_LOG_TYPES.has(type)) {
+        return res.status(400).json({ success: false, error: "Invalid log type" });
+      }
       const logs = readLocalCollection(`logs_${type}`);
       res.json({ success: true, logs });
     } catch (err: any) {
@@ -2983,6 +3088,13 @@ async function startServer() {
     // 2. Rate Burst / DDoS / Traffic Abuse Filter
     if (settings.enableBurstFilter) {
       const key = visitorId || ip;
+      if (visitorRequestRateMap.size > 1000) {
+        for (const [k, tsList] of visitorRequestRateMap.entries()) {
+          const fresh = tsList.filter(ts => nowMs - ts < 60000);
+          if (fresh.length === 0) visitorRequestRateMap.delete(k);
+          else visitorRequestRateMap.set(k, fresh);
+        }
+      }
       let timestamps = visitorRequestRateMap.get(key) || [];
       timestamps = timestamps.filter(ts => nowMs - ts < 60000); // 60s sliding window
       timestamps.push(nowMs);
@@ -3011,10 +3123,16 @@ async function startServer() {
 
   app.post("/api/visitor/log", rateLimitVisitorLog, (req, res) => {
     try {
-      const { visitorId, userId, userEmail, activeTab, entryUrl, action } = req.body;
-      if (!visitorId) {
+      const { visitorId, userId, userEmail, activeTab, entryUrl, action } = req.body || {};
+      if (!visitorId || typeof visitorId !== 'string' || !visitorId.trim()) {
         return res.status(400).json({ success: false, error: "visitorId required" });
       }
+
+      const safeVisitorId = visitorId.trim().slice(0, 120);
+      const safeUserId = typeof userId === 'string' ? userId.trim().slice(0, 120) : null;
+      const safeUserEmail = typeof userEmail === 'string' ? userEmail.trim().slice(0, 160) : null;
+      const safeActiveTab = typeof activeTab === 'string' && activeTab.trim() ? activeTab.trim().slice(0, 40) : 'guidebook';
+      const safeEntryUrl = typeof entryUrl === 'string' && entryUrl.trim() ? entryUrl.trim().slice(0, 200) : '/';
 
       const ua = (req.headers["user-agent"] as string) || "";
       const rawIp = (req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1";
@@ -3023,7 +3141,7 @@ async function startServer() {
       const { os, browser, deviceType } = parseUserAgent(ua);
 
       const logs = readLocalCollection("logs_visitor");
-      const existingIdx = logs.findIndex((item: any) => item.visitorId === visitorId);
+      const existingIdx = logs.findIndex((item: any) => item.visitorId === safeVisitorId);
       const now = new Date().toISOString();
       const nowMs = Date.now();
 
@@ -3036,9 +3154,9 @@ async function startServer() {
           currentRecord.visitCount = (currentRecord.visitCount || 1) + 1;
         }
         currentRecord.activityCount = (currentRecord.activityCount || 1) + 1;
-        if (userId) currentRecord.userId = userId;
-        if (userEmail) currentRecord.userEmail = userEmail;
-        if (activeTab) currentRecord.activeTab = activeTab;
+        if (safeUserId) currentRecord.userId = safeUserId;
+        if (safeUserEmail) currentRecord.userEmail = safeUserEmail;
+        if (activeTab) currentRecord.activeTab = safeActiveTab;
         currentRecord.ip = ip;
         currentRecord.userAgent = ua;
         currentRecord.browser = browser;
@@ -3048,19 +3166,19 @@ async function startServer() {
       } else {
         currentRecord = {
           id: `vis_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-          visitorId,
-          userId: userId || null,
-          userEmail: userEmail || null,
+          visitorId: safeVisitorId,
+          userId: safeUserId,
+          userEmail: safeUserEmail,
           ip,
           userAgent: ua,
           browser,
           os,
           deviceType,
           language,
-          activeTab: activeTab || 'guidebook',
+          activeTab: safeActiveTab,
           visitCount: 1,
           activityCount: 1,
-          entryUrl: entryUrl || '/',
+          entryUrl: safeEntryUrl,
           firstVisitedAt: now,
           lastActiveAt: now,
           isBlocked: false,
@@ -3072,7 +3190,7 @@ async function startServer() {
 
       // Check for automatic abnormal visitor detection if not already manually blocked
       if (!currentRecord.isBlocked) {
-        const abnormalCheck = checkAbnormalVisitor(visitorId, ip, ua, currentRecord.activityCount, nowMs);
+        const abnormalCheck = checkAbnormalVisitor(safeVisitorId, ip, ua, currentRecord.activityCount, nowMs);
         if (abnormalCheck.isAbnormal) {
           currentRecord.isBlocked = true;
           currentRecord.autoBlocked = true;
@@ -3189,7 +3307,7 @@ async function startServer() {
 
   app.get("/api/admin/event-logs", (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string, 10) || 50;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 50, 1), 500);
       const levelFilter = (req.query.level as string || '').trim();
 
       let logs = readLocalCollection('system_event_logs');
@@ -3229,8 +3347,11 @@ async function startServer() {
   };
 
   const verifyPasswordWithSalt = (password: string, salt: string, expectedHash: string) => {
+    if (!salt || !expectedHash) return false;
     const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha256').toString('hex');
-    return hash === expectedHash;
+    const a = Buffer.from(hash, 'utf8');
+    const b = Buffer.from(expectedHash, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   };
 
   const getAdminEmailList = () => [
@@ -3252,6 +3373,10 @@ async function startServer() {
       }
 
       const cleanEmail = email.toLowerCase().trim();
+      if (getAdminEmailList().includes(cleanEmail)) {
+        return res.status(403).json({ success: false, error: "시스템 관리자 계정은 일반 회원가입으로 등록할 수 없습니다. 관리자 로그인을 이용해주세요." });
+      }
+
       const users = readLocalCollection('users');
 
       const existing = users.find((u: any) => u.email?.toLowerCase().trim() === cleanEmail);
@@ -3260,7 +3385,6 @@ async function startServer() {
       }
 
       const { salt, hash } = hashPasswordWithSalt(password);
-      const isAdm = getAdminEmailList().includes(cleanEmail);
       const now = getKSTISOString();
       const userId = `usr-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
@@ -3268,7 +3392,7 @@ async function startServer() {
         id: userId,
         email: cleanEmail,
         displayName: displayName || cleanEmail.split('@')[0],
-        role: isAdm ? 'admin' : 'member',
+        role: 'member',
         authProvider: 'email',
         salt,
         passwordHash: hash,
@@ -3338,7 +3462,9 @@ async function startServer() {
       user.lastLoginAt = now;
       writeLocalCollection('users', users);
 
-      const token = `usr_token_${user.id}_${crypto.randomBytes(8).toString('hex')}`;
+      const token = user.role === 'admin'
+        ? issueAdminSessionToken(user.email)
+        : `usr_token_${user.id}_${crypto.randomBytes(8).toString('hex')}`;
 
       res.json({
         success: true,
@@ -3359,15 +3485,22 @@ async function startServer() {
   // POST /api/auth/google-sync - Automatically persist/sync Google OAuth users to data/users.json
   app.post("/api/auth/google-sync", (req, res) => {
     try {
-      const { email, displayName } = req.body;
+      const { email, displayName } = req.body || {};
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ success: false, error: "Email is required" });
       }
 
       const cleanEmail = email.toLowerCase().trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return res.status(400).json({ success: false, error: "Invalid email format" });
+      }
+      const safeDisplayName = typeof displayName === 'string' && displayName.trim()
+        ? displayName.trim().slice(0, 80)
+        : cleanEmail.split('@')[0];
+
       const users = readLocalCollection('users');
       let user = users.find((u: any) => u.email?.toLowerCase().trim() === cleanEmail);
-      const isAdm = getAdminEmailList().includes(cleanEmail);
+      const isVerifiedAdminCaller = verifyAdminAuthHeader(req.headers.authorization).ok;
       const now = getKSTISOString();
 
       if (!user) {
@@ -3375,8 +3508,8 @@ async function startServer() {
         user = {
           id: userId,
           email: cleanEmail,
-          displayName: displayName || cleanEmail.split('@')[0],
-          role: isAdm ? 'admin' : 'member',
+          displayName: safeDisplayName,
+          role: 'member',
           authProvider: 'google',
           status: 'active',
           createdAt: now,
@@ -3392,10 +3525,15 @@ async function startServer() {
           operator: cleanEmail
         });
       } else {
+        if (user.status === 'blocked') {
+          return res.status(403).json({ success: false, error: "이용이 제한된 계정입니다. 관리자에게 문의하세요." });
+        }
         user.lastLoginAt = now;
-        if (isAdm) user.role = 'admin';
-        if (displayName && (!user.displayName || user.displayName === cleanEmail.split('@')[0])) {
-          user.displayName = displayName;
+        if (isVerifiedAdminCaller && getAdminEmailList().includes(cleanEmail)) {
+          user.role = 'admin';
+        }
+        if (safeDisplayName && (!user.displayName || user.displayName === cleanEmail.split('@')[0])) {
+          user.displayName = safeDisplayName;
         }
         writeLocalCollection('users', users);
       }
@@ -3575,9 +3713,18 @@ async function startServer() {
 
   app.post("/api/logs/add", (req, res) => {
     try {
-      const { type, log } = req.body;
-      if (!type || typeof type !== 'string' || !/^[a-zA-Z0-9_]{1,32}$/.test(type)) {
+      const { type, log } = req.body || {};
+      if (!type || typeof type !== 'string' || !ALLOWED_ALL_LOG_TYPES.has(type)) {
         return res.status(400).json({ success: false, error: "Invalid log type name" });
+      }
+      if (!log || typeof log !== 'object' || Array.isArray(log)) {
+        return res.status(400).json({ success: false, error: "Invalid log payload" });
+      }
+      if (!ALLOWED_PUBLIC_LOG_TYPES.has(type)) {
+        const authResult = verifyAdminAuthHeader(req.headers.authorization);
+        if (!authResult.ok) {
+          return res.status(authResult.status).json({ success: false, error: authResult.error || "Admin authorization required for this log type" });
+        }
       }
       addLocalLog(`logs_${type}`, log);
       res.json({ success: true });
@@ -3588,7 +3735,10 @@ async function startServer() {
 
   app.post("/api/logs/clear", requireAdmin, (req, res) => {
     try {
-      const { type } = req.body;
+      const { type } = req.body || {};
+      if (!type || typeof type !== 'string' || !ALLOWED_ALL_LOG_TYPES.has(type)) {
+        return res.status(400).json({ success: false, error: "Invalid log type name" });
+      }
       writeLocalCollection(`logs_${type}`, []);
       res.json({ success: true });
     } catch (err: any) {
@@ -3792,7 +3942,7 @@ async function startServer() {
 
       // 3. Include manifest metadata
       folder.file('manifest.json', JSON.stringify({
-        version: '3.0',
+        version: getAppVersion(),
         timestamp: getKSTISOString(),
         backupType: 'Automated System Recovery Backup',
         uptimeMs: Date.now() - engineStartTime
@@ -3958,9 +4108,14 @@ async function startServer() {
       const snapshotData = parsed.data || {};
       let restoredRecordsCount = 0;
 
+      const allowedCols = new Set(['issues', 'feedback', 'bookmarks', 'admin_logs', 'system_config']);
       for (const colName of Object.keys(snapshotData)) {
+        if (!allowedCols.has(colName)) continue;
         const docs = snapshotData[colName];
-        if (Array.isArray(docs)) {
+        if (colName === 'system_config' && docs && typeof docs === 'object' && !Array.isArray(docs)) {
+          fs.writeFileSync(getJsonFilePath('system_config'), JSON.stringify(docs, null, 2), 'utf8');
+          restoredRecordsCount += 1;
+        } else if (Array.isArray(docs)) {
           writeLocalCollection(colName, docs);
           restoredRecordsCount += docs.length;
         }
@@ -3998,9 +4153,14 @@ async function startServer() {
       const snapshotData = parsed.data || {};
       let restoredRecordsCount = 0;
 
+      const allowedCols = new Set(['issues', 'feedback', 'bookmarks', 'admin_logs', 'system_config']);
       for (const colName of Object.keys(snapshotData)) {
+        if (!allowedCols.has(colName)) continue;
         const docs = snapshotData[colName];
-        if (Array.isArray(docs)) {
+        if (colName === 'system_config' && docs && typeof docs === 'object' && !Array.isArray(docs)) {
+          fs.writeFileSync(getJsonFilePath('system_config'), JSON.stringify(docs, null, 2), 'utf8');
+          restoredRecordsCount += 1;
+        } else if (Array.isArray(docs)) {
           writeLocalCollection(colName, docs);
           restoredRecordsCount += docs.length;
         }
@@ -4323,20 +4483,20 @@ async function startServer() {
       success: true,
       engineConfigured: true,
       lastSyncError,
-      lastSyncErrorTime: lastSyncErrorTime ? new Date(lastSyncErrorTime + 9*3600000).toISOString() : null,
+      lastSyncErrorTime: lastSyncErrorTime ? new Date(lastSyncErrorTime).toISOString() : null,
       apiKeySource: keySource,
       maskedKey: maskedKey,
       isPlaceholder,
       currentTimeKST: getKSTISOString(),
       isSyncInProgress,
       consecutiveFailures,
-      lastEmailAlertTime: lastEmailAlertTime ? new Date(lastEmailAlertTime + 9*3600000).toISOString() : null,
+      lastEmailAlertTime: lastEmailAlertTime ? new Date(lastEmailAlertTime).toISOString() : null,
       emailAlertLogs: lastEmailAlertLogs,
       telemetry: {
         throttledKeys: throttledDetails,
         searchThrottledKeys: searchThrottledDetails,
         cachedModels: cachedModelsDetails,
-        engineStartTime: new Date(engineStartTime + 9*3600000).toISOString(),
+        engineStartTime: new Date(engineStartTime).toISOString(),
         totalSyncSuccesses,
         totalSyncFailures,
         syncRunRecords,
@@ -4349,7 +4509,7 @@ async function startServer() {
     res.json({
       success: true,
       consecutiveFailures,
-      lastEmailAlertTime: lastEmailAlertTime ? new Date(lastEmailAlertTime + 9*3600000).toISOString() : null,
+      lastEmailAlertTime: lastEmailAlertTime ? new Date(lastEmailAlertTime).toISOString() : null,
       alertLogs: lastEmailAlertLogs
     });
   });
@@ -4371,11 +4531,11 @@ async function startServer() {
             </tr>
             <tr>
               <th style="padding: 10px; text-align: left; font-weight: bold; border-top: 1px solid #f1f5f9;">수신 대상자 주소</th>
-              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace;">${targetRecipient}</td>
+              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace;">${escapeHtml(targetRecipient)}</td>
             </tr>
             <tr>
               <th style="padding: 10px; text-align: left; font-weight: bold; border-top: 1px solid #f1f5f9;">SMTP 호스트 정보</th>
-              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace; color: #475569;">${process.env.EMAIL_SMTP_HOST || 'local-developer-sandbox (Simulation Mode)'}</td>
+              <td style="padding: 10px; border-top: 1px solid #f1f5f9; font-family: monospace; color: #475569;">${escapeHtml(process.env.EMAIL_SMTP_HOST || 'local-developer-sandbox (Simulation Mode)')}</td>
             </tr>
           </table>
 
@@ -4396,15 +4556,22 @@ async function startServer() {
   app.post("/api/admin/smtp/verify", requireAdmin, rateLimitSmtp, async (req, res) => {
     try {
       const settings = await getMaintenanceSettings();
-      const host = (req.body?.smtpHost || settings?.smtpHost || process.env.EMAIL_SMTP_HOST || "").trim();
-      const port = parseInt(req.body?.smtpPort || settings?.smtpPort || process.env.EMAIL_SMTP_PORT || "587");
-      const user = (req.body?.smtpUser || settings?.smtpUser || process.env.EMAIL_SMTP_USER || "").trim();
-      const pass = (req.body?.smtpPass || settings?.smtpPass || process.env.EMAIL_SMTP_PASS || "").trim();
+      const host = String(req.body?.smtpHost ?? settings?.smtpHost ?? process.env.EMAIL_SMTP_HOST ?? "").trim();
+      const rawPort = req.body?.smtpPort ?? settings?.smtpPort ?? process.env.EMAIL_SMTP_PORT ?? "587";
+      const port = Number(rawPort);
+      const user = String(req.body?.smtpUser ?? settings?.smtpUser ?? process.env.EMAIL_SMTP_USER ?? "").trim();
+      const pass = String(req.body?.smtpPass ?? settings?.smtpPass ?? process.env.EMAIL_SMTP_PASS ?? "").trim();
 
       if (!host || !user || !pass) {
         return res.status(400).json({
           success: false,
           error: "SMTP 호스트, 사용자 계정 ID, 비밀번호를 모두 입력해야 실제 연결 테스트가 가능합니다."
+        });
+      }
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        return res.status(400).json({
+          success: false,
+          error: "유효한 SMTP 포트 번호(1~65535)를 입력하세요."
         });
       }
 
@@ -4438,15 +4605,15 @@ async function startServer() {
 
   app.all("/api/cron-sync", async (req, res) => {
     const secretInput = req.headers['x-cron-secret'] || req.query.secret || (req.body && req.body.secret);
-    const cronSecret = process.env.CRON_SECRET;
+    const cronSecret = process.env.CRON_SECRET?.trim();
     
     if (!cronSecret) {
       console.warn("[Cron Sync] CRON_SECRET is not configured in environment variables. Access denied.");
       return res.status(500).json({ success: false, error: "CRON_SECRET is not configured on the server. Set CRON_SECRET in AI Studio Secrets." });
     }
     
-    if (secretInput !== cronSecret) {
-      console.warn(`[Cron Sync] Unauthorized access attempt with secret: '${String(secretInput).substring(0, 5)}...'`);
+    if (typeof secretInput !== 'string' || !timingSafeEqualStrings(secretInput, cronSecret)) {
+      console.warn(`[Cron Sync] Unauthorized access attempt blocked.`);
       return res.status(401).json({ success: false, error: "Unauthorized: Invalid secret" });
     }
     
@@ -4592,19 +4759,24 @@ async function startServer() {
   // 1. Webhook endpoint called by GitHub Actions collector workflow or external runner
   app.post("/api/github/sync", async (req, res) => {
     try {
-      const secretInput = req.headers['x-cron-secret'] || req.query.secret || (req.body && req.body.secret);
-      const cronSecret = process.env.CRON_SECRET;
-      // If server has CRON_SECRET configured, verify secret
+      const rawSecret = req.headers['x-cron-secret'] || req.query.secret || (req.body && req.body.secret);
+      const secretInput = typeof rawSecret === 'string' ? rawSecret : '';
+      const cronSecret = process.env.CRON_SECRET?.trim() || '';
+      // If server has CRON_SECRET configured, verify secret in constant time
       if (cronSecret) {
-        if (secretInput !== cronSecret) {
+        const a = Buffer.from(secretInput, 'utf8');
+        const b = Buffer.from(cronSecret, 'utf8');
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
           console.warn(`[GitHub Webhook] Unauthorized sync attempt with invalid secret`);
           return res.status(401).json({ success: false, error: "Unauthorized: Invalid or missing secret header 'x-cron-secret'" });
         }
       } else {
         const authHeader = req.headers.authorization;
         const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
-        const candidatePasskey = authHeader?.startsWith('Bearer ') ? authHeader.split('Bearer ')[1]?.replace('passkey:', '').trim() : '';
-        if (!configuredPasskey || candidatePasskey !== configuredPasskey) {
+        const candidatePasskey = authHeader?.startsWith('Bearer ') ? authHeader.split('Bearer ')[1]?.replace('passkey:', '').trim() || '' : '';
+        const a = Buffer.from(candidatePasskey, 'utf8');
+        const b = Buffer.from(configuredPasskey, 'utf8');
+        if (!configuredPasskey || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
           return res.status(401).json({ success: false, error: "Unauthorized: CRON_SECRET or ADMIN_PASSKEY must be configured and valid credentials supplied." });
         }
       }
@@ -4715,7 +4887,8 @@ async function startServer() {
   // 1-2. Automatic GitHub-to-Main Dataset Integration endpoint (cooldown-guarded)
   app.post("/api/github/auto-integrate", async (req, res) => {
     try {
-      const force = Boolean(req.body?.force);
+      const requestedForce = Boolean(req.body?.force);
+      const force = requestedForce && verifyAdminAuthHeader(req.headers.authorization).ok;
       const result = await syncGithubDatasetIntoMainData({ force, reason: 'client-auto-check' });
       res.json(result);
     } catch (err: any) {
@@ -4726,14 +4899,19 @@ async function startServer() {
   // 2. Pull issues directly from a GitHub repository (raw JSON / GitHub API)
   app.post("/api/github/pull-from-repo", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch = 'main', filePath = 'data/issues.json', token } = req.body;
-      if (!repo || typeof repo !== 'string' || !repo.includes('/')) {
+      const { repo, branch = 'main', filePath = 'data/issues.json', token } = req.body || {};
+      const cleanRepo = typeof repo === 'string' ? repo.trim() : '';
+      if (!isValidGithubRepo(cleanRepo)) {
         return res.status(400).json({ success: false, error: "유효한 저장소 이름('사용자명/저장소명' 형식, 예: octocat/winfix)을 입력하세요." });
       }
+      const cleanPath = typeof filePath === 'string' ? filePath.trim() : '';
+      if (!cleanPath || cleanPath.includes('..') || cleanPath.startsWith('/') || !/^[a-zA-Z0-9_.\-/]+$/.test(cleanPath)) {
+        return res.status(400).json({ success: false, error: "유효한 저장소 파일 경로(예: data/issues.json)를 입력하세요." });
+      }
 
-      console.log(`[GitHub Pull] Fetching data from GitHub: ${repo} (${branch}, ${filePath})...`);
+      console.log(`[GitHub Pull] Fetching data from GitHub: ${cleanRepo} (${branch}, ${cleanPath})...`);
 
-      const rawUrl = `https://raw.githubusercontent.com/${repo}/${encodeURIComponent(branch)}/${filePath}`;
+      const rawUrl = `https://raw.githubusercontent.com/${cleanRepo}/${encodeURIComponent(branch)}/${cleanPath}`;
       const headers: Record<string, string> = {
         'User-Agent': 'WindowsFixWizard-App'
       };
@@ -4751,7 +4929,7 @@ async function startServer() {
         parsed = JSON.parse(text);
       } else {
         // Fallback to GitHub Contents API
-        const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
+        const apiUrl = `https://api.github.com/repos/${cleanRepo}/contents/${cleanPath}?ref=${encodeURIComponent(branch)}`;
         const apiRes = await fetch(apiUrl, {
           headers: {
             ...headers,
@@ -4774,7 +4952,7 @@ async function startServer() {
       // Update config log
       try {
         const ghConfig = readLocalCollection('github_config')[0] || {};
-        ghConfig.repo = repo;
+        ghConfig.repo = cleanRepo;
         ghConfig.branch = branch;
         ghConfig.lastSyncAt = getKSTISOString();
         ghConfig.lastSyncCount = parsed.length;
@@ -4787,13 +4965,13 @@ async function startServer() {
       await logSyncEvent({
         type: 'success',
         source: 'github-pull',
-        message: `GitHub(${repo})에서 ${parsed.length}개 데이터 동기화 완료 (+${syncResult.added} 신규)`,
-        details: { repo, count: parsed.length, syncResult }
+        message: `GitHub(${cleanRepo})에서 ${parsed.length}개 데이터 동기화 완료 (+${syncResult.added} 신규)`,
+        details: { repo: cleanRepo, count: parsed.length, syncResult }
       });
 
       res.json({
         success: true,
-        message: `GitHub(${repo})에서 ${parsed.length}개의 데이터 목록을 성공적으로 반영했습니다. (+${syncResult.added}개 추가, ~${syncResult.updated}개 갱신)`,
+        message: `GitHub(${cleanRepo})에서 ${parsed.length}개의 데이터 목록을 성공적으로 반영했습니다. (+${syncResult.added}개 추가, ~${syncResult.updated}개 갱신)`,
         count: parsed.length,
         result: syncResult
       });
@@ -4806,13 +4984,17 @@ async function startServer() {
   // 3. Dispatch a GitHub Actions workflow remotely from Admin UI
   app.post("/api/github/dispatch-workflow", requireAdmin, async (req, res) => {
     try {
-      const { repo, workflowId = 'windows-fix-collector.yml', branch = 'main', token, topic = 'all', batchSize = 2, modelPreference = 'auto', targetWindows = '' } = req.body;
+      const { repo, workflowId = 'windows-fix-collector.yml', branch = 'main', token, topic = 'all', batchSize = 2, modelPreference = 'auto', targetWindows = '' } = req.body || {};
       const ghConfig = readLocalCollection('github_config')[0] || {};
-      const targetRepo = repo || ghConfig.repo;
+      const targetRepo = (repo || ghConfig.repo || '').trim();
+      const targetBranch = typeof branch === 'string' && isValidGitRef(branch) ? branch.trim() : 'main';
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
       
-      if (!targetRepo || !targetRepo.includes('/')) {
+      if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
+      }
+      if (!isValidGitRef(workflowId)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 워크플로 파일명입니다." });
       }
       if (!authToken) {
         return res.status(400).json({ 
@@ -4830,7 +5012,7 @@ async function startServer() {
       };
 
       const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`;
-      console.log(`[GitHub Dispatch] Triggering workflow ${workflowId} on ${targetRepo} (ref: ${branch}) with inputs:`, inputs);
+      console.log(`[GitHub Dispatch] Triggering workflow ${workflowId} on ${targetRepo} (ref: ${targetBranch}) with inputs:`, inputs);
 
       const ghRes = await fetch(dispatchUrl, {
         method: 'POST',
@@ -4841,7 +5023,7 @@ async function startServer() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          ref: branch,
+          ref: targetBranch,
           inputs
         })
       });
@@ -4873,12 +5055,13 @@ async function startServer() {
   // 3-1. Remote trigger for GitHub Pages deployment workflow (deploy-pages.yml)
   app.post("/api/github/deploy-pages", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch = 'main', token } = req.body;
+      const { repo, branch = 'main', token } = req.body || {};
       const ghConfig = readLocalCollection('github_config')[0] || {};
-      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetBranch = typeof branch === 'string' && isValidGitRef(branch) ? branch.trim() : 'main';
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
 
-      if (!targetRepo || !targetRepo.includes('/')) {
+      if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
       }
       if (!authToken) {
@@ -4889,7 +5072,7 @@ async function startServer() {
       }
 
       const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`;
-      console.log(`[GitHub Pages Dispatch] Triggering deploy-pages.yml on ${targetRepo} (ref: ${branch})...`);
+      console.log(`[GitHub Pages Dispatch] Triggering deploy-pages.yml on ${targetRepo} (ref: ${targetBranch})...`);
 
       const ghRes = await fetch(dispatchUrl, {
         method: 'POST',
@@ -4900,7 +5083,7 @@ async function startServer() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          ref: branch
+          ref: targetBranch
         })
       });
 
@@ -4936,13 +5119,14 @@ async function startServer() {
   // 3-2. Push local database directly to GitHub repository & optionally auto-deploy Pages
   app.post("/api/github/push-to-repo", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch = 'main', token, commitMessage, deployPages } = req.body;
+      const { repo, branch = 'main', token, commitMessage, deployPages } = req.body || {};
       const ghConfig = readLocalCollection('github_config')[0] || {};
-      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetBranch = typeof branch === 'string' && isValidGitRef(branch) ? branch.trim() : 'main';
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
       const shouldAutoDeploy = typeof deployPages === 'boolean' ? deployPages : (ghConfig.autoDeployPages !== false);
 
-      if (!targetRepo || !targetRepo.includes('/')) {
+      if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
       }
       if (!authToken) {
@@ -4954,7 +5138,7 @@ async function startServer() {
 
       const issues = readLocalCollection('issues');
       const filePath = 'data/issues.json';
-      const fileUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
+      const fileUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`;
       
       const headers: Record<string, string> = {
         'Authorization': `Bearer ${authToken}`,
@@ -4992,7 +5176,7 @@ async function startServer() {
         body: JSON.stringify({
           message,
           content: contentBase64,
-          branch,
+          branch: targetBranch,
           ...(fileSha ? { sha: fileSha } : {})
         })
       });
@@ -5020,7 +5204,7 @@ async function startServer() {
               'User-Agent': 'WindowsFixWizard-App',
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ ref: branch })
+            body: JSON.stringify({ ref: targetBranch })
           });
           pagesTriggerResult = deployRes.ok ? "triggered" : "skipped";
         } catch (e: any) {
@@ -5089,13 +5273,22 @@ async function startServer() {
   // 5. Save GitHub integration configuration
   app.post("/api/github/config", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch, workflowId, token, authMode, sshPrivateKey, autoDeployPages } = req.body;
+      const { repo, branch, workflowId, token, authMode, sshPrivateKey, autoDeployPages } = req.body || {};
       const current = readLocalCollection('github_config')[0] || {};
+      if (repo !== undefined && String(repo).trim() !== '' && !isValidGithubRepo(String(repo))) {
+        return res.status(400).json({ success: false, error: "유효한 GitHub 저장소 형식('소유자/저장소명')이 아닙니다." });
+      }
+      if (branch !== undefined && String(branch).trim() !== '' && !isValidGitRef(String(branch))) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 브랜치 이름입니다." });
+      }
+      if (workflowId !== undefined && String(workflowId).trim() !== '' && !isValidGitRef(String(workflowId))) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 워크플로 ID 형식입니다." });
+      }
       const updated = {
         ...current,
-        repo: repo !== undefined ? String(repo).trim() : current.repo || "AhBiYout-all/windows-fix-wizard",
-        branch: branch !== undefined ? String(branch).trim() : current.branch || "main",
-        workflowId: workflowId !== undefined ? String(workflowId).trim() : current.workflowId || "windows-fix-collector.yml",
+        repo: repo !== undefined && String(repo).trim() ? String(repo).trim() : current.repo || "AhBiYout-all/windows-fix-wizard",
+        branch: branch !== undefined && String(branch).trim() ? String(branch).trim() : current.branch || "main",
+        workflowId: workflowId !== undefined && String(workflowId).trim() ? String(workflowId).trim() : current.workflowId || "windows-fix-collector.yml",
         authMode: authMode || current.authMode || "PAT",
         autoDeployPages: autoDeployPages !== undefined ? Boolean(autoDeployPages) : (current.autoDeployPages !== false),
         token: (token && !token.includes("••••")) ? String(token).trim() : current.token || "",
@@ -5405,10 +5598,10 @@ jobs:
     try {
       const { repo, branch = 'main', token, options: incomingOpts } = req.body || {};
       const ghConfig = readLocalCollection('github_config')[0] || {};
-      const targetRepo = repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
 
-      if (!targetRepo || !targetRepo.includes('/')) {
+      if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명')이 필요합니다." });
       }
       if (!authToken) {
@@ -5505,7 +5698,10 @@ jobs:
   app.get("/api/github/check-update", async (req, res) => {
     try {
       const ghConfig = readLocalCollection('github_config')[0] || {};
-      const targetRepo = (req.query.repo as string) || ghConfig.repo || "AhBiYout-all/windows-fix-wizard";
+      const targetRepo = ((req.query.repo as string) || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
+      }
       const token = ghConfig.token || process.env.GITHUB_TOKEN || "";
       const now = Date.now();
 
@@ -5618,7 +5814,10 @@ jobs:
   // PowerShell Script Verification & Code Signing endpoints
   app.post("/api/scripts/verify", (req, res) => {
     try {
-      const { script } = req.body;
+      const { script } = req.body || {};
+      if (script !== undefined && script !== null && typeof script !== 'string') {
+        return res.status(400).json({ success: false, error: "Invalid script format: must be string" });
+      }
       if (!script) {
         return res.json({ success: true, isSigned: false, signatureDetails: null, obfuscationScore: 0, signals: [] });
       }
@@ -5628,7 +5827,6 @@ jobs:
       const scriptContent = script.replace(signatureRegex, '').trim();
 
       const signals = [];
-      const lower = scriptContent.toLowerCase();
 
       if (/\b(iex|invoke-expression)\b/i.test(scriptContent)) {
         signals.push({ pattern: 'iex / Invoke-Expression', severity: 'high', desc: '동적 코드 주입 및 실행 위험' });
@@ -5639,8 +5837,11 @@ jobs:
       if (/frombase64string/i.test(scriptContent)) {
         signals.push({ pattern: 'FromBase64String', severity: 'high', desc: '메모리 바이트 디코더 유포 징후' });
       }
-      if (/(\w+`\w+)+/i.test(scriptContent) && scriptContent.includes('`')) {
-        signals.push({ pattern: 'Backtick Obfuscation', severity: 'high', desc: '백틱 기호 등 커맨드 우회 난독화' });
+      if (scriptContent.includes('`')) {
+        const backtickMatches = scriptContent.match(/\w+`[A-Za-z0-9]/g);
+        if (backtickMatches && backtickMatches.some(m => !/`[nrt0abfv]$/i.test(m))) {
+          signals.push({ pattern: 'Backtick Obfuscation', severity: 'high', desc: '백틱 기호 등 커맨드 우회 난독화' });
+        }
       }
       if (/\.(downloadstring|downloadfile)\(/i.test(scriptContent) || /\b(invoke-webrequest|iwr|curl)\b/i.test(scriptContent)) {
         signals.push({ pattern: 'Web File Download', severity: 'medium', desc: '외부 웹 페이로드 호출 징후' });
@@ -5691,9 +5892,9 @@ jobs:
 
   app.post("/api/scripts/sign", requireAdmin, (req, res) => {
     try {
-      const { script, signerName } = req.body;
-      if (!script) {
-        return res.status(400).json({ success: false, error: "Script missing" });
+      const { script, signerName } = req.body || {};
+      if (!script || typeof script !== 'string') {
+        return res.status(400).json({ success: false, error: "Script string missing" });
       }
 
       const signatureRegex = /#\s*SIG\s*#\s*Begin\s*Signature\s*Block[\s\S]*?#\s*SIG\s*#\s*End\s*Signature\s*Block/i;
@@ -5708,7 +5909,7 @@ jobs:
         hash |= 0;
       }
       const calculated = Math.abs(hash).toString(16).toUpperCase().padStart(8, '0');
-      const sName = signerName || "Universal Windows Error Solver Root CA";
+      const sName = (typeof signerName === 'string' && signerName.trim()) ? signerName.trim().slice(0, 120) : "Universal Windows Error Solver Root CA";
       const serial = 'UWES-' + Math.floor(Math.random() * 9000 + 1000) + '-' + Math.floor(Math.random() * 9000 + 1000);
       const rawCert = `PlatformSignatureAuthToken:SHA256Hash=${calculated};Signer=${sName};Serial=${serial};CryptoEngine=RSA_4096_PKCS15`;
       const base64Bytes = Buffer.from(rawCert).toString('base64');
@@ -5755,6 +5956,12 @@ jobs:
     "[COMPLIANCE] Verification parameters passed on standard client WS-DEV-09.",
     "[ALERT] WS-STAGE-SVR and WS-CORE-01 require corrective rollbacks."
   ];
+  const appendNodeLog = (line: string) => {
+    nodeLogs.push(line);
+    if (nodeLogs.length > 200) {
+      nodeLogs = nodeLogs.slice(-200);
+    }
+  };
 
   let isNodeHealingInProgress = false;
   let nodeHealingProgress = 0;
@@ -5790,34 +5997,34 @@ jobs:
 
     isNodeHealingInProgress = true;
     nodeHealingProgress = 0;
-    nodeLogs.push(`[USER ACTION] Triggered Collective Disaster One-Click Rollback Script...`);
-    nodeLogs.push(`[SENTINEL] Initializing dual safe-vault parameters handshake.`);
+    appendNodeLog(`[USER ACTION] Triggered Collective Disaster One-Click Rollback Script...`);
+    appendNodeLog(`[SENTINEL] Initializing dual safe-vault parameters handshake.`);
 
     healingIntervalId = setInterval(() => {
       nodeHealingProgress += 10;
       
       if (nodeHealingProgress === 20) {
-        nodeLogs.push(`[WS-CORE-01] Parsing current state parameters... Found non-malicious drift.`);
-        nodeLogs.push(`[WS-CORE-01] Side-loading SHA-256 rollback signature payload...`);
+        appendNodeLog(`[WS-CORE-01] Parsing current state parameters... Found non-malicious drift.`);
+        appendNodeLog(`[WS-CORE-01] Side-loading SHA-256 rollback signature payload...`);
         nodeStorage = nodeStorage.map(n => n.id === 'node-1' ? { ...n, status: 'healing' } : n);
       } else if (nodeHealingProgress === 40) {
-        nodeLogs.push(`[WS-CORE-01] SUCCESS: Restorative keys committed standard 100% rollback.`);
-        nodeLogs.push(`[WS-STAGE-SVR] Repairing SoftwareDistribution cache... Stop-Service wuauserv completed.`);
+        appendNodeLog(`[WS-CORE-01] SUCCESS: Restorative keys committed standard 100% rollback.`);
+        appendNodeLog(`[WS-STAGE-SVR] Repairing SoftwareDistribution cache... Stop-Service wuauserv completed.`);
         nodeStorage = nodeStorage.map(n => n.id === 'node-1' ? { ...n, status: 'healthy', textKo: '자가 자율 복원 완료', textEn: 'Self-healed via rollback' } : n.id === 'node-4' ? { ...n, status: 'healing' } : n);
       } else if (nodeHealingProgress === 70) {
-        nodeLogs.push(`[WS-STAGE-SVR] Injecting Windows restore point... Start-Service wuauserv active.`);
-        nodeLogs.push(`[CLOUD SYNC] Updating remote state with Secure Dual-Channel Vault.`);
+        appendNodeLog(`[WS-STAGE-SVR] Injecting Windows restore point... Start-Service wuauserv active.`);
+        appendNodeLog(`[CLOUD SYNC] Updating remote state with Secure Dual-Channel Vault.`);
       } else if (nodeHealingProgress === 90) {
-        nodeLogs.push(`[WS-STAGE-SVR] SUCCESS: Concurrency state validated. Build alignment healthy.`);
-        nodeLogs.push(`[SENTINEL] Integrity audit successfully recorded.`);
+        appendNodeLog(`[WS-STAGE-SVR] SUCCESS: Concurrency state validated. Build alignment healthy.`);
+        appendNodeLog(`[SENTINEL] Integrity audit successfully recorded.`);
         nodeStorage = nodeStorage.map(n => n.id === 'node-4' ? { ...n, status: 'healthy', textKo: 'WUAUSERV 복구 및 서명 통과', textEn: 'Caches rebuilt & running' } : n);
       } else if (nodeHealingProgress >= 100) {
         clearInterval(healingIntervalId);
         healingIntervalId = null;
         isNodeHealingInProgress = false;
         nodeHealingProgress = 100;
-        nodeLogs.push(`[SYSTEM SENTINEL] Collective healing accomplished. All 4 nodes are fully compliant.`);
-        nodeLogs.push(`[STATUS] 0 threats, 100% service-integrity restored!`);
+        appendNodeLog(`[SYSTEM SENTINEL] Collective healing accomplished. All 4 nodes are fully compliant.`);
+        appendNodeLog(`[STATUS] 0 threats, 100% service-integrity restored!`);
       }
     }, 1000);
 
@@ -5926,9 +6133,10 @@ jobs:
     });
   }
 
+  await ensureIssuesSeeded();
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    void ensureIssuesSeeded();
   });
 }
 

@@ -60,6 +60,21 @@ export const QuickSystemScanUtility: React.FC<QuickSystemScanUtilityProps> = ({
   const [scanCompleted, setScanCompleted] = useState<boolean>(false);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+        scanIntervalRef.current = null;
+      }
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Initial Scan steps definition using standard Windows PowerShell diagnostic commands
   const initialSteps: ScanStep[] = useMemo(() => [
@@ -217,9 +232,14 @@ Write-Host "====================================================================
       { type: 'cmd', text: `PS C:\\WINDOWS\\system32> .\\Quick_System_Health_Scan.ps1`, timestamp: now() }
     ]);
 
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+
     let stepIdx = 0;
 
-    const interval = setInterval(() => {
+    scanIntervalRef.current = setInterval(() => {
       if (stepIdx < initialSteps.length) {
         const step = initialSteps[stepIdx];
         setCurrentStepIndex(stepIdx);
@@ -239,7 +259,10 @@ Write-Host "====================================================================
 
         stepIdx++;
       } else {
-        clearInterval(interval);
+        if (scanIntervalRef.current) {
+          clearInterval(scanIntervalRef.current);
+          scanIntervalRef.current = null;
+        }
         setIsScanning(false);
         setCurrentStepIndex(-1);
         setScanCompleted(true);
@@ -258,6 +281,10 @@ Write-Host "====================================================================
   useEffect(() => {
     if (isOpen && !scanCompleted && !isScanning) {
       startSystemScan();
+    } else if (!isOpen && scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+      setIsScanning(false);
     }
   }, [isOpen]);
 
@@ -267,20 +294,38 @@ Write-Host "====================================================================
     }
   }, [terminalLogs]);
 
-  const handleCopyScript = () => {
-    navigator.clipboard.writeText(generatedPowerShellScript);
+  const handleCopyScript = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(generatedPowerShellScript);
+      } else {
+        throw new Error('no-clipboard');
+      }
+    } catch (_) {
+      const textarea = document.createElement('textarea');
+      textarea.value = generatedPowerShellScript;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(textarea);
+    }
     setCopiedScript(true);
-    setTimeout(() => setCopiedScript(false), 2000);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setCopiedScript(false), 2000);
   };
 
   const handleDownloadScript = () => {
     const element = document.createElement('a');
     const file = new Blob([generatedPowerShellScript], { type: 'text/plain;charset=utf-8' });
-    element.href = URL.createObjectURL(file);
+    const objectUrl = URL.createObjectURL(file);
+    element.href = objectUrl;
     element.download = 'Quick_System_Health_Scan.ps1';
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   };
 
   const handleOpenSandbox = () => {

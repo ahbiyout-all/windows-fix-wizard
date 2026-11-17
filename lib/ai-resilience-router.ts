@@ -129,7 +129,7 @@ export const DEFAULT_GEMINI_MODELS: DiscoveredGeminiModel[] = [
 ];
 
 export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
-  version: '3.103.4',
+  version: '3.105.5',
   updatedAt: new Date().toISOString(),
   lastDiscoveryAt: null,
   routingPolicy: 'quota-split',

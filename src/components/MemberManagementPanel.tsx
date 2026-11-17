@@ -134,6 +134,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
     a.href = url;
     a.download = `winfix_users_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const filteredUsers = users.filter(u => {

@@ -37,6 +37,8 @@ export function PowerShellVerifierPanel({ scriptText, onScriptSigned, language }
   const [copied, setCopied] = useState(false);
   const [pasted, setPasted] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
+  const [showManualPasteBox, setShowManualPasteBox] = useState(false);
+  const [manualPasteDraft, setManualPasteDraft] = useState('');
 
   const handleCopy = async () => {
     try {
@@ -73,28 +75,27 @@ export function PowerShellVerifierPanel({ scriptText, onScriptSigned, language }
       const text = await navigator.clipboard.readText();
       if (text !== undefined && text !== null) {
         handleSandboxChange(text);
+        setShowManualPasteBox(false);
         setPasted(true);
         setTimeout(() => setPasted(false), 2000);
       }
     } catch (err) {
       console.warn("Clipboard read blocked (normal iframe behavior):", err);
-      // Fallback: prompt the user to input
-      const manualText = window.prompt(
-        language === 'ko' 
-          ? "보안 정책으로 웹페이지에서 직접 붙여넣기가 제한되어 있습니다.\n아래 입력 상자에 코드(Ctrl+V)를 붙여넣은 뒤 [확인]을 클릭해 주세요:" 
-          : "Web browser safety policy restricts direct clipboard pasting.\nPlease paste (Ctrl+V) the script content in the input box below:"
-      );
-      if (manualText !== null) {
-        handleSandboxChange(manualText);
+      const cached = (window as any).__lastCopiedScript;
+      if (typeof cached === 'string' && cached.trim().length > 0) {
+        handleSandboxChange(cached);
+        setShowManualPasteBox(false);
         setPasted(true);
         setTimeout(() => setPasted(false), 2000);
-      } else {
-        setPasteError(
-          language === 'ko' 
-            ? "클립보드 접근이 거부되었습니다. 편집창(아래)을 클릭하고 키보드의 Ctrl+V를 사용하여 수동으로 붙여넣어 주세요." 
-            : "Clipboard read access denied. Click the editor textarea below and press 'Ctrl+V' to paste manually."
-        );
+        return;
       }
+      setManualPasteDraft('');
+      setShowManualPasteBox(true);
+      setPasteError(
+        language === 'ko'
+          ? "브라우저 보안 정책으로 직접 클립보드 읽기가 제한되어 있습니다. 아래 붙여넣기 입력창에 Ctrl+V 후 [적용]을 눌러주세요."
+          : "Clipboard read access is restricted in this frame. Press Ctrl+V in the paste box below and click Apply."
+      );
     }
   };
 
@@ -269,7 +270,7 @@ export function PowerShellVerifierPanel({ scriptText, onScriptSigned, language }
               <div>
                 <h6 className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                   {language === 'ko' ? rule.nameKo : rule.name}
-                  <span className={`ml-1.5 font-semibold text-[9px] px-1 py-0.2 rounded-md ${
+                  <span className={`ml-1.5 font-semibold text-[9px] px-1 py-0.5 rounded-md ${
                     rule.isSecure 
                       ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
                       : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600'
@@ -450,7 +451,7 @@ export function PowerShellVerifierPanel({ scriptText, onScriptSigned, language }
                       handleSandboxChange('');
                       setPasteError(null);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-955/40 hover:bg-rose-900/40 active:bg-rose-955/60 text-rose-300 hover:text-rose-100 text-[11px] font-semibold border border-rose-910/40 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-950/40 hover:bg-rose-900/40 active:bg-rose-950/60 text-rose-300 hover:text-rose-100 text-[11px] font-semibold border border-rose-900/40 transition-all cursor-pointer shadow-sm hover:scale-[1.02] duration-150"
                     title={language === 'ko' ? '스크립트 전체 비우기' : 'Clear All'}
                   >
                     <Trash2 className="w-3.5 h-3.5 text-rose-400" />
@@ -462,6 +463,43 @@ export function PowerShellVerifierPanel({ scriptText, onScriptSigned, language }
               {pasteError && (
                 <div className="bg-amber-950/40 border-b border-amber-900/30 p-2.5 text-[10px] text-amber-400 leading-normal">
                   {pasteError}
+                </div>
+              )}
+
+              {showManualPasteBox && (
+                <div className="bg-slate-900/90 border-b border-slate-800 p-3 space-y-2">
+                  <textarea
+                    className="w-full h-20 bg-slate-950 text-slate-200 font-mono text-xs p-2 rounded border border-slate-700 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                    value={manualPasteDraft}
+                    onChange={(e) => setManualPasteDraft(e.target.value)}
+                    placeholder={language === 'ko' ? '여기에 Ctrl+V로 스크립트를 붙여넣은 뒤 [적용]을 클릭하세요...' : 'Press Ctrl+V here and click Apply...'}
+                    autoFocus
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowManualPasteBox(false);
+                        setPasteError(null);
+                      }}
+                      className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                    >
+                      {language === 'ko' ? '취소' : 'Cancel'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSandboxChange(manualPasteDraft);
+                        setShowManualPasteBox(false);
+                        setPasteError(null);
+                        setPasted(true);
+                        setTimeout(() => setPasted(false), 2000);
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                    >
+                      {language === 'ko' ? '적용' : 'Apply'}
+                    </button>
+                  </div>
                 </div>
               )}
 

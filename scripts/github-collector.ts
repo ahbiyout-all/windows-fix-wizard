@@ -374,6 +374,7 @@ JSON Schema:
 
   // Normalize, deduplicate and format into KnownIssue
   const newIssues: KnownIssue[] = [];
+  const batchNormalizedTitles = new Set<string>();
   const nowIso = new Date().toISOString();
 
   for (const raw of parsedItems) {
@@ -385,9 +386,9 @@ JSON Schema:
     // Check duplication according to dedupStrictness option
     const normalizedCode = code.toLowerCase().trim();
     const normalizedTitle = title.toLowerCase().replace(/\s+/g, '');
-    const isDupTitle = existingIssues.some(
-      ex => ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
-    );
+    const isDupTitle =
+      batchNormalizedTitles.has(normalizedTitle) ||
+      existingIssues.some(ex => ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle);
     const isDupCodeStrict = dedupStrictness === 'strict' && normalizedCode.length >= 4 && avoidCodes.has(normalizedCode);
     const isDupCodeAndTitle = existingIssues.some(
       ex => ex.code && ex.code.toLowerCase().trim() === normalizedCode && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
@@ -437,6 +438,7 @@ JSON Schema:
     };
 
     newIssues.push(formattedIssue);
+    batchNormalizedTitles.add(normalizedTitle);
     if (normalizedCode) avoidCodes.add(normalizedCode);
   }
 
@@ -504,7 +506,13 @@ JSON Schema:
           })
         });
 
-        const webhookData = await webhookRes.json();
+        const rawWebhookText = await webhookRes.text();
+        let webhookData: any = rawWebhookText;
+        try {
+          webhookData = JSON.parse(rawWebhookText);
+        } catch {
+          // keep raw text preview if webhook returned HTML or plain text
+        }
         console.log(`✅ Live Webhook Response (${webhookRes.status}):`, webhookData);
       } catch (webhookErr: any) {
         console.warn(`⚠️ Failed to ping web application webhook:`, webhookErr.message);

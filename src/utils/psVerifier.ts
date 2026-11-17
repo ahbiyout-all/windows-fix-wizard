@@ -108,11 +108,10 @@ export function verifyPowerShellScript(scriptText: string | undefined | null): P
     });
   }
 
-  // Backticks obfuscation (e.g. g`e`t-p`r`o`c`e`s`s)
-  if (/(\w+`\w+)+/i.test(scriptContentOnly) && scriptContentOnly.includes('`')) {
-    // Make sure we are not just seeing backticks in format strings, e.g. `n or `r
-    const customBacktickMatches = scriptContentOnly.match(/\w+`\w+/g);
-    if (customBacktickMatches && customBacktickMatches.some(m => !m.endsWith('`n') && !m.endsWith('`r') && !m.endsWith('`t'))) {
+  // Backticks obfuscation (e.g. g`e`t-p`r`o`c`e`s`s), avoiding ReDoS and valid PS escapes (`n, `r, `t, `0)
+  if (scriptContentOnly.includes('`')) {
+    const customBacktickMatches = scriptContentOnly.match(/\w+`[A-Za-z0-9]/g);
+    if (customBacktickMatches && customBacktickMatches.some(m => !/`[nrt0abfv]$/i.test(m))) {
       signals.push({
         pattern: 'Backtick Obfuscation',
         severity: 'high',
@@ -143,7 +142,7 @@ export function verifyPowerShellScript(scriptText: string | undefined | null): P
   }
 
   // Format String joining or byte arrays
-  if (/([char]\d+|[char]\[\]|\[char\]\d+)/i.test(scriptContentOnly)) {
+  if (/(\[char\]\s*\d+|\[char\[\]\])/i.test(scriptContentOnly)) {
     signals.push({
       pattern: 'Char/Byte Array Injection',
       severity: 'medium',

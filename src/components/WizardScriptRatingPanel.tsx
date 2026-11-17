@@ -271,7 +271,7 @@ export const WizardScriptRatingPanel: React.FC<WizardScriptRatingPanelProps> = (
           >
             <ThumbsUp className={`w-3.5 h-3.5 ${userVote === 'up' ? 'fill-current' : ''}`} />
             <span>{isEn ? 'Effective' : '해결됨'}</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${userVote === 'up' ? 'bg-emerald-700 text-emerald-100' : 'bg-slate-900 text-slate-400'}`}>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${userVote === 'up' ? 'bg-emerald-700 text-emerald-100' : 'bg-slate-900 text-slate-400'}`}>
               {currentUpCount}
             </span>
           </button>
@@ -289,7 +289,7 @@ export const WizardScriptRatingPanel: React.FC<WizardScriptRatingPanelProps> = (
           >
             <ThumbsDown className={`w-3.5 h-3.5 ${userVote === 'down' ? 'fill-current' : ''}`} />
             <span>{isEn ? 'Ineffective' : '해결 안 됨'}</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${userVote === 'down' ? 'bg-rose-700 text-rose-100' : 'bg-slate-900 text-slate-400'}`}>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${userVote === 'down' ? 'bg-rose-700 text-rose-100' : 'bg-slate-900 text-slate-400'}`}>
               {currentDownCount}
             </span>
           </button>

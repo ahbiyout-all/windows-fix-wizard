@@ -28,13 +28,11 @@ const orderBy = (...args: any[]): any => ({});
 const where = (...args: any[]): any => ({});
 const writeBatch = (...args: any[]): any => ({ commit: async () => {}, set: () => {}, update: () => {}, delete: () => {} });
 const getCountFromServer = async (...args: any[]): Promise<any> => ({ data: () => ({ count: 0 }) });
-const signInWithPopup = async (...args: any[]): Promise<any> => ({
-  user: {
-    email: 'ahbiyoutwinfix@gmail.com',
-    displayName: 'AhBiYout Administrator',
-    getIdToken: async () => 'local-admin-token'
-  }
-});
+const signInWithPopup = async (..._args: any[]): Promise<any> => {
+  const err: any = new Error('Google OAuth popup is not configured in standalone mode.');
+  err.code = 'auth/oauth-not-configured';
+  throw err;
+};
 class GoogleAuthProvider {
   constructor(...args: any[]) {}
   setCustomParameters(...args: any[]) {}
@@ -72,7 +70,6 @@ import { DailyQuotaUsageChart } from './components/DailyQuotaUsageChart';
 import { SystemInfoWidget } from './components/SystemInfoWidget';
 import { GitHubPagesDeployDoc } from './components/GitHubPagesDeployDoc';
 import { GitHubWorkflowStatus } from './components/GitHubWorkflowStatus';
-import { DeploymentDashboardWidget } from './components/DeploymentDashboardWidget';
 import { ReadingProgressBar } from './components/ReadingProgressBar';
 import { parseJsonResponse, parseAiJson } from './utils/safeFetch';
 import { validateKnownIssuesData, ValidationResult } from './utils/validateKnownIssue';
@@ -129,18 +126,11 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  // 1. Check if admin passkey is used
   const isPasskeyActive = localStorage.getItem('winfix_admin_passkey_active') === 'true';
-  const adminToken = localStorage.getItem('winfix_admin_token');
-  
-  if (adminToken && (adminToken.startsWith('passkey:') || isPasskeyActive)) {
-    return {
-      'Authorization': `Bearer ${adminToken}`
-    };
-  }
+  const rawToken = localStorage.getItem('winfix_admin_token');
+  const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : '';
 
-  // 2. Fallback to existing admin token if present
-  if (adminToken) {
+  if (adminToken && (adminToken.startsWith('passkey:') || isPasskeyActive)) {
     return {
       'Authorization': `Bearer ${adminToken}`
     };
@@ -712,7 +702,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.103.4";
+const APP_VERSION = "3.105.5";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -726,13 +716,45 @@ const IS_GITHUB_PAGES = typeof window !== 'undefined' && (
   window.location.hostname.includes('pages.dev')
 );
 
-const getKSTISOString = () => {
-  const now = new Date();
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const kst = new Date(utc + (9 * 3600000));
+const getKSTISOString = (ts: number = Date.now()) => {
+  const kst = new Date(ts + 9 * 3600000);
   const pad = (n: number) => n.toString().padStart(2, '0');
   const msPad = (n: number) => n.toString().padStart(3, '0');
-  return `${kst.getFullYear()}-${pad(kst.getMonth() + 1)}-${pad(kst.getDate())}T${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}.${msPad(kst.getMilliseconds())}+09:00`;
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}T${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}:${pad(kst.getUTCSeconds())}.${msPad(kst.getUTCMilliseconds())}+09:00`;
+};
+
+const safeWriteClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) {}
+  try {
+    if (typeof document !== 'undefined') {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    }
+  } catch (_) {}
+  return false;
+};
+
+const safeParseLocalArray = <T = any>(key: string): T[] => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 const mergeIssuesDeduplicated = (baseList: KnownIssue[], incomingList: KnownIssue[]): { merged: KnownIssue[]; addedCount: number; updatedCount: number } => {
@@ -1267,7 +1289,6 @@ export default function App() {
   const [isPullingFirestoreBundles, setIsPullingFirestoreBundles] = useState<boolean>(false);
   const [isDispatchingWorkflow, setIsDispatchingWorkflow] = useState<boolean>(false);
   const [isDeployingPages, setIsDeployingPages] = useState<boolean>(false);
-  const [isPushingGithub, setIsPushingGithub] = useState<boolean>(false);
   const [isInstantSyncing, setIsInstantSyncing] = useState<boolean>(false);
   const [instantSyncStep, setInstantSyncStep] = useState<number>(0);
   const [instantSyncMsg, setInstantSyncMsg] = useState<string>('');
@@ -1300,7 +1321,6 @@ export default function App() {
   const [isPushingCollectorOptions, setIsPushingCollectorOptions] = useState<boolean>(false);
   const [collectorOptionsStatus, setCollectorOptionsStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [showGitOpsGuideModal, setShowGitOpsGuideModal] = useState<boolean>(false);
-  const [showGitOpsDiagramCard, setShowGitOpsDiagramCard] = useState<boolean>(true);
   const [gitOpsGuideActiveTab, setGitOpsGuideActiveTab] = useState<'architecture' | 'permissions' | 'secrets' | 'cron' | 'cli'>('architecture');
   const [copiedGuideMarkdown, setCopiedGuideMarkdown] = useState<boolean>(false);
 
@@ -1889,6 +1909,10 @@ export default function App() {
   const githubRepoTotalCount = useMemo(() => {
     return dbSourceBreakdown.total || categoryCounts['전체'] || fullIssuesPool.length || dbIssues.length || 0;
   }, [dbSourceBreakdown.total, categoryCounts, fullIssuesPool.length, dbIssues.length]);
+
+  const myLabIssuesPool = useMemo(() => {
+    return mergeIssuesDeduplicated([...KNOWN_ISSUES, ...fullIssuesPool], dbIssues).merged;
+  }, [fullIssuesPool, dbIssues]);
 
   const [showFeedbackModal, setShowFeedbackModal] = useState<string | null>(null);
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -2499,9 +2523,10 @@ export default function App() {
         return;
       }
 
+      const authHeaders = await getAuthHeaders();
       const res = await fetch('/api/ai/validate-key', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ key: keyVal })
       });
       const data = await res.json();
@@ -3667,162 +3692,6 @@ export default function App() {
     setIsDeployingPages(false);
   };
 
-  const handlePushToGithub = async () => {
-    if (!isAdmin) return;
-    const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
-    const targetBranch = githubBranch.trim() || 'main';
-    const storedToken = (() => {
-      if (githubToken.trim()) return githubToken.trim();
-      try {
-        const local = localStorage.getItem('winfix_github_config');
-        return local ? JSON.parse(local).token : '';
-      } catch (e) { return ''; }
-    })();
-
-    if (!hasServerGithubToken && !storedToken) {
-      customAlert(
-        language === 'en'
-          ? "GitHub PAT Token is required for pushing database changes. Please enter a PAT with 'repo' and 'workflow' permissions below."
-          : "GitHub 저장소 데이터 커밋 및 푸시를 위해 Personal Access Token(PAT)이 필요합니다. 아래 연동 설정창에서 '새 토큰 발급' 링크를 클릭해 토큰을 생성 및 저장해 주세요.",
-        scrollToGithubSettings
-      );
-      scrollToGithubSettings();
-      return;
-    }
-
-    setIsPushingGithub(true);
-    let success = false;
-    let pushMsg = '';
-
-    // 1. Try server API first
-    try {
-      const authHeaders = await getAuthHeaders();
-      const resp = await fetch("/api/github/push-to-repo", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders
-        },
-        body: JSON.stringify({
-          repo: targetRepo,
-          branch: targetBranch,
-          token: storedToken || undefined
-        })
-      });
-      const data = await parseJsonResponse(resp);
-      if (data.success) {
-        success = true;
-        pushMsg = data.message || "GitHub에 최신 데이터베이스를 성공적으로 푸시했습니다!";
-        await fetchGithubConfig();
-      }
-    } catch (apiErr) {
-      console.warn("Server push-to-repo endpoint skipped (static mode):", apiErr);
-    }
-
-    // 2. Direct client-side GitHub REST API fallback (for GitHub Pages static host)
-    if (!success) {
-      try {
-        const issuesToPush = dbIssues && dbIssues.length > 0 ? dbIssues : KNOWN_ISSUES;
-        const filePath = 'data/issues.json';
-        const fileUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`;
-        const headers = {
-          'Authorization': `Bearer ${storedToken}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        };
-
-        // Get file SHA
-        let fileSha: string | undefined = undefined;
-        try {
-          const getRes = await fetch(fileUrl, { headers });
-          if (getRes.status === 401 || getRes.status === 403) {
-            throw new Error("GitHub 인증 실패 (401 Bad Credentials): PAT 토큰이 올바르지 않거나 'repo' 권한이 없습니다.");
-          }
-          if (getRes.ok) {
-            const fileInfo = await getRes.json();
-            fileSha = fileInfo.sha;
-          }
-        } catch (e: any) {
-          if (e.message?.includes('GitHub 인증 실패')) throw e;
-        }
-
-        const jsonStr = JSON.stringify(issuesToPush, null, 2);
-        // UTF-8 to Base64
-        const encoder = new TextEncoder();
-        const dataBytes = encoder.encode(jsonStr);
-        let binaryStr = '';
-        for (let i = 0; i < dataBytes.length; i++) {
-          binaryStr += String.fromCharCode(dataBytes[i]);
-        }
-        const contentBase64 = btoa(binaryStr);
-
-        const commitMessage = `🚀 [GitOps Direct] Push database updates (${issuesToPush.length} issues) via Web Admin`;
-
-        const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({
-            message: commitMessage,
-            content: contentBase64,
-            branch: targetBranch,
-            sha: fileSha
-          })
-        });
-
-        if (!putRes.ok) {
-          const errBody = await putRes.text();
-          throw new Error(`GitHub 커밋 실패 (${putRes.status}): ${errBody}`);
-        }
-
-        success = true;
-        pushMsg = `GitHub 저장소(${targetRepo}/data/issues.json)에 최신 ${issuesToPush.length}개 데이터베이스를 직접 푸시했습니다!`;
-
-        // If autoDeployPages is enabled, trigger deploy-pages.yml
-        if (autoDeployPages) {
-          try {
-            await fetch(`https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({ ref: targetBranch })
-            });
-            pushMsg += " GitHub Pages 자동 배포 파이프라인(deploy-pages.yml)이 가동되었습니다 (약 1분 후 라이브 사이트 반영).";
-          } catch (_) {}
-        }
-      } catch (clientErr: any) {
-        const isAuthErr = clientErr.message?.includes('401') || clientErr.message?.includes('Bad Credentials') || clientErr.message?.includes('인증');
-        
-        let displayMsg = language === 'en' 
-          ? `GitHub push failed: ${clientErr.message}` 
-          : `GitHub 데이터 푸시 실패: ${clientErr.message}`;
-          
-        if (isAuthErr) {
-          displayMsg = language === 'en'
-            ? "GitHub Authentication Failed (401). Your Personal Access Token (PAT) may be invalid or missing 'repo' and 'workflow' scopes. Please issue a new token and update settings."
-            : "GitHub 인증 실패 (401): 입력된 PAT 토큰이 올바르지 않거나 'repo' 및 'workflow' 권한이 없습니다. [새 토큰 발급] 링크를 클릭해 권한이 설정된 토큰을 새로 발급받아 입력해 주세요.";
-        }
-
-        customAlert(
-          displayMsg,
-          isAuthErr ? () => {
-            scrollToGithubSettings();
-            setTimeout(() => {
-              const input = document.getElementById('github-pat-input');
-              if (input) input.focus();
-            }, 500);
-          } : undefined
-        );
-        if (isAuthErr) scrollToGithubSettings();
-        setIsPushingGithub(false);
-        return;
-      }
-    }
-
-    if (success) {
-      customAlert(pushMsg);
-    }
-    setIsPushingGithub(false);
-  };
-
   const handleInstantSync = async () => {
     if (!isAdmin) return;
     const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
@@ -3866,7 +3735,7 @@ export default function App() {
       const contentBase64 = btoa(binaryStr);
       const datasetSizeKb = (dataBytes.length / 1024).toFixed(1);
 
-      // Step 2: Push commit directly to repository
+      // Step 2: Push commit directly to repository (Server-first when backend is available so server GITHUB_TOKEN is used safely)
       setInstantSyncStep(2);
       setInstantSyncMsg(
         language === 'en'
@@ -3874,71 +3743,115 @@ export default function App() {
           : `Step 2/3: ${issuesToPush.length}개 이슈 (${datasetSizeKb} KB)를 GitHub 저장소에 커밋 및 푸시 중...`
       );
 
-      const filePath = 'data/issues.json';
-      const headers: Record<string, string> = {
-        'Authorization': `Bearer ${storedToken}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      };
-
-      let fileSha: string | undefined = undefined;
-      let remoteContentBase64: string | undefined = undefined;
-      try {
-        const getRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`, { headers });
-        if (getRes.status === 401 || getRes.status === 403) {
-          throw new Error("GitHub 인증 실패 (401 Bad Credentials): PAT 토큰이 올바르지 않거나 'repo' 권한이 없습니다.");
+      let pushedViaServer = false;
+      if (!IS_GITHUB_PAGES) {
+        try {
+          const authHeaders = await getAuthHeaders();
+          const serverResp = await fetch('/api/github/push-to-repo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({
+              repo: targetRepo,
+              branch: targetBranch,
+              token: storedToken || undefined,
+              commitMessage: `⚡ [Instant Sync & GitOps] Manual push data/issues.json (${issuesToPush.length} issues) via Web Admin`,
+              deployPages: true
+            })
+          });
+          const serverData = await parseJsonResponse(serverResp);
+          if (serverResp.ok && serverData.success) {
+            pushedViaServer = true;
+            setInstantSyncStep(3);
+            setInstantSyncMsg(
+              language === 'en'
+                ? 'Step 3/3: GitHub Pages deployment pipeline triggered via server...'
+                : 'Step 3/3: 서버 GitOps 경로로 GitHub Pages 배포 파이프라인 연동 완료...'
+            );
+          } else if (serverResp.status !== 404 && !storedToken) {
+            throw new Error(serverData.error || `GitHub 푸시 서버 오류 (${serverResp.status})`);
+          }
+        } catch (serverErr: any) {
+          if (!storedToken) {
+            throw serverErr;
+          }
         }
-        if (getRes.ok) {
-          const fileInfo = await getRes.json();
-          fileSha = fileInfo.sha;
-          remoteContentBase64 = (fileInfo.content || '').replace(/\s+/g, '');
-        }
-      } catch (e: any) {
-        if (e.message?.includes('GitHub 인증 실패')) throw e;
       }
 
-      // Smart Diff Check: If remote dataset is already identical, bypass commit to save API quota
-      const cleanLocalBase64 = contentBase64.replace(/\s+/g, '');
-      const isIdentical = remoteContentBase64 && remoteContentBase64 === cleanLocalBase64;
+      if (!pushedViaServer) {
+        if (!storedToken) {
+          throw new Error(
+            language === 'en'
+              ? 'Client PAT token is empty and server push failed.'
+              : '클라이언트 PAT 토큰이 비어 있고 서버 GitHub 푸시에 실패했습니다.'
+          );
+        }
 
-      if (!isIdentical) {
-        const commitMsg = `⚡ [Instant Sync & GitOps] Manual push data/issues.json (${issuesToPush.length} issues) via Web Admin`;
-        const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
-          method: 'PUT',
+        const filePath = 'data/issues.json';
+        const headers: Record<string, string> = {
+          'Authorization': `Bearer ${storedToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        };
+
+        let fileSha: string | undefined = undefined;
+        let remoteContentBase64: string | undefined = undefined;
+        try {
+          const getRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`, { headers });
+          if (getRes.status === 401 || getRes.status === 403) {
+            throw new Error("GitHub 인증 실패 (401 Bad Credentials): PAT 토큰이 올바르지 않거나 'repo' 권한이 없습니다.");
+          }
+          if (getRes.ok) {
+            const fileInfo = await getRes.json();
+            fileSha = fileInfo.sha;
+            remoteContentBase64 = (fileInfo.content || '').replace(/\s+/g, '');
+          }
+        } catch (e: any) {
+          if (e.message?.includes('GitHub 인증 실패')) throw e;
+        }
+
+        // Smart Diff Check: If remote dataset is already identical, bypass commit to save API quota
+        const cleanLocalBase64 = contentBase64.replace(/\s+/g, '');
+        const isIdentical = remoteContentBase64 && remoteContentBase64 === cleanLocalBase64;
+
+        if (!isIdentical) {
+          const commitMsg = `⚡ [Instant Sync & GitOps] Manual push data/issues.json (${issuesToPush.length} issues) via Web Admin`;
+          const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({
+              message: commitMsg,
+              content: contentBase64,
+              branch: targetBranch,
+              sha: fileSha
+            })
+          });
+
+          if (!putRes.ok) {
+            const errBody = await putRes.text();
+            throw new Error(`GitHub 커밋 실패 (${putRes.status}): ${errBody}`);
+          }
+        } else {
+          console.log("[Instant Sync] Remote data/issues.json already up-to-date. Bypassing redundant commit.");
+        }
+
+        // Step 3: Trigger GitHub Pages workflow dispatch
+        setInstantSyncStep(3);
+        setInstantSyncMsg(
+          language === 'en'
+            ? 'Step 3/3: Dispatching GitHub Pages deployment pipeline (deploy-pages.yml)...'
+            : 'Step 3/3: GitHub Pages 원격 배포 파이프라인(deploy-pages.yml) 가동 중...'
+        );
+
+        const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`;
+        const dispatchRes = await fetch(dispatchUrl, {
+          method: 'POST',
           headers,
-          body: JSON.stringify({
-            message: commitMsg,
-            content: contentBase64,
-            branch: targetBranch,
-            sha: fileSha
-          })
+          body: JSON.stringify({ ref: targetBranch })
         });
 
-        if (!putRes.ok) {
-          const errBody = await putRes.text();
-          throw new Error(`GitHub 커밋 실패 (${putRes.status}): ${errBody}`);
+        if (!dispatchRes.ok && dispatchRes.status !== 204) {
+          console.warn("Pages workflow dispatch returned status:", dispatchRes.status);
         }
-      } else {
-        console.log("[Instant Sync] Remote data/issues.json already up-to-date. Bypassing redundant commit.");
-      }
-
-      // Step 3: Trigger GitHub Pages workflow dispatch
-      setInstantSyncStep(3);
-      setInstantSyncMsg(
-        language === 'en'
-          ? 'Step 3/3: Dispatching GitHub Pages deployment pipeline (deploy-pages.yml)...'
-          : 'Step 3/3: GitHub Pages 원격 배포 파이프라인(deploy-pages.yml) 가동 중...'
-      );
-
-      const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`;
-      const dispatchRes = await fetch(dispatchUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ref: targetBranch })
-      });
-
-      if (!dispatchRes.ok && dispatchRes.status !== 204) {
-        console.warn("Pages workflow dispatch returned status:", dispatchRes.status);
       }
 
       const successMsg = language === 'en'
@@ -4644,7 +4557,9 @@ export default function App() {
     category: 'ISSUE' | 'AI' | 'DATABASE' | 'AUTH' | 'SYSTEM' = 'SYSTEM',
     changes?: Record<string, { old: any, new: any }>
   ) => {
-    if (!user || !isAdmin) return;
+    if (!isAdmin) return;
+    const resolvedEmail = user?.email || adminSessionEmail || 'admin';
+    const resolvedUid = user?.uid || `passkey:${resolvedEmail}`;
     const logData = {
       action,
       targetId,
@@ -4653,8 +4568,8 @@ export default function App() {
       category,
       changes: changes || null,
       timestamp: new Date().toISOString(),
-      adminEmail: user?.email || null,
-      adminUid: user.uid,
+      adminEmail: resolvedEmail,
+      adminUid: resolvedUid,
       metadata: {
         userAgent: navigator.userAgent,
         platform: navigator.platform,
@@ -4664,9 +4579,10 @@ export default function App() {
 
     // 1. Log locally override
     try {
+      const authHeaders = await getAuthHeaders();
       await fetch('/api/logs/add', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ type: 'admin', log: logData })
       });
     } catch (err) {
@@ -6550,7 +6466,7 @@ export default function App() {
   };
 
   const optimizeAiModel = async () => {
-    if (!isAdmin || !user) return;
+    if (!isAdmin) return;
     setIsOptimizingAi(true);
     try {
       const feedbackSnap = await getDocs(firestoreQuery(collection(db, 'feedback'), where('isSolved', '==', true), limit(30)));
@@ -6608,7 +6524,7 @@ export default function App() {
       await setDoc(doc(db, 'ai_config', 'knowledge'), {
         content: text,
         updatedAt: new Date(),
-        optimizedBy: user?.email || 'unknown',
+        optimizedBy: user?.email || adminSessionEmail || 'admin',
         dataPoints: solvedPatterns.length + updatePatterns.length
       });
 
@@ -6629,16 +6545,16 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Check if passkey admin session is active
-    const checkPasskeySession = () => {
-      const savedPasskey = localStorage.getItem('winfix_admin_passkey_active');
-      const savedEmail = localStorage.getItem('winfix_admin_email') || 'ahbiyoutwinfix@gmail.com';
-      if (savedPasskey === 'true') {
-        setIsAdmin(true);
-        setAdminSessionEmail(savedEmail);
-      }
-    };
-    checkPasskeySession();
+    const savedPasskey = localStorage.getItem('winfix_admin_passkey_active') === 'true';
+    const savedToken = localStorage.getItem('winfix_admin_token') || '';
+    const savedEmail = localStorage.getItem('winfix_admin_email') || 'ahbiyoutwinfix@gmail.com';
+    const hasUsableToken = Boolean(savedToken && savedToken !== 'local-admin-token');
+
+    if (savedPasskey && !IS_GITHUB_PAGES && !hasUsableToken) {
+      localStorage.removeItem('winfix_admin_passkey_active');
+      localStorage.removeItem('winfix_admin_token');
+      localStorage.removeItem('winfix_admin_email');
+    }
 
     // Check if general user session is active
     try {
@@ -6651,9 +6567,23 @@ export default function App() {
       }
     } catch (_) {}
 
-    const hasPasskeyAdmin = localStorage.getItem('winfix_admin_passkey_active') === 'true';
+    const hasPasskeyAdmin = localStorage.getItem('winfix_admin_passkey_active') === 'true' && (IS_GITHUB_PAGES || hasUsableToken);
     setIsAdmin(hasPasskeyAdmin);
     if (hasPasskeyAdmin) {
+      setAdminSessionEmail(savedEmail);
+      if (!IS_GITHUB_PAGES) {
+        fetch('/api/admin/session', { headers: { Authorization: `Bearer ${savedToken}` } })
+          .then((res) => {
+            if (res.status === 401 || res.status === 403) {
+              localStorage.removeItem('winfix_admin_passkey_active');
+              localStorage.removeItem('winfix_admin_token');
+              localStorage.removeItem('winfix_admin_email');
+              setIsAdmin(false);
+              setAdminSessionEmail('');
+            }
+          })
+          .catch(() => {});
+      }
       fetchCloudApiKeyConfig();
     }
     fetchAiKnowledge();
@@ -6807,45 +6737,41 @@ export default function App() {
 
         const validActivity = activityToImport.filter(item => item.type && item.timestamp);
         
-        // 1. Process Activities
+        // 1. Process Activities synchronously so imported counts reflect accurately in alerts
         let newItemsCount = 0;
         if (validActivity.length > 0) {
-          setUserActivity(prev => {
-            const existingMap = new Map(prev.map(a => [`${a.type}_${a.query || a.targetId}_${a.timestamp}`, a]));
-            
-            (validActivity as any[]).forEach(item => {
-              const key = `${item.type}_${item.query || item.targetId}_${item.timestamp}`;
-              if (!existingMap.has(key)) {
-                existingMap.set(key, item);
-                newItemsCount++;
-              }
-            });
+          const existingMap = new Map(userActivity.map(a => [`${a.type}_${a.query || a.targetId}_${a.timestamp}`, a]));
 
-            const merged = Array.from(existingMap.values())
-              .sort((a, b) => new Date((b as any).timestamp).getTime() - new Date((a as any).timestamp).getTime())
-              .slice(0, 50);
-
-            if (!user) {
-              localStorage.setItem('guest_history', JSON.stringify(merged));
+          (validActivity as any[]).forEach(item => {
+            const key = `${item.type}_${item.query || item.targetId}_${item.timestamp}`;
+            if (!existingMap.has(key)) {
+              existingMap.set(key, item);
+              newItemsCount++;
             }
-            return merged;
           });
+
+          const merged = Array.from(existingMap.values())
+            .sort((a, b) => new Date((b as any).timestamp).getTime() - new Date((a as any).timestamp).getTime())
+            .slice(0, 50);
+
+          if (!user) {
+            localStorage.setItem('guest_history', JSON.stringify(merged));
+          }
+          setUserActivity(merged);
         }
 
-        // 2. Process Bookmarks
+        // 2. Process Bookmarks synchronously
         let newBookmarksCount = 0;
         if (bookmarksToImport.length > 0) {
-          setBookmarkedIds(prev => {
-            const next = new Set(prev);
-            bookmarksToImport.forEach(id => {
-              if (!next.has(id)) {
-                next.add(id);
-                newBookmarksCount++;
-              }
-            });
-            localStorage.setItem('winfix_bookmarks', JSON.stringify(Array.from(next)));
-            return next;
+          const next = new Set(bookmarkedIds);
+          bookmarksToImport.forEach(id => {
+            if (!next.has(id)) {
+              next.add(id);
+              newBookmarksCount++;
+            }
           });
+          localStorage.setItem('winfix_bookmarks', JSON.stringify(Array.from(next)));
+          setBookmarkedIds(next);
         }
 
         if (newItemsCount === 0 && newBookmarksCount === 0) {
@@ -7134,7 +7060,9 @@ export default function App() {
         setAdminSessionEmail(loggedUser.email);
         localStorage.setItem('winfix_admin_email', loggedUser.email);
         localStorage.setItem('winfix_admin_passkey_active', 'true');
-        localStorage.setItem('winfix_admin_token', token || 'local-admin-token');
+        if (token) {
+          localStorage.setItem('winfix_admin_token', token);
+        }
         setActiveTab('admin');
       } else {
         setIsAdmin(false);
@@ -7162,20 +7090,13 @@ export default function App() {
     setAuthLoading(true);
     setAuthError('');
     try {
-      let res: any = null;
-      try {
-        res = await signInWithPopup(auth, provider);
-      } catch (e) {
-        console.warn("Google popup auth fallback active:", e);
+      const res: any = await signInWithPopup(auth, provider);
+      const userObj = res?.user;
+      if (!userObj?.email) {
+        throw new Error(language === 'en' ? 'Google sign-in did not return an account.' : 'Google 로그인 계정 정보를 받지 못했습니다.');
       }
 
-      const userObj = res?.user || {
-        email: 'ahbiyoutwinfix@gmail.com',
-        displayName: 'AhBiYout Administrator',
-        getIdToken: async () => 'local-admin-token'
-      };
-
-      const email = (userObj?.email || 'ahbiyoutwinfix@gmail.com').toLowerCase().trim();
+      const email = userObj.email.toLowerCase().trim();
       const adminEmails = [
         'redmunlight@gmail.com', 
         'ahbiyout@gmail.com', 
@@ -7185,27 +7106,34 @@ export default function App() {
       
       const isAdm = email && adminEmails.includes(email);
 
-      // Silently sync Google User to local file database (data/users.json)
+      // Sync Google User to local file database (data/users.json)
       try {
-        await fetch('/api/auth/google-sync', {
+        const syncResp = await fetch('/api/auth/google-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, displayName: userObj?.displayName || email.split('@')[0] })
         });
-      } catch (syncErr) {
+        if (syncResp.status === 403) {
+          const blockedData = await syncResp.json().catch(() => ({}));
+          throw new Error(blockedData.error || '이용이 제한된 계정입니다.');
+        }
+      } catch (syncErr: any) {
+        if (syncErr?.message?.includes('이용이 제한')) {
+          throw syncErr;
+        }
         console.warn("Google user sync to local DB non-blocking warning:", syncErr);
       }
 
-      if (isAdm) {
+      const idToken = typeof userObj?.getIdToken === 'function' ? await userObj.getIdToken() : '';
+      const hasValidJwtToken = Boolean(idToken && idToken !== 'local-admin-token' && idToken.split('.').length === 3);
+
+      if (isAdm && hasValidJwtToken) {
         setIsAdmin(true);
         setAdminSessionEmail(email);
         setUser({ email, displayName: userObj?.displayName || 'AhBiYout Administrator' });
         localStorage.setItem('winfix_admin_email', email);
         localStorage.setItem('winfix_admin_passkey_active', 'true');
-        try {
-          const idToken = typeof userObj?.getIdToken === 'function' ? await userObj.getIdToken() : 'local-admin-token';
-          localStorage.setItem('winfix_admin_token', idToken);
-        } catch (e) {}
+        localStorage.setItem('winfix_admin_token', idToken);
         setActiveTab('admin');
       } else {
         setIsAdmin(false);
@@ -7213,7 +7141,7 @@ export default function App() {
         localStorage.removeItem('winfix_admin_passkey_active');
         localStorage.removeItem('winfix_admin_token');
         if (targetRole === 'admin' || authMode === 'admin') {
-          // If user specifically requested admin mode with non-admin email
+          // If user specifically requested admin mode without verified server token
           setAuthError(
             language === 'en' 
               ? `Account (${email}) is verified as a standard user. If you are an administrator, use the emergency passkey below.`
@@ -7232,6 +7160,7 @@ export default function App() {
                           errCode === 'auth/cancelled-popup-request' ||
                           errMsg.includes('popup-closed-by-user') ||
                           errMsg.includes('cancelled-popup-request');
+      const isOauthNotConfigured = errCode === 'auth/oauth-not-configured';
       const isDomainError = errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain');
       const isPopupBlocked = errCode === 'auth/popup-blocked';
       
@@ -7240,7 +7169,11 @@ export default function App() {
         setAuthError('');
       } else {
         console.error("Google auth failed", error);
-        if (isPopupBlocked) {
+        if (isOauthNotConfigured) {
+          setAuthError(language === 'en'
+            ? "Google OAuth popup is not enabled in standalone mode. Please use Email/Password login or Emergency Admin Master Passkey."
+            : "독립 실행 환경에서는 Google OAuth 팝업이 비활성화되어 있습니다. 아래의 이메일 로그인 또는 '비상 마스터 패스키'를 이용해주세요.");
+        } else if (isPopupBlocked) {
           setAuthError(language === 'en' 
             ? "Popup was blocked by the browser. You can use the 'Admin Master Passkey' below to log in directly." 
             : "브라우저에서 팝업이 차단되었습니다. 바로 아래의 '관리자 보안 마스터 패스키'를 사용하여 즉시 로그인하실 수 있습니다.");
@@ -7289,7 +7222,7 @@ export default function App() {
             setAdminPasskeyLoading(false);
             return;
           }
-        } else if (IS_GITHUB_PAGES || resp.status === 404) {
+        } else if (IS_GITHUB_PAGES) {
           // Static hosting fallback (GitHub Pages has no Node backend server)
           isVerified = true;
           token = `passkey:${pk}`;
@@ -7374,12 +7307,9 @@ export default function App() {
     // 2. Instant Local/Memory Search across all known issues & cached bundles to completely eliminate Firestore reads
     if (!isLoadMore && searchQuery) {
       const allCandidates: KnownIssue[] = (() => {
-        const stored = localStorage.getItem('winfix_unpacked_bundles');
-        const bundleIssues: KnownIssue[] = stored ? JSON.parse(stored) : [];
-        const cachedDefault = localStorage.getItem(ISSUES_CACHE_KEY);
-        const defaultIssues: KnownIssue[] = cachedDefault ? JSON.parse(cachedDefault) : [];
-        const pagesMergedRaw = localStorage.getItem('winfix_github_pages_merged_issues');
-        const pagesMerged: KnownIssue[] = pagesMergedRaw ? JSON.parse(pagesMergedRaw) : [];
+        const bundleIssues = safeParseLocalArray<KnownIssue>('winfix_unpacked_bundles');
+        const defaultIssues = safeParseLocalArray<KnownIssue>(ISSUES_CACHE_KEY);
+        const pagesMerged = safeParseLocalArray<KnownIssue>('winfix_github_pages_merged_issues');
         return mergeIssuesDeduplicated(
           [...KNOWN_ISSUES, ...dbIssues],
           [...bundleIssues, ...defaultIssues, ...pagesMerged]
@@ -7760,7 +7690,7 @@ export default function App() {
   };
 
   const handleTriggerAiSearch = async (isAuto = false, count = 3): Promise<{ added: number, updated: number }> => {
-    if (!isAuto && !user) {
+    if (!isAuto && !user && !isAdmin) {
       customAlert(language === 'en' ? "Login required." : "로그인이 필요합니다.");
       return { added: 0, updated: 0 };
     }
@@ -8997,6 +8927,7 @@ export default function App() {
       if (duplicateCount > 0) {
         // Update local memory and cache
         setDbIssues(uniqueList);
+        setFullIssuesPool(uniqueList);
         localStorage.setItem(ISSUES_CACHE_KEY, JSON.stringify(uniqueList.slice(0, 100)));
         try {
           await idbSet('winfix_merged_issues', uniqueList);
@@ -9005,11 +8936,14 @@ export default function App() {
         // Persist to server local JSON database if not on static host
         if (!IS_GITHUB_PAGES) {
           const authHeaders = await getAuthHeaders();
-          await fetch('/api/admin/collections/import', {
+          const resp = await fetch('/api/admin/restore', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({ collection: 'issues', data: uniqueList, mode: 'overwrite' })
-          }).catch(e => console.warn("Failed to sync deduplicated list to server:", e));
+            body: JSON.stringify({ collection: 'issues', data: uniqueList, strategy: 'overwrite', skipAutoBackup: false })
+          });
+          if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+          }
         }
 
         await logAdminAction('delete', 'batch_cleanup', `O(1) 중복 데이터 정리 완료: ${duplicateCount}개 항목 삭제됨 (남은 레코드: ${uniqueList.length}개)`, 'info', 'DATABASE');
@@ -10032,9 +9966,16 @@ export default function App() {
     setTranslationResult(null);
 
     try {
-      // 1. Fetch issues with safety limit
-      const issuesSnapshot = await getDocs(firestoreQuery(collection(db, 'issues'), limit(30)));
-      const allIssues = issuesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as KnownIssue));
+      // 1. Fetch issues with safety limit (Firestore with local/server pool fallback)
+      let allIssues: KnownIssue[] = [];
+      try {
+        const issuesSnapshot = await getDocs(firestoreQuery(collection(db, 'issues'), limit(30)));
+        allIssues = issuesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as KnownIssue));
+      } catch (_) {}
+      if (allIssues.length === 0) {
+        const pool = await getFullUnfilteredIssuesPool();
+        allIssues = pool.slice(0, 30);
+      }
       
       // 2. Filter issues missing English data
       const issuesToTranslate = allIssues.filter(issue => !issue.title_en || !issue.symptoms_en || !issue.manualSteps_en);
@@ -10106,18 +10047,55 @@ export default function App() {
             continue; // Skip this batch if invalid
           }
           
-          const firestoreBatch = writeBatch(db);
-          
-          results.forEach((res: any) => {
-            const issueRef = doc(db, 'issues', res.id);
-            firestoreBatch.update(issueRef, {
-              title_en: res.title_en,
-              symptoms_en: res.symptoms_en,
-              manualSteps_en: res.manualSteps_en
+          if (!Array.isArray(results) || results.length === 0) continue;
+
+          if (!IS_GITHUB_PAGES) {
+            const authHeaders = await getAuthHeaders();
+            for (const res of results) {
+              if (!res?.id) continue;
+              await fetch(`/api/issues/${encodeURIComponent(res.id)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
+                body: JSON.stringify({
+                  title_en: res.title_en,
+                  symptoms_en: res.symptoms_en,
+                  manualSteps_en: res.manualSteps_en,
+                  updatedAt: getKSTISOString()
+                })
+              }).catch(() => {});
+            }
+          }
+
+          try {
+            const firestoreBatch = writeBatch(db);
+            results.forEach((res: any) => {
+              const issueRef = doc(db, 'issues', res.id);
+              firestoreBatch.update(issueRef, {
+                title_en: res.title_en,
+                symptoms_en: res.symptoms_en,
+                manualSteps_en: res.manualSteps_en
+              });
             });
+            await firestoreBatch.commit();
+          } catch (_) {}
+
+          const applyTransToList = (list: KnownIssue[]) =>
+            list.map(item => {
+              const m = results.find((r: any) => r.id === item.id);
+              return m ? { ...item, title_en: m.title_en, symptoms_en: m.symptoms_en, manualSteps_en: m.manualSteps_en } : item;
+            });
+
+          setDbIssues(prev => {
+            const next = applyTransToList(prev);
+            syncItemsToLocalCache(next);
+            return next;
           });
-          
-          await firestoreBatch.commit();
+          setFullIssuesPool(prev => {
+            const next = applyTransToList(prev);
+            idbSet('winfix_merged_issues', next).catch(() => {});
+            return next;
+          });
+
           translatedCount += results.length;
           setTranslationProgress(translatedCount);
         }
@@ -10213,21 +10191,43 @@ export default function App() {
         const updateData: any = {
           verifiedAt: getKSTISOString(),
           verificationStatus: finalStatus,
-          aiFeedback: finalFeedback
+          aiFeedback: finalFeedback,
+          updatedAt: getKSTISOString()
         };
         if (verdict.revisedScript) updateData.script = verdict.revisedScript;
         if (verdict.revisedManualSteps && Array.isArray(verdict.revisedManualSteps) && verdict.revisedManualSteps.length > 0) updateData.manualSteps = verdict.revisedManualSteps;
         if (verdict.revisedSymptoms) updateData.symptoms = verdict.revisedSymptoms;
-        
-        await updateDoc(issueRef, updateData);
+
+        if (!IS_GITHUB_PAGES) {
+          const authHeaders = await getAuthHeaders();
+          const patchResp = await fetch(`/api/issues/${encodeURIComponent(issue.id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify(updateData)
+          });
+          if (!patchResp.ok) {
+            console.warn(`Failed to patch single verified issue ${issue.id}: HTTP ${patchResp.status}`);
+          }
+        }
+
+        await updateDoc(issueRef, updateData).catch(() => {});
         trackUsage(0, 1);
 
         const logSev = verdict.status === 'verified' ? 'success' : verdict.status === 'needs_update' ? 'warning' : 'error';
         await logAdminAction('verify', issue.id, `개별 AI 데이터 점검 [${issue.title}]: ${verdict.status}. 피드백: ${verdict.feedback}`, logSev, 'AI');
 
-        // Update local state for immediate UI feedback
-        setDbIssues(prev => prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i));
-        
+        // Update local state & caches for immediate and durable UI feedback
+        setDbIssues(prev => {
+          const next = prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i);
+          syncItemsToLocalCache(next);
+          return next;
+        });
+        setFullIssuesPool(prev => {
+          const next = prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i);
+          idbSet('winfix_merged_issues', next).catch(() => {});
+          return next;
+        });
+
         if (language === 'en') {
           customAlert(`Verification complete: ${verdict.status}`);
         } else {
@@ -10251,10 +10251,30 @@ export default function App() {
       const updateData: any = {
         verifiedAt: getKSTISOString(),
         verificationStatus: fallbackVerdict.status,
-        aiFeedback: fallbackVerdict.feedback
+        aiFeedback: fallbackVerdict.feedback,
+        updatedAt: getKSTISOString()
       };
+      if (!IS_GITHUB_PAGES) {
+        try {
+          const authHeaders = await getAuthHeaders();
+          await fetch(`/api/issues/${encodeURIComponent(issue.id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify(updateData)
+          });
+        } catch (_) {}
+      }
       await updateDoc(issueRef, updateData).catch(() => {});
-      setDbIssues(prev => prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i));
+      setDbIssues(prev => {
+        const next = prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i);
+        syncItemsToLocalCache(next);
+        return next;
+      });
+      setFullIssuesPool(prev => {
+        const next = prev.map(i => i.id === issue.id ? { ...i, ...updateData } : i);
+        idbSet('winfix_merged_issues', next).catch(() => {});
+        return next;
+      });
       customAlert(language === 'en' ? "Verification complete: verified (System Rule Engine)" : "검증이 완료되었습니다: 정상 (시스템 규칙 엔진)");
     } finally {
       setVerifyingIssueId(null);
@@ -10718,8 +10738,36 @@ export default function App() {
       }
     }
 
-    // After all AI calls in this batch, use Write Batch for efficiency (Delta Update strategy)
+    // After all AI calls in this batch, persist updates to server file DB + local pools + Firestore
     if (batchResults.length > 0) {
+      if (!IS_GITHUB_PAGES) {
+        const authHeaders = await getAuthHeaders();
+        for (const res of batchResults) {
+          try {
+            const patchPayload: any = {
+              verifiedAt: res.data.verifiedAt,
+              verificationStatus: res.data.verificationStatus,
+              aiFeedback: res.data.aiFeedback,
+              updatedAt: getKSTISOString()
+            };
+            if (res.data.script) patchPayload.script = res.data.script;
+            if (res.data.manualSteps) patchPayload.manualSteps = res.data.manualSteps;
+            if (res.data.symptoms) patchPayload.symptoms = res.data.symptoms;
+
+            const resp = await fetch(`/api/issues/${encodeURIComponent(res.id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', ...authHeaders },
+              body: JSON.stringify(patchPayload)
+            });
+            if (!resp.ok) {
+              console.warn(`Failed to patch verified issue ${res.id}: HTTP ${resp.status}`);
+            }
+          } catch (patchErr) {
+            console.warn(`Error patching verified issue ${res.id}:`, patchErr);
+          }
+        }
+      }
+
       try {
         const batch = writeBatch(db);
         batchResults.forEach(res => {
@@ -10727,21 +10775,32 @@ export default function App() {
           batch.update(issueRef, res.data);
         });
         await batch.commit();
-        trackUsage(0, batchResults.length); // Track writes
-        
-        // Immediately update local state so cards refresh instantly
-        setDbIssues(prev => prev.map(item => {
+        trackUsage(0, batchResults.length);
+      } catch (err) {
+        console.warn("Firestore batch write skipped/failed in AI verification:", err);
+      }
+
+      const mergeVerified = (list: KnownIssue[]) =>
+        list.map(item => {
           const match = batchResults.find(res => res.id === item.id);
           return match ? { ...item, ...match.data } : item;
-        }));
+        });
 
-        // Log all at once or individually for accountability
-        for (const res of batchResults) {
-          const logSev = res.verdict.status === 'verified' ? 'success' : res.verdict.status === 'needs_update' ? 'warning' : 'error';
-          await logAdminAction('verify', res.id, `AI 데이터 재검증 [${issues.find(iss => iss.id === res.id)?.title}]: ${res.verdict.status}. 피드백: ${res.verdict.feedback}`, logSev, 'AI');
-        }
-      } catch (err) {
-        console.error("Batch write failed in AI verification", err);
+      // Immediately update local state & caches so cards refresh instantly
+      setDbIssues(prev => {
+        const next = mergeVerified(prev);
+        syncItemsToLocalCache(next);
+        return next;
+      });
+      setFullIssuesPool(prev => {
+        const next = mergeVerified(prev);
+        idbSet('winfix_merged_issues', next).catch(() => {});
+        return next;
+      });
+
+      for (const res of batchResults) {
+        const logSev = res.verdict.status === 'verified' ? 'success' : res.verdict.status === 'needs_update' ? 'warning' : 'error';
+        await logAdminAction('verify', res.id, `AI 데이터 재검증 [${issues.find(iss => iss.id === res.id)?.title}]: ${res.verdict.status}. 피드백: ${res.verdict.feedback}`, logSev, 'AI');
       }
     }
   };
@@ -10954,16 +11013,37 @@ export default function App() {
   const handleGeneratePdfReport = () => {
     if (!result) return;
 
+    const escapeHtml = (val: unknown): string =>
+      String(val ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const sanitizeHttpUrl = (raw: unknown): string | null => {
+      try {
+        const u = new URL(String(raw ?? '').trim());
+        if (u.protocol === 'https:' || u.protocol === 'http:') {
+          return u.href;
+        }
+      } catch (_) {}
+      return null;
+    };
+
     const reportId = `WFW-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const formattedDate = getKSTISOString();
     const isEn = language === 'en';
+    const safeUrls = (result.sourceUrls || [])
+      .map(sanitizeHttpUrl)
+      .filter((u): u is string => Boolean(u));
 
     const pdfHtml = `
 <!DOCTYPE html>
 <html lang="${isEn ? 'en' : 'ko'}">
 <head>
   <meta charset="UTF-8">
-  <title>${isEn ? 'Windows Fix Wizard Diagnostic Report' : 'Windows Fix Wizard 진단 및 복구 리포트'} - ${reportId}</title>
+  <title>${isEn ? 'Windows Fix Wizard Diagnostic Report' : 'Windows Fix Wizard 진단 및 복구 리포트'} - ${escapeHtml(reportId)}</title>
   <style>
     @page {
       size: A4;
@@ -11181,9 +11261,9 @@ export default function App() {
       </div>
     </div>
     <div class="meta-box">
-      <div>${isEn ? 'Report ID:' : '문서 번호:'} <span class="meta-id">${reportId}</span></div>
-      <div>${isEn ? 'Generated:' : '발행 일시:'} ${formattedDate}</div>
-      <div>${isEn ? 'Target OS:' : '대상 환경:'} <strong>${version}</strong></div>
+      <div>${isEn ? 'Report ID:' : '문서 번호:'} <span class="meta-id">${escapeHtml(reportId)}</span></div>
+      <div>${isEn ? 'Generated:' : '발행 일시:'} ${escapeHtml(formattedDate)}</div>
+      <div>${isEn ? 'Target OS:' : '대상 환경:'} <strong>${escapeHtml(version)}</strong></div>
     </div>
   </div>
 
@@ -11193,10 +11273,10 @@ export default function App() {
       <span>📌 ${isEn ? 'Diagnosed Symptom / Error Code' : '진단 요청 증상 및 오류 코드'}</span>
     </div>
     <div class="query-highlight">
-      ${query}
+      ${escapeHtml(query)}
     </div>
     <div style="display: flex; gap: 8px; align-items: center;">
-      <span class="badge badge-blue">${version}</span>
+      <span class="badge badge-blue">${escapeHtml(version)}</span>
       <span class="badge badge-emerald">${isEn ? 'AI Health Check: Verified' : 'AI 시스템 무결성 검증 완료'}</span>
     </div>
   </div>
@@ -11206,7 +11286,7 @@ export default function App() {
     <div class="section-title">
       <span>🔍 ${isEn ? 'AI Cause Analysis & Technical Diagnosis' : 'AI 원인 분석 및 전문 진단'}</span>
     </div>
-    <p style="white-space: pre-line; color: #334155; line-height: 1.6;">${result.diagnosis}</p>
+    <p style="white-space: pre-line; color: #334155; line-height: 1.6;">${escapeHtml(result.diagnosis)}</p>
   </div>
 
   <!-- Section 3: PowerShell Script -->
@@ -11215,11 +11295,11 @@ export default function App() {
       <div class="section-title">
         <span>⚡ ${isEn ? 'Automated PowerShell Fix Script' : '자동 해결 PowerShell 스크립트 (관리자 권한)'}</span>
       </div>
-      ${result.scriptSafetyWarning ? `<div class="warning-box">⚠️ <strong>${isEn ? 'Safety Warning' : '주의사항'}:</strong> ${result.scriptSafetyWarning}</div>` : ''}
+      ${result.scriptSafetyWarning ? `<div class="warning-box">⚠️ <strong>${isEn ? 'Safety Warning' : '주의사항'}:</strong> ${escapeHtml(result.scriptSafetyWarning)}</div>` : ''}
       <p style="font-size: 11px; color: #64748b; margin-bottom: 4px;">
         ${isEn ? 'How to run: Press Win + X, select "Terminal (Admin)" or "PowerShell (Admin)", copy and paste the code below:' : '실행 방법: 시작 단추 우클릭 > "터미널(관리자)" 또는 "PowerShell(관리자)" 실행 후 아래 명령어를 입력하십시오:'}
       </p>
-      <div class="code-block">${result.script}</div>
+      <div class="code-block">${escapeHtml(result.script)}</div>
     </div>
   ` : ''}
 
@@ -11230,25 +11310,25 @@ export default function App() {
         <span>🛠️ ${isEn ? 'Step-by-Step Manual Recovery Instructions' : '단계별 수동 복구 가이드라인'}</span>
       </div>
       <ol class="steps-list">
-        ${result.manualSteps.map(step => `<li>${step}</li>`).join('')}
+        ${result.manualSteps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}
       </ol>
     </div>
   ` : ''}
 
   <!-- Section 5: References -->
-  ${result.sourceUrls && result.sourceUrls.length > 0 ? `
+  ${safeUrls.length > 0 ? `
     <div class="section-card">
       <div class="section-title">
         <span>📚 ${isEn ? 'Official References & Guidance' : '공식 기술 문서 및 참고 출처'}</span>
       </div>
       <ul style="padding-left: 20px; font-size: 11px; color: #2563eb;">
-        ${result.sourceUrls.map(url => `<li><a href="${url}" target="_blank" style="color: #2563eb; text-decoration: underline;">${url}</a></li>`).join('')}
+        ${safeUrls.map(url => `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline;">${escapeHtml(url)}</a></li>`).join('')}
       </ul>
     </div>
   ` : ''}
 
   <div class="footer">
-    <div>Official Technical Verification Document | Windows Fix Wizard v${APP_VERSION}</div>
+    <div>Official Technical Verification Document | Windows Fix Wizard v${escapeHtml(APP_VERSION)}</div>
     <div>© ${new Date().getFullYear()} AhBiYout. Powered by Google Gemini AI & GitOps.</div>
   </div>
 
@@ -11288,11 +11368,7 @@ export default function App() {
   };
 
   const copyToClipboard = (text: string, id: string) => {
-    try {
-      navigator.clipboard.writeText(text);
-    } catch (e) {
-      console.warn("Navigator clipboard write failed inside sandbox:", e);
-    }
+    void safeWriteClipboard(text);
     // Store in global memory register for robust sandbox-pasting support
     (window as any).__lastCopiedScript = text;
     setCopiedScript(id);
@@ -13728,7 +13804,7 @@ export default function App() {
                 </div>
 
                 {/* Filter and Search Bar when bookmarks exist */}
-                {dbIssues.filter(i => bookmarkedIds.has(i.id)).length > 2 && (
+                {myLabIssuesPool.filter(i => bookmarkedIds.has(i.id)).length > 2 && (
                   <div className="space-y-3 bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-200/70 dark:border-slate-800/80">
                     <div className="relative">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -13749,9 +13825,9 @@ export default function App() {
                       )}
                     </div>
 
-                    {Array.from(new Set(dbIssues.filter(i => bookmarkedIds.has(i.id)).map(i => i.category))).length > 1 && (
+                    {Array.from(new Set(myLabIssuesPool.filter(i => bookmarkedIds.has(i.id)).map(i => i.category))).length > 1 && (
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {['전체', ...Array.from(new Set(dbIssues.filter(i => bookmarkedIds.has(i.id)).map(i => i.category)))].map((cat) => (
+                        {['전체', ...Array.from(new Set(myLabIssuesPool.filter(i => bookmarkedIds.has(i.id)).map(i => i.category)))].map((cat) => (
                           <button
                             key={cat}
                             onClick={() => setBookmarkCategoryFilter(cat)}
@@ -13805,7 +13881,7 @@ export default function App() {
                   </div>
                 ) : (
                   (() => {
-                    const savedIssues = dbIssues.filter(i => bookmarkedIds.has(i.id));
+                    const savedIssues = myLabIssuesPool.filter(i => bookmarkedIds.has(i.id));
                     const filteredSavedIssues = savedIssues.filter(issue => {
                       if (bookmarkCategoryFilter !== '전체' && issue.category !== bookmarkCategoryFilter) {
                         return false;
@@ -13965,7 +14041,7 @@ export default function App() {
                     {userActivity.length > 0 && (
                       <button
                         onClick={handleClearAllActivities}
-                        className="text-xs font-semibold text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 transition-colors flex items-center gap-1 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-indigo-950/25 px-2.5 py-1.5 rounded-lg border border-slate-250 dark:border-slate-750 shadow-sm cursor-pointer"
+                        className="text-xs font-semibold text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 transition-colors flex items-center gap-1 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-indigo-950/25 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>{language === 'en' ? 'Clear All' : '전체 삭제'}</span>
@@ -13993,7 +14069,7 @@ export default function App() {
                 ) : (
                   <div className="space-y-4">
                     {userActivity.map((activity, idx) => (
-                      <div key={activity.id || idx} className="flex gap-4 items-start group justify-between hover:bg-slate-50/50 dark:hover:bg-slate-850/30 p-2.5 rounded-xl -mx-2.5 transition-all">
+                      <div key={activity.id || idx} className="flex gap-4 items-start group justify-between hover:bg-slate-50/50 dark:hover:bg-slate-800/30 p-2.5 rounded-xl -mx-2.5 transition-all">
                         <div 
                           className={`flex gap-4 items-start flex-1 min-w-0 ${ (activity.type === 'search' || activity.type === 'diagnosis') ? 'cursor-pointer' : '' }`}
                           onClick={() => {
@@ -14021,11 +14097,10 @@ export default function App() {
                                    ? 'text-indigo-600 dark:text-indigo-400 group-hover:text-blue-500' 
                                    : 'text-slate-700 dark:text-slate-300'
                                }`}>
-                                 {activity.type === 'view' ? (
-                                   dbIssues.find(i => i.id === activity.targetId) 
-                                     ? getLocalizedText(dbIssues.find(i => i.id === activity.targetId)!, 'title')
-                                     : activity.targetId
-                                 ) : (
+                                 {activity.type === 'view' ? (() => {
+                                   const matched = myLabIssuesPool.find(i => i.id === activity.targetId);
+                                   return matched ? getLocalizedText(matched, 'title') : activity.targetId;
+                                 })() : (
                                    `"${activity.query}"`
                                  )}
                                </p>
@@ -14131,14 +14206,6 @@ export default function App() {
               <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
                 <button
                   type="button"
-                  onClick={() => setShowMobileUxReportModal(true)}
-                  className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
-                >
-                  <Smartphone className="w-4 h-4 text-blue-500" />
-                  <span>{language === 'en' ? 'Mobile UX Report' : '모바일 UX 연구'}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setAllAdminTiersCollapsed(false)}
                   className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
                 >
@@ -14191,39 +14258,6 @@ export default function App() {
                     transition={{ duration: 0.25, ease: 'easeInOut' }}
                     className="p-5 sm:p-6 space-y-6 overflow-hidden"
                   >
-                    {/* DATABASE ENGINE CONTROL CENTER (100% Jamstack & GitOps Architecture) */}
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-emerald-100 dark:bg-emerald-950/35 p-2 rounded-lg shrink-0">
-                            <Database className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                                {language === 'en' ? 'Serverless Jamstack & GitOps Engine' : '독립형 Jamstack & GitOps 무과금 데이터 엔진'}
-                              </h2>
-                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                ● Zero Cloud DB
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-                              {language === 'en'
-                                ? 'Operating 100% serverless via local data/issues.json feeds, IndexedDB in-browser caching, and automated GitHub Actions cron.'
-                                : '클라우드 DB 의존성 및 할당량 소모 없이 data/issues.json 정적 피드와 브라우저 IndexedDB, GitHub Actions 스케줄러로 무중단 작동합니다.'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                          <span className="px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            {language === 'en' ? 'Static Feed Active' : '정적 피드 가동 중'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
                     {/* Daily API Quota & Usage Monitor (Jamstack & Gemini) */}
                     <DailyQuotaUsageChart language={language} />
                   </motion.div>
@@ -14270,96 +14304,7 @@ export default function App() {
             <DashboardWidget engineStatus={engineStatus} language={language} />
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 sm:p-8">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg">
-                  <Database className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                </div>
-                <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{language === 'en' ? 'AI Auto-Sync System (Admin)' : 'AI 자동 수집 시스템 (관리자)'}</h2>
-              </div>
-              <p className="text-slate-600 dark:text-slate-400 mb-6 flex items-center gap-3">
-                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
-                 {language === 'en'
-                  ? `GitOps Autonomous Engine: Active. Automatically monitoring Windows error trends and syncing static feeds (${maintenanceSettings.engineIntervalMin || 60}m intervals).`
-                  : `GitOps 자율 수집 엔진 가동 중: ${maintenanceSettings.engineIntervalMin || 60}분 간격으로 최신 Windows 오류 트렌드를 자동 수집하여 Jamstack 정적 데이터셋에 동기화합니다.`}
-              </p>
-              
-
-
-              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-6 mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                    {language === 'en' ? 'Jamstack Zero-Quota Data Shield' : 'Jamstack 정적 데이터 보호 전략'}
-                  </h3>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <h4 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mb-1 flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'Smart Search Cache' : '스마트 검색 캐시'}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Search results are cached in memory for 5 mins to prevent redundant database requests.' : '동일한 검색어에 대해 5분간 메모리 캐시를 사용하여 중복 요청을 차단합니다.'}
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <h4 className="text-sm font-bold text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'IndexedDB Local Search' : 'IndexedDB 로컬 인메모리 엔진'}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Uses browser IndexedDB cache for sub-10ms instantaneous category filtering.' : `브라우저 IndexedDB 기반으로 ${(dbSourceBreakdown.total || KNOWN_ISSUES.length).toLocaleString()}개 이상의 지침을 서브 10ms 초고속 필터링합니다.`}
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <h4 className="text-sm font-bold text-purple-600 dark:text-purple-400 mb-1 flex items-center gap-1.5">
-                      <Globe className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'Knowledge Persistence' : 'AI 지식 캐싱'}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'AI patterns are saved centrally (6h TTL), saving heavy AI read operations for all users.' : 'AI 분석 결과를 6시간 동안 전역 캐싱하여 모든 사용자의 AI API 호출 할당량을 보존합니다.'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <h4 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mb-1 flex items-center gap-1.5">
-                      <Search className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'Confirmed Fetching' : '확정적 데이터 수집'}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Only fetches data on Enter key or Click, avoiding unnecessary reads during typing.' : '입력 중에는 통신하지 않고 Enter나 버튼 클릭 시에만 통신하여 비효율적인 조회를 방지합니다.'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <h4 className="text-sm font-bold text-orange-600 dark:text-orange-400 mb-1 flex items-center gap-1.5">
-                      <Database className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'Local Persistence' : '로컬 영속성 로드'}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Frequently accessed lists are synced to LocalStorage, serving instant data with zero DB cost.' : '자주 쓰이는 리스트를 로컬 저장소에 동기화하여 서버나 DB 비용 없이 즉시 데이터를 제공합니다.'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <h4 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mb-1 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      {language === 'en' ? 'Jamstack Unlimited Guard' : 'Jamstack 무제한 구동'}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {language === 'en' ? 'Static data/issues.json feed operates 100% serverless with zero external DB quotas.' : 'Jamstack 정적 데이터 피드와 GitHub Pages CDN을 활용하여 외부 DB 할당량 제한 없이 100% 무중단 구동됩니다.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-6 mb-8">
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-6">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200/80 dark:border-slate-700/80">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2 shrink-0">
@@ -14768,21 +14713,6 @@ export default function App() {
                       )}
                     </div>
                   </div>
-                  <div className="mt-3 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                    <div className="flex gap-2 items-start">
-                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                      <div className="text-[10px] leading-relaxed">
-                        <p className="text-slate-700 dark:text-slate-300 font-bold mb-1">
-                          {language === 'en' ? 'Engine Monitoring & Troubleshooting' : '엔진 모니터링 및 트러블슈팅'}
-                        </p>
-                        <p className="text-slate-500">
-                          {language === 'en' 
-                            ? 'Logs are stored in Local File DB & IndexedDB (backend_logs). The GitHub Actions GitOps engine auto-syncs data. If logs show placeholder errors, please set GEMINI_API_KEY in AI Studio Settings (Secrets).' 
-                            : '로그는 로컬 파일 DB 및 IndexedDB(backend_logs)에 기록됩니다. GitHub Actions GitOps 자율 엔진이 수집 및 동기화합니다. 로그에 Placeholder 오류가 보이면 AI Studio 설정(Secrets)에 API Key를 등록하세요.'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -14827,35 +14757,6 @@ export default function App() {
                       </span>
                     </span>
 
-                    {/* Real-time Collector Workflow Badge */}
-                    <a 
-                      href={`https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/actions/workflows/windows-fix-collector.yml`}
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-500 transition-all text-xs font-semibold cursor-pointer"
-                      title={language === 'en' ? 'windows-fix-collector.yml Real-Time Workflow Status' : 'windows-fix-collector.yml 실시간 워크플로 상태 배지'}
-                    >
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Collector:</span>
-                      <img 
-                        src={`https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/actions/workflows/windows-fix-collector.yml/badge.svg`}
-                        alt="windows-fix-collector.yml badge"
-                        className="h-4 rounded border border-slate-300 dark:border-slate-700"
-                        onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                      />
-                    </a>
-
-                    {githubLastSync?.at ? (
-                      <span className="px-2.5 py-1 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1.5 font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>{language === 'en' ? 'Auto-Integrated:' : '자동 통합 완료:'} {new Date(githubLastSync.at).toLocaleDateString()}</span>
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 text-xs rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1.5 font-medium">
-                        <RefreshCw className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>{language === 'en' ? 'Auto-Integration Active' : '메인데이터 자동 통합 가동 중'}</span>
-                      </span>
-                    )}
-
                     <button
                       onClick={() => setShowGitOpsGuideModal(true)}
                       className="px-3 py-1.5 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 font-bold transition-all shadow-xs"
@@ -14867,77 +14768,26 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* GitHub Actions Live Deployment Health & Workflow Telemetry Dashboard */}
-                <DeploymentDashboardWidget 
-                  owner={GITHUB_USERNAME}
-                  repo={GITHUB_REPO_NAME}
-                  language={language}
-                  token={githubToken}
-                  showStatusBadges={true}
-                />
-
-                {/* GitOps Architecture Diagram (Interactive Card) */}
-                <div className="bg-gradient-to-r from-slate-50 via-indigo-50/30 to-purple-50/30 dark:from-slate-800/40 dark:via-indigo-950/20 dark:to-purple-950/20 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-4 sm:p-5 transition-all">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                        {language === 'en' ? 'Autonomous Data Harvesting Architecture' : 'GitHub Actions ➔ GitOps 메인데이터 자동 통합 흐름도'}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowGitOpsDiagramCard(!showGitOpsDiagramCard)}
-                      className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
-                      title={showGitOpsDiagramCard ? (language === 'en' ? 'Fold Diagram' : '흐름도 접기') : (language === 'en' ? 'Expand Diagram' : '흐름도 펼치기')}
-                    >
-                      <span>{showGitOpsDiagramCard ? (language === 'en' ? 'Fold' : '접기') : (language === 'en' ? 'Expand' : '펼치기')}</span>
-                      <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showGitOpsDiagramCard ? 'rotate-90' : ''}`} />
-                    </button>
-                  </div>
-
-                  {showGitOpsDiagramCard && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs mt-3 animate-fade-in">
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                          <Clock className="w-3.5 h-3.5 text-blue-500" />
-                          1. 무료 클라우드 크론
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                          GitHub Actions가 매 6시간마다 슬립 없이 자율 기동
-                        </p>
-                      </div>
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                          <Bot className="w-3.5 h-3.5 text-purple-500" />
-                          2. Gemini AI 자율 수집
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                          실시간 웹 검색 그라운딩으로 최신 오류와 해결 스크립트 발굴
-                        </p>
-                      </div>
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                          <GitBranch className="w-3.5 h-3.5 text-emerald-500" />
-                          3. Git 자동 커밋 (GitOps)
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                          data/issues.json 및 시드 데이터에 누적 커밋하여 영구 보존
-                        </p>
-                      </div>
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                        <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1 text-xs">
-                          <Zap className="w-3.5 h-3.5 text-amber-500" />
-                          4. 메인데이터 자동 통합
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                          서버(15분 주기·부팅 시) 및 앱 진입 시 메인데이터에 자동 병합 반영
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                {/* Compact Live Workflow Status Badges */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <GitHubWorkflowStatus
+                    owner={GITHUB_USERNAME}
+                    repo={GITHUB_REPO_NAME}
+                    workflowFile="deploy-pages.yml"
+                    language={language}
+                    token={githubToken}
+                    title={language === 'en' ? 'GitHub Pages Deployment Pipeline' : 'GitHub Pages 웹 서비스 배포 파이프라인'}
+                  />
+                  <GitHubWorkflowStatus
+                    owner={GITHUB_USERNAME}
+                    repo={GITHUB_REPO_NAME}
+                    workflowFile="windows-fix-collector.yml"
+                    language={language}
+                    token={githubToken}
+                    title={language === 'en' ? 'Autonomous AI Collector Engine' : 'AI 자율 수집 및 GitOps 동기화 엔진'}
+                  />
                 </div>
+
 
                 {/* Featured Hero Action: One-Click Instant Dataset Sync & Pages Deploy */}
                 <div className="p-5 bg-gradient-to-br from-indigo-900/90 via-slate-900 to-purple-950 text-white rounded-2xl shadow-lg border border-indigo-500/30 space-y-4">
@@ -15042,7 +14892,7 @@ export default function App() {
                 </div>
 
                 {/* Operations & Action Toolbar */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Action 1: Pull from GitHub */}
                   <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
                     <div>
@@ -15142,42 +14992,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Action 3: Push Database to GitHub & Auto Deploy Pages */}
-                  <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Upload className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {language === 'en' ? 'Push DB to GitHub & Auto-Deploy' : '현재 데이터베이스 GitHub 푸시 & 자동 배포'}
-                        </h3>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {language === 'en'
-                          ? 'Pushes current local issues dataset to GitHub data/issues.json and automatically triggers GitHub Pages build.'
-                          : '현재 앱의 로컬 이슈 데이터베이스를 GitHub 저장소의 data/issues.json에 직간접 푸시하고 Pages 배포를 연동합니다.'}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={handlePushToGithub}
-                      disabled={isPushingGithub || !githubRepo}
-                      className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
-                    >
-                      {isPushingGithub ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>{language === 'en' ? 'Pushing & Deploying...' : 'GitHub 푸시 및 배포 연동 중...'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          <span>{language === 'en' ? 'Push DB & Auto-Deploy Pages' : 'GitHub 푸시 및 Pages 즉시 연동'}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Action 4: Trigger Pages Deployment Directly */}
+                  {/* Action 3: Trigger Pages Deployment Directly */}
                   <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
@@ -15678,29 +15493,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Auto-deploy Pages toggle switch */}
-                  <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {language === 'en' ? 'Auto-Deploy to GitHub Pages on Data Sync' : '데이터 동기화 및 수집 완료 시 GitHub Pages 자동 배포 연동'}
-                      </span>
-                      <p className="text-[11px] text-slate-500">
-                        {language === 'en'
-                          ? 'Triggers deploy-pages.yml workflow whenever data is pushed or updated by AI collector.'
-                          : '자율 수집 엔진 및 관리자 데이터 푸시 시 GitHub Pages 웹사이트가 최신 상태로 자동 업데이트됩니다.'}
-                      </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-                      <input
-                        type="checkbox"
-                        checked={autoDeployPages}
-                        onChange={(e) => setAutoDeployPages(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                    </label>
-                  </div>
-
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
                     <p className="text-[11px] text-slate-500">
                       💡 원격 워크플로 실행이나 비공개(Private) 저장소 접근 시에만 PAT(`repo` 또는 `workflow` 권한)이 필요합니다.
@@ -15746,7 +15538,7 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(dynamicWorkflowYaml);
+                            void safeWriteClipboard(dynamicWorkflowYaml);
                             setCopiedWorkflow(true);
                             setTimeout(() => setCopiedWorkflow(false), 2500);
                           }}
@@ -15789,142 +15581,6 @@ export default function App() {
                       </div>
                     </div>
                   )}
-                </div>
-
-                {/* GitHub Pages Web Operations Hub */}
-                <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 sm:p-7 shadow-lg border border-indigo-800/40 space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-indigo-800/50 pb-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white shadow-md shrink-0">
-                        <Globe className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-bold text-white">
-                            {language === 'en' ? 'GitHub Pages Web Portal Center' : 'GitHub Pages 공식 웹사이트 대용 운영 센터'}
-                          </h3>
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            Live Ready
-                          </span>
-                        </div>
-                        <p className="text-xs text-indigo-200/80 mt-0.5">
-                          {language === 'en'
-                            ? 'Host and run Windows Fix Wizard as a full standalone website on GitHub Pages.'
-                            : '별도 서버 호스팅 비용 없이 GitHub Pages를 통해 실시간 웹사이트로 완벽 구동합니다.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <a
-                        href={GITHUB_PAGES_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center gap-1.5 transition-all shadow-md active:scale-95"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? 'Open Website' : '웹사이트 열기'}</span>
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* URL Bar & Copy */}
-                  <div className="p-3.5 rounded-xl bg-slate-950/70 border border-indigo-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-xs text-indigo-300 font-mono font-semibold shrink-0">🌐 URL:</span>
-                      <a
-                        href={GITHUB_PAGES_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-emerald-400 font-mono hover:underline truncate"
-                      >
-                        {GITHUB_PAGES_URL}
-                      </a>
-                    </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(GITHUB_PAGES_URL);
-                        customAlert(language === 'en' ? 'GitHub Pages website URL copied!' : 'GitHub Pages 공식 웹사이트 주소가 클립보드에 복사되었습니다!');
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 text-xs font-medium border border-indigo-700/50 flex items-center gap-1.5 shrink-0 self-end sm:self-auto transition-colors"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{language === 'en' ? 'Copy URL' : '주소 복사'}</span>
-                    </button>
-                  </div>
-
-                  {/* Feature Highlights Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                    <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-800/40 space-y-1">
-                      <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>단독 정적 웹사이트 (SPA)</span>
-                      </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
-                        Node.js 서버 없이도 클라이언트에서 AI 검색, 가이드북, 위협 검증, PWA 설치까지 즉시 동작합니다.
-                      </p>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-800/40 space-y-1">
-                      <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>자동 릴리즈 연동</span>
-                      </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
-                        GitHub Releases API와 실시간 통신하여 웹사이트 방문자에게 최신 인스톨러 다운로드를 자동 안내합니다.
-                      </p>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-800/40 space-y-1">
-                      <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>자동 배포 파이프라인</span>
-                      </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
-                        <code>.github/workflows/deploy-pages.yml</code>을 통해 main 브랜치 푸시 시 1분 내 자동 배포됩니다.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 3-Step Setup Guide */}
-                  <div className="p-4 rounded-xl bg-indigo-950/30 border border-indigo-800/30 space-y-2.5">
-                    <div className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
-                      <Settings className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>GitHub 저장소 활성화 3단계 가이드</span>
-                    </div>
-                    <ol className="text-xs text-slate-300 space-y-1.5 list-decimal pl-5">
-                      <li>
-                        GitHub 저장소 (<a href={`${GITHUB_REPO_URL}/settings/pages`} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline font-mono">Settings &gt; Pages</a>) 로 이동합니다.
-                      </li>
-                      <li>
-                        <strong>Build and deployment</strong> 섹션의 <strong>Source</strong> 드롭다운을 <span className="text-white font-semibold underline decoration-emerald-400">GitHub Actions</span> 로 선택합니다.
-                      </li>
-                      <li>
-                        제공된 <code>scripts/github_push.bat</code>을 실행하거나 <code>main</code> 브랜치로 푸시하면 사이트가 즉시 오픈됩니다!
-                      </li>
-                    </ol>
-
-                    <div className="pt-2 flex flex-wrap items-center gap-2">
-                      <a
-                        href={`${GITHUB_REPO_URL}/settings/pages`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 flex items-center gap-1.5 transition-colors"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>GitHub Pages 설정 바로가기</span>
-                      </a>
-                      <a
-                        href={`${GITHUB_REPO_URL}/actions`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 flex items-center gap-1.5 transition-colors"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>GitHub Actions 배포 로그 확인</span>
-                      </a>
-                    </div>
-                  </div>
                 </div>
 
                 {/* GitHub Actions Pages Deployment (deploy.yml) Snippet & Architecture Safeguards Component */}
@@ -16449,21 +16105,6 @@ export default function App() {
                 {/* TAB 3: 2026 Model Change Resilience & Free-Tier Strategy Research Matrix */}
                 {aiHubTab === 'strategy' && (
                   <div className="space-y-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {[
-                        { step: '01 · 롤링 탐색', title: 'Live Model Auto-Discovery', desc: '부팅 40초 후 및 6시간마다 ai.models.list()와 OpenRouter /models를 조회해 신형 Gemini(4/Lite) 및 :free 슬러그를 자동 등록합니다.' },
-                        { step: '02 · 404 즉시 격리', title: '24h Model Circuit Breaker', desc: '폐기된 모델이 HTTP 404를 반환하면 해당 모델 ID만 24시간 격리하고 즉시 다음 정상 모델과 6대 프로바이더로 우회합니다.' },
-                        { step: '03 · 작업별 쿼터 분할', title: 'Quota-Split Routing', desc: '웹 검색 그라운딩이 필요한 수집에만 Gemini를 쓰고, 단문 진단·재분류는 Groq/Mistral/Cloudflare 무료 티어로 분산합니다.' },
-                        { step: '04 · 2026 지원 현황 반영', title: 'Retired API Filtering', desc: '2026년 종료된 GitHub Models 추론 API는 실전 호출에서 제외하고 Cerebras($5 크레딧)는 선택적 버스트 폴백으로 배치했습니다.' }
-                      ].map((card) => (
-                        <div key={card.step} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 space-y-1.5">
-                          <div className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">{card.step}</div>
-                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100">{card.title}</div>
-                          <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{card.desc}</p>
-                        </div>
-                      ))}
-                    </div>
-
                     <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
@@ -16533,7 +16174,7 @@ export default function App() {
                   <span className={`px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1.5 self-start sm:self-auto ${
                     (engineStatus?.consecutiveFailures || 0) === 0
                       ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                      : 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-350 border border-rose-200 dark:border-rose-800'
+                      : 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                   }`}>
                     <span className={`h-2 w-2 rounded-full ${ (engineStatus?.consecutiveFailures || 0) === 0 ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500 animate-ping'}`}></span>
                     {(engineStatus?.consecutiveFailures || 0) === 0 ? (language === 'en' ? 'Sentinel Guard: SAFE' : '모니터링 경비중: 정상') : (language === 'en' ? '⚠️ WARNING OUTAGE' : '⚠️ 장애 발생 감지')}
@@ -16545,7 +16186,7 @@ export default function App() {
                   {/* Gauge */}
                   <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col justify-between">
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-450 mb-4 text-slate-500">
+                      <h4 className="text-xs font-bold uppercase tracking-wider mb-4 text-slate-500">
                         {language === 'en' ? 'Engine Stability Index' : 'AI 자동 수집 엔진 건강도'}
                       </h4>
                       <div className="flex items-center justify-center py-4 relative">
@@ -16562,7 +16203,7 @@ export default function App() {
                           />
                         </svg>
                         <div className="absolute flex flex-col items-center">
-                          <span className="text-2xl font-mono font-bold text-slate-850 dark:text-slate-100">
+                          <span className="text-2xl font-mono font-bold text-slate-800 dark:text-slate-100">
                             {Math.max(0, 100 - (engineStatus?.consecutiveFailures || 0) * 33)}%
                           </span>
                           <span className="text-[9px] text-slate-400 uppercase font-semibold">
@@ -16571,7 +16212,7 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-850">
+                    <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-800">
                       <p className="text-xs text-slate-500">
                         {language === 'en' ? 'Consecutive Failures: ' : '장애 수집 복구 단계: '}
                         <span className="font-mono font-bold text-slate-800 dark:text-white">
@@ -16593,12 +16234,12 @@ export default function App() {
                       </div>
                       <div>
                         <p className="text-[10px] text-slate-400 font-bold uppercase">{language === 'en' ? 'Masked Secret string' : '마스킹된 보안키 주소'}</p>
-                        <p className="font-mono text-slate-850 dark:text-slate-300">{engineStatus?.maskedKey || 'No custom API key active'}</p>
+                        <p className="font-mono text-slate-800 dark:text-slate-300">{engineStatus?.maskedKey || 'No custom API key active'}</p>
                       </div>
                       <div>
                         <p className="text-[10px] text-slate-400 font-bold uppercase">{language === 'en' ? 'Cooperative Multi-Routing' : '자동 우회 고장 대응 모드'}</p>
                         <div className="flex gap-2 mt-1">
-                          <span className="px-1.5 py-0.5 bg-indigo-55 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded text-[9px] border border-indigo-100 dark:border-indigo-900/40 font-bold">
+                          <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded text-[9px] border border-indigo-100 dark:border-indigo-900/40 font-bold">
                             {engineStatus?.isPlaceholder ? (language === 'en' ? 'Placeholder Active' : '에러 복원 가동중') : (language === 'en' ? 'Production Ready' : '보안 연동 확인됨')}
                           </span>
                         </div>
@@ -16614,13 +16255,13 @@ export default function App() {
                     <div className="text-xs leading-relaxed max-h-32 overflow-y-auto custom-scrollbar space-y-2">
                       {engineStatus?.telemetry && Object.keys(engineStatus.telemetry.throttledKeys || {}).length > 0 ? (
                         Object.entries(engineStatus.telemetry.throttledKeys).map(([kName, secs]: any) => (
-                          <div key={kName} className="flex justify-between items-center text-amber-605 dark:text-amber-400 font-medium">
+                          <div key={kName} className="flex justify-between items-center text-amber-600 dark:text-amber-400 font-medium">
                             <span className="font-mono truncate max-w-[120px]">{kName}</span>
                             <span className="font-mono font-bold shrink-0">{secs}초 강제 격리 대기</span>
                           </div>
                         ))
                       ) : (
-                        <p className="text-xs text-slate-450 italic py-2">{language === 'en' ? 'No keys actively throttled currently' : '일시 정지되거나 격리 조치된 API 키 없음'}</p>
+                        <p className="text-xs text-slate-400 italic py-2">{language === 'en' ? 'No keys actively throttled currently' : '일시 정지되거나 격리 조치된 API 키 없음'}</p>
                       )}
                       
                       {engineStatus?.telemetry && Object.keys(engineStatus.telemetry.searchThrottledKeys || {}).length > 0 && (
@@ -17322,24 +16963,15 @@ export default function App() {
                     )}
                   </ul>
 
-                  {/* API Key Action Toolbar & Permanent Sync Confirmation */}
-                  <div className="p-3.5 bg-slate-100/70 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span>{language === 'en' 
-                        ? 'Keys are stored in browser IndexedDB & LocalStorage (Zero Cloud DB / No Quota).' 
-                        : '등록된 키는 브라우저 영구 저장소(IndexedDB 및 LocalStorage)에 안전하게 보관되어 쿼터 소모 없이 다음날에도 유지됩니다.'}</span>
-                    </p>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={handleSaveAllApiKeySettings}
-                        className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? 'Save All Key Settings' : 'API 키 설정 전체 저장'}</span>
-                      </button>
-                    </div>
+                  {/* API Key Save Action */}
+                  <div className="p-3.5 bg-slate-100/70 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+                    <button
+                      onClick={handleSaveAllApiKeySettings}
+                      className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{language === 'en' ? 'Save All Key Settings' : 'API 키 설정 전체 저장'}</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -17810,6 +17442,12 @@ export default function App() {
                               {isError && <AlertTriangle className="w-5 h-5 text-rose-500" />}
                               {isBackend && <Database className="w-5 h-5 text-indigo-500" />}
                               <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">{item.labelKo}</span>
+                              {isVisitor && visitorStats.activeNowCount > 0 && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  {visitorStats.activeNowCount} {language === 'en' ? 'Online' : '접속'}
+                                </span>
+                              )}
                             </div>
                             <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px] font-bold">
                               {item.sizeFormatted || '0 KB'}
@@ -17825,6 +17463,12 @@ export default function App() {
                               <span>기록 수:</span>
                               <span className="font-bold text-cyan-600 dark:text-cyan-400">{item.count ?? 0}건</span>
                             </div>
+                            {isVisitor && visitorStats.todayVisitors > 0 && (
+                              <div className="flex justify-between font-mono text-[11px]">
+                                <span>오늘 / 누적 방문:</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-300">{visitorStats.todayVisitors} / {visitorStats.totalVisitors}명</span>
+                              </div>
+                            )}
                             {item.latestLogAt && (
                               <div className="text-[10px] text-slate-400 truncate pt-1">
                                 최근 기록: {new Date(item.latestLogAt).toLocaleString()}
@@ -17856,101 +17500,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                <button
-                  onClick={fetchVisitorLogs}
-                  disabled={loadingLogs}
-                  className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-cyan-500 transition-all text-left group shadow-sm relative overflow-hidden"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <Users className="w-6 h-6 text-cyan-500 group-hover:scale-110 transition-transform" />
-                    {visitorStats.activeNowCount > 0 && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 animate-pulse">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        {visitorStats.activeNowCount} {language === 'en' ? 'Online' : '접속 중'}
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100">{language === 'en' ? 'Visitor Management' : '방문자 정보 관리'}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    {language === 'en' 
-                      ? 'Monitor real-time visitors, device stats, OS distribution, and session logs.' 
-                      : '실시간 접속자, 기기/OS 정보, 방문 수 및 세션 로그를 종합 관리합니다.'}
-                  </p>
-                  {visitorStats.todayVisitors > 0 && (
-                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] font-medium text-slate-500 dark:text-slate-400 flex justify-between">
-                      <span>오늘 방문자: <strong className="text-slate-800 dark:text-slate-200">{visitorStats.todayVisitors}명</strong></span>
-                      <span>총 누적: <strong className="text-slate-800 dark:text-slate-200">{visitorStats.totalVisitors}명</strong></span>
-                    </div>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => fetchSearchLogs(0)}
-                  disabled={loadingLogs}
-                  className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-blue-500 transition-all text-left group shadow-sm"
-                >
-                  <Search className="w-6 h-6 text-blue-500 mb-2 group-hover:scale-110 transition-transform" />
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100">{language === 'en' ? 'Search Logs' : '검색 로그'}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{language === 'en' ? 'Check user search queries and OS versions.' : '사용자들의 검색 쿼리 및 OS 버전을 확인합니다.'}</p>
-                </button>
-                <button
-                  onClick={() => fetchFeedbackLogs(0)}
-                  disabled={loadingLogs}
-                  className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-emerald-500 transition-all text-left group shadow-sm"
-                >
-                  <ThumbsUp className="w-6 h-6 text-emerald-500 mb-2 group-hover:scale-110 transition-transform" />
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100">{language === 'en' ? 'User Feedback' : '사용자 피드백'}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{language === 'en' ? 'Check resolution status and user comments.' : '해결 여부 및 사용자 의견을 확인합니다.'}</p>
-                </button>
-                <button
-                  onClick={() => fetchAdminLogs(0)}
-                  disabled={loadingLogs}
-                  className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-purple-500 transition-all text-left group shadow-sm"
-                >
-                  <ShieldCheck className="w-6 h-6 text-purple-500 mb-2 group-hover:scale-110 transition-transform" />
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100">{language === 'en' ? 'Admin Activity' : '관리자 활동'}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{language === 'en' ? 'Check issue addition, modification, and deletion history.' : '이슈 추가, 수정, 삭제 내역을 확인합니다.'}</p>
-                </button>
-                <button
-                  onClick={() => fetchAppErrorLogs(0)}
-                  disabled={loadingLogs}
-                  className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-rose-500 transition-all text-left group shadow-sm"
-                >
-                  <AlertTriangle className="w-6 h-6 text-rose-500 mb-2 group-hover:scale-110 transition-transform" />
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100">{language === 'en' ? 'App Error Logs' : '앱 시스템 에러'}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{language === 'en' ? 'Monitor runtime errors and diagnosis failures.' : '런타임 에러 및 진단 실패 로그를 모니터링합니다.'}</p>
-                </button>
-                <button
-                  onClick={reclassifyUncategorizedIssues}
-                  disabled={isReclassifying}
-                  className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-indigo-500 transition-all text-left group shadow-sm relative overflow-hidden"
-                >
-                  {isReclassifying && (
-                    <motion.div 
-                      className="absolute bottom-0 left-0 h-1.5 bg-indigo-500"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(reclassifyProgress.current / (reclassifyProgress.total || 1)) * 100}%` }}
-                    />
-                  )}
-                  <Sparkles className={`w-6 h-6 text-indigo-500 mb-2 ${isReclassifying ? 'animate-bounce' : 'group-hover:scale-110 transition-transform'}`} />
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100">
-                    {language === 'en' ? 'AI Auto-Classification' : 'AI 자동 카테고리 분류'}
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    {isReclassifying 
-                      ? (language === 'en' ? `In Progress... ${reclassifyProgress.current}/${reclassifyProgress.total}` : `처리 중... ${reclassifyProgress.current}/${reclassifyProgress.total}`)
-                      : (language === 'en' ? 'Organize items in the Others category using AI.' : '기타 카테고리의 이슈들을 AI가 분석하여 적절한 위치로 이동합니다.')}
-                  </p>
-                  {isReclassifying && (
-                    <div className="mt-2 text-[10px] font-mono text-indigo-600 dark:text-indigo-400">
-                      STEP {Math.ceil(reclassifyProgress.current / 10)} / {Math.ceil(reclassifyProgress.total / 10)}
-                    </div>
-                  )}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
                 {/* Batch Processing Status Card */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
                   <div className="flex items-center gap-3 mb-4">
@@ -17979,6 +17529,48 @@ export default function App() {
                       <>
                         <Search className="w-4 h-4" />
                         {language === 'en' ? 'Run Now' : '지금 즉시 실행'}
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* AI Category Reclassification Card */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow relative overflow-hidden">
+                  {isReclassifying && (
+                    <motion.div
+                      className="absolute bottom-0 left-0 h-1.5 bg-indigo-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(reclassifyProgress.current / (reclassifyProgress.total || 1)) * 100}%` }}
+                    />
+                  )}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-indigo-100 dark:bg-indigo-900/30 p-2.5 rounded-xl">
+                      <Sparkles className={`w-5 h-5 text-indigo-600 dark:text-indigo-400 ${isReclassifying ? 'animate-bounce' : ''}`} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 dark:text-slate-100">{language === 'en' ? 'AI Auto-Classification' : 'AI 자동 카테고리 분류'}</h4>
+                      <p className="text-[10px] text-slate-400 font-mono">Taxonomy Re-Assign</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 flex-grow leading-relaxed">
+                    {isReclassifying
+                      ? (language === 'en' ? `In Progress... ${reclassifyProgress.current}/${reclassifyProgress.total}` : `처리 중... ${reclassifyProgress.current}/${reclassifyProgress.total}`)
+                      : (language === 'en' ? 'Organize items in the Others category using AI.' : '기타 카테고리의 이슈들을 AI가 분석하여 적절한 위치로 이동합니다.')}
+                  </p>
+                  <button
+                    onClick={reclassifyUncategorizedIssues}
+                    disabled={isReclassifying}
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 dark:disabled:bg-indigo-800 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98]"
+                  >
+                    {isReclassifying ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>STEP {Math.ceil(reclassifyProgress.current / 10)} / {Math.ceil(reclassifyProgress.total / 10)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <span>{language === 'en' ? 'Run Classification' : '자동 분류 실행'}</span>
                       </>
                     )}
                   </button>
@@ -18079,9 +17671,10 @@ export default function App() {
                     )}
                   </div>
                 </div>
+              </div>
 
-                {/* Advanced Data Backup & Restore Card */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col h-full ring-1 ring-emerald-500/20">
+              {/* Advanced Data Backup & Restore Card */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 mb-6 shadow-sm flex flex-col ring-1 ring-emerald-500/20">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="bg-emerald-100 dark:bg-emerald-900/40 p-2.5 rounded-xl shadow-xs">
@@ -18290,7 +17883,6 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              </div>
 
               <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-inner">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
@@ -18760,7 +18352,7 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      {/* [4등급] 나의 실험실 이전 기능 (User Lab Transferred) */}
+      {/* [4등급] 이슈 DB 검수 & 관리 (Issue Database Manager) */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all mb-6">
         <button
           type="button"
@@ -18769,11 +18361,11 @@ export default function App() {
         >
           <div className="flex items-center gap-2.5">
             <span className="px-3 py-1 text-xs font-black rounded-xl bg-slate-600 text-white shadow-sm flex items-center gap-1.5 shrink-0">
-              <Terminal className="w-4 h-4" />
-              {language === 'en' ? '[Tier 4] Transferred Lab Utilities' : '[4등급] 실험실 이전 기능'}
+              <LayoutList className="w-4 h-4" />
+              {language === 'en' ? '[Tier 4] Issue DB Manager' : '[4등급] 이슈 DB 검수 & 관리'}
             </span>
             <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-              {language === 'en' ? 'Windows Event Viewer & PC Specs Laboratory' : 'Windows 이벤트 뷰어 및 내 PC 실시간 사양 실험실'}
+              {language === 'en' ? 'Database Issue Review, Editing & Batch AI Verification' : '수집·등록된 Windows 이슈 목록 조회, 편집 및 AI 일괄 검증'}
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -18795,33 +18387,6 @@ export default function App() {
               transition={{ duration: 0.25, ease: 'easeInOut' }}
               className="p-5 sm:p-6 space-y-6 overflow-hidden"
             >
-
-              {/* Quick Link to My Lab Event Viewer */}
-              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-750 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl">
-                    <Terminal className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      {language === 'en' ? 'Windows Event Viewer & PC Specs Laboratory' : 'Windows 이벤트 뷰어 및 내 PC 실시간 사양 실험실'}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {language === 'en' 
-                        ? 'Moved to [My Lab] for personalized user computer diagnostics and live Event Viewer log monitoring.' 
-                        : '사용자 맞춤형 실시간 PC 사양 진단 및 이벤트 뷰어 로그 모니터링을 위해 [나의 실험실] 탭으로 이전되었습니다.'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setActiveTab('library')}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer shadow-sm"
-                >
-                  <span>{language === 'en' ? 'Open in My Lab' : '나의 실험실에서 열기'}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
               {/* Issue Management - Added List to Admin Tab */}
               {(() => {
                 const adminDisplayedIssues = dbIssues.filter(issue => {
@@ -18832,7 +18397,7 @@ export default function App() {
                 });
 
                 return (
-                  <div className="mt-8">
+                  <div>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
                       <div className="flex items-center gap-3">
                         <div className="bg-blue-100 dark:bg-blue-900/30 p-2.5 rounded-xl text-blue-600 dark:text-blue-400">
@@ -20778,7 +20343,7 @@ export default function App() {
                         <p className="text-slate-900 dark:text-slate-100 font-medium mb-2 leading-relaxed">{log.details}</p>
                         
                         {log.changes && Object.keys(log.changes || {}).length > 0 && (
-                          <div className="mb-3 p-3 bg-slate-50 dark:bg-slate-800/80 rounded-lg border border-slate-100 dark:border-slate-750 font-mono text-[10px]">
+                          <div className="mb-3 p-3 bg-slate-50 dark:bg-slate-800/80 rounded-lg border border-slate-100 dark:border-slate-700 font-mono text-[10px]">
                             <p className="text-slate-400 mb-1 uppercase text-[9px] font-bold">{language === 'en' ? 'Field Changes' : '변경 내역'}</p>
                             <div className="space-y-1.5">
                               {Object.entries(log.changes).map(([field, delta]: [string, any]) => (
@@ -22707,7 +22272,7 @@ export default function App() {
               </div>
 
               {/* Modal Footer Actions */}
-              <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-850 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2.5">
                 <button
                   onClick={() => {
                     // Snooze for 24 hours
@@ -22724,7 +22289,7 @@ export default function App() {
                     href={updateInfo?.htmlUrl || updateInfo?.repoUrl || GITHUB_REPO_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-750 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors flex items-center gap-1.5"
                   >
                     <Github className="w-3.5 h-3.5" />
                     <span>GitHub 릴리즈</span>
@@ -23045,7 +22610,7 @@ npm run collect:github`}
                       <span className="text-xs font-mono text-slate-500">.github/workflows/windows-fix-collector.yml</span>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(dynamicWorkflowYaml);
+                          void safeWriteClipboard(dynamicWorkflowYaml);
                           setCopiedWorkflow(true);
                           setTimeout(() => setCopiedWorkflow(false), 2500);
                         }}
@@ -23081,7 +22646,7 @@ npm run collect:github`}
                         `- 상세 문서는 저장소의 /docs/GITHUB_ACTIONS_GUIDE.md 에서 확인하실 수 있습니다.\n` +
                         `- 워크플로 파일: .github/workflows/windows-fix-collector.yml\n\n` +
                         dynamicWorkflowYaml;
-                      navigator.clipboard.writeText(markdownDoc);
+                      void safeWriteClipboard(markdownDoc);
                       setCopiedGuideMarkdown(true);
                       setTimeout(() => setCopiedGuideMarkdown(false), 2500);
                     }}
