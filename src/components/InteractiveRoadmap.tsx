@@ -271,7 +271,8 @@ export function InteractiveRoadmap({ language }: Props) {
     try {
       setIsRecovering(true);
       setRecoveryProgress(0);
-      const adminToken = localStorage.getItem('winfix_admin_token') || '';
+      const rawToken = localStorage.getItem('winfix_admin_token') || '';
+      const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : '';
       const headers: Record<string, string> = {};
       if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
 
@@ -328,7 +329,8 @@ export function InteractiveRoadmap({ language }: Props) {
     setReflectionAuditResults(curr => curr.map(item => ({ ...item, status: 'running', value: '...' })));
 
     try {
-      const adminToken = localStorage.getItem('winfix_admin_token') || '';
+      const rawToken = localStorage.getItem('winfix_admin_token') || '';
+      const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : '';
       const headers: Record<string, string> = {};
       if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
 

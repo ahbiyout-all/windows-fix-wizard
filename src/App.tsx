@@ -28,15 +28,6 @@ const orderBy = (...args: any[]): any => ({});
 const where = (...args: any[]): any => ({});
 const writeBatch = (...args: any[]): any => ({ commit: async () => {}, set: () => {}, update: () => {}, delete: () => {} });
 const getCountFromServer = async (...args: any[]): Promise<any> => ({ data: () => ({ count: 0 }) });
-const signInWithPopup = async (..._args: any[]): Promise<any> => {
-  const err: any = new Error('Google OAuth popup is not configured in standalone mode.');
-  err.code = 'auth/oauth-not-configured';
-  throw err;
-};
-class GoogleAuthProvider {
-  constructor(...args: any[]) {}
-  setCustomParameters(...args: any[]) {}
-}
 const signOut = async (...args: any[]): Promise<any> => {};
 const onAuthStateChanged = (authObj: any, callback: any) => { callback(null); return () => {}; };
 type User = any;
@@ -702,7 +693,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.105.5";
+const APP_VERSION = "3.105.11";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -2047,29 +2038,56 @@ export default function App() {
   const stagedIssuesRef = useRef<KnownIssue[]>(stagedIssues);
   const pendingGitOpsRef = useRef<boolean>(pendingGitOpsCommit);
   const handleSyncStagedIssuesRef = useRef<(triggerType?: 'threshold' | 'interval' | 'manual' | 'retry') => Promise<void>>(async () => {});
+  const defaultMaintenanceSettings = {
+    cleanupMonths: 1,
+    linkVerifyFrequencyDays: 7,
+    maintenanceEnabled: true,
+    maintenanceScheduleMode: 'daily' as 'daily' | 'interval' | 'weekly',
+    maintenanceRunHour: 0,
+    maintenanceIntervalHours: 24,
+    linkVerifyBatchLimit: 30,
+    engineIntervalMin: 60,
+    engineBatchSize: 4,
+    alertEmail: "admin@cisnet.co.kr",
+    enableAlerts: true,
+    alertOnApiExhaustion: true,
+    alertOnTimeout: true,
+    consecutiveFailuresLimit: 3,
+    smtpHost: "",
+    smtpPort: 587,
+    smtpUser: "",
+    smtpPass: "",
+    adsenseClientId: "",
+    lastMaintenanceAt: null as string | null,
+    lastLinkVerifyAt: null as string | null,
+    lastMaintenanceResult: null as {
+      cleanup?: string;
+      totalPurged?: number;
+      lkgPurgedCount?: number;
+      linkCheck?: string;
+      checkedCount?: number;
+      brokenLinksCount?: number;
+      durationMs?: number;
+      triggeredBy?: string;
+      timestamp?: string;
+    } | null
+  };
+
   const [maintenanceSettings, setMaintenanceSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('winfix_maintenance_settings');
-      if (saved) return JSON.parse(saved);
+      if (saved) return { ...defaultMaintenanceSettings, ...JSON.parse(saved) };
     } catch (e) {}
-    return {
-      cleanupMonths: 1,
-      linkVerifyFrequencyDays: 7,
-      engineIntervalMin: 60,
-      engineBatchSize: 4,
-      alertEmail: "admin@cisnet.co.kr",
-      enableAlerts: true,
-      alertOnApiExhaustion: true,
-      alertOnTimeout: true,
-      consecutiveFailuresLimit: 3,
-      smtpHost: "",
-      smtpPort: 587,
-      smtpUser: "",
-      smtpPass: "",
-      adsenseClientId: "",
-      lastMaintenanceAt: null as string | null
-    };
+    return defaultMaintenanceSettings;
   });
+  const [maintenanceSchedulerStatus, setMaintenanceSchedulerStatus] = useState<{
+    schedulerActive: boolean;
+    isMaintenanceRunning: boolean;
+    cronPattern: string | null;
+    scheduleDescription: string;
+    nextMaintenanceAt: string | null;
+  } | null>(null);
+  const [isRunningMaintenance, setIsRunningMaintenance] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [logSummaryData, setLogSummaryData] = useState<{
     summary: any[];
@@ -2671,6 +2689,33 @@ export default function App() {
     }
   };
 
+  const fetchMaintenanceStatus = async () => {
+    if (!isAdmin || IS_GITHUB_PAGES) return;
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch("/api/maintenance/status", {
+        headers: { ...authHeaders }
+      });
+      const data = await parseJsonResponse(resp);
+      if (data.success) {
+        setMaintenanceSchedulerStatus({
+          schedulerActive: Boolean(data.schedulerActive),
+          isMaintenanceRunning: Boolean(data.isMaintenanceRunning),
+          cronPattern: data.cronPattern ?? null,
+          scheduleDescription: data.scheduleDescription || '',
+          nextMaintenanceAt: data.nextMaintenanceAt || null
+        });
+        if (data.settings) {
+          const merged = { ...defaultMaintenanceSettings, ...data.settings };
+          setMaintenanceSettings(merged);
+          localStorage.setItem('winfix_maintenance_settings', JSON.stringify(merged));
+        }
+      }
+    } catch (err: any) {
+      console.warn("Maintenance status check skipped:", err?.message || err);
+    }
+  };
+
   const fetchMaintenanceSettings = async () => {
     if (!isAdmin) return;
     try {
@@ -2680,8 +2725,12 @@ export default function App() {
       });
       const data = await parseJsonResponse(resp);
       if (data.success && data.settings) {
-        setMaintenanceSettings(data.settings);
-        localStorage.setItem('winfix_maintenance_settings', JSON.stringify(data.settings));
+        const merged = { ...defaultMaintenanceSettings, ...data.settings };
+        setMaintenanceSettings(merged);
+        localStorage.setItem('winfix_maintenance_settings', JSON.stringify(merged));
+        if (data.schedulerStatus) {
+          setMaintenanceSchedulerStatus(data.schedulerStatus);
+        }
         return;
       }
     } catch (err: any) {
@@ -2694,7 +2743,7 @@ export default function App() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed) {
-          setMaintenanceSettings(parsed);
+          setMaintenanceSettings({ ...defaultMaintenanceSettings, ...parsed });
           return;
         }
       }
@@ -2708,11 +2757,19 @@ export default function App() {
         if (configDoc.exists()) {
           const data = configDoc.data();
           const settings = {
-            cleanupMonths: data.cleanupMonths || 1,
-            linkVerifyFrequencyDays: data.linkVerifyFrequencyDays || 7,
+            ...defaultMaintenanceSettings,
+            cleanupMonths: data.cleanupMonths ?? 1,
+            linkVerifyFrequencyDays: data.linkVerifyFrequencyDays ?? 7,
+            maintenanceEnabled: data.maintenanceEnabled !== false,
+            maintenanceScheduleMode: data.maintenanceScheduleMode || 'daily',
+            maintenanceRunHour: data.maintenanceRunHour ?? 0,
+            maintenanceIntervalHours: data.maintenanceIntervalHours ?? 24,
+            linkVerifyBatchLimit: data.linkVerifyBatchLimit ?? 30,
             engineIntervalMin: data.engineIntervalMin || 60,
             engineBatchSize: data.engineBatchSize || 4,
-            lastMaintenanceAt: data.lastMaintenanceAt || null
+            lastMaintenanceAt: data.lastMaintenanceAt || null,
+            lastLinkVerifyAt: data.lastLinkVerifyAt || null,
+            lastMaintenanceResult: data.lastMaintenanceResult || null
           };
           setMaintenanceSettings(settings);
           localStorage.setItem('winfix_maintenance_settings', JSON.stringify(settings));
@@ -2757,11 +2814,20 @@ export default function App() {
         throw new Error(data.error || "Server settings update failed");
       }
 
-      const finalSettings = data.settings || updatedSettings;
+      const finalSettings = { ...defaultMaintenanceSettings, ...(data.settings || updatedSettings) };
       setMaintenanceSettings(finalSettings);
       localStorage.setItem('winfix_maintenance_settings', JSON.stringify(finalSettings));
-      await logAdminAction('update', 'system_config', `유지보수 설정 업데이트: 정리 ${finalSettings.cleanupMonths}개월, 검증 ${finalSettings.linkVerifyFrequencyDays}일, 수집주기 ${finalSettings.engineIntervalMin}분, 모집개수 ${finalSettings.engineBatchSize}개`, 'success', 'SYSTEM');
-      customAlert(language === 'en' ? "Maintenance settings saved successfully to the server." : "유지보수 및 자율 엔진 설정이 서버와 데이터베이스에 안전하게 저장되었습니다.");
+      if (data.schedulerStatus) {
+        setMaintenanceSchedulerStatus(data.schedulerStatus);
+      }
+      await logAdminAction(
+        'update',
+        'system_config',
+        `유지보수 설정 업데이트: 스케줄=${finalSettings.maintenanceEnabled === false ? '중지' : `${finalSettings.maintenanceScheduleMode}(${finalSettings.maintenanceScheduleMode === 'interval' ? `${finalSettings.maintenanceIntervalHours}h` : `${String(finalSettings.maintenanceRunHour).padStart(2, '0')}:00 KST`})`}, 정리 ${finalSettings.cleanupMonths}개월, 검증 ${finalSettings.linkVerifyFrequencyDays}일(배치 ${finalSettings.linkVerifyBatchLimit}건), 수집주기 ${finalSettings.engineIntervalMin}분`,
+        'success',
+        'SYSTEM'
+      );
+      customAlert(language === 'en' ? "Maintenance settings saved and background scheduler updated." : "유지보수 설정과 자동 스케줄러가 서버에 안전하게 저장 및 반영되었습니다.");
     } catch (err: any) {
       console.warn("API settings save failed, trying direct Firestore write fallback:", err?.message || err);
       try {
@@ -2785,6 +2851,88 @@ export default function App() {
       }
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  const handleRunMaintenanceNow = async () => {
+    if (!isAdmin || isRunningMaintenance) return;
+    if (IS_GITHUB_PAGES) {
+      customAlert(language === 'en'
+        ? "Automated server maintenance requires the Node.js backend environment."
+        : "서버 데이터베이스 정리 및 링크 검증 유지보수는 Node.js 백엔드 서버 환경에서 실행할 수 있습니다.");
+      return;
+    }
+
+    setIsRunningMaintenance(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch("/api/maintenance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify({
+          forceLinkVerify: (maintenanceSettings.linkVerifyFrequencyDays ?? 7) > 0,
+          forceCleanup: false
+        })
+      });
+      const data = await parseJsonResponse(resp);
+      if (!data.success) {
+        throw new Error(data.error || "Maintenance run failed");
+      }
+
+      const result = data.result || {};
+      if (result.skipped) {
+        customAlert(language === 'en'
+          ? "A maintenance cycle is already in progress on the server."
+          : "서버에서 이미 유지보수 작업이 실행 중입니다.");
+        return;
+      }
+
+      if (data.settings) {
+        const merged = { ...defaultMaintenanceSettings, ...data.settings };
+        setMaintenanceSettings(merged);
+        localStorage.setItem('winfix_maintenance_settings', JSON.stringify(merged));
+      }
+      if (data.nextMaintenanceAt !== undefined) {
+        setMaintenanceSchedulerStatus((prev) => ({
+          schedulerActive: prev?.schedulerActive ?? (maintenanceSettings.maintenanceEnabled !== false),
+          isMaintenanceRunning: false,
+          cronPattern: prev?.cronPattern ?? null,
+          scheduleDescription: prev?.scheduleDescription || '',
+          nextMaintenanceAt: data.nextMaintenanceAt || null
+        }));
+      }
+
+      await Promise.all([
+        fetchLogSummary(),
+        fetchCategoryCounts(true),
+        fetchMaintenanceStatus()
+      ]);
+
+      await logAdminAction(
+        'system',
+        'database_and_links',
+        `수동 유지보수 실행: ${result.cleanup || ''} | ${result.linkCheck || ''} (${result.durationMs || 0}ms)`,
+        result.brokenLinksCount > 0 ? 'warning' : 'success',
+        'SYSTEM'
+      );
+
+      customAlert(
+        language === 'en'
+          ? `Maintenance completed (${result.durationMs || 0}ms).\n• Database cleanup: ${result.cleanup}\n• Link verification: ${result.linkCheck}`
+          : `서버 유지보수 작업이 완료되었습니다 (${result.durationMs || 0}ms).\n• DB 정리: ${result.cleanup}\n• 링크 검증: ${result.linkCheck}`
+      );
+    } catch (err: any) {
+      console.error("Manual maintenance execution failed:", err);
+      customAlert(
+        language === 'en'
+          ? `Failed to run maintenance: ${err?.message || err}`
+          : `유지보수 실행 중 오류가 발생했습니다: ${err?.message || err}`
+      );
+    } finally {
+      setIsRunningMaintenance(false);
     }
   };
 
@@ -7084,113 +7232,6 @@ export default function App() {
     }
   };
 
-  const handleGoogleAuth = async (targetRole: 'general' | 'admin' = 'general') => {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    setAuthLoading(true);
-    setAuthError('');
-    try {
-      const res: any = await signInWithPopup(auth, provider);
-      const userObj = res?.user;
-      if (!userObj?.email) {
-        throw new Error(language === 'en' ? 'Google sign-in did not return an account.' : 'Google 로그인 계정 정보를 받지 못했습니다.');
-      }
-
-      const email = userObj.email.toLowerCase().trim();
-      const adminEmails = [
-        'redmunlight@gmail.com', 
-        'ahbiyout@gmail.com', 
-        'ahbiyoutwinfixwizard@gmail.com',
-        'ahbiyoutwinfix@gmail.com'
-      ].map(e => e.toLowerCase().trim());
-      
-      const isAdm = email && adminEmails.includes(email);
-
-      // Sync Google User to local file database (data/users.json)
-      try {
-        const syncResp = await fetch('/api/auth/google-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, displayName: userObj?.displayName || email.split('@')[0] })
-        });
-        if (syncResp.status === 403) {
-          const blockedData = await syncResp.json().catch(() => ({}));
-          throw new Error(blockedData.error || '이용이 제한된 계정입니다.');
-        }
-      } catch (syncErr: any) {
-        if (syncErr?.message?.includes('이용이 제한')) {
-          throw syncErr;
-        }
-        console.warn("Google user sync to local DB non-blocking warning:", syncErr);
-      }
-
-      const idToken = typeof userObj?.getIdToken === 'function' ? await userObj.getIdToken() : '';
-      const hasValidJwtToken = Boolean(idToken && idToken !== 'local-admin-token' && idToken.split('.').length === 3);
-
-      if (isAdm && hasValidJwtToken) {
-        setIsAdmin(true);
-        setAdminSessionEmail(email);
-        setUser({ email, displayName: userObj?.displayName || 'AhBiYout Administrator' });
-        localStorage.setItem('winfix_admin_email', email);
-        localStorage.setItem('winfix_admin_passkey_active', 'true');
-        localStorage.setItem('winfix_admin_token', idToken);
-        setActiveTab('admin');
-      } else {
-        setIsAdmin(false);
-        setUser({ email, displayName: userObj?.displayName || email.split('@')[0] });
-        localStorage.removeItem('winfix_admin_passkey_active');
-        localStorage.removeItem('winfix_admin_token');
-        if (targetRole === 'admin' || authMode === 'admin') {
-          // If user specifically requested admin mode without verified server token
-          setAuthError(
-            language === 'en' 
-              ? `Account (${email}) is verified as a standard user. If you are an administrator, use the emergency passkey below.`
-              : `로그인된 구글 계정(${email})은 일반 사용자 계정입니다. 관리자 전용 제어 콘솔 접근은 비상 마스터 패스키를 입력해주세요.`
-          );
-          setAuthLoading(false);
-          return;
-        }
-      }
-      setShowAuthModal(false);
-    } catch (error: any) {
-      const errCode = error?.code || '';
-      const errMsg = error?.message || '';
-      const isCancelled = errCode === 'auth/user-cancelled' || 
-                          errCode === 'auth/popup-closed-by-user' || 
-                          errCode === 'auth/cancelled-popup-request' ||
-                          errMsg.includes('popup-closed-by-user') ||
-                          errMsg.includes('cancelled-popup-request');
-      const isOauthNotConfigured = errCode === 'auth/oauth-not-configured';
-      const isDomainError = errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain');
-      const isPopupBlocked = errCode === 'auth/popup-blocked';
-      
-      if (isCancelled) {
-        console.info("Google login popup closed by user.");
-        setAuthError('');
-      } else {
-        console.error("Google auth failed", error);
-        if (isOauthNotConfigured) {
-          setAuthError(language === 'en'
-            ? "Google OAuth popup is not enabled in standalone mode. Please use Email/Password login or Emergency Admin Master Passkey."
-            : "독립 실행 환경에서는 Google OAuth 팝업이 비활성화되어 있습니다. 아래의 이메일 로그인 또는 '비상 마스터 패스키'를 이용해주세요.");
-        } else if (isPopupBlocked) {
-          setAuthError(language === 'en' 
-            ? "Popup was blocked by the browser. You can use the 'Admin Master Passkey' below to log in directly." 
-            : "브라우저에서 팝업이 차단되었습니다. 바로 아래의 '관리자 보안 마스터 패스키'를 사용하여 즉시 로그인하실 수 있습니다.");
-        } else if (isDomainError) {
-          const appUrl = window.location.origin;
-          setAuthError(language === 'en' 
-            ? `Domain ${appUrl} is not registered in Cloud Authorized Domains. Use the 'Admin Master Passkey' below to bypass domain restriction.` 
-            : `현재 도메인(${appUrl})이 클라우드 승인 도메인에 등록되어 있지 않습니다. 바로 아래의 '관리자 보안 마스터 패스키'를 사용하면 도메인 제약 없이 즉시 최고 관리자로 로그인할 수 있습니다.`);
-        } else {
-          setAuthError(errMsg || (language === 'en' ? "Google login failed. You can use Admin Passkey below." : "구글 로그인에 실패했습니다. 아래의 관리자 보안 패스키를 통해 로그인해주세요."));
-        }
-      }
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const handlePasskeyLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const pk = adminPasskey.trim();
@@ -7237,7 +7278,7 @@ export default function App() {
           isVerified = true;
           token = `passkey:${pk}`;
         } else {
-          setAdminPasskeyError(language === 'en' ? 'Unable to reach verification server. Please check your network or sign in with Google.' : '인증 서버에 연결할 수 없습니다. 네트워크를 확인하거나 Google 관리자 로그인을 이용해주세요.');
+          setAdminPasskeyError(language === 'en' ? 'Unable to reach verification server. Please check your network connection or try again.' : '인증 서버에 연결할 수 없습니다. 네트워크 연결 또는 서버 상태를 확인한 뒤 다시 시도해주세요.');
           setAdminPasskeyLoading(false);
           return;
         }
@@ -14151,7 +14192,7 @@ export default function App() {
                    <Sparkles className="absolute -right-4 -top-4 w-24 h-24 text-white/10 rotate-12" />
                    <h4 className="font-bold relative z-10">{language === 'en' ? 'Sync Ready' : '계정 동기화 완료'}</h4>
                    <p className="text-xs text-white/80 mt-2 relative z-10">
-                     {language === 'en' ? 'Your bookmarks and history are securely synced with your Google account.' : '구글 계정에 로그인하여 북마크와 활동 내역을 동기화했습니다.'}
+                     {language === 'en' ? 'Your bookmarks and activity history are synced to your account.' : '계정에 로그인하여 북마크와 활동 내역을 안전하게 동기화했습니다.'}
                    </p>
                 </div>
               </div>
@@ -17103,23 +17144,170 @@ export default function App() {
               </div>
 
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-xl p-6 mb-8">
-                <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                   <div className="flex items-center gap-3">
                     <div className="bg-blue-100 dark:bg-blue-900/40 p-2 rounded-lg">
                       <Wrench className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-                      {language === 'en' ? 'Server Maintenance Settings' : '서버 유지보수 설정 (스케줄러 고도화)'}
-                    </h3>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+                          {language === 'en' ? 'Server Maintenance & Scheduler Settings' : '서버 유지보수 설정 (자동 스케줄러)'}
+                        </h3>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-tight ${
+                          (isRunningMaintenance || maintenanceSchedulerStatus?.isMaintenanceRunning)
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                            : maintenanceSettings.maintenanceEnabled === false
+                              ? 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        }`}>
+                          {(isRunningMaintenance || maintenanceSchedulerStatus?.isMaintenanceRunning)
+                            ? (language === 'en' ? 'Running Now' : '작업 실행 중')
+                            : maintenanceSettings.maintenanceEnabled === false
+                              ? (language === 'en' ? 'Scheduler Paused' : '스케줄 일시중지')
+                              : (language === 'en' ? 'Auto-Schedule Active' : '자동 스케줄 활성')}
+                        </span>
+                      </div>
+                      {maintenanceSchedulerStatus?.scheduleDescription && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                          {maintenanceSchedulerStatus.scheduleDescription}
+                          {maintenanceSchedulerStatus.cronPattern ? ` · cron(${maintenanceSchedulerStatus.cronPattern})` : ''}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <button 
-                    onClick={handleSaveMaintenanceSettings}
-                    disabled={isSavingSettings}
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-sm"
-                  >
-                    {isSavingSettings ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                    {language === 'en' ? 'Save Settings' : '설정 저장'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRunMaintenanceNow}
+                      disabled={isRunningMaintenance || isSavingSettings}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      {isRunningMaintenance ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                      {language === 'en' ? (isRunningMaintenance ? 'Running...' : 'Run Maintenance Now') : (isRunningMaintenance ? '실행 중...' : '유지보수 즉시 실행')}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={handleSaveMaintenanceSettings}
+                      disabled={isSavingSettings || isRunningMaintenance}
+                      className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+                    >
+                      {isSavingSettings ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      {language === 'en' ? 'Save Settings' : '설정 저장'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Automated Maintenance Scheduler Controls */}
+                <div className="bg-white/90 dark:bg-slate-800/70 p-4 rounded-xl border border-blue-200/80 dark:border-blue-900/40 mb-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-100 dark:border-slate-700/60">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-indigo-500" />
+                      <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                        {language === 'en' ? 'Automated DB Cleanup & Link Check Schedule' : 'DB 정리 · 링크 검증 자동 스케줄 정책'}
+                      </span>
+                    </div>
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={maintenanceSettings.maintenanceEnabled !== false}
+                        onChange={(e) => setMaintenanceSettings(prev => ({ ...prev, maintenanceEnabled: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        {language === 'en' ? 'Enable Automated Scheduler' : '자동 유지보수 스케줄러 활성화'}
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                        {language === 'en' ? 'Schedule Cadence' : '실행 주기 모드'}
+                      </label>
+                      <select
+                        value={maintenanceSettings.maintenanceScheduleMode || 'daily'}
+                        disabled={maintenanceSettings.maintenanceEnabled === false}
+                        onChange={(e) => setMaintenanceSettings(prev => ({
+                          ...prev,
+                          maintenanceScheduleMode: e.target.value as 'daily' | 'interval' | 'weekly'
+                        }))}
+                        className="w-full bg-slate-50 dark:bg-slate-900 disabled:opacity-50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="daily">{language === 'en' ? 'Daily (Once a day)' : '매일 1회 실행'}</option>
+                        <option value="interval">{language === 'en' ? 'Interval (Every N hours)' : '시간 간격 반복 (매 N시간)'}</option>
+                        <option value="weekly">{language === 'en' ? 'Weekly (Every Sunday)' : '매주 1회 실행 (일요일)'}</option>
+                      </select>
+                    </div>
+
+                    {maintenanceSettings.maintenanceScheduleMode === 'interval' ? (
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                          {language === 'en' ? 'Repeat Every (Hours)' : '반복 간격 (시간 단위)'}
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            max={168}
+                            disabled={maintenanceSettings.maintenanceEnabled === false}
+                            value={maintenanceSettings.maintenanceIntervalHours ?? 24}
+                            onChange={(e) => setMaintenanceSettings(prev => ({
+                              ...prev,
+                              maintenanceIntervalHours: Math.max(1, Math.min(168, parseInt(e.target.value, 10) || 24))
+                            }))}
+                            className="w-24 bg-slate-50 dark:bg-slate-900 disabled:opacity-50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {language === 'en' ? 'hr(s) (1–168)' : '시간마다 (1~168)'}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                          {language === 'en' ? 'Execution Hour (KST)' : '실행 시각 (한국시간 KST)'}
+                        </label>
+                        <select
+                          value={maintenanceSettings.maintenanceRunHour ?? 0}
+                          disabled={maintenanceSettings.maintenanceEnabled === false}
+                          onChange={(e) => setMaintenanceSettings(prev => ({
+                            ...prev,
+                            maintenanceRunHour: Math.max(0, Math.min(23, parseInt(e.target.value, 10) || 0))
+                          }))}
+                          className="w-full bg-slate-50 dark:bg-slate-900 disabled:opacity-50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {Array.from({ length: 24 }, (_, hr) => (
+                            <option key={hr} value={hr}>
+                              {`${String(hr).padStart(2, '0')}:00 KST`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                        {language === 'en' ? 'Link Check Batch Size / Run' : '1회 순환 링크 검증 문서 상한'}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={5}
+                          max={100}
+                          value={maintenanceSettings.linkVerifyBatchLimit ?? 30}
+                          onChange={(e) => setMaintenanceSettings(prev => ({
+                            ...prev,
+                            linkVerifyBatchLimit: Math.max(5, Math.min(100, parseInt(e.target.value, 10) || 30))
+                          }))}
+                          className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {language === 'en' ? 'issues/run (5–100)' : '건/회 (오래된 순 순환)'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -17244,18 +17432,53 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-blue-100 dark:border-blue-900/30 flex items-center justify-between text-[10px] text-slate-400">
-                  <div className="flex items-center gap-1">
-                    <RefreshCw className="w-3 h-3 text-blue-500" />
+                {maintenanceSettings.lastMaintenanceResult && (
+                  <div className="mt-4 p-3.5 bg-white/80 dark:bg-slate-800/60 border border-blue-100 dark:border-blue-900/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div className="flex items-start sm:items-center gap-2">
+                      {(maintenanceSettings.lastMaintenanceResult.brokenLinksCount ?? 0) > 0
+                        ? <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5 sm:mt-0" />
+                        : <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5 sm:mt-0" />}
+                      <div>
+                        <span className="font-bold text-slate-700 dark:text-slate-200 mr-2">
+                          {language === 'en' ? 'Last Execution Result' : '최근 유지보수 실행 리포트'}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">
+                          {maintenanceSettings.lastMaintenanceResult.triggeredBy || 'scheduler'}
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                          {maintenanceSettings.lastMaintenanceResult.cleanup} · {maintenanceSettings.lastMaintenanceResult.linkCheck}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono shrink-0">
+                      {maintenanceSettings.lastMaintenanceResult.timestamp
+                        ? new Date(maintenanceSettings.lastMaintenanceResult.timestamp).toLocaleString()
+                        : ''}
+                      {typeof maintenanceSettings.lastMaintenanceResult.durationMs === 'number'
+                        ? ` (${maintenanceSettings.lastMaintenanceResult.durationMs}ms)`
+                        : ''}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-blue-100 dark:border-blue-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-1.5">
+                    <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${isRunningMaintenance ? 'animate-spin' : ''}`} />
                     <span>
-                      {language === 'en' ? 'Next maintenance:' : '다음 유지보수 점검 예정:'} {' '}
+                      {language === 'en' ? 'Next scheduled maintenance:' : '다음 자동 유지보수 예정:'} {' '}
                       <span className="text-blue-600 dark:text-blue-400 font-bold">
-                        {maintenanceSettings.lastMaintenanceAt ? new Date(new Date(maintenanceSettings.lastMaintenanceAt).getTime() + 24 * 60 * 60 * 1000).toLocaleString() : (language === 'en' ? 'At Midnight' : '오늘 자정')}
+                        {maintenanceSettings.maintenanceEnabled === false
+                          ? (language === 'en' ? 'Paused by admin' : '관리자에 의해 중지됨')
+                          : maintenanceSchedulerStatus?.nextMaintenanceAt
+                            ? new Date(maintenanceSchedulerStatus.nextMaintenanceAt).toLocaleString()
+                            : (maintenanceSettings.lastMaintenanceAt
+                              ? new Date(new Date(maintenanceSettings.lastMaintenanceAt).getTime() + 24 * 60 * 60 * 1000).toLocaleString()
+                              : (language === 'en' ? 'At Midnight (KST)' : '매일 00:00 (KST)'))}
                       </span>
                     </span>
                   </div>
-                  <span className="font-medium text-slate-500">
-                    {language === 'en' ? '* Saved to data/system_config.json & synced to GitHub repository' : '* 설정 저장 시 data/system_config.json 저장 및 깃허브 GitOps 수집 엔진에 자동 반영됩니다.'}
+                  <span className="font-medium text-slate-500 dark:text-slate-400">
+                    {language === 'en' ? '* Saved to data/maintenance_config.json & system_config.json' : '* 저장 시 data/maintenance_config.json 및 system_config.json에 반영되며 서버 크론이 즉시 재구성됩니다.'}
                   </span>
                 </div>
               </div>
@@ -18958,16 +19181,16 @@ export default function App() {
                       {/* Header guide banner */}
                       <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-start gap-3">
                         <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
-                          <Sparkles className="w-4 h-4" />
+                          <ShieldCheck className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
                           <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                            {language === 'ko' ? '스마트 원클릭 통합 로그인' : 'Smart Unified One-Click Login'}
+                            {language === 'ko' ? '계정 통합 로그인' : 'Unified Account Sign In'}
                           </h4>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                             {language === 'ko' 
-                              ? 'Google 계정으로 한 번에 로그인하세요. 관리자 계정은 자동으로 관리자 대시보드가 즉시 활성화됩니다.' 
-                              : 'Sign in with your Google account. Administrator accounts are automatically elevated with full access.'}
+                              ? '이메일 및 비밀번호로 로그인하거나, 관리자는 상단 "관리자 비상 인증" 탭의 마스터 패스키로 즉시 접속할 수 있습니다.' 
+                              : 'Sign in with your registered email and password, or switch to Admin Passkey for administrator access.'}
                           </p>
                         </div>
                       </div>
@@ -18978,34 +19201,6 @@ export default function App() {
                           <span className="leading-relaxed">{authError}</span>
                         </div>
                       )}
-
-                      {/* Primary One-Click Google Login Button */}
-                      <button 
-                        onClick={() => handleGoogleAuth('general')}
-                        disabled={authLoading}
-                        className="w-full flex items-center justify-center gap-2.5 py-3 px-4 bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 rounded-xl text-xs font-bold transition-all shadow-xs hover:shadow-md disabled:opacity-50 cursor-pointer"
-                      >
-                        <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                        </svg>
-                        <span>
-                          {authLoading 
-                            ? (language === 'en' ? 'Authenticating with Google...' : 'Google 인증 진행 중...') 
-                            : (language === 'en' ? 'Continue with Google (Auto Role Detection)' : 'Google 계정으로 계속하기 (권한 자동 감지)')}
-                        </span>
-                      </button>
-
-                      {/* Divider */}
-                      <div className="relative flex py-1 items-center">
-                        <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
-                        <span className="flex-shrink mx-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          {language === 'ko' ? '또는 이메일 로그인' : 'OR EMAIL LOGIN'}
-                        </span>
-                        <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
-                      </div>
 
                       {/* Standard Email/Password Form */}
                       <form onSubmit={handleEmailAuth} className="space-y-3">
@@ -19237,22 +19432,6 @@ export default function App() {
                           {authLoading ? (language === 'en' ? 'Please wait...' : '잠시만 기다려주세요...') : (language === 'en' ? 'Create Account' : '회원가입')}
                         </button>
                       </form>
-                      
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <button 
-                          onClick={() => handleGoogleAuth('general')}
-                          disabled={authLoading}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
-                        >
-                          <svg viewBox="0 0 24 24" className="w-4 h-4">
-                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                          </svg>
-                          <span>{language === 'en' ? 'Sign up with Google' : 'Google로 회원가입'}</span>
-                        </button>
-                      </div>
                       
                       <div className="pt-2 text-center">
                         <button 

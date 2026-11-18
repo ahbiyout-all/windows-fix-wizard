@@ -1,6 +1,118 @@
-# Patch Note - System Update (v3.105.5)
+# Patch Note - System Update (v3.105.11)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.105.11] - 2026-11-18
+
+### 🛡️ Security Hardening & Validation (8차 심층 자아성찰 GitOps YAML 인젝션·프로토타입 오염·외부 API 타임아웃 방어)
+- **GitHub Actions 워크플로 YAML 인젝션 및 브랜치 검증 일관화 (`server.ts`)**:
+  - `sanitizeCollectorOptions()` 및 `buildCollectorWorkflowYamlFromOptions()`에서 `targetWindowsVersions` 입력의 따옴표·개행 문자와 비안전 문자열(`/^[a-zA-Z0-9 .\-_+]{1,40}$/`)을 엄격히 차단해 `.github/workflows/windows-fix-collector.yml` YAML 삽입 가능성을 제거.
+  - `POST /api/github/pull-from-repo`, `POST /api/github/push-collector-options`, `POST /api/ai/push-registry`에도 `isValidGitRef(branch)` 검증을 일괄 적용.
+- **이슈 패치 프로토타입 오염 방지 및 회원 수정 검증 보강 (`server.ts`)**:
+  - `PATCH /api/issues/:id`가 `__proto__`, `constructor`, `prototype`, `id` 키를 필터링한 안전 객체만 병합하도록 개선.
+  - `PATCH /api/admin/users/:id`에 요청 본문 객체 검사 및 `displayName` 80자 상한 제한을 추가.
+
+### 🔧 Reliability & DoS Resilience Improvements
+- **외부 AI 제공자 네트워크 타임아웃 및 방문자 레이트 맵 상한 적용 (`lib/ai-resilience-router.ts`, `server.ts`)**:
+  - Groq, Mistral, OpenRouter, Cerebras, Cloudflare 외부 AI 호출(`callExternalFreeProvider`) 및 `/api/keys/test-secondary` 검증 `fetch()`에 `AbortSignal.timeout(15000)`을 적용해 외부 장애 시 비동기 동기화·응답 지연 누적(Hang)을 방지.
+  - `visitorRequestRateMap` 메모리 보호 상한(`> 2000` 키 초과 시 오래된 항목 회전 정리)을 추가해 고카디널리티 요청 폭주 시 메모리 고갈을 예방.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 기본 버전을 `v3.105.11`로 동기화.
+
+---
+
+## [v3.105.10] - 2026-11-18
+
+### 🛡️ Security Hardening & Authentication (7차 심층 자아성찰 관리자 JWT 우회 차단 및 시크릿 보호)
+- **미검증 JWT 서명 기반 관리자 인증 우회 원천 차단 (`server.ts`)**:
+  - `verifyAdminAuthHeader()`에서 서명 검증 없이 Base64Url 디코딩된 JWT 페이로드의 `email`/`iss` 필드만으로 관리자 권한을 허용하던 레거시 분기를 완전 제거하고, 서버가 직접 발급한 유효 세션 토큰(`adm_sess_...`) 또는 상수 시간 비교 기반 `ADMIN_PASSKEY`만 허용하도록 전면 강화.
+  - `issuedAdminSessions` 맵과 `issueAdminSessionToken()` 선언 위치를 검증 로직 상단으로 정리해 초기화 순서 명확화.
+  - `POST /api/github/sync`의 비(`CRON_SECRET`) 폴백 인증도 `verifyAdminAuthHeader()`로 통합하고 웹훅 배치 상한(`1~500건`) 검증 추가.
+- **`/api/admin/event-logs` 관리자 인증 게이트 적용 (`server.ts`, `src/components/SystemEventLogPanel.tsx`)**:
+  - `GET /api/admin/event-logs`에 `requireAdmin` 미들웨어를 적용해 관리자 엔드포인트 인증 일관성을 확보하고, `SystemEventLogPanel`은 유효한 `winfix_admin_token`이 있는 경우에만 서버 조회를 수행(일반 세션은 로컬 샘플 폴백 사용)하도록 개선.
+- **유지보수·시스템 설정 API `smtpPass` 마스킹 및 프로토타입 오염 방어 (`server.ts`)**:
+  - `GET /api/settings/maintenance` 및 `GET /api/system_config`가 저장된 `smtpPass` 평문을 반환하지 않고 `"••••••••"` (`hasSmtpPass`)로 마스킹하도록 개선.
+  - `POST /api/settings/maintenance`와 `POST /api/admin/smtp/verify`가 마스킹된 플레이스홀더(`"••••"`) 전송 시 기존 서버 저장 비밀번호를 보존·사용하도록 수정.
+  - `POST /api/system_config/update`에 객체 타입 검증 및 `__proto__`/`constructor`/`prototype` 키 차단 추가.
+
+### 🔧 Bug Fixes & Input Validation
+- **이슈 등록/동기화 페이로드 방어 (`server.ts`)**:
+  - `POST /api/issues/add`에 유효한 이슈 객체(`title` 또는 `code` 필수) 검증 추가, `POST /api/issues/sync`에 1회 최대 `1,000건` 배치 상한 적용.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 기본 버전을 `v3.105.10`으로 동기화.
+
+---
+
+## [v3.105.9] - 2026-11-18
+
+### 🛡️ Security Hardening & Authentication (6차 심층 자아성찰 백업·스냅샷 무결성 및 클라이언트 위생 강화)
+- **시스템 백업 ZIP 및 LKG 스냅샷 다운로드 민감 정보 자동 마스킹 (`server.ts`)**:
+  - `GET /api/admin/backup`이 `DATA_DIR` 내 JSON 파일들을 직렬화할 때 `redactBackupSecrets()`를 적용해 `users.json`(`passwordHash`, `salt`), `github_config.json`(`token`, `sshPrivateKey`), `system_config.json`/`maintenance_config.json`(`smtpPass`, 외부 AI API 키 등)의 자격 증명을 `[REDACTED_FOR_BACKUP]`으로 치환하도록 보안 강화.
+  - `GET /api/admin/last-known-good/download` 및 `GET /api/admin/last-known-good/download-snapshot/:filename`에서도 동일한 시크릿 마스킹을 적용하고 `Content-Disposition` 파일명을 안전하게 인용 처리.
+- **스냅샷 다운로드 파일명 정규식 검증 및 복원 허용 컬렉션 화이트리스트 적용 (`server.ts`)**:
+  - `GET /api/admin/last-known-good/download-snapshot/:filename` 및 `restore-snapshot`에 `/^snapshot_[a-zA-Z0-9_.\-]+\.json$/` 엄격 정규식 검증을 적용해 비정상 파일 접근 경로를 차단.
+  - `POST /api/admin/restore`가 단일·다중 컬렉션 복원 시 허용된 DB/로그 컬렉션 화이트리스트만 수용하도록 제한해 `users`, `github_config` 등 인증/자격 설정 파일의 오작동 덮어쓰기를 방지.
+- **서브 컴포넌트 구버전 토큰 필터링 및 URL 파라미터 인코딩 (`MemberManagementPanel.tsx`, `PowerShellVerifierPanel.tsx`, `InteractiveRoadmap.tsx`, `DailyQuotaUsageChart.tsx`)**:
+  - 모든 관리자 보조 컴포넌트가 `winfix_admin_token` 조회 시 폐기된 `'local-admin-token'`을 명시적으로 배제하고, `MemberManagementPanel.tsx`의 `PATCH`/`DELETE` 요청 경로에 `encodeURIComponent(user.id)`를 적용.
+
+### 🔧 Bug Fixes & Data Integrity
+- **Last-Known-Good (LKG) 스냅샷 백업·복원 컬렉션 명칭 불일치 교정 (`server.ts`)**:
+  - 실제 서버 로그·유지보수 파일명(`logs_admin`, `logs_feedback`, `maintenance_config`)이 기존 LKG 백업 목록(`admin_logs`, `feedback`)과 어긋나 빈 배열로 저장·누락되던 결함을 수정하고(기존 별칭 하위 호환 유지), 스냅샷 롤백 시 `maintenance_config` 복원 직후 `setupMaintenanceScheduler()`를 자동 재동기화하도록 개선.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 기본 버전을 `v3.105.9`로 동기화.
+
+---
+
+## [v3.105.8] - 2026-11-18
+
+### 🛡️ Security Hardening & Authentication (5차 심층 자아성찰 보안·DoS 방어 및 데드코드 정리)
+- **비인가 계정 스팸·AI 쿼터 남용·로그 플러딩 차단 (`server.ts`)**:
+  - `POST /api/auth/google-sync`에 `requireAdmin` 미들웨어를 적용해 독립 실행 환경에서 비인증 외부 요청으로 `users.json` 계정이 임의 생성되던 경로를 차단.
+  - `POST /api/auth/login`, `POST /api/auth/register`에 `rateLimitAuth`(분당 15회)와 엄격한 이메일 형식·비밀번호 길이 상한(`6~128자` PBKDF2 DoS 방어)·표시 이름 길이(`80자`) 검증 추가.
+  - 공개 AI 엔드포인트(`/api/ai/generate`, `/api/ai/stream`, `/api/ai/diagnose`)에 `rateLimitPublicAi`(분당 30회)와 `32,000자` 프롬프트 상한을 적용하고, 공개 로그 수집(`/api/logs/add`)에 `rateLimitPublicLogs`(분당 40회) 및 `8KB` 크기 제한을 추가.
+- **XSS 방어 심화 (`src/components/PowerShellSandbox.tsx`)**:
+  - `highlightPowerShell` 폴백 이스케이프에 따옴표(`"`, `'`) 치환을 추가해 인라인 렌더링 안전성을 강화.
+
+### 🔧 Bug Fixes & Code Cleanliness
+- **유지보수 부팅 보정 중복 실행 방지 및 데드 OAuth 코드 제거 (`server.ts`, `src/App.tsx`)**:
+  - 서버 부팅 25초 후 실행되는 `startup-overdue` 유지보수 체크가 타이머 시점의 최신 `getMaintenanceSettings()`를 재조회하도록 개선해 부팅 직후 수동 실행과의 중복 실행을 방지.
+  - `src/App.tsx`에서 사용되지 않는 `signInWithPopup`, `GoogleAuthProvider`, `handleGoogleAuth` 데드 코드를 제거하고, 패스키 네트워크 안내 및 `My Lab` 계정 동기화 문구를 독립 실행 환경에 맞게 정제.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 기본 버전을 `v3.105.8`로 동기화.
+
+---
+
+## [v3.105.7] - 2026-11-17
+
+### 🔧 Bug Fixes & Stability Improvements
+- **독립 실행 환경 Google OAuth 스텁 런타임 오류(`auth/oauth-not-configured`) 해결 (`src/App.tsx`, `server.ts`)**:
+  - Google OAuth가 비활성화된 독립 실행 환경에서 로그인/회원가입 모달에 노출되던 미작동 Google 로그인·가입 버튼을 제거하고, 이메일 통합 로그인 및 비상 마스터 패스키 중심으로 인증 화면을 정돈.
+  - `handleGoogleAuth` 내 `auth/oauth-not-configured` 예외가 `console.error`로 전파되어 런타임 오류로 감지되던 문제를 비오류 안내 처리로 교정하고, `/api/auth/login`의 비밀번호 미설정 계정 안내 문구를 현실에 맞게 개선.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 기본 버전을 `v3.105.7`로 동기화.
+
+---
+
+## [v3.105.6] - 2026-11-17
+
+### 🚀 Major New Features & Integrations
+- **동적 유지보수 자동 스케줄러 및 실시간 재구성 (`server.ts`, `data/maintenance_config.json`)**:
+  - 관리자가 설정한 주기(`daily` 매일 지정 시각 KST, `interval` 매 N시간 간격, `weekly` 매주 일요일 지정 시각 KST, 또는 일시 중지 `maintenanceEnabled: false`)에 맞춰 `node-cron` (`Asia/Seoul`) 작업을 즉시 중지/재등록하는 `setupMaintenanceScheduler()` 및 `getMaintenanceCronPattern()` / `computeNextMaintenanceAt()` 구현.
+  - 서버 부팅 시 저장된 유지보수 설정을 로드해 스케줄러를 자동 시작하며, 활성화 상태에서 이전 실행 기록이 없거나 설정 주기를 초과(`overdue`)한 경우 25초 뒤 비동기 catch-up 유지보수(`triggeredBy: 'startup-overdue'`)를 자동 수행하도록 개선.
+  - 관리자 전용 상태 조회(`GET /api/maintenance/status`)와 수동 실행(`POST /api/maintenance`), 동적 스케줄 반영(`GET/POST /api/settings/maintenance`) API 연동 완료.
+- **실제 DB 로그·스냅샷 자동 정리 및 순환 링크 검증기 (`server.ts`)**:
+  - `runMaintenance()`가 기존 문자열 스텁 대신 공용 `pruneOldDatabaseLogs()`를 호출해 7개 로그 컬렉션(`logs_admin`, `logs_search`, `logs_feedback`, `logs_error`, `logs_backend`, `logs_visitor`, `system_event_logs`)의 만료 레코드와 오래된 LKG 스냅샷(`purgeOldLastKnownGoodSnapshotsSync`), 손상된 불량 `issues` 레코드를 실제로 정리.
+  - 외부 참조 URL 검증을 단순 상위 20건 고정 슬라이싱에서 `lastLinkCheckAt` 오래된 순/미검증 우선 순환 배치(`linkVerifyBatchLimit`, 5~100건, 동시성 풀 5)로 업그레이드하고 `HEAD` 차단(`400`/`403`/`405`) 시 `GET (Range: bytes=0-0)` 폴백 검사를 적용해 정확도를 개선.
+- **Admin UI 유지보수 스케줄 제어 및 즉시 실행 패널 (`src/App.tsx`)**:
+  - 서버 유지보수 설정 카드에 자동 스케줄러 활성 토글, 실행 주기 모드(`daily`/`interval`/`weekly`), 실행 시각(KST)/반복 시간, 순환 링크 검증 배치 상한, 실시간 크론 상태 뱃지, 다음 유지보수 예정 시각, 최근 실행 리포트(`lastMaintenanceResult`), **유지보수 즉시 실행(`handleRunMaintenanceNow`)** 버튼을 통합.
+
+### 🛡️ Security Hardening & Stability Improvements
+- **동시 실행 뮤텍스 및 SSRF 링크 검증 가드 유지 (`server.ts`)**:
+  - `isMaintenanceRunning` 뮤텍스로 수동 실행·정기 스케줄·부팅 보정 실행 간 경합 및 중복 파일 쓰기를 방지하고, 모든 검증 대상 URL에 `isSafeExternalHttpUrl()` SSRF 차단을 선적용.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 및 패치 노트 헤더 버전을 `v3.105.6`으로 동기화.
 
 ---
 

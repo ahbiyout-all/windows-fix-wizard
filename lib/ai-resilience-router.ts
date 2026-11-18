@@ -129,7 +129,7 @@ export const DEFAULT_GEMINI_MODELS: DiscoveredGeminiModel[] = [
 ];
 
 export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
-  version: '3.105.5',
+  version: '3.105.11',
   updatedAt: new Date().toISOString(),
   lastDiscoveryAt: null,
   routingPolicy: 'quota-split',
@@ -610,6 +610,7 @@ export async function callExternalFreeProvider(
       try {
         const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
+          signal: AbortSignal.timeout(15000),
           headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
@@ -638,6 +639,7 @@ export async function callExternalFreeProvider(
       try {
         const resp = await fetch('https://api.mistral.ai/v1/chat/completions', {
           method: 'POST',
+          signal: AbortSignal.timeout(15000),
           headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
@@ -668,6 +670,7 @@ export async function callExternalFreeProvider(
       try {
         const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
+          signal: AbortSignal.timeout(15000),
           headers: {
             Authorization: `Bearer ${key}`,
             'Content-Type': 'application/json',
@@ -701,6 +704,7 @@ export async function callExternalFreeProvider(
       try {
         const resp = await fetch('https://api.cerebras.ai/v1/chat/completions', {
           method: 'POST',
+          signal: AbortSignal.timeout(15000),
           headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
@@ -730,6 +734,7 @@ export async function callExternalFreeProvider(
       try {
         const resp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`, {
           method: 'POST',
+          signal: AbortSignal.timeout(15000),
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [{ role: 'user', content: promptText }]

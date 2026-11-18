@@ -41,7 +41,8 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const getAuthHeader = (): Record<string, string> => {
-    const token = localStorage.getItem('winfix_admin_token');
+    const rawToken = localStorage.getItem('winfix_admin_token');
+    const token = rawToken && rawToken !== 'local-admin-token' ? rawToken : '';
     return token ? { 'Authorization': `Bearer ${token}` } : {};
   };
 
@@ -80,7 +81,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
 
   const handleUpdateStatus = async (user: MemberUser, newStatus: 'active' | 'blocked') => {
     try {
-      const res = await fetch(`/api/admin/users/${user.id}`, {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -107,7 +108,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   const handleDeleteUser = async (user: MemberUser) => {
     setConfirmDeleteId(null);
     try {
-      const res = await fetch(`/api/admin/users/${user.id}`, {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, {
         method: 'DELETE',
         headers: getAuthHeader()
       });

@@ -138,7 +138,8 @@ export const DailyQuotaUsageChart: React.FC<DailyQuotaUsageChartProps> = ({ lang
     }
 
     try {
-      const adminToken = typeof window !== 'undefined' ? localStorage.getItem('winfix_admin_token') : null;
+      const rawToken = typeof window !== 'undefined' ? localStorage.getItem('winfix_admin_token') : null;
+      const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : null;
       const headers: Record<string, string> = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
       const res = await fetch(`/api/admin/daily-quota-stats?days=${timeRange}`, { headers });
       if (res.ok) {

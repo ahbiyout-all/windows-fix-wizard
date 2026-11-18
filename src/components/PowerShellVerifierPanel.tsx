@@ -124,7 +124,8 @@ export function PowerShellVerifierPanel({ scriptText, onScriptSigned, language }
     // Simulate certificates binding processing
     await new Promise(r => setTimeout(r, 600));
     try {
-      const adminToken = localStorage.getItem('winfix_admin_token') || '';
+      const rawToken = localStorage.getItem('winfix_admin_token') || '';
+      const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : '';
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (adminToken) {
         headers['Authorization'] = `Bearer ${adminToken}`;

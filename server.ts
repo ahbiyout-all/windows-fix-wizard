@@ -183,7 +183,90 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.105.5';
+  return '3.105.11';
+}
+
+const BACKUP_SENSITIVE_KEY_EXACT = new Set([
+  'passwordhash',
+  'salt',
+  'password',
+  'smtppass',
+  'token',
+  'sshprivatekey',
+  'apikey',
+  'apitoken',
+  'secret',
+  'privatekey',
+  'accesstoken',
+  'refreshtoken',
+  'clientsecret'
+]);
+
+const BACKUP_SAFE_TOKEN_FIELDS = new Set([
+  'hassshkey',
+  'isplaceholder',
+  'keysource',
+  'maskedkey',
+  'keyused',
+  'tokens',
+  'geminitokens',
+  'geminirequestsquota',
+  'passrate',
+  'passed'
+]);
+
+function isSensitiveBackupFieldName(key: string): boolean {
+  const lower = key.toLowerCase();
+  if (BACKUP_SAFE_TOKEN_FIELDS.has(lower)) return false;
+  if (BACKUP_SENSITIVE_KEY_EXACT.has(lower)) return true;
+  return (
+    lower.endsWith('apikey') ||
+    lower.endsWith('apitoken') ||
+    lower.endsWith('privatekey') ||
+    lower.endsWith('clientsecret') ||
+    lower.endsWith('smtppass') ||
+    lower.endsWith('passwordhash')
+  );
+}
+
+function redactBackupSecrets(value: any): any {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactBackupSecrets(item));
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (isSensitiveBackupFieldName(k)) {
+        if (typeof v === 'string' && v.trim().length === 0) {
+          out[k] = '';
+        } else if (v === null || v === undefined) {
+          out[k] = v;
+        } else {
+          out[k] = '[REDACTED_FOR_BACKUP]';
+        }
+      } else {
+        out[k] = redactBackupSecrets(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+function readLocalConfigObject(collection: string): Record<string, any> {
+  const filePath = getJsonFilePath(collection);
+  if (!fs.existsSync(filePath)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (Array.isArray(parsed)) {
+      const firstObj = parsed.find((item) => item && typeof item === 'object' && !Array.isArray(item));
+      return firstObj ? { ...firstObj } : {};
+    }
+    if (parsed && typeof parsed === 'object') {
+      return { ...parsed };
+    }
+  } catch (_) {}
+  return {};
 }
 
 function readSystemConfigObject(): Record<string, any> {
@@ -517,16 +600,26 @@ function createLastKnownGoodBackupSync(customReason?: string): { success: boolea
       fs.mkdirSync(LKG_SNAPSHOTS_DIR, { recursive: true });
     }
 
-    const collectionsToBackup = ['issues', 'feedback', 'bookmarks', 'admin_logs', 'system_config'];
+    const collectionsToBackup = [
+      'issues',
+      'logs_admin',
+      'logs_feedback',
+      'maintenance_config',
+      'system_config',
+      'feedback',
+      'bookmarks',
+      'admin_logs'
+    ];
+    const objectConfigCollections = new Set(['system_config', 'maintenance_config']);
     const snapshotData: Record<string, any> = {};
     const collectionsCount: Record<string, number> = {};
     let totalRecords = 0;
 
     for (const col of collectionsToBackup) {
-      if (col === 'system_config') {
-        const sysObj = readSystemConfigObject();
-        snapshotData[col] = sysObj;
-        const count = Object.keys(sysObj).length > 0 ? 1 : 0;
+      if (objectConfigCollections.has(col)) {
+        const cfgObj = col === 'system_config' ? readSystemConfigObject() : readLocalConfigObject(col);
+        snapshotData[col] = cfgObj;
+        const count = Object.keys(cfgObj).length > 0 ? 1 : 0;
         collectionsCount[col] = count;
         totalRecords += count;
       } else {
@@ -1331,10 +1424,15 @@ async function runAiSync() {
 }
 
 async function getMaintenanceSettings(): Promise<any> {
-  let settings = { 
-    cleanupMonths: 1, 
-    linkVerifyFrequencyDays: 7, 
-    engineIntervalMin: 60, 
+  let settings = {
+    cleanupMonths: 1,
+    linkVerifyFrequencyDays: 7,
+    maintenanceEnabled: true,
+    maintenanceScheduleMode: 'daily' as 'daily' | 'interval' | 'weekly',
+    maintenanceRunHour: 0,
+    maintenanceIntervalHours: 24,
+    linkVerifyBatchLimit: 30,
+    engineIntervalMin: 60,
     engineBatchSize: 4,
     alertEmail: process.env.ALERT_EMAIL || "admin@cisnet.co.kr",
     enableAlerts: true,
@@ -1344,21 +1442,24 @@ async function getMaintenanceSettings(): Promise<any> {
     smtpHost: "",
     smtpPort: 587,
     smtpUser: "",
-    smtpPass: ""
+    smtpPass: "",
+    adsenseClientId: "",
+    lastMaintenanceAt: null as string | null,
+    lastLinkVerifyAt: null as string | null,
+    lastMaintenanceResult: null as any
   };
-  
-  // 1. Load local config first (trust server's local file as primary ground-truth if it exists)
+
+  // Load local config as primary ground-truth
   const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
-  let localSettings: any = null;
   if (fs.existsSync(localPath)) {
     try {
-      localSettings = JSON.parse(fs.readFileSync(localPath, 'utf8'));
-      settings = { ...settings, ...localSettings };
+      const localSettings = JSON.parse(fs.readFileSync(localPath, 'utf8'));
+      if (localSettings && typeof localSettings === 'object') {
+        settings = { ...settings, ...localSettings };
+      }
     } catch {}
   }
 
-
-  
   return settings;
 }
 
@@ -1644,13 +1745,429 @@ function setupEngineScheduler(intervalMin: number) {
   });
 }
 
+function pruneOldDatabaseLogs(months: number): {
+  months: number;
+  cutoffIso: string | null;
+  totalPurged: number;
+  purgedCounts: Record<string, number>;
+  lkgPurgedCount: number;
+} {
+  if (!Number.isFinite(months) || months <= 0) {
+    return { months: 0, cutoffIso: null, totalPurged: 0, purgedCounts: {}, lkgPurgedCount: 0 };
+  }
+
+  const cutoffMs = Date.now() - months * 30 * 86400 * 1000;
+  const cutoffIso = getKSTISOString(cutoffMs);
+  const collections = [
+    { key: 'admin', col: 'logs_admin' },
+    { key: 'search', col: 'logs_search' },
+    { key: 'feedback', col: 'logs_feedback' },
+    { key: 'error', col: 'logs_error' },
+    { key: 'backend', col: 'logs_backend' },
+    { key: 'visitor', col: 'logs_visitor' },
+    { key: 'event', col: 'system_event_logs' }
+  ];
+
+  const purgedCounts: Record<string, number> = {};
+  let totalPurged = 0;
+
+  for (const { key, col } of collections) {
+    const logs = readLocalCollection(col);
+    if (!Array.isArray(logs) || logs.length === 0) {
+      purgedCounts[key] = 0;
+      continue;
+    }
+    const filtered = logs.filter((item: any) => {
+      const ts = item?.timestamp || item?.lastActiveAt || item?.created_at || item?.firstVisitedAt || item?.createdAt;
+      if (!ts) return true;
+      const logMs = new Date(ts).getTime();
+      return isNaN(logMs) || logMs >= cutoffMs;
+    });
+    const purged = logs.length - filtered.length;
+    purgedCounts[key] = purged;
+    totalPurged += purged;
+    if (purged > 0) {
+      writeLocalCollection(col, filtered);
+    }
+  }
+
+  const lkgPurge = purgeOldLastKnownGoodSnapshotsSync();
+  return {
+    months,
+    cutoffIso,
+    totalPurged,
+    purgedCounts,
+    lkgPurgedCount: lkgPurge.purgedCount
+  };
+}
+
+async function verifySingleUrlReachable(rawUrl: string): Promise<boolean> {
+  if (!isSafeExternalHttpUrl(rawUrl)) return false;
+  try {
+    const headResp = await fetch(rawUrl, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: (AbortSignal as any).timeout(5000),
+      headers: { 'User-Agent': 'WindowsFixWizard-LinkVerifier/1.0' }
+    });
+    if (headResp.ok) return true;
+    if (headResp.status === 405 || headResp.status === 403 || headResp.status === 400) {
+      const getResp = await fetch(rawUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: (AbortSignal as any).timeout(5000),
+        headers: {
+          'User-Agent': 'WindowsFixWizard-LinkVerifier/1.0',
+          'Range': 'bytes=0-0'
+        }
+      });
+      return getResp.ok || getResp.status === 206;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function getMaintenanceCronPattern(settings: any): { pattern: string; description: string } {
+  const mode = settings?.maintenanceScheduleMode || 'daily';
+  const rawHour = Number(settings?.maintenanceRunHour);
+  const runHour = Number.isFinite(rawHour) ? Math.min(23, Math.max(0, Math.floor(rawHour))) : 0;
+  const rawIntervalHours = Number(settings?.maintenanceIntervalHours);
+  const intervalHours = Number.isFinite(rawIntervalHours) ? Math.min(168, Math.max(1, Math.floor(rawIntervalHours))) : 24;
+
+  if (mode === 'interval') {
+    if (intervalHours < 24) {
+      return {
+        pattern: `0 */${intervalHours} * * *`,
+        description: `Every ${intervalHours} hour(s) (KST)`
+      };
+    }
+    const days = Math.max(1, Math.floor(intervalHours / 24));
+    return {
+      pattern: `0 ${runHour} */${days} * *`,
+      description: `Every ${days} day(s) at ${String(runHour).padStart(2, '0')}:00 KST`
+    };
+  }
+
+  if (mode === 'weekly') {
+    return {
+      pattern: `0 ${runHour} * * 0`,
+      description: `Weekly (Sunday ${String(runHour).padStart(2, '0')}:00 KST)`
+    };
+  }
+
+  return {
+    pattern: `0 ${runHour} * * *`,
+    description: `Daily at ${String(runHour).padStart(2, '0')}:00 KST`
+  };
+}
+
+function computeNextMaintenanceAt(settings: any, fromMs: number = Date.now()): string | null {
+  if (settings?.maintenanceEnabled === false) return null;
+  const mode = settings?.maintenanceScheduleMode || 'daily';
+  const rawHour = Number(settings?.maintenanceRunHour);
+  const runHour = Number.isFinite(rawHour) ? Math.min(23, Math.max(0, Math.floor(rawHour))) : 0;
+  const rawIntervalHours = Number(settings?.maintenanceIntervalHours);
+  const intervalHours = Number.isFinite(rawIntervalHours) ? Math.min(168, Math.max(1, Math.floor(rawIntervalHours))) : 24;
+
+  // Compute in KST (UTC+9)
+  const kstNow = new Date(fromMs + 9 * 3600000);
+  if (mode === 'interval' && intervalHours < 24) {
+    const nextHourBlock = Math.floor(kstNow.getUTCHours() / intervalHours) * intervalHours + intervalHours;
+    const candidateKst = new Date(Date.UTC(
+      kstNow.getUTCFullYear(),
+      kstNow.getUTCMonth(),
+      kstNow.getUTCDate(),
+      nextHourBlock, 0, 0, 0
+    ));
+    return getKSTISOString(candidateKst.getTime() - 9 * 3600000);
+  }
+
+  if (mode === 'weekly') {
+    const daysUntilSunday = (7 - kstNow.getUTCDay()) % 7;
+    const candidateKst = new Date(Date.UTC(
+      kstNow.getUTCFullYear(),
+      kstNow.getUTCMonth(),
+      kstNow.getUTCDate() + daysUntilSunday,
+      runHour, 0, 0, 0
+    ));
+    if (candidateKst.getTime() <= kstNow.getTime()) {
+      candidateKst.setUTCDate(candidateKst.getUTCDate() + 7);
+    }
+    return getKSTISOString(candidateKst.getTime() - 9 * 3600000);
+  }
+
+  const daysStep = mode === 'interval' ? Math.max(1, Math.floor(intervalHours / 24)) : 1;
+  const candidateKst = new Date(Date.UTC(
+    kstNow.getUTCFullYear(),
+    kstNow.getUTCMonth(),
+    kstNow.getUTCDate(),
+    runHour, 0, 0, 0
+  ));
+  if (candidateKst.getTime() <= kstNow.getTime()) {
+    candidateKst.setUTCDate(candidateKst.getUTCDate() + daysStep);
+  }
+  return getKSTISOString(candidateKst.getTime() - 9 * 3600000);
+}
+
+let activeMaintenanceCronTask: any = null;
+let activeMaintenanceCronPattern: string | null = null;
+let activeMaintenanceScheduleDesc: string = 'Paused';
+let isMaintenanceRunning: boolean = false;
+
+function setupMaintenanceScheduler(settings: any) {
+  if (activeMaintenanceCronTask) {
+    console.log("[MAINTENANCE] Stopping existing maintenance scheduler...");
+    try { activeMaintenanceCronTask.stop(); } catch {}
+    activeMaintenanceCronTask = null;
+  }
+
+  if (settings?.maintenanceEnabled === false) {
+    activeMaintenanceCronPattern = null;
+    activeMaintenanceScheduleDesc = 'Disabled by admin';
+    console.log("[MAINTENANCE] Automatic maintenance scheduler is disabled by admin settings.");
+    return;
+  }
+
+  const { pattern, description } = getMaintenanceCronPattern(settings);
+  activeMaintenanceCronPattern = pattern;
+  activeMaintenanceScheduleDesc = description;
+  console.log(`[MAINTENANCE] Scheduling automated cleanup & link verification: "${pattern}" (${description})`);
+
+  activeMaintenanceCronTask = cron.schedule(pattern, async () => {
+    console.log(`[MAINTENANCE] Triggering scheduled maintenance (${description})...`);
+    await runMaintenance({ triggeredBy: 'scheduler' }).catch((err) => {
+      console.error("[MAINTENANCE] Scheduled execution error:", err);
+    });
+  }, { timezone: 'Asia/Seoul' });
+}
+
+// Maintenance Runner (Database Cleanup + Rotating Link Verification)
+async function runMaintenance(options: {
+  triggeredBy?: 'scheduler' | 'manual' | 'startup-overdue';
+  forceLinkVerify?: boolean;
+  forceCleanup?: boolean;
+} = {}) {
+  const { triggeredBy = 'manual', forceLinkVerify = false, forceCleanup = false } = options;
+  if (isMaintenanceRunning) {
+    return {
+      skipped: true,
+      reason: 'already_running',
+      message: 'Maintenance task is already running.'
+    };
+  }
+
+  isMaintenanceRunning = true;
+  const startedMs = Date.now();
+  console.log(`[MAINTENANCE] Starting server maintenance tasks (trigger: ${triggeredBy})...`);
+
+  try {
+    const settings = await getMaintenanceSettings();
+    const cleanupMonths = Number.isFinite(Number(settings?.cleanupMonths)) ? Number(settings.cleanupMonths) : 1;
+    const linkVerifyFrequencyDays = Number.isFinite(Number(settings?.linkVerifyFrequencyDays)) ? Number(settings.linkVerifyFrequencyDays) : 7;
+    const batchLimit = Math.min(100, Math.max(5, Number(settings?.linkVerifyBatchLimit) || 30));
+
+    let cleanupResult = "";
+    let cleanupSummary = { months: cleanupMonths, cutoffIso: null as string | null, totalPurged: 0, purgedCounts: {} as Record<string, number>, lkgPurgedCount: 0 };
+
+    // 1. Database Cleanup: old logs across all log collections, LKG snapshots, and invalid orphan issues
+    if (cleanupMonths > 0 || forceCleanup) {
+      const effectiveMonths = cleanupMonths > 0 ? cleanupMonths : 1;
+      cleanupSummary = pruneOldDatabaseLogs(effectiveMonths);
+
+      // Sanitize malformed orphan records in issues.json if any exist
+      let malformedRemoved = 0;
+      const allIssues = readLocalCollection('issues');
+      if (Array.isArray(allIssues) && allIssues.length > 0) {
+        const cleanIssues = allIssues.filter((item: any) => item && typeof item === 'object' && item.id && item.title);
+        malformedRemoved = allIssues.length - cleanIssues.length;
+        if (malformedRemoved > 0) {
+          writeLocalCollection('issues', cleanIssues);
+        }
+      }
+
+      cleanupResult = `${effectiveMonths}개월 초과 로그 ${cleanupSummary.totalPurged}건 정리` +
+        (cleanupSummary.lkgPurgedCount > 0 ? `, 스냅샷 ${cleanupSummary.lkgPurgedCount}건 정리` : '') +
+        (malformedRemoved > 0 ? `, 불량 이슈 ${malformedRemoved}건 제거` : '');
+    } else {
+      cleanupResult = "Cleanup disabled by settings (0 months).";
+    }
+
+    // 2. Rotating Link Verification for Stale or Never-Verified Issues
+    const lastLinkAtStr = settings?.lastLinkVerifyAt || settings?.lastMaintenanceAt;
+    const lastLinkMs = lastLinkAtStr ? new Date(lastLinkAtStr).getTime() : 0;
+    const daysSinceLastCheck = lastLinkMs > 0 ? (Date.now() - lastLinkMs) / (1000 * 60 * 60 * 24) : Infinity;
+
+    let linkResult = "";
+    let checkedCount = 0;
+    let brokenLinksCount = 0;
+    const brokenIssueIds: string[] = [];
+    let updatedLastLinkVerifyAt = settings?.lastLinkVerifyAt || null;
+
+    if (linkVerifyFrequencyDays <= 0 && !forceLinkVerify) {
+      linkResult = "Link verification disabled by settings (0 days).";
+    } else {
+      const localIssues = readLocalCollection('issues');
+      const staleThresholdMs = Math.max(1, linkVerifyFrequencyDays) * 86400 * 1000;
+      const nowMs = Date.now();
+
+      // Prioritize issues with sourceUrls that have never been checked or are older than linkVerifyFrequencyDays
+      const candidates = localIssues
+        .filter((issue: any) => Array.isArray(issue?.sourceUrls) && issue.sourceUrls.length > 0)
+        .filter((issue: any) => {
+          if (forceLinkVerify) return true;
+          if (!issue.lastLinkCheckAt) return true;
+          const t = new Date(issue.lastLinkCheckAt).getTime();
+          return isNaN(t) || (nowMs - t >= staleThresholdMs);
+        })
+        .sort((a: any, b: any) => {
+          const aT = a.lastLinkCheckAt ? new Date(a.lastLinkCheckAt).getTime() : 0;
+          const bT = b.lastLinkCheckAt ? new Date(b.lastLinkCheckAt).getTime() : 0;
+          return aT - bT;
+        });
+
+      const batchLimitEffective = forceLinkVerify ? Math.max(batchLimit, 50) : batchLimit;
+      const issuesToCheck = candidates.slice(0, batchLimitEffective);
+
+      if (issuesToCheck.length === 0 && !forceLinkVerify && daysSinceLastCheck < linkVerifyFrequencyDays) {
+        linkResult = `Link check skipped (All links verified within ${linkVerifyFrequencyDays}d; last check ${daysSinceLastCheck.toFixed(1)}d ago).`;
+      } else {
+        console.log(`[MAINTENANCE] Running Link Verification on ${issuesToCheck.length} issue(s)...`);
+        let localIssuesChanged = false;
+        const issueIndexById = new Map<string, number>();
+        localIssues.forEach((item: any, idx: number) => {
+          if (item?.id) issueIndexById.set(String(item.id), idx);
+        });
+
+        // Concurrency pool of 5 issues at a time
+        for (let i = 0; i < issuesToCheck.length; i += 5) {
+          const chunk = issuesToCheck.slice(i, i + 5);
+          await Promise.all(chunk.map(async (data: any) => {
+            const urls: string[] = Array.isArray(data.sourceUrls) ? data.sourceUrls : [];
+            if (urls.length === 0) return;
+
+            checkedCount++;
+            const brokenLinks: string[] = [];
+            for (const url of urls) {
+              const ok = await verifySingleUrlReachable(url);
+              if (!ok) brokenLinks.push(url);
+            }
+
+            const hasBroken = brokenLinks.length > 0;
+            const checkTime = getKSTISOString();
+            const localIdx = data.id ? issueIndexById.get(String(data.id)) : undefined;
+            if (localIdx !== undefined && localIdx !== -1) {
+              localIssues[localIdx] = {
+                ...localIssues[localIdx],
+                hasBrokenLinks: hasBroken,
+                brokenLinks,
+                lastLinkCheckAt: checkTime
+              };
+              localIssuesChanged = true;
+            }
+            if (hasBroken) {
+              brokenLinksCount++;
+              if (data.id) brokenIssueIds.push(String(data.id));
+            }
+          }));
+        }
+
+        if (localIssuesChanged) {
+          writeLocalCollection('issues', localIssues);
+        }
+        updatedLastLinkVerifyAt = getKSTISOString();
+        linkResult = `문서 ${checkedCount}건 링크 검증 완료 (오류 링크 ${brokenLinksCount}건 검출)`;
+        console.log(`[MAINTENANCE] ${linkResult}`);
+      }
+    }
+
+    const now = getKSTISOString();
+    const durationMs = Date.now() - startedMs;
+    const report = {
+      cleanup: cleanupResult,
+      totalPurged: cleanupSummary.totalPurged,
+      purgedCounts: cleanupSummary.purgedCounts,
+      lkgPurgedCount: cleanupSummary.lkgPurgedCount,
+      linkCheck: linkResult,
+      checkedCount,
+      brokenLinksCount,
+      brokenIssueIds: brokenIssueIds.slice(0, 20),
+      durationMs,
+      triggeredBy,
+      timestamp: now
+    };
+
+    const nextSettings = {
+      ...settings,
+      lastMaintenanceAt: now,
+      lastLinkVerifyAt: updatedLastLinkVerifyAt,
+      lastMaintenanceResult: report,
+      updatedAt: now
+    };
+
+    const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
+    try {
+      fs.writeFileSync(localPath, JSON.stringify(nextSettings, null, 2), 'utf8');
+      writeSystemConfigObject(nextSettings);
+    } catch {}
+
+    addLocalLog("logs_admin", {
+      action: 'automated_maintenance',
+      target: 'database_and_links',
+      details: `[자동 유지보수 (${triggeredBy})] ${cleanupResult} | ${linkResult} (${durationMs}ms)`,
+      severity: brokenLinksCount > 0 ? 'warning' : 'info',
+      timestamp: now,
+      admin: 'SYSTEM_MAINTENANCE'
+    });
+
+    await logSyncEvent({
+      type: brokenLinksCount > 0 ? 'info' : 'success',
+      source: 'maintenance-scheduler',
+      message: `유지보수 완료 (${triggeredBy}): 로그 ${cleanupSummary.totalPurged}건 정리 · 링크 ${checkedCount}건 검사(오류 ${brokenLinksCount}건)`,
+      details: report
+    });
+
+    console.log(`[MAINTENANCE] Completed in ${durationMs}ms.`);
+    return report;
+  } catch (err: any) {
+    console.error("Maintenance failed:", err);
+    throw err;
+  } finally {
+    isMaintenanceRunning = false;
+  }
+}
+
 // Initial scheduler setup from saved configuration on boot
 getMaintenanceSettings().then(settings => {
   const intervalMin = settings.engineIntervalMin || 60;
   setupEngineScheduler(intervalMin);
+  setupMaintenanceScheduler(settings);
+
+  // Non-blocking startup overdue check: re-read latest settings inside timer so manual runs during warmup are respected
+  if (settings.maintenanceEnabled !== false) {
+    setTimeout(async () => {
+      try {
+        const latestSettings = await getMaintenanceSettings();
+        if (latestSettings.maintenanceEnabled === false) return;
+        const expectedIntervalMs =
+          latestSettings.maintenanceScheduleMode === 'weekly'
+            ? 7 * 86400 * 1000
+            : latestSettings.maintenanceScheduleMode === 'interval'
+              ? Math.max(1, Number(latestSettings.maintenanceIntervalHours) || 24) * 3600 * 1000
+              : 24 * 3600 * 1000;
+        const lastRunMs = latestSettings.lastMaintenanceAt ? new Date(latestSettings.lastMaintenanceAt).getTime() : 0;
+        if (!lastRunMs || isNaN(lastRunMs) || (Date.now() - lastRunMs > expectedIntervalMs)) {
+          console.log("[MAINTENANCE] Detected overdue/missing maintenance run at startup; triggering catch-up run...");
+          await runMaintenance({ triggeredBy: 'startup-overdue' }).catch(() => {});
+        }
+      } catch {}
+    }, 25000);
+  }
 }).catch(err => {
-  console.error("Failed to load initial engine scheduling settings on startup:", err);
+  console.error("Failed to load initial scheduling settings on startup:", err);
   setupEngineScheduler(60); // fallback to 60 mins
+  setupMaintenanceScheduler({ maintenanceEnabled: true, maintenanceScheduleMode: 'daily', maintenanceRunHour: 0 });
 });
 
 // Non-blocking periodic Live AI Model Discovery (40s after boot, then every 6 hours)
@@ -1677,125 +2194,6 @@ setTimeout(async () => {
     console.log("Local database already populated, skipping immediate boot-time AI sync.");
   }
 }, 45000); // 45 seconds after boot
-
-// Maintenance Scheduler (Non-AI)
-async function runMaintenance() {
-  console.log("Starting server maintenance tasks...");
-  try {
-    // 1. Load settings from unified helper
-    const settings = await getMaintenanceSettings();
-    
-    const cleanupMonths = settings?.cleanupMonths ?? 1;
-    const linkVerifyFrequencyDays = settings?.linkVerifyFrequencyDays ?? 7;
-
-    let cleanupResult = "";
-    let linkResult = "";
-
-    // 2. Log Cleanup (admin_logs, search_logs) - Local File DB
-    if (cleanupMonths > 0) {
-      const cutoffDate = new Date();
-      cutoffDate.setMonth(cutoffDate.getMonth() - cleanupMonths);
-      cleanupResult = `Log cleanup check performed (Cutoff: ${cutoffDate.toISOString()})`;
-    } else {
-      cleanupResult = "Cleanup disabled by settings.";
-    }
-
-    // 3. Link Verification for Issues
-    const lastMaintStr = settings?.lastMaintenanceAt;
-    const lastMaint = lastMaintStr ? new Date(lastMaintStr) : new Date(0);
-    const daysSinceLast = (Date.now() - lastMaint.getTime()) / (1000 * 60 * 60 * 24);
-    
-    if (linkVerifyFrequencyDays > 0 && (daysSinceLast >= linkVerifyFrequencyDays || !lastMaintStr)) {
-      console.log("Running Link Verification (Local)...");
-      const localIssues = readLocalCollection('issues');
-      const issuesToCheck = localIssues.slice(0, 20);
-      
-      let brokenLinksCount = 0;
-      let checkedCount = 0;
-      let localIssuesChanged = false;
-      
-      for (const data of issuesToCheck) {
-        const urls = data.sourceUrls || [];
-        if (urls.length === 0) continue;
-
-        const brokenLinks = [];
-        checkedCount++;
-        
-        for (const url of urls) {
-          if (!isSafeExternalHttpUrl(url)) {
-            brokenLinks.push(url);
-            continue;
-          }
-          try {
-            const resp = await fetch(url, { 
-              method: 'HEAD', 
-              signal: (AbortSignal as any).timeout(5000) 
-            });
-            if (!resp.ok && resp.status !== 405) {
-              brokenLinks.push(url);
-            }
-          } catch (e) {
-            brokenLinks.push(url);
-          }
-        }
-        
-        const hasBroken = brokenLinks.length > 0;
-        const checkTime = getKSTISOString();
-
-        const localIdx = localIssues.findIndex((i: any) => i.id === data.id);
-        if (localIdx !== -1) {
-          localIssues[localIdx] = {
-            ...localIssues[localIdx],
-            hasBrokenLinks: hasBroken,
-            brokenLinks,
-            lastLinkCheckAt: checkTime
-          };
-          localIssuesChanged = true;
-        }
-
-        if (hasBroken) brokenLinksCount++;
-      }
-
-      if (localIssuesChanged) {
-        writeLocalCollection('issues', localIssues);
-      }
-
-      linkResult = `Checked ${checkedCount} docs, found ${brokenLinksCount} with issues.`;
-      console.log(linkResult);
-    } else {
-      linkResult = `Link check skipped (Frequency: ${linkVerifyFrequencyDays} days, Last: ${daysSinceLast.toFixed(1)} days ago)`;
-    }
-
-    // 4. Update maintenance status
-    const now = getKSTISOString();
-    const updatePayload = {
-      lastMaintenanceAt: now,
-      lastMaintenanceResult: {
-        cleanup: cleanupResult,
-        linkCheck: linkResult,
-        timestamp: now
-      }
-    };
-    
-    // Write out locally only
-    const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
-    try {
-      const merged = { ...settings, ...updatePayload };
-      fs.writeFileSync(localPath, JSON.stringify(merged, null, 2), 'utf8');
-    } catch {}
-    
-    console.log("Maintenance completed successfully (Local-only mode).");
-    return { cleanup: cleanupResult, linkCheck: linkResult };
-  } catch (err: any) {
-    console.error("Maintenance failed:", err);
-    throw err;
-  }
-}
-
-cron.schedule('0 0 * * *', async () => { 
-  console.log("Triggering scheduled daily maintenance...");
-  await runMaintenance();
-});
 
 // Automatic GitHub-to-Main Dataset Integration
 let isGithubAutoIntegrateRunning = false;
@@ -2014,17 +2412,26 @@ async function startServer() {
   const rateLimitVisitorLog = createRateLimiter(60, 60000, "VISITOR_LOG");
   const rateLimitPasskeyVerify = createRateLimiter(5, 60000, "PASSKEY_VERIFY");
   const rateLimitValidateKey = createRateLimiter(20, 60000, "VALIDATE_KEY");
+  const rateLimitAuth = createRateLimiter(15, 60000, "AUTH_LOGIN_REGISTER");
+  const rateLimitPublicAi = createRateLimiter(30, 60000, "PUBLIC_AI");
+  const rateLimitPublicLogs = createRateLimiter(40, 60000, "PUBLIC_LOGS");
 
   // Seed database on startup (Removed to save quota)
   // await seedDatabase();
 
   // Admin Auth Helper & Middleware
-  const ADMIN_EMAILS = new Set([
-    'redmunlight@gmail.com',
-    'ahbiyout@gmail.com',
-    'ahbiyoutwinfixwizard@gmail.com',
-    'ahbiyoutwinfix@gmail.com'
-  ]);
+  const issuedAdminSessions = new Map<string, { email: string; expiresAt: number }>();
+  const issueAdminSessionToken = (email: string): string => {
+    const now = Date.now();
+    if (issuedAdminSessions.size > 200) {
+      for (const [k, v] of issuedAdminSessions.entries()) {
+        if (v.expiresAt <= now) issuedAdminSessions.delete(k);
+      }
+    }
+    const token = `adm_sess_${crypto.randomBytes(24).toString('hex')}`;
+    issuedAdminSessions.set(token, { email, expiresAt: now + 24 * 60 * 60 * 1000 });
+    return token;
+  };
 
   const verifyAdminAuthHeader = (authHeader?: string): { ok: boolean; status: number; error?: string } => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -2039,7 +2446,7 @@ async function startServer() {
       return { ok: false, status: 401, error: 'Unauthorized: Empty token' };
     }
 
-    // 0. Check active server-issued admin session token
+    // 1. Check active server-issued admin session token
     const session = issuedAdminSessions.get(token);
     if (session) {
       if (session.expiresAt > Date.now()) {
@@ -2050,7 +2457,7 @@ async function startServer() {
 
     const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
 
-    // 1. Check Admin Passkey (with or without 'passkey:' prefix) using constant-time comparison
+    // 2. Check Admin Passkey (with or without 'passkey:' prefix) using constant-time comparison
     let candidatePasskey = token;
     if (token.startsWith('passkey:')) {
       candidatePasskey = token.replace('passkey:', '').trim();
@@ -2060,50 +2467,7 @@ async function startServer() {
       return { ok: true, status: 200 };
     }
 
-    // 2. Check if it's a valid 3-part Google/Firebase JWT (non-expired, non-'none' alg)
-    const jwtParts = token.split('.');
-    if (jwtParts.length === 3 && jwtParts[2]) {
-      try {
-        const headerJson = Buffer.from(jwtParts[0], 'base64url').toString('utf8');
-        const header = JSON.parse(headerJson);
-        const payloadJson = Buffer.from(jwtParts[1], 'base64url').toString('utf8');
-        const payload = JSON.parse(payloadJson);
-        const email = (payload.email || '').toLowerCase().trim();
-        const iss = payload.iss || '';
-        const isGoogleOrFirebase = iss.startsWith('https://securetoken.google.com/') || iss.includes('accounts.google.com');
-        const nowSec = Math.floor(Date.now() / 1000);
-        const exp = typeof payload.exp === 'number' ? payload.exp : 0;
-
-        if (
-          header?.alg &&
-          String(header.alg).toLowerCase() !== 'none' &&
-          email &&
-          ADMIN_EMAILS.has(email) &&
-          payload.email_verified !== false &&
-          isGoogleOrFirebase &&
-          exp > nowSec - 60
-        ) {
-          return { ok: true, status: 200 };
-        }
-      } catch (jwtErr) {
-        console.warn("[Admin Auth] Failed to decode JWT payload:", jwtErr);
-      }
-    }
-
     return { ok: false, status: 401, error: 'Unauthorized: Invalid token' };
-  };
-
-  const issuedAdminSessions = new Map<string, { email: string; expiresAt: number }>();
-  const issueAdminSessionToken = (email: string): string => {
-    const now = Date.now();
-    if (issuedAdminSessions.size > 200) {
-      for (const [k, v] of issuedAdminSessions.entries()) {
-        if (v.expiresAt <= now) issuedAdminSessions.delete(k);
-      }
-    }
-    const token = `adm_sess_${crypto.randomBytes(24).toString('hex')}`;
-    issuedAdminSessions.set(token, { email, expiresAt: now + 24 * 60 * 60 * 1000 });
-    return token;
   };
 
   const requireAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -2409,8 +2773,8 @@ async function startServer() {
   // ==========================================
   // SERVER-SIDE GEMINI API ROUTES
   // ==========================================
-  app.post("/api/ai/generate", async (req, res) => {
-    const { prompt, contents, model, config, enableSearch, customApiKey } = req.body;
+  app.post("/api/ai/generate", rateLimitPublicAi, async (req, res) => {
+    const { prompt, contents, model, config, enableSearch, customApiKey } = req.body || {};
     const clientKey = customApiKey || (req.headers['x-gemini-api-key'] as string);
     const payload = contents || prompt;
     if (!payload) {
@@ -2418,6 +2782,9 @@ async function startServer() {
     }
 
     const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    if (payloadStr.length > 32000) {
+      return res.status(400).json({ success: false, error: "Prompt payload exceeds 32,000 character safety limit" });
+    }
     const isVerification = payloadStr.includes("Please verify if the following troubleshooting information") ||
       payloadStr.includes("You are a Windows technical expert") ||
       payloadStr.includes("verificationStatus") ||
@@ -2458,17 +2825,23 @@ async function startServer() {
     }
   });
 
-  app.post("/api/ai/stream", async (req, res) => {
+  app.post("/api/ai/stream", rateLimitPublicAi, async (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
     try {
-      const { prompt, contents, model, config, enableSearch, customApiKey } = req.body;
+      const { prompt, contents, model, config, enableSearch, customApiKey } = req.body || {};
       const clientKey = customApiKey || (req.headers['x-gemini-api-key'] as string);
       const payload = contents || prompt;
       if (!payload) {
         res.write(`data: ${JSON.stringify({ error: "Prompt or contents payload is required" })}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      }
+      const payloadLen = typeof payload === 'string' ? payload.length : JSON.stringify(payload).length;
+      if (payloadLen > 32000) {
+        res.write(`data: ${JSON.stringify({ error: "Prompt payload exceeds 32,000 character safety limit" })}\n\n`);
         res.write("data: [DONE]\n\n");
         return res.end();
       }
@@ -2494,9 +2867,12 @@ async function startServer() {
     }
   });
 
-  app.post("/api/ai/diagnose", async (req, res) => {
+  app.post("/api/ai/diagnose", rateLimitPublicAi, async (req, res) => {
     const { prompt, model, query, version } = req.body || {};
     const targetPrompt = prompt || query || "";
+    if (typeof targetPrompt === 'string' && targetPrompt.length > 32000) {
+      return res.status(400).json({ success: false, error: "Diagnostic prompt exceeds 32,000 character limit" });
+    }
     try {
       if (targetPrompt) {
         const result = await executeServerGeminiCall(targetPrompt, {
@@ -2703,6 +3079,7 @@ async function startServer() {
       if (provider === 'groq') {
         const testRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
+          signal: AbortSignal.timeout(15000),
           headers: {
             "Authorization": `Bearer ${trimmed}`,
             "Content-Type": "application/json"
@@ -2722,6 +3099,7 @@ async function startServer() {
       } else if (provider === 'openrouter') {
         const testRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
+          signal: AbortSignal.timeout(15000),
           headers: {
             "Authorization": `Bearer ${trimmed}`,
             "Content-Type": "application/json",
@@ -2896,10 +3274,14 @@ async function startServer() {
       const { repo, branch = 'main', token } = req.body || {};
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
 
       if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "유효한 GitHub 저장소 이름('소유자/저장소명')이 필요합니다." });
+      }
+      if (!isValidGitRef(targetBranch)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 브랜치 이름입니다." });
       }
 
       if (!authToken) {
@@ -2919,7 +3301,7 @@ async function startServer() {
       };
       const filePath = 'data/ai-model-registry.json';
       let sha: string | undefined;
-      const getRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`, { headers });
+      const getRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`, { headers });
       if (getRes.ok) {
         const info: any = await getRes.json();
         sha = info.sha;
@@ -2930,7 +3312,7 @@ async function startServer() {
         body: JSON.stringify({
           message: `🧠 [GitOps] Sync AI model registry & free-tier routing (${registry.geminiModels[0]?.id || 'gemini-4-hydrogen'})`,
           content: Buffer.from(contentStr, 'utf8').toString('base64'),
-          branch,
+          branch: targetBranch,
           ...(sha ? { sha } : {})
         })
       });
@@ -2954,6 +3336,9 @@ async function startServer() {
   app.post("/api/issues/add", requireAdmin, async (req, res) => {
     try {
       const issueData = req.body;
+      if (!issueData || typeof issueData !== 'object' || Array.isArray(issueData) || (!issueData.title && !issueData.code)) {
+        return res.status(400).json({ success: false, error: "Valid issue object with title or code is required" });
+      }
       const saveRes = await saveIssuesToServer([issueData]);
       res.json({ success: true, ...saveRes });
     } catch (err: any) {
@@ -2963,9 +3348,9 @@ async function startServer() {
 
   app.post("/api/issues/sync", requireAdmin, async (req, res) => {
     try {
-      const { issues, skipDuplicates } = req.body;
-      if (!Array.isArray(issues)) {
-        return res.status(400).json({ success: false, error: "Issues payload must be an array" });
+      const { issues, skipDuplicates } = req.body || {};
+      if (!Array.isArray(issues) || issues.length > 1000) {
+        return res.status(400).json({ success: false, error: "Issues payload must be an array of at most 1000 records" });
       }
       const result = await saveIssuesToServer(issues, { skipDuplicates: Boolean(skipDuplicates) });
       res.json({ success: true, ...result, result });
@@ -2980,11 +3365,15 @@ async function startServer() {
       if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
         return res.status(400).json({ success: false, error: "Invalid issue patch payload" });
       }
-      const { id: _ignoredId, ...patchData } = req.body;
+      const sanitizedPatch: Record<string, any> = {};
+      for (const [k, v] of Object.entries(req.body)) {
+        if (k === 'id' || k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+        sanitizedPatch[k] = v;
+      }
       const list = readLocalCollection('issues');
       const idx = list.findIndex((i: any) => i.id === id);
       if (idx !== -1) {
-        list[idx] = { ...list[idx], ...patchData, id };
+        list[idx] = { ...list[idx], ...sanitizedPatch, id };
         writeLocalCollection('issues', list);
         res.json({ success: true, issue: list[idx] });
       } else {
@@ -3093,6 +3482,13 @@ async function startServer() {
           const fresh = tsList.filter(ts => nowMs - ts < 60000);
           if (fresh.length === 0) visitorRequestRateMap.delete(k);
           else visitorRequestRateMap.set(k, fresh);
+        }
+        if (visitorRequestRateMap.size > 2000) {
+          let toDelete = visitorRequestRateMap.size - 1000;
+          for (const k of visitorRequestRateMap.keys()) {
+            visitorRequestRateMap.delete(k);
+            if (--toDelete <= 0) break;
+          }
         }
       }
       let timestamps = visitorRequestRateMap.get(key) || [];
@@ -3305,7 +3701,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/admin/event-logs", (req, res) => {
+  app.get("/api/admin/event-logs", requireAdmin, (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 50, 1), 500);
       const levelFilter = (req.query.level as string || '').trim();
@@ -3362,17 +3758,17 @@ async function startServer() {
   ].map(e => e.toLowerCase().trim());
 
   // POST /api/auth/register - Register new user account with hashed password
-  app.post("/api/auth/register", (req, res) => {
+  app.post("/api/auth/register", rateLimitAuth, (req, res) => {
     try {
-      const { email, password, displayName } = req.body;
-      if (!email || typeof email !== 'string' || !email.includes('@')) {
+      const { email, password, displayName } = req.body || {};
+      const cleanEmail = typeof email === 'string' ? email.toLowerCase().trim() : '';
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 254) {
         return res.status(400).json({ success: false, error: "유효한 이메일 주소를 입력해주세요." });
       }
-      if (!password || typeof password !== 'string' || password.length < 6) {
-        return res.status(400).json({ success: false, error: "비밀번호는 6자리 이상이어야 합니다." });
+      if (!password || typeof password !== 'string' || password.length < 6 || password.length > 128) {
+        return res.status(400).json({ success: false, error: "비밀번호는 6자리 이상 128자리 이하로 입력해주세요." });
       }
 
-      const cleanEmail = email.toLowerCase().trim();
       if (getAdminEmailList().includes(cleanEmail)) {
         return res.status(403).json({ success: false, error: "시스템 관리자 계정은 일반 회원가입으로 등록할 수 없습니다. 관리자 로그인을 이용해주세요." });
       }
@@ -3387,11 +3783,14 @@ async function startServer() {
       const { salt, hash } = hashPasswordWithSalt(password);
       const now = getKSTISOString();
       const userId = `usr-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+      const safeDisplayName = typeof displayName === 'string' && displayName.trim()
+        ? displayName.trim().slice(0, 80)
+        : cleanEmail.split('@')[0];
 
       const newUser = {
         id: userId,
         email: cleanEmail,
-        displayName: displayName || cleanEmail.split('@')[0],
+        displayName: safeDisplayName,
         role: 'member',
         authProvider: 'email',
         salt,
@@ -3430,11 +3829,11 @@ async function startServer() {
   });
 
   // POST /api/auth/login - Email/Password login
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", rateLimitAuth, (req, res) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ success: false, error: "이메일과 비밀번호를 모두 입력해주세요." });
+      const { email, password } = req.body || {};
+      if (!email || typeof email !== 'string' || !password || typeof password !== 'string' || password.length > 128) {
+        return res.status(400).json({ success: false, error: "유효한 이메일과 비밀번호를 입력해주세요." });
       }
 
       const cleanEmail = (email || '').toLowerCase().trim();
@@ -3450,7 +3849,7 @@ async function startServer() {
       }
 
       if (user.authProvider === 'google' && !user.passwordHash) {
-        return res.status(400).json({ success: false, error: "해당 계정은 Google 원클릭 로그인으로 가입된 계정입니다. Google 로그인 버튼을 이용해주세요." });
+        return res.status(400).json({ success: false, error: "해당 계정은 비밀번호가 설정되어 있지 않습니다. 관리자 비상 패스키를 이용하거나 신규 이메일 계정으로 가입해주세요." });
       }
 
       const isValid = verifyPasswordWithSalt(password, user.salt || '', user.passwordHash || '');
@@ -3482,8 +3881,8 @@ async function startServer() {
     }
   });
 
-  // POST /api/auth/google-sync - Automatically persist/sync Google OAuth users to data/users.json
-  app.post("/api/auth/google-sync", (req, res) => {
+  // POST /api/auth/google-sync - Admin-only sync endpoint (prevents anonymous user DB flooding in standalone mode)
+  app.post("/api/auth/google-sync", requireAdmin, (req, res) => {
     try {
       const { email, displayName } = req.body || {};
       if (!email || typeof email !== 'string') {
@@ -3592,6 +3991,9 @@ async function startServer() {
   app.patch("/api/admin/users/:id", requireAdmin, (req, res) => {
     try {
       const userId = req.params.id;
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 사용자 수정 요청 형식입니다." });
+      }
       const { role, status, displayName } = req.body;
       const users = readLocalCollection('users');
       const userIndex = users.findIndex((u: any) => u.id === userId);
@@ -3606,8 +4008,8 @@ async function startServer() {
       if (status && (status === 'active' || status === 'blocked')) {
         users[userIndex].status = status;
       }
-      if (displayName && typeof displayName === 'string') {
-        users[userIndex].displayName = displayName.trim();
+      if (displayName && typeof displayName === 'string' && displayName.trim()) {
+        users[userIndex].displayName = displayName.trim().slice(0, 80);
       }
 
       writeLocalCollection('users', users);
@@ -3711,7 +4113,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/logs/add", (req, res) => {
+  app.post("/api/logs/add", rateLimitPublicLogs, (req, res) => {
     try {
       const { type, log } = req.body || {};
       if (!type || typeof type !== 'string' || !ALLOWED_ALL_LOG_TYPES.has(type)) {
@@ -3719,6 +4121,9 @@ async function startServer() {
       }
       if (!log || typeof log !== 'object' || Array.isArray(log)) {
         return res.status(400).json({ success: false, error: "Invalid log payload" });
+      }
+      if (JSON.stringify(log).length > 8192) {
+        return res.status(400).json({ success: false, error: "Log payload exceeds 8KB limit" });
       }
       if (!ALLOWED_PUBLIC_LOG_TYPES.has(type)) {
         const authResult = verifyAdminAuthHeader(req.headers.authorization);
@@ -3854,39 +4259,17 @@ async function startServer() {
 
   app.post("/api/logs/auto-prune", requireAdmin, (req, res) => {
     try {
-      const months = typeof req.body.months === 'number' ? req.body.months : 1;
+      const months = typeof req.body?.months === 'number' ? req.body.months : 1;
       if (months <= 0) {
         return res.json({ success: true, message: "Pruning disabled (0 months specified). No logs purged.", totalPurged: 0, purgedCounts: {} });
       }
 
-      const cutoffMs = Date.now() - (months * 30 * 86400 * 1000);
-      const logTypes = ['admin', 'search', 'feedback', 'error', 'backend', 'visitor'];
-      const purgedCounts: Record<string, number> = {};
-      let totalPurged = 0;
-
-      for (const t of logTypes) {
-        const colName = `logs_${t}`;
-        const logs = readLocalCollection(colName);
-        const filtered = logs.filter((item: any) => {
-          const ts = item.timestamp || item.lastActiveAt || item.created_at || item.firstVisitedAt;
-          if (!ts) return true;
-          const logMs = new Date(ts).getTime();
-          return !isNaN(logMs) && logMs >= cutoffMs;
-        });
-
-        const purged = logs.length - filtered.length;
-        purgedCounts[t] = purged;
-        totalPurged += purged;
-
-        if (purged > 0) {
-          writeLocalCollection(colName, filtered);
-        }
-      }
+      const pruneRes = pruneOldDatabaseLogs(months);
 
       addLocalLog("logs_admin", {
         action: 'auto_prune_logs',
         target: 'system_logs',
-        details: `[로그 자동 정돈 완료] ${months}개월 초과 이전 로그 총 ${totalPurged}건 파기 정돈됨`,
+        details: `[로그 자동 정돈 완료] ${months}개월 초과 이전 로그 총 ${pruneRes.totalPurged}건 파기 정돈됨`,
         severity: 'info',
         timestamp: getKSTISOString(),
         admin: 'SYSTEM_MAINTENANCE'
@@ -3895,8 +4278,9 @@ async function startServer() {
       res.json({
         success: true,
         months,
-        totalPurged,
-        purgedCounts
+        totalPurged: pruneRes.totalPurged,
+        purgedCounts: pruneRes.purgedCounts,
+        lkgPurgedCount: pruneRes.lkgPurgedCount
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -3922,7 +4306,7 @@ async function startServer() {
         throw new Error("Failed to create ZIP directory structure");
       }
 
-      // 1. Back up all local JSON files in the DATA_DIR directory
+      // 1. Back up all local JSON files in DATA_DIR with sensitive credentials redacted
       if (fs.existsSync(DATA_DIR)) {
         const dataFiles = fs.readdirSync(DATA_DIR);
         for (const file of dataFiles) {
@@ -3930,7 +4314,14 @@ async function startServer() {
             const filePath = path.join(DATA_DIR, file);
             try {
               const content = fs.readFileSync(filePath, 'utf8');
-              folder.file(`server_json_db/${file}`, content);
+              try {
+                const parsed = JSON.parse(content);
+                const sanitized = redactBackupSecrets(parsed);
+                folder.file(`server_json_db/${file}`, JSON.stringify(sanitized, null, 2));
+              } catch {
+                // Skip unreadable/non-JSON content from verbatim export to avoid leaking partial credential files
+                console.warn(`Skipped invalid JSON file ${file} during backup serialization.`);
+              }
             } catch (fileErr: any) {
               console.warn(`Failed to read local file ${file} for backup:`, fileErr.message);
             }
@@ -4058,10 +4449,14 @@ async function startServer() {
         return res.status(404).json({ success: false, error: "No last-known-good backup snapshot found on server." });
       }
       const raw = fs.readFileSync(LAST_KNOWN_GOOD_PATH, 'utf8');
+      let safePayload = raw;
+      try {
+        safePayload = JSON.stringify(redactBackupSecrets(JSON.parse(raw)), null, 2);
+      } catch (_) {}
       const timestamp = getKSTISOString().replace(/[:.]/g, '-');
       res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename=last_known_good_snapshot_${timestamp}.json`);
-      res.send(raw);
+      res.setHeader('Content-Disposition', `attachment; filename="last_known_good_snapshot_${timestamp}.json"`);
+      res.send(safePayload);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || "Failed to download last-known-good snapshot" });
     }
@@ -4069,15 +4464,22 @@ async function startServer() {
 
   app.get("/api/admin/last-known-good/download-snapshot/:filename", requireAdmin, (req, res) => {
     try {
-      const safeFilename = path.basename(req.params.filename);
+      const safeFilename = path.basename(String(req.params.filename || ''));
+      if (!/^snapshot_[a-zA-Z0-9_.\-]+\.json$/.test(safeFilename)) {
+        return res.status(400).json({ success: false, error: "Invalid snapshot filename format." });
+      }
       const targetPath = path.join(LKG_SNAPSHOTS_DIR, safeFilename);
       if (!fs.existsSync(targetPath)) {
         return res.status(404).json({ success: false, error: "Snapshot file not found." });
       }
       const raw = fs.readFileSync(targetPath, 'utf8');
+      let safePayload = raw;
+      try {
+        safePayload = JSON.stringify(redactBackupSecrets(JSON.parse(raw)), null, 2);
+      } catch (_) {}
       res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename=${safeFilename}`);
-      res.send(raw);
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+      res.send(safePayload);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || "Failed to download snapshot" });
     }
@@ -4091,7 +4493,7 @@ async function startServer() {
       }
 
       const safeFilename = path.basename(filename);
-      if (!safeFilename.startsWith('snapshot_') || !safeFilename.endsWith('.json')) {
+      if (!/^snapshot_[a-zA-Z0-9_.\-]+\.json$/.test(safeFilename)) {
         return res.status(400).json({ success: false, error: "Invalid snapshot filename format." });
       }
 
@@ -4108,17 +4510,26 @@ async function startServer() {
       const snapshotData = parsed.data || {};
       let restoredRecordsCount = 0;
 
-      const allowedCols = new Set(['issues', 'feedback', 'bookmarks', 'admin_logs', 'system_config']);
+      const allowedCols = new Set(['issues', 'logs_admin', 'logs_feedback', 'maintenance_config', 'system_config', 'feedback', 'bookmarks', 'admin_logs']);
+      const objectCols = new Set(['system_config', 'maintenance_config']);
+      let maintenanceRestored = false;
       for (const colName of Object.keys(snapshotData)) {
         if (!allowedCols.has(colName)) continue;
         const docs = snapshotData[colName];
-        if (colName === 'system_config' && docs && typeof docs === 'object' && !Array.isArray(docs)) {
-          fs.writeFileSync(getJsonFilePath('system_config'), JSON.stringify(docs, null, 2), 'utf8');
+        if (objectCols.has(colName) && docs && typeof docs === 'object' && !Array.isArray(docs)) {
+          fs.writeFileSync(getJsonFilePath(colName), JSON.stringify(docs, null, 2), 'utf8');
           restoredRecordsCount += 1;
+          if (colName === 'maintenance_config') maintenanceRestored = true;
         } else if (Array.isArray(docs)) {
           writeLocalCollection(colName, docs);
           restoredRecordsCount += docs.length;
         }
+      }
+      if (maintenanceRestored) {
+        try {
+          const restoredMaint = await getMaintenanceSettings();
+          setupMaintenanceScheduler(restoredMaint);
+        } catch (_) {}
       }
 
       // Sync issues back to Firestore bundles
@@ -4153,17 +4564,26 @@ async function startServer() {
       const snapshotData = parsed.data || {};
       let restoredRecordsCount = 0;
 
-      const allowedCols = new Set(['issues', 'feedback', 'bookmarks', 'admin_logs', 'system_config']);
+      const allowedCols = new Set(['issues', 'logs_admin', 'logs_feedback', 'maintenance_config', 'system_config', 'feedback', 'bookmarks', 'admin_logs']);
+      const objectCols = new Set(['system_config', 'maintenance_config']);
+      let maintenanceRestored = false;
       for (const colName of Object.keys(snapshotData)) {
         if (!allowedCols.has(colName)) continue;
         const docs = snapshotData[colName];
-        if (colName === 'system_config' && docs && typeof docs === 'object' && !Array.isArray(docs)) {
-          fs.writeFileSync(getJsonFilePath('system_config'), JSON.stringify(docs, null, 2), 'utf8');
+        if (objectCols.has(colName) && docs && typeof docs === 'object' && !Array.isArray(docs)) {
+          fs.writeFileSync(getJsonFilePath(colName), JSON.stringify(docs, null, 2), 'utf8');
           restoredRecordsCount += 1;
+          if (colName === 'maintenance_config') maintenanceRestored = true;
         } else if (Array.isArray(docs)) {
           writeLocalCollection(colName, docs);
           restoredRecordsCount += docs.length;
         }
+      }
+      if (maintenanceRestored) {
+        try {
+          const restoredMaint = await getMaintenanceSettings();
+          setupMaintenanceScheduler(restoredMaint);
+        } catch (_) {}
       }
 
       await logSyncEvent({
@@ -4187,6 +4607,20 @@ async function startServer() {
     try {
       const { collection = 'issues', data, collectionsData, strategy = 'merge', mode = strategy, skipAutoBackup = false } = req.body;
       const effectiveStrategy = strategy || mode || 'merge';
+      const allowedRestoreCols = new Set([
+        'issues',
+        'logs_admin',
+        'logs_search',
+        'logs_feedback',
+        'logs_error',
+        'logs_backend',
+        'logs_visitor',
+        'system_event_logs',
+        'quota_usage_stats',
+        'feedback',
+        'bookmarks',
+        'admin_logs'
+      ]);
 
       // Automatically create Last-Known-Good backup snapshot before applying import/restore
       let autoBackupInfo = null;
@@ -4202,7 +4636,7 @@ async function startServer() {
         for (const [col, colItems] of Object.entries(collectionsData)) {
           if (!Array.isArray(colItems)) continue;
           const safeCol = col.replace(/[^a-zA-Z0-9_]/g, '');
-          if (!safeCol) continue;
+          if (!safeCol || !allowedRestoreCols.has(safeCol)) continue;
 
           if (safeCol === 'issues') {
             const validation = validateKnownIssuesData(colItems);
@@ -4295,9 +4729,9 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "Restore payload 'data' must be an array of records." });
       }
 
-      const safeCollectionName = collection.replace(/[^a-zA-Z0-9_]/g, '');
-      if (!safeCollectionName) {
-        return res.status(400).json({ success: false, error: "Invalid collection name." });
+      const safeCollectionName = typeof collection === 'string' ? collection.replace(/[^a-zA-Z0-9_]/g, '') : '';
+      if (!safeCollectionName || !allowedRestoreCols.has(safeCollectionName)) {
+        return res.status(400).json({ success: false, error: "Invalid or unsupported restore collection name." });
       }
 
       if (safeCollectionName === 'issues') {
@@ -4560,7 +4994,10 @@ async function startServer() {
       const rawPort = req.body?.smtpPort ?? settings?.smtpPort ?? process.env.EMAIL_SMTP_PORT ?? "587";
       const port = Number(rawPort);
       const user = String(req.body?.smtpUser ?? settings?.smtpUser ?? process.env.EMAIL_SMTP_USER ?? "").trim();
-      const pass = String(req.body?.smtpPass ?? settings?.smtpPass ?? process.env.EMAIL_SMTP_PASS ?? "").trim();
+      const rawPass = typeof req.body?.smtpPass === 'string' ? req.body.smtpPass : '';
+      const pass = (!rawPass || rawPass.includes('••••'))
+        ? String(settings?.smtpPass || process.env.EMAIL_SMTP_PASS || '').trim()
+        : rawPass.trim();
 
       if (!host || !user || !pass) {
         return res.status(400).json({
@@ -4645,11 +5082,42 @@ async function startServer() {
     res.json({ success: true, message: "Engine sync triggered." });
   });
 
+  app.get("/api/maintenance/status", requireAdmin, async (req, res) => {
+    try {
+      const settings = await getMaintenanceSettings();
+      const { pattern, description } = getMaintenanceCronPattern(settings);
+      res.json({
+        success: true,
+        schedulerActive: Boolean(activeMaintenanceCronTask && settings.maintenanceEnabled !== false),
+        isMaintenanceRunning,
+        maintenanceEnabled: settings.maintenanceEnabled !== false,
+        cronPattern: settings.maintenanceEnabled !== false ? pattern : null,
+        scheduleDescription: settings.maintenanceEnabled !== false ? description : 'Disabled by admin',
+        timezone: 'Asia/Seoul',
+        nextMaintenanceAt: computeNextMaintenanceAt(settings),
+        lastMaintenanceAt: settings.lastMaintenanceAt || null,
+        lastLinkVerifyAt: settings.lastLinkVerifyAt || null,
+        lastMaintenanceResult: settings.lastMaintenanceResult || null,
+        settings
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to load maintenance status" });
+    }
+  });
+
   app.post("/api/maintenance", requireAdmin, async (req, res) => {
     try {
       console.log("Manual maintenance triggered via API");
-      const result = await runMaintenance();
-      res.json({ success: true, result });
+      const forceLinkVerify = req.body?.forceLinkVerify !== false;
+      const forceCleanup = Boolean(req.body?.forceCleanup);
+      const result = await runMaintenance({ triggeredBy: 'manual', forceLinkVerify, forceCleanup });
+      const updatedSettings = await getMaintenanceSettings();
+      res.json({
+        success: true,
+        result,
+        settings: updatedSettings,
+        nextMaintenanceAt: computeNextMaintenanceAt(updatedSettings)
+      });
     } catch (error: any) {
       console.error("Manual maintenance failed:", error);
       res.status(500).json({ success: false, error: error.message || "Maintenance failed" });
@@ -4659,7 +5127,23 @@ async function startServer() {
   app.get("/api/settings/maintenance", requireAdmin, async (req, res) => {
     try {
       const settings = await getMaintenanceSettings();
-      res.json({ success: true, settings });
+      const { pattern, description } = getMaintenanceCronPattern(settings);
+      const safeSettings = {
+        ...settings,
+        hasSmtpPass: Boolean(settings?.smtpPass),
+        smtpPass: settings?.smtpPass ? "••••••••" : ""
+      };
+      res.json({
+        success: true,
+        settings: safeSettings,
+        schedulerStatus: {
+          schedulerActive: Boolean(activeMaintenanceCronTask && settings.maintenanceEnabled !== false),
+          isMaintenanceRunning,
+          cronPattern: settings.maintenanceEnabled !== false ? pattern : null,
+          scheduleDescription: settings.maintenanceEnabled !== false ? description : 'Disabled by admin',
+          nextMaintenanceAt: computeNextMaintenanceAt(settings)
+        }
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -4669,23 +5153,55 @@ async function startServer() {
     try {
       const settings = req.body || {};
       const existingMaint = await getMaintenanceSettings();
+
+      const rawMode = String(settings.maintenanceScheduleMode ?? existingMaint.maintenanceScheduleMode ?? 'daily');
+      const maintenanceScheduleMode = (rawMode === 'interval' || rawMode === 'weekly') ? rawMode : 'daily';
+      const parsedRunHour = settings.maintenanceRunHour !== undefined
+        ? parseInt(settings.maintenanceRunHour, 10)
+        : (existingMaint.maintenanceRunHour ?? 0);
+      const maintenanceRunHour = Number.isFinite(parsedRunHour) ? Math.min(23, Math.max(0, parsedRunHour)) : 0;
+      const parsedIntervalHours = settings.maintenanceIntervalHours !== undefined
+        ? parseInt(settings.maintenanceIntervalHours, 10)
+        : (existingMaint.maintenanceIntervalHours ?? 24);
+      const maintenanceIntervalHours = Number.isFinite(parsedIntervalHours) ? Math.min(168, Math.max(1, parsedIntervalHours)) : 24;
+      const parsedBatchLimit = settings.linkVerifyBatchLimit !== undefined
+        ? parseInt(settings.linkVerifyBatchLimit, 10)
+        : (existingMaint.linkVerifyBatchLimit ?? 30);
+      const linkVerifyBatchLimit = Number.isFinite(parsedBatchLimit) ? Math.min(100, Math.max(5, parsedBatchLimit)) : 30;
+
+      const parsedCleanupMonths = settings.cleanupMonths !== undefined ? parseInt(settings.cleanupMonths, 10) : (existingMaint.cleanupMonths ?? 1);
+      const parsedLinkDays = settings.linkVerifyFrequencyDays !== undefined ? parseInt(settings.linkVerifyFrequencyDays, 10) : (existingMaint.linkVerifyFrequencyDays ?? 7);
+      const parsedEngineInterval = settings.engineIntervalMin !== undefined ? parseInt(settings.engineIntervalMin, 10) : (existingMaint.engineIntervalMin ?? 60);
+      const parsedEngineBatch = settings.engineBatchSize !== undefined ? parseInt(settings.engineBatchSize, 10) : (existingMaint.engineBatchSize ?? 4);
+      const rawIncomingPass = typeof settings.smtpPass === 'string' ? settings.smtpPass : undefined;
+      const resolvedSmtpPass = (rawIncomingPass !== undefined && !rawIncomingPass.includes('••••'))
+        ? rawIncomingPass.trim()
+        : (existingMaint.smtpPass ?? "");
+
       const cleanSettings = {
-        cleanupMonths: settings.cleanupMonths !== undefined ? parseInt(settings.cleanupMonths, 10) : (existingMaint.cleanupMonths ?? 1),
-        linkVerifyFrequencyDays: settings.linkVerifyFrequencyDays !== undefined ? parseInt(settings.linkVerifyFrequencyDays, 10) : (existingMaint.linkVerifyFrequencyDays ?? 7),
-        engineIntervalMin: settings.engineIntervalMin !== undefined ? parseInt(settings.engineIntervalMin, 10) : (existingMaint.engineIntervalMin ?? 60),
-        engineBatchSize: settings.engineBatchSize !== undefined ? parseInt(settings.engineBatchSize, 10) : (existingMaint.engineBatchSize ?? 4),
+        cleanupMonths: Number.isFinite(parsedCleanupMonths) ? Math.max(0, parsedCleanupMonths) : 1,
+        linkVerifyFrequencyDays: Number.isFinite(parsedLinkDays) ? Math.max(0, parsedLinkDays) : 7,
+        maintenanceEnabled: settings.maintenanceEnabled !== undefined ? Boolean(settings.maintenanceEnabled) : (existingMaint.maintenanceEnabled !== false),
+        maintenanceScheduleMode,
+        maintenanceRunHour,
+        maintenanceIntervalHours,
+        linkVerifyBatchLimit,
+        engineIntervalMin: Number.isFinite(parsedEngineInterval) ? Math.min(10080, Math.max(1, parsedEngineInterval)) : 60,
+        engineBatchSize: Number.isFinite(parsedEngineBatch) ? Math.min(10, Math.max(1, parsedEngineBatch)) : 4,
         alertEmail: settings.alertEmail !== undefined ? String(settings.alertEmail).trim() : (existingMaint.alertEmail || process.env.ALERT_EMAIL || "admin@cisnet.co.kr"),
         enableAlerts: settings.enableAlerts !== undefined ? Boolean(settings.enableAlerts) : (existingMaint.enableAlerts ?? true),
         alertOnApiExhaustion: settings.alertOnApiExhaustion !== undefined ? Boolean(settings.alertOnApiExhaustion) : (existingMaint.alertOnApiExhaustion ?? true),
         alertOnTimeout: settings.alertOnTimeout !== undefined ? Boolean(settings.alertOnTimeout) : (existingMaint.alertOnTimeout ?? true),
-        consecutiveFailuresLimit: settings.consecutiveFailuresLimit !== undefined ? parseInt(settings.consecutiveFailuresLimit, 10) : (existingMaint.consecutiveFailuresLimit ?? 3),
+        consecutiveFailuresLimit: settings.consecutiveFailuresLimit !== undefined ? (parseInt(settings.consecutiveFailuresLimit, 10) || 3) : (existingMaint.consecutiveFailuresLimit ?? 3),
         smtpHost: settings.smtpHost !== undefined ? String(settings.smtpHost).trim() : (existingMaint.smtpHost ?? ""),
         smtpPort: settings.smtpPort !== undefined ? (parseInt(settings.smtpPort, 10) || 587) : (existingMaint.smtpPort ?? 587),
         smtpUser: settings.smtpUser !== undefined ? String(settings.smtpUser).trim() : (existingMaint.smtpUser ?? ""),
-        smtpPass: settings.smtpPass !== undefined ? String(settings.smtpPass).trim() : (existingMaint.smtpPass ?? ""),
+        smtpPass: resolvedSmtpPass,
         adsenseClientId: settings.adsenseClientId !== undefined ? String(settings.adsenseClientId).trim() : (existingMaint.adsenseClientId ?? ""),
         lastMaintenanceAt: settings.lastMaintenanceAt || existingMaint.lastMaintenanceAt || null,
-        updatedAt: settings.updatedAt || getKSTISOString()
+        lastLinkVerifyAt: settings.lastLinkVerifyAt || existingMaint.lastLinkVerifyAt || null,
+        lastMaintenanceResult: existingMaint.lastMaintenanceResult || null,
+        updatedAt: getKSTISOString()
       };
 
       // 1. Write to local maintenance_config.json
@@ -4695,14 +5211,31 @@ async function startServer() {
       // 2. Safely merge into system_config.json without wiping groqApiKey/openrouterApiKey/stagingAutomationConfig
       writeSystemConfigObject(cleanSettings);
 
-      // 3. Reschedule active background scheduler in real-time
+      // 3. Reschedule active background AI sync & maintenance schedulers in real-time
       try {
         setupEngineScheduler(cleanSettings.engineIntervalMin);
+        setupMaintenanceScheduler(cleanSettings);
       } catch (schedErr: any) {
-        console.error("Failed to reschedule background engine cron dynamically:", schedErr);
+        console.error("Failed to reschedule background crons dynamically:", schedErr);
       }
 
-      res.json({ success: true, settings: cleanSettings });
+      const { pattern, description } = getMaintenanceCronPattern(cleanSettings);
+      const safeCleanSettings = {
+        ...cleanSettings,
+        hasSmtpPass: Boolean(cleanSettings.smtpPass),
+        smtpPass: cleanSettings.smtpPass ? "••••••••" : ""
+      };
+      res.json({
+        success: true,
+        settings: safeCleanSettings,
+        schedulerStatus: {
+          schedulerActive: Boolean(activeMaintenanceCronTask && cleanSettings.maintenanceEnabled !== false),
+          isMaintenanceRunning,
+          cronPattern: cleanSettings.maintenanceEnabled !== false ? pattern : null,
+          scheduleDescription: cleanSettings.maintenanceEnabled !== false ? description : 'Disabled by admin',
+          nextMaintenanceAt: computeNextMaintenanceAt(cleanSettings)
+        }
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -4736,7 +5269,15 @@ async function startServer() {
 
   app.get("/api/system_config", requireAdmin, async (req, res) => {
     try {
-      res.json({ success: true, config: readSystemConfigObject() });
+      const cfg = readSystemConfigObject();
+      res.json({
+        success: true,
+        config: {
+          ...cfg,
+          hasSmtpPass: Boolean(cfg.smtpPass),
+          smtpPass: cfg.smtpPass ? "••••••••" : ""
+        }
+      });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -4744,9 +5285,25 @@ async function startServer() {
 
   app.post("/api/system_config/update", requireAdmin, async (req, res) => {
     try {
-      const updates = req.body || {};
-      const newConfig = writeSystemConfigObject({ ...updates, updatedAt: getKSTISOString() });
-      res.json({ success: true, config: newConfig });
+      const rawUpdates = req.body;
+      if (!rawUpdates || typeof rawUpdates !== 'object' || Array.isArray(rawUpdates)) {
+        return res.status(400).json({ success: false, error: "Invalid config payload: must be a JSON object." });
+      }
+      const sanitizedUpdates: Record<string, any> = {};
+      for (const [k, v] of Object.entries(rawUpdates)) {
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+        if (k === 'smtpPass' && typeof v === 'string' && v.includes('••••')) continue;
+        sanitizedUpdates[k] = v;
+      }
+      const newConfig = writeSystemConfigObject({ ...sanitizedUpdates, updatedAt: getKSTISOString() });
+      res.json({
+        success: true,
+        config: {
+          ...newConfig,
+          hasSmtpPass: Boolean(newConfig.smtpPass),
+          smtpPass: newConfig.smtpPass ? "••••••••" : ""
+        }
+      });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -4762,28 +5319,22 @@ async function startServer() {
       const rawSecret = req.headers['x-cron-secret'] || req.query.secret || (req.body && req.body.secret);
       const secretInput = typeof rawSecret === 'string' ? rawSecret : '';
       const cronSecret = process.env.CRON_SECRET?.trim() || '';
-      // If server has CRON_SECRET configured, verify secret in constant time
+      // If server has CRON_SECRET configured, verify secret in constant time; otherwise require verified Admin auth header
       if (cronSecret) {
-        const a = Buffer.from(secretInput, 'utf8');
-        const b = Buffer.from(cronSecret, 'utf8');
-        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        if (!timingSafeEqualStrings(secretInput, cronSecret)) {
           console.warn(`[GitHub Webhook] Unauthorized sync attempt with invalid secret`);
           return res.status(401).json({ success: false, error: "Unauthorized: Invalid or missing secret header 'x-cron-secret'" });
         }
       } else {
-        const authHeader = req.headers.authorization;
-        const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
-        const candidatePasskey = authHeader?.startsWith('Bearer ') ? authHeader.split('Bearer ')[1]?.replace('passkey:', '').trim() || '' : '';
-        const a = Buffer.from(candidatePasskey, 'utf8');
-        const b = Buffer.from(configuredPasskey, 'utf8');
-        if (!configuredPasskey || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-          return res.status(401).json({ success: false, error: "Unauthorized: CRON_SECRET or ADMIN_PASSKEY must be configured and valid credentials supplied." });
+        const authCheck = verifyAdminAuthHeader(req.headers.authorization);
+        if (!authCheck.ok) {
+          return res.status(401).json({ success: false, error: "Unauthorized: CRON_SECRET or valid Admin credentials required." });
         }
       }
 
       const incomingIssues = req.body?.issues;
-      if (!Array.isArray(incomingIssues) || incomingIssues.length === 0) {
-        return res.status(400).json({ success: false, error: "No issues array provided in payload." });
+      if (!Array.isArray(incomingIssues) || incomingIssues.length === 0 || incomingIssues.length > 500) {
+        return res.status(400).json({ success: false, error: "No valid issues array (1..500 items) provided in payload." });
       }
 
       console.log(`[GitHub Webhook] Received ${incomingIssues.length} issues from GitHub Actions`);
@@ -4901,17 +5452,21 @@ async function startServer() {
     try {
       const { repo, branch = 'main', filePath = 'data/issues.json', token } = req.body || {};
       const cleanRepo = typeof repo === 'string' ? repo.trim() : '';
+      const targetBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
       if (!isValidGithubRepo(cleanRepo)) {
         return res.status(400).json({ success: false, error: "유효한 저장소 이름('사용자명/저장소명' 형식, 예: octocat/winfix)을 입력하세요." });
+      }
+      if (!isValidGitRef(targetBranch)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 브랜치 이름입니다." });
       }
       const cleanPath = typeof filePath === 'string' ? filePath.trim() : '';
       if (!cleanPath || cleanPath.includes('..') || cleanPath.startsWith('/') || !/^[a-zA-Z0-9_.\-/]+$/.test(cleanPath)) {
         return res.status(400).json({ success: false, error: "유효한 저장소 파일 경로(예: data/issues.json)를 입력하세요." });
       }
 
-      console.log(`[GitHub Pull] Fetching data from GitHub: ${cleanRepo} (${branch}, ${cleanPath})...`);
+      console.log(`[GitHub Pull] Fetching data from GitHub: ${cleanRepo} (${targetBranch}, ${cleanPath})...`);
 
-      const rawUrl = `https://raw.githubusercontent.com/${cleanRepo}/${encodeURIComponent(branch)}/${cleanPath}`;
+      const rawUrl = `https://raw.githubusercontent.com/${cleanRepo}/${encodeURIComponent(targetBranch)}/${cleanPath}`;
       const headers: Record<string, string> = {
         'User-Agent': 'WindowsFixWizard-App'
       };
@@ -4929,7 +5484,7 @@ async function startServer() {
         parsed = JSON.parse(text);
       } else {
         // Fallback to GitHub Contents API
-        const apiUrl = `https://api.github.com/repos/${cleanRepo}/contents/${cleanPath}?ref=${encodeURIComponent(branch)}`;
+        const apiUrl = `https://api.github.com/repos/${cleanRepo}/contents/${cleanPath}?ref=${encodeURIComponent(targetBranch)}`;
         const apiRes = await fetch(apiUrl, {
           headers: {
             ...headers,
@@ -5386,9 +5941,13 @@ async function startServer() {
     const preferredTopics = Array.isArray(input.preferredTopics)
       ? input.preferredTopics.filter((t: string) => ALL_COLLECTOR_TOPICS.includes(t))
       : current.preferredTopics;
-    const targetWindowsVersions = Array.isArray(input.targetWindowsVersions) && input.targetWindowsVersions.length > 0
-      ? input.targetWindowsVersions.map((v: any) => String(v).trim()).filter(Boolean)
-      : current.targetWindowsVersions;
+    const sanitizedWinVersions = Array.isArray(input.targetWindowsVersions)
+      ? input.targetWindowsVersions
+          .map((v: any) => String(v).replace(/[\r\n'"]/g, '').trim())
+          .filter((v: string) => /^[a-zA-Z0-9 .\-_+]{1,40}$/.test(v))
+          .slice(0, 10)
+      : [];
+    const targetWindowsVersions = sanitizedWinVersions.length > 0 ? sanitizedWinVersions : current.targetWindowsVersions;
     const registryModels = loadAiModelRegistry().geminiModels.map((m) => m.id);
     const allowedModels = Array.from(new Set([
       'auto',
@@ -5457,7 +6016,7 @@ on:
       target_windows:
         description: 'Comma-separated Windows versions'
         required: false
-        default: '${(opts.targetWindowsVersions || ['Windows 11', 'Windows 10']).join(',')}'
+        default: '${(opts.targetWindowsVersions || ['Windows 11', 'Windows 10']).map((v: any) => String(v).replace(/[\r\n'"]/g, '').trim()).filter(Boolean).join(',')}'
 
 permissions:
   contents: write
@@ -5599,10 +6158,14 @@ jobs:
       const { repo, branch = 'main', token, options: incomingOpts } = req.body || {};
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
       const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
 
       if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명')이 필요합니다." });
+      }
+      if (!isValidGitRef(targetBranch)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 브랜치 이름입니다." });
       }
       if (!authToken) {
         return res.status(400).json({
@@ -5631,7 +6194,7 @@ jobs:
       };
 
       const upsertGithubFile = async (filePath: string, contentStr: string, commitMessage: string) => {
-        const getUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
+        const getUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`;
         let sha: string | undefined;
         const getRes = await fetch(getUrl, { headers });
         if (getRes.status === 401) {
@@ -5647,7 +6210,7 @@ jobs:
           body: JSON.stringify({
             message: commitMessage,
             content: Buffer.from(contentStr, 'utf8').toString('base64'),
-            branch,
+            branch: targetBranch,
             ...(sha ? { sha } : {})
           })
         });
@@ -5675,7 +6238,7 @@ jobs:
         type: 'success',
         source: 'github-push-collector-options',
         message: `GitHub(${targetRepo})에 자동수집 옵션 및 워크플로 스케줄(${cleanOptions.scheduleCron}, ${cleanOptions.batchSize}개) 커밋 반영 완료`,
-        details: { targetRepo, branch, cleanOptions }
+        details: { targetRepo, branch: targetBranch, cleanOptions }
       });
 
       res.json({

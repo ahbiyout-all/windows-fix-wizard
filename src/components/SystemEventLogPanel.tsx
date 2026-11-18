@@ -337,13 +337,19 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
   const fetchEventLogs = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/admin/event-logs?limit=${limit}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.logs) && data.logs.length > 0) {
-          setLogs(data.logs);
-          setIsLoading(false);
-          return;
+      const rawToken = typeof window !== 'undefined' ? localStorage.getItem('winfix_admin_token') : null;
+      const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : null;
+      if (adminToken) {
+        const res = await fetch(`/api/admin/event-logs?limit=${limit}`, {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.logs) && data.logs.length > 0) {
+            setLogs(data.logs);
+            setIsLoading(false);
+            return;
+          }
         }
       }
     } catch (e) {
