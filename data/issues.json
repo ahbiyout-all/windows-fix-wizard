@@ -6792,5 +6792,49 @@
     "updatedAt": "2026-11-15T22:31:05.580Z",
     "verifiedAt": "2026-11-15T22:31:05.580Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007000e-mwnz4n1u",
+    "category": "디스플레이/그래픽",
+    "code": "0x8007000E",
+    "title": "디스플레이 드라이버 설치 시 \"시스템이 파일을 찾을 수 없습니다\" 오류",
+    "title_en": "Display Driver Install Fails with \"The system cannot find the file specified\" Error",
+    "symptoms": "Windows 10/11 최신 업데이트(24H2) 후 그래픽 카드 드라이버를 설치하거나 업데이트하려 할 때 \"시스템이 파일을 찾을 수 없습니다\" 메시지가 표시되고 설치가 중단됩니다. 화면이 검은색이거나 해상도가 낮아지는 현상이 동반될 수 있습니다.",
+    "symptoms_en": "After the latest Windows 10/11 update (24H2), attempting to install or update a graphics driver shows the message \"The system cannot find the file specified\" and the installation stops. The screen may appear black or the resolution may drop.",
+    "script": "Get-WindowsDriver -Online | Where-Object {$_.DeviceName -match \"Display\"} | ForEach-Object {pnputil /delete-driver $_.DeviceID /uninstall /force}\nStart-Process -FilePath \"C:\\Windows\\System32\\sfc.exe\" -ArgumentList \"/scannow\" -Wait\nStart-Process -FilePath \"C:\\Windows\\System32\\DISM.exe\" -ArgumentList \"/Online /Cleanup-Image /RestoreHealth\" -Wait",
+    "manualSteps": [
+      "1. 관리자 권한으로 PowerShell을 실행하고 위 스크립트를 복사‑붙여넣기합니다.",
+      "2. 스크립트가 완료되면 컴퓨터를 재부팅합니다.",
+      "3. 그래픽 카드 제조사(예: NVIDIA, AMD, Intel) 웹사이트에서 최신 드라이버를 다운로드하고 설치합니다."
+    ],
+    "manualSteps_en": [
+      "1. Open PowerShell as administrator and paste the script above.",
+      "2. After the script finishes, reboot the computer.",
+      "3. Download the latest driver from the GPU manufacturer’s website (e.g., NVIDIA, AMD, Intel) and install it."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/windows/resolve-0x8007000e-error-when-installing-drivers-5b2d3a1c-9f4e-4e2b-8c3f-1a2b3c4d5e6f",
+      "https://learn.microsoft.com/windows-hardware/drivers/display/display-driver-installation-failures"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8007000E display driver error",
+      "시스템이 파일을 찾을 수 없습니다 드라이버 설치",
+      "display driver install failure 2024",
+      "Windows 24H2 graphics driver issue",
+      "pnputil delete driver display"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-19T19:59:29.970Z",
+    "updatedAt": "2026-11-19T19:59:29.970Z",
+    "verifiedAt": "2026-11-19T19:59:29.970Z",
+    "verificationStatus": "verified"
   }
 ]

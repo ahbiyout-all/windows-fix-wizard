@@ -1,15 +1,17 @@
 {
   "version": "3.100.0",
-  "updatedAt": "2026-11-18T23:55:04.480Z",
+  "updatedAt": "2026-11-19T19:59:29.969Z",
   "lastDiscoveryAt": "2026-11-18T23:55:04.217Z",
   "routingPolicy": "quota-split",
+  "keylessFallbackEnabled": true,
   "providerOrder": [
     "gemini",
     "groq",
     "mistral",
     "openrouter",
     "cerebras",
-    "cloudflare"
+    "cloudflare",
+    "pollinations"
   ],
   "geminiModels": [
     {
@@ -176,6 +178,11 @@
     "nvidia/nemotron-3.5-lightning:free",
     "cohere/north-mini-code:free"
   ],
+  "pollinationsModels": [
+    "openai",
+    "openai-fast",
+    "mistral"
+  ],
   "providerModels": {
     "groq": [
       "llama-3.3-70b-versatile",
@@ -207,6 +214,11 @@
     "cloudflare": [
       "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       "@cf/google/gemma-3-12b-it"
+    ],
+    "pollinations": [
+      "openai",
+      "openai-fast",
+      "mistral"
     ]
   },
   "circuitBreakers": {
@@ -248,21 +260,23 @@
     }
   },
   "telemetry": {
-    "totalRequests": 3,
+    "totalRequests": 4,
     "geminiRequests": 3,
-    "freeProviderRequests": 0,
-    "failoverSaves": 0,
+    "freeProviderRequests": 1,
+    "keylessRequests": 1,
+    "failoverSaves": 1,
     "circuitTrips404": 12,
-    "lastProviderUsed": "gemini",
-    "lastModelUsed": "gemini-4-hydrogen",
-    "lastUpdatedAt": "2026-11-16T04:56:37.099Z",
+    "lastProviderUsed": "pollinations",
+    "lastModelUsed": "Pollinations (openai) [Keyless]",
+    "lastUpdatedAt": "2026-11-19T19:59:29.969Z",
     "perProviderUsage": {
       "gemini": 3,
       "groq": 0,
       "mistral": 0,
       "openrouter": 0,
       "cerebras": 0,
-      "cloudflare": 0
+      "cloudflare": 0,
+      "pollinations": 1
     }
   }
 }

@@ -1,21 +1,15 @@
 {
-  "lastCollectedAt": "2026-11-15T22:31:05.580Z",
-  "modelUsed": "gemini-4-hydrogen",
-  "targetCategory": "시스템/블루스크린",
-  "newlyAddedCount": 2,
-  "totalIssuesCount": 150,
+  "lastCollectedAt": "2026-11-19T19:59:29.970Z",
+  "modelUsed": "Pollinations (openai) [Keyless]",
+  "targetCategory": "디스플레이/그래픽",
+  "newlyAddedCount": 1,
+  "totalIssuesCount": 151,
   "newIssues": [
     {
-      "id": "gh-0x000000d1--driver-irql-not-less-or-equal--mwies6lo",
-      "code": "0x000000D1 (DRIVER_IRQL_NOT_LESS_OR_EQUAL)",
-      "title": "Windows 10/11 드라이버 IRQL 메모리 충돌 블루스크린 (0x000000D1) 해결 방법",
-      "category": "시스템/블루스크린"
-    },
-    {
-      "id": "gh-0x0000009f--driver-power-state-failure--mwies6lp",
-      "code": "0x0000009F (DRIVER_POWER_STATE_FAILURE)",
-      "title": "Windows 10/11 드라이버 전원 상태 전환 실패 블루스크린 (0x0000009F) 해결",
-      "category": "시스템/블루스크린"
+      "id": "gh-0x8007000e-mwnz4n1u",
+      "code": "0x8007000E",
+      "title": "디스플레이 드라이버 설치 시 \"시스템이 파일을 찾을 수 없습니다\" 오류",
+      "category": "디스플레이/그래픽"
     }
   ]
 }
