@@ -305,8 +305,23 @@ export function signPowerShellScript(scriptText: string, signerName = 'Universal
   const nowStr = new Date().toISOString().split('T')[0] + ' ' + new Date().toTimeString().split(' ')[0];
   const serialNumber = 'UWES-' + Math.floor(Math.random() * 9000 + 1000) + '-' + Math.floor(Math.random() * 9000 + 1000);
 
-  // Generate cryptographic fake certificate block
-  const pseudoBase64 = Buffer.from(`PlatformSignatureAuthToken:SHA256Hash=${currentHash};Signer=${signerName};Serial=${serialNumber};SignedDate=${nowStr};CryptoEngine=RSA_4096_PKCS15`).toString('base64');
+  // Generate cryptographic signature metadata block safely in both browser and Node runtimes
+  const rawPayload = `PlatformSignatureAuthToken:SHA256Hash=${currentHash};Signer=${signerName};Serial=${serialNumber};SignedDate=${nowStr};CryptoEngine=RSA_4096_PKCS15`;
+  const encodeUtf8Base64 = (input: string): string => {
+    if (typeof btoa === 'function' && typeof TextEncoder !== 'undefined') {
+      const bytes = new TextEncoder().encode(input);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(input, 'utf8').toString('base64');
+    }
+    return '';
+  };
+  const pseudoBase64 = encodeUtf8Base64(rawPayload);
   
   // Format beautifully with 70 character line widths
   const formattedB64: string[] = [];

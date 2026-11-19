@@ -272,7 +272,10 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
       const saved = localStorage.getItem('winfix_sandbox_script_versions');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((v: any) => v && typeof v === 'object' && typeof v.id === 'string' && typeof v.script === 'string');
+          if (valid.length > 0) return valid;
+        }
       }
     } catch (e) {
       console.warn("Failed to load script versions from localStorage:", e);
@@ -409,6 +412,26 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
     { name: 'SecurityHealthService', displayName: 'Windows Security Service', status: 'Running', startType: 'Automatic' },
     { name: 'WinDefend', displayName: 'Microsoft Defender Antivirus Service', status: 'Running', startType: 'Automatic' }
   ]);
+  const servicesRef = useRef<VirtualService[]>(services);
+  servicesRef.current = services;
+  const isMountedRef = useRef(true);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const scheduleTimeout = (fn: () => void, ms: number) => {
+    const t = setTimeout(() => {
+      if (isMountedRef.current) fn();
+    }, ms);
+    timersRef.current.push(t);
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current = [];
+    };
+  }, []);
 
   const [vfs, setVfs] = useState<VirtualFile[]>([
     { path: 'C:\\Windows\\System32\\drivers\\etc\\hosts', size: '824 B', status: 'exists', description: 'Local DNS mappings' },
@@ -630,7 +653,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
       const svcName = svcMatch[2];
       
       if (action === 'get') {
-        const found = services.find(s => s.name.toLowerCase() === svcName.toLowerCase());
+        const found = servicesRef.current.find(s => s.name.toLowerCase() === svcName.toLowerCase());
         if (found) {
           appendTerminalLine(`Status   Name               DisplayName`, 'info');
           appendTerminalLine(`------   ----               -----------`, 'info');
@@ -641,13 +664,15 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
         return true;
       }
 
-      const newStatus = action === 'stop' ? 'Stopped' : 'Running';
-      setServices(prev => prev.map(s => {
+      const newStatus: VirtualService['status'] = action === 'stop' ? 'Stopped' : 'Running';
+      const nextServices = servicesRef.current.map(s => {
         if (s.name.toLowerCase() === svcName.toLowerCase()) {
           return { ...s, status: newStatus };
         }
         return s;
-      }));
+      });
+      servicesRef.current = nextServices;
+      setServices(nextServices);
 
       appendTerminalLine(`[V-Service] Service '${svcName}' transition: => ${newStatus} (OK)`, 'green');
       return true;
@@ -802,6 +827,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
 
     const lines = scriptText.split('\n');
     for (let i = 0; i < lines.length; i++) {
+      if (!isMountedRef.current) return;
       const line = lines[i].trim();
       if (!line) continue;
       await executeSingleCommandLine(line);
@@ -809,6 +835,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
       await new Promise(r => setTimeout(r, 60));
     }
 
+    if (!isMountedRef.current) return;
     appendTerminalLine(`[Sandbox Run] Execution completed. All operations isolated from host.`, 'green');
     appendTerminalLine('------------------------------------------------------------', 'info');
     setIsRunning(false);
@@ -870,7 +897,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
   const handleCopyScript = () => {
     safeCopyText(scriptText);
     setCopiedScript(true);
-    setTimeout(() => setCopiedScript(false), 2000);
+    scheduleTimeout(() => setCopiedScript(false), 2000);
   };
 
   // Save current script as new version checkpoint
@@ -878,7 +905,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
     const trimmed = scriptText.trim();
     if (!trimmed) {
       setVersionToast(language === 'en' ? 'Cannot save an empty script' : '빈 스크립트는 저장할 수 없습니다');
-      setTimeout(() => setVersionToast(null), 2500);
+      scheduleTimeout(() => setVersionToast(null), 2500);
       return;
     }
 
@@ -905,15 +932,16 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
     setVersionLabelInput('');
     appendTerminalLine(`[Version Control] Saved script checkpoint: '${finalLabel}' (${newVer.lineCount} lines)`, 'success');
     setVersionToast(language === 'en' ? `Saved checkpoint: '${finalLabel}'` : `'${finalLabel}' 버전이 저장되었습니다`);
-    setTimeout(() => setVersionToast(null), 3000);
+    scheduleTimeout(() => setVersionToast(null), 3000);
   };
 
   // Revert editor to a specific version checkpoint
   const handleRevertToVersion = (ver: ScriptVersion) => {
     setScriptText(ver.script);
-    appendTerminalLine(`[Version Control] Reverted editor to '${ver.label}' (Saved: ${new Date(ver.createdAt).toLocaleString()})`, 'cyan');
+    const savedAt = ver.createdAt && !Number.isNaN(Date.parse(ver.createdAt)) ? new Date(ver.createdAt).toLocaleString() : '-';
+    appendTerminalLine(`[Version Control] Reverted editor to '${ver.label}' (Saved: ${savedAt})`, 'cyan');
     setVersionToast(language === 'en' ? `Reverted to '${ver.label}'` : `'${ver.label}' 버전으로 복원되었습니다`);
-    setTimeout(() => setVersionToast(null), 3000);
+    scheduleTimeout(() => setVersionToast(null), 3000);
     setShowVersionModal(false);
     setPreviewVersion(null);
   };
@@ -939,14 +967,14 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
     } catch (e) {}
     if (previewVersion?.id === id) setPreviewVersion(null);
     setVersionToast(language === 'en' ? 'Version removed' : '버전이 삭제되었습니다');
-    setTimeout(() => setVersionToast(null), 2000);
+    scheduleTimeout(() => setVersionToast(null), 2000);
   };
 
   const handleCopyTerminal = () => {
     const allText = terminalLines.map(l => `[${l.timestamp}] ${l.text}`).join('\n');
     safeCopyText(allText);
     setCopiedLog(true);
-    setTimeout(() => setCopiedLog(false), 2000);
+    scheduleTimeout(() => setCopiedLog(false), 2000);
   };
 
   const handleExportLogFile = () => {
@@ -956,8 +984,10 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
     const a = document.createElement('a');
     a.href = url;
     a.download = `winfix-sandbox-session-${Date.now()}.log`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
@@ -2036,7 +2066,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                               <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
                                 <span className="flex items-center gap-1">
                                   <Clock className="w-3 h-3 text-slate-500" />
-                                  {new Date(ver.createdAt).toLocaleString()}
+                                  {ver.createdAt && !Number.isNaN(Date.parse(ver.createdAt)) ? new Date(ver.createdAt).toLocaleString() : '-'}
                                 </span>
                                 <span>•</span>
                                 <span className="font-mono text-slate-400">
@@ -2073,7 +2103,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
                                 onClick={() => {
                                   safeCopyText(ver.script);
                                   setVersionToast(language === 'en' ? 'Script copied' : '스크립트가 복사되었습니다');
-                                  setTimeout(() => setVersionToast(null), 2000);
+                                  scheduleTimeout(() => setVersionToast(null), 2000);
                                 }}
                                 className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
                                 title={language === 'en' ? 'Copy Script' : '스크립트 복사'}

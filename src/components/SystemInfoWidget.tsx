@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Monitor, 
   Globe, 
@@ -183,9 +183,13 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
   const [copied, setCopied] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    detectSystemInfo().then(info => setSysInfo(info));
+    let active = true;
+    detectSystemInfo().then(info => {
+      if (active) setSysInfo(info);
+    }).catch(() => {});
 
     const handleResize = () => {
       setSysInfo(prev => prev ? {
@@ -195,7 +199,14 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      active = false;
+      window.removeEventListener('resize', handleResize);
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+    };
   }, []);
 
   if (!sysInfo) return null;
@@ -217,7 +228,8 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
     try {
       await navigator.clipboard.writeText(diagText);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       const textarea = document.createElement('textarea');
       textarea.value = diagText;
@@ -228,7 +240,8 @@ export const SystemInfoWidget: React.FC<SystemInfoWidgetProps> = ({
       try {
         if (document.execCommand('copy')) {
           setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
+          if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+          copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
         }
       } catch {}
       document.body.removeChild(textarea);

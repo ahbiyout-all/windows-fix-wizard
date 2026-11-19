@@ -8,7 +8,8 @@ export type ProviderId =
   | 'mistral'
   | 'openrouter'
   | 'cerebras'
-  | 'cloudflare';
+  | 'cloudflare'
+  | 'pollinations';
 
 export type RoutingPolicy = 'quota-split' | 'gemini-first';
 export type WorkloadType = 'heavy-grounded' | 'fast-diagnostic' | 'classification' | 'stream';
@@ -39,15 +40,18 @@ export interface AiModelRegistry {
   updatedAt: string;
   lastDiscoveryAt: string | null;
   routingPolicy: RoutingPolicy;
+  keylessFallbackEnabled: boolean;
   providerOrder: ProviderId[];
   geminiModels: DiscoveredGeminiModel[];
   openrouterFreeModels: string[];
+  pollinationsModels: string[];
   providerModels: Record<Exclude<ProviderId, 'gemini'>, string[]>;
   circuitBreakers: Record<string, CircuitBreakerEntry>;
   telemetry: {
     totalRequests: number;
     geminiRequests: number;
     freeProviderRequests: number;
+    keylessRequests: number;
     failoverSaves: number;
     circuitTrips404: number;
     lastProviderUsed: string | null;
@@ -58,9 +62,9 @@ export interface AiModelRegistry {
 }
 
 export interface ProviderStrategyInfo {
-  id: ProviderId | 'github-models';
+  id: ProviderId | 'github-models' | 'ovh-anonymous';
   name: string;
-  status: 'active' | 'trial' | 'retired';
+  status: 'active' | 'keyless' | 'trial' | 'retired';
   envVars: string[];
   freeTierLimits: string;
   strengths: string;
@@ -129,17 +133,23 @@ export const DEFAULT_GEMINI_MODELS: DiscoveredGeminiModel[] = [
 ];
 
 export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
-  version: '3.105.11',
+  version: '3.106.7',
   updatedAt: new Date().toISOString(),
   lastDiscoveryAt: null,
   routingPolicy: 'quota-split',
-  providerOrder: ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'],
+  keylessFallbackEnabled: true,
+  providerOrder: ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'],
   geminiModels: DEFAULT_GEMINI_MODELS,
   openrouterFreeModels: [
     'deepseek/deepseek-chat-v3-0324:free',
     'meta-llama/llama-3.3-70b-instruct:free',
     'qwen/qwen-2.5-72b-instruct:free',
     'mistralai/mistral-small-3.1-24b-instruct:free'
+  ],
+  pollinationsModels: [
+    'openai',
+    'openai-fast',
+    'mistral'
   ],
   providerModels: {
     groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b'],
@@ -150,13 +160,15 @@ export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
       'qwen/qwen-2.5-72b-instruct:free'
     ],
     cerebras: ['gpt-oss-120b', 'qwen-3-32b'],
-    cloudflare: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/google/gemma-3-12b-it']
+    cloudflare: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/google/gemma-3-12b-it'],
+    pollinations: ['openai', 'openai-fast', 'mistral']
   },
   circuitBreakers: {},
   telemetry: {
     totalRequests: 0,
     geminiRequests: 0,
     freeProviderRequests: 0,
+    keylessRequests: 0,
     failoverSaves: 0,
     circuitTrips404: 0,
     lastProviderUsed: null,
@@ -168,7 +180,8 @@ export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
       mistral: 0,
       openrouter: 0,
       cerebras: 0,
-      cloudflare: 0
+      cloudflare: 0,
+      pollinations: 0
     }
   }
 };
@@ -241,6 +254,28 @@ export const PROVIDER_STRATEGY_CATALOG: ProviderStrategyInfo[] = [
     endpoint: 'https://api.cerebras.ai/v1/chat/completions'
   },
   {
+    id: 'pollinations',
+    name: 'Pollinations.ai Text API (Keyless Fallback)',
+    status: 'keyless',
+    envVars: [],
+    freeTierLimits: 'Zero signup · Zero API key (Shared IP rate-limited community pool)',
+    strengths: 'OpenAI-compatible endpoint with rotating openai / mistral / Llama / Qwen models',
+    privacyNote: 'Public community endpoint: prompt credentials scrubbed & private:true enforced; last-resort only',
+    recommendedWorkload: '기존 모든 API 키 미설정 또는 429/404 전면 소진 시 최후 폴백 (로컬 DB fallback 직전)',
+    endpoint: 'https://text.pollinations.ai/openai'
+  },
+  {
+    id: 'ovh-anonymous',
+    name: 'OVHcloud AI Endpoints (Anonymous Tier)',
+    status: 'trial',
+    envVars: [],
+    freeTierLimits: 'No signup for anonymous test (~2 RPM/IP strict rate cap)',
+    strengths: 'European GDPR-compliant public inference endpoints for open-weight models',
+    privacyNote: 'Too strict (~2 RPM) for multi-user primary traffic; documented for reference comparison',
+    recommendedWorkload: '연구 비교 참조용 (2 RPM 제한으로 서버 공용 폴백엔 Pollinations 채택)',
+    endpoint: 'https://endpoints.ai.cloud.ovh.net'
+  },
+  {
     id: 'github-models',
     name: 'GitHub Models Inference API',
     status: 'retired',
@@ -248,10 +283,57 @@ export const PROVIDER_STRATEGY_CATALOG: ProviderStrategyInfo[] = [
     freeTierLimits: 'Retired in 2026 (endpoint https://models.github.ai/inference decommissioned)',
     strengths: 'Historical developer prototyping catalog via GitHub PAT',
     privacyNote: 'Excluded from live HTTP routing to avoid guaranteed 404/timeout waste',
-    recommendedWorkload: '사용 중단됨 — Groq · Mistral · OpenRouter :free · Cloudflare로 대체',
+    recommendedWorkload: '사용 중단됨 — Groq · Mistral · OpenRouter :free · Cloudflare · Pollinations로 대체',
     endpoint: 'https://models.github.ai/inference (Retired)'
   }
 ];
+
+export function sanitizePromptForKeylessEndpoint(promptText: string): string {
+  const input = String(promptText || '');
+  return input
+    .replace(/\bAIza[0-9A-Za-z\-_]{20,}\b/g, '[REDACTED_GEMINI_KEY]')
+    .replace(/\bgsk_[0-9A-Za-z_]{16,}\b/g, '[REDACTED_GROQ_KEY]')
+    .replace(/\bsk-or-[0-9A-Za-z\-_]{16,}\b/g, '[REDACTED_OPENROUTER_KEY]')
+    .replace(/\bsk-[0-9A-Za-z\-_]{20,}\b/g, '[REDACTED_API_KEY]')
+    .replace(/\bghp_[0-9A-Za-z]{20,}\b/g, '[REDACTED_GITHUB_TOKEN]')
+    .replace(/\bgithub_pat_[0-9A-Za-z_]{20,}\b/g, '[REDACTED_GITHUB_PAT]')
+    .replace(/\bxox[bpa]-[0-9A-Za-z\-]{16,}\b/g, '[REDACTED_SLACK_TOKEN]')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED_AWS_KEY]')
+    .replace(/\badm_sess_[0-9A-Za-z_]{12,}\b/g, '[REDACTED_ADMIN_SESSION]')
+    .replace(/\bpasskey:[^\s"'`]+/gi, 'passkey:[REDACTED_PASSKEY]')
+    .replace(/([?&](?:secret|token|key|api_key)=)[^&\s]+/gi, '$1[REDACTED_PARAM]')
+    .replace(/(Authorization\s*:\s*)?Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED_TOKEN]');
+}
+
+export function buildExternalFallbackPrompt(
+  promptText: string,
+  config?: { systemInstruction?: any; responseMimeType?: string }
+): string {
+  const parts: string[] = [];
+  if (config?.systemInstruction) {
+    const sysText = contentsToPromptText(config.systemInstruction).trim();
+    if (sysText) {
+      parts.push(`[System Instructions]\n${sysText}`);
+    }
+  }
+  parts.push(String(promptText || ''));
+  if (config?.responseMimeType === 'application/json') {
+    parts.push('[Output Format Requirement]\nReturn strictly valid raw JSON matching the requested fields. Do not include markdown code fences or conversational preamble.');
+  }
+  return parts.join('\n\n');
+}
+
+export function stripMarkdownJsonFences(rawText: string): string {
+  let cleaned = String(rawText || '').trim();
+  const fencedMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fencedMatch && fencedMatch[1]) {
+    cleaned = fencedMatch[1].trim();
+  }
+  if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/i, '');
+  if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '');
+  if (cleaned.endsWith('```')) cleaned = cleaned.replace(/\s*```$/, '');
+  return cleaned.trim();
+}
 
 export function loadAiModelRegistry(): AiModelRegistry {
   try {
@@ -261,18 +343,30 @@ export function loadAiModelRegistry(): AiModelRegistry {
     if (fs.existsSync(REGISTRY_PATH)) {
       const raw = fs.readFileSync(REGISTRY_PATH, 'utf8');
       const parsed = JSON.parse(raw);
+      const validProviderSet = new Set<ProviderId>([
+        'gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'
+      ]);
+      const rawOrder: ProviderId[] = Array.isArray(parsed?.providerOrder) && parsed.providerOrder.length > 0
+        ? Array.from(new Set(parsed.providerOrder.filter((p: any): p is ProviderId => validProviderSet.has(p))))
+        : DEFAULT_AI_MODEL_REGISTRY.providerOrder;
+      const keyedInOrder = rawOrder.filter((p) => p !== 'pollinations');
+      const normalizedOrder: ProviderId[] = [...keyedInOrder, 'pollinations'];
       const merged: AiModelRegistry = {
         ...DEFAULT_AI_MODEL_REGISTRY,
         ...parsed,
+        keylessFallbackEnabled: typeof parsed?.keylessFallbackEnabled === 'boolean'
+          ? parsed.keylessFallbackEnabled
+          : true,
         geminiModels: Array.isArray(parsed?.geminiModels) && parsed.geminiModels.length > 0
-          ? parsed.geminiModels.filter((m: DiscoveredGeminiModel) => !isProhibitedGeminiModel(m.id))
+          ? parsed.geminiModels.filter((m: any): m is DiscoveredGeminiModel => Boolean(m && typeof m === 'object' && typeof m.id === 'string' && !isProhibitedGeminiModel(m.id)))
           : DEFAULT_GEMINI_MODELS,
-        providerOrder: Array.isArray(parsed?.providerOrder) && parsed.providerOrder.length > 0
-          ? parsed.providerOrder
-          : DEFAULT_AI_MODEL_REGISTRY.providerOrder,
+        providerOrder: normalizedOrder,
         openrouterFreeModels: Array.isArray(parsed?.openrouterFreeModels) && parsed.openrouterFreeModels.length > 0
-          ? parsed.openrouterFreeModels.filter((id: string) => !id.includes('gemini-2.0'))
+          ? parsed.openrouterFreeModels.filter((id: any): id is string => typeof id === 'string' && id.trim().length > 0 && !id.includes('gemini-2.0'))
           : DEFAULT_AI_MODEL_REGISTRY.openrouterFreeModels,
+        pollinationsModels: Array.isArray(parsed?.pollinationsModels) && parsed.pollinationsModels.length > 0
+          ? parsed.pollinationsModels.filter((m: any): m is string => typeof m === 'string' && m.trim().length > 0)
+          : DEFAULT_AI_MODEL_REGISTRY.pollinationsModels,
         providerModels: {
           ...DEFAULT_AI_MODEL_REGISTRY.providerModels,
           ...(parsed?.providerModels || {})
@@ -281,6 +375,7 @@ export function loadAiModelRegistry(): AiModelRegistry {
         telemetry: {
           ...DEFAULT_AI_MODEL_REGISTRY.telemetry,
           ...(parsed?.telemetry || {}),
+          keylessRequests: Number(parsed?.telemetry?.keylessRequests || 0),
           perProviderUsage: {
             ...DEFAULT_AI_MODEL_REGISTRY.telemetry.perProviderUsage,
             ...(parsed?.telemetry?.perProviderUsage || {})
@@ -305,7 +400,17 @@ export function saveAiModelRegistry(registry: AiModelRegistry): void {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     registry.updatedAt = new Date().toISOString();
-    fs.writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2) + '\n', 'utf8');
+    const serialized = JSON.stringify(registry, null, 2) + '\n';
+    const tmpPath = `${REGISTRY_PATH}.tmp.${process.pid}.${Date.now()}`;
+    try {
+      fs.writeFileSync(tmpPath, serialized, 'utf8');
+      fs.renameSync(tmpPath, REGISTRY_PATH);
+    } catch {
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch {}
+      fs.writeFileSync(REGISTRY_PATH, serialized, 'utf8');
+    }
   } catch (err: any) {
     console.warn('[AI Registry] Failed to save registry:', err?.message || err);
   }
@@ -438,6 +543,7 @@ export async function discoverLiveModels(options?: {
   registry: AiModelRegistry;
   geminiDiscoveredCount: number;
   openrouterDiscoveredCount: number;
+  pollinationsDiscoveredCount: number;
   errors: string[];
 }> {
   const registry = loadAiModelRegistry();
@@ -445,6 +551,7 @@ export async function discoverLiveModels(options?: {
   const errors: string[] = [];
   let geminiDiscoveredCount = 0;
   let openrouterDiscoveredCount = 0;
+  let pollinationsDiscoveredCount = 0;
   const nowIso = new Date().toISOString();
 
   // 1. Discover Gemini models via @google/genai ai.models.list()
@@ -499,56 +606,126 @@ export async function discoverLiveModels(options?: {
     errors.push('Gemini discovery skipped (no valid server AIza key configured).');
   }
 
-  // 2. Discover active OpenRouter :free models (public unauthenticated endpoint)
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const orResp = await fetch('https://openrouter.ai/api/v1/models', {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.100' }
-    });
-    clearTimeout(timer);
-    if (orResp.ok) {
-      const json: any = await orResp.json();
-      const items: any[] = Array.isArray(json?.data) ? json.data : [];
-      const freeSlugs = items
-        .map((item) => String(item?.id || '').trim())
-        .filter((id) => id.endsWith(':free') && !id.includes('gemini-2.0') && !id.includes('gemini-1.5'));
-      if (freeSlugs.length > 0) {
-        const preferredKeywords = ['deepseek', 'llama-3.3', 'qwen', 'mistral', 'gemma', 'llama-3.1'];
-        const ranked = [
-          ...freeSlugs.filter((id) => preferredKeywords.some((kw) => id.toLowerCase().includes(kw))),
-          ...freeSlugs.filter((id) => !preferredKeywords.some((kw) => id.toLowerCase().includes(kw)))
-        ].slice(0, 12);
-        registry.openrouterFreeModels = ranked;
-        registry.providerModels.openrouter = ranked;
-        openrouterDiscoveredCount = freeSlugs.length;
+  // 2. Discover active OpenRouter :free & Pollinations keyless text models in parallel
+  await Promise.all([
+    (async () => {
+      try {
+        const orResp = await fetch('https://openrouter.ai/api/v1/models', {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.7' }
+        });
+        if (orResp.ok) {
+          const json: any = await orResp.json();
+          const items: any[] = Array.isArray(json?.data) ? json.data : [];
+          const freeSlugs = items
+            .map((item) => String(item?.id || '').trim())
+            .filter((id) => id.endsWith(':free') && !id.includes('gemini-2.0') && !id.includes('gemini-1.5'));
+          if (freeSlugs.length > 0) {
+            const preferredKeywords = ['deepseek', 'llama-3.3', 'qwen', 'mistral', 'gemma', 'llama-3.1'];
+            const ranked = [
+              ...freeSlugs.filter((id) => preferredKeywords.some((kw) => id.toLowerCase().includes(kw))),
+              ...freeSlugs.filter((id) => !preferredKeywords.some((kw) => id.toLowerCase().includes(kw)))
+            ].slice(0, 12);
+            registry.openrouterFreeModels = ranked;
+            registry.providerModels.openrouter = ranked;
+            openrouterDiscoveredCount = freeSlugs.length;
+          }
+        }
+      } catch (err: any) {
+        errors.push(`OpenRouter :free catalog sync: ${err?.message || err}`);
       }
-    }
-  } catch (err: any) {
-    errors.push(`OpenRouter :free catalog sync: ${err?.message || err}`);
-  }
+    })(),
+    (async () => {
+      try {
+        const pollResp = await fetch('https://text.pollinations.ai/models', {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.7' }
+        });
+        if (pollResp.ok) {
+          const json: any = await pollResp.json();
+          const list: any[] = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
+          const textNames = list
+            .map((item) => {
+              if (typeof item === 'string') return item.trim();
+              const modelType = String(item?.type || item?.output_modalities || 'text').toLowerCase();
+              if (item?.type && !modelType.includes('text') && !modelType.includes('chat')) return '';
+              if (item?.community === true) return '';
+              return String(item?.name || item?.id || '').trim();
+            })
+            .filter((name) => Boolean(name) && name.length <= 64);
+          const uniqueNames = Array.from(new Set(textNames));
+          if (uniqueNames.length > 0) {
+            const preferredKeywords = ['openai', 'openai-fast', 'mistral', 'llama', 'qwen', 'deepseek'];
+            const ranked = [
+              ...uniqueNames.filter((name) => preferredKeywords.some((kw) => name.toLowerCase() === kw || name.toLowerCase().startsWith(`${kw}-`))),
+              ...uniqueNames.filter((name) => !preferredKeywords.some((kw) => name.toLowerCase() === kw || name.toLowerCase().startsWith(`${kw}-`)))
+            ].slice(0, 8);
+            registry.pollinationsModels = ranked;
+            registry.providerModels.pollinations = ranked;
+            pollinationsDiscoveredCount = uniqueNames.length;
+          }
+        }
+      } catch (err: any) {
+        errors.push(`Pollinations keyless catalog sync: ${err?.message || err}`);
+      }
+    })()
+  ]);
 
   registry.lastDiscoveryAt = nowIso;
   saveAiModelRegistry(registry);
 
-  return { registry, geminiDiscoveredCount, openrouterDiscoveredCount, errors };
+  return { registry, geminiDiscoveredCount, openrouterDiscoveredCount, pollinationsDiscoveredCount, errors };
 }
 
-export function getProviderServerReadiness(): Record<ProviderId, { configured: boolean; envHint: string }> {
+export function getProviderServerReadiness(
+  registryInput?: AiModelRegistry
+): Record<ProviderId, { configured: boolean; envHint: string; keyless?: boolean }> {
+  const registry = registryInput || loadAiModelRegistry();
+
+  let hasConfiguredGeminiKey = false;
+  try {
+    const apiKeysPath = path.join(DATA_DIR, 'api_keys_config.json');
+    if (fs.existsSync(apiKeysPath)) {
+      const parsed = JSON.parse(fs.readFileSync(apiKeysPath, 'utf8'));
+      if (Array.isArray(parsed?.keys)) {
+        hasConfiguredGeminiKey = parsed.keys.some(
+          (k: any) => k && k.isActive !== false && typeof k.key === 'string' && k.key.trim().startsWith('AIza') && k.key.trim().length >= 30
+        );
+      }
+    }
+  } catch (_) {}
+
+  let sysConfig: Record<string, any> = {};
+  try {
+    const sysPath = path.join(DATA_DIR, 'system_config.json');
+    if (fs.existsSync(sysPath)) {
+      const parsed = JSON.parse(fs.readFileSync(sysPath, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        sysConfig = parsed;
+      }
+    }
+  } catch (_) {}
+
   const hasGemini = Boolean(
+    hasConfiguredGeminiKey ||
     (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().startsWith('AIza')) ||
-    (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim().startsWith('AIza'))
+    (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim().startsWith('AIza')) ||
+    (process.env.CUSTOM_API_KEY && process.env.CUSTOM_API_KEY.trim().startsWith('AIza'))
   );
   return {
     gemini: { configured: hasGemini, envHint: 'GEMINI_API_KEY / GOOGLE_API_KEY' },
-    groq: { configured: Boolean(process.env.GROQ_API_KEY?.trim()), envHint: 'GROQ_API_KEY' },
+    groq: { configured: Boolean(process.env.GROQ_API_KEY?.trim() || String(sysConfig.groqApiKey || '').trim()), envHint: 'GROQ_API_KEY' },
     mistral: { configured: Boolean(process.env.MISTRAL_API_KEY?.trim()), envHint: 'MISTRAL_API_KEY' },
-    openrouter: { configured: Boolean(process.env.OPENROUTER_API_KEY?.trim()), envHint: 'OPENROUTER_API_KEY' },
+    openrouter: { configured: Boolean(process.env.OPENROUTER_API_KEY?.trim() || String(sysConfig.openrouterApiKey || '').trim()), envHint: 'OPENROUTER_API_KEY' },
     cerebras: { configured: Boolean(process.env.CEREBRAS_API_KEY?.trim()), envHint: 'CEREBRAS_API_KEY' },
     cloudflare: {
       configured: Boolean(process.env.CLOUDFLARE_ACCOUNT_ID?.trim() && process.env.CLOUDFLARE_API_TOKEN?.trim()),
       envHint: 'CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN'
+    },
+    pollinations: {
+      configured: registry.keylessFallbackEnabled !== false,
+      envHint: 'No API Key Required (Keyless Toggle)',
+      keyless: true
     }
   };
 }
@@ -597,6 +774,7 @@ export async function callExternalFreeProvider(
     cloudflareAccountId?: string;
     maxTokens?: number;
     registry?: AiModelRegistry;
+    bypassEnabledCheck?: boolean;
   }
 ): Promise<{ text: string; modelUsed: string; keyUsed: string; provider: ProviderId } | null> {
   const registry = options?.registry || loadAiModelRegistry();
@@ -729,7 +907,7 @@ export async function callExternalFreeProvider(
     const token = (options?.customKey || process.env.CLOUDFLARE_API_TOKEN || '').trim();
     if (!accountId || !token) return null;
     const models = (registry.providerModels.cloudflare || DEFAULT_AI_MODEL_REGISTRY.providerModels.cloudflare)
-      .filter((m) => !isCircuitOpen(registry, m));
+      .filter((m) => typeof m === 'string' && /^[@a-zA-Z0-9._/-]+$/.test(m) && !m.includes('..') && !isCircuitOpen(registry, m));
     for (const model of models) {
       try {
         const resp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`, {
@@ -753,6 +931,62 @@ export async function callExternalFreeProvider(
     }
   }
 
+  if (provider === 'pollinations') {
+    if (!options?.bypassEnabledCheck && registry.keylessFallbackEnabled === false) {
+      return null;
+    }
+    const sanitizedPrompt = sanitizePromptForKeylessEndpoint(promptText);
+    const rawModels = registry.pollinationsModels?.length
+      ? registry.pollinationsModels
+      : (registry.providerModels.pollinations || DEFAULT_AI_MODEL_REGISTRY.providerModels.pollinations);
+    const models = rawModels.filter((m) => !isCircuitOpen(registry, `pollinations:${m}`));
+    for (const model of models.slice(0, 3)) {
+      try {
+        const resp = await fetch('https://text.pollinations.ai/openai', {
+          method: 'POST',
+          signal: AbortSignal.timeout(15000),
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.7'
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: sanitizedPrompt }],
+            temperature: 0.3,
+            private: true,
+            ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {})
+          })
+        });
+        if (resp.ok) {
+          const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+          const rawBody = await resp.text();
+          let text = '';
+          let parsedJson = false;
+          try {
+            const parsed: any = JSON.parse(rawBody);
+            parsedJson = true;
+            text = parsed?.choices?.[0]?.message?.content || parsed?.text || '';
+          } catch {
+            const looksLikeHtml = contentType.includes('text/html') || /^\s*(?:<!doctype|<html|<head|<body)\b/i.test(rawBody);
+            if (!looksLikeHtml) {
+              text = rawBody || '';
+            }
+          }
+          if ((!parsedJson || String(text).trim()) && String(text).trim()) {
+            return {
+              text: String(text),
+              modelUsed: `Pollinations (${model}) [Keyless]`,
+              keyUsed: 'KEYLESS_NO_AUTH',
+              provider: 'pollinations'
+            };
+          }
+        } else if (resp.status === 404) {
+          tripCircuitBreaker(registry, `pollinations:${model}`, 'pollinations', 404, 'Pollinations HTTP 404', 6);
+        }
+      } catch (_) {}
+    }
+  }
+
   return null;
 }
 
@@ -764,6 +998,9 @@ export function recordRegistryUsage(provider: ProviderId, modelUsed: string, was
       registry.telemetry.geminiRequests = (registry.telemetry.geminiRequests || 0) + 1;
     } else {
       registry.telemetry.freeProviderRequests = (registry.telemetry.freeProviderRequests || 0) + 1;
+      if (provider === 'pollinations') {
+        registry.telemetry.keylessRequests = (registry.telemetry.keylessRequests || 0) + 1;
+      }
     }
     if (wasFailover) {
       registry.telemetry.failoverSaves = (registry.telemetry.failoverSaves || 0) + 1;

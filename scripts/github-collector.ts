@@ -19,9 +19,11 @@ import {
   tripCircuitBreaker,
   discoverLiveModels,
   callExternalFreeProvider,
+  buildExternalFallbackPrompt,
   recordRegistryUsage,
   type ProviderId
 } from '../lib/ai-resilience-router';
+import { parseAiJson } from '../src/utils/safeFetch';
 
 interface KnownIssue {
   id: string;
@@ -65,16 +67,29 @@ async function runCollector() {
   console.log(`⏰ Execution Time: ${new Date().toISOString()}`);
   console.log('====================================================\n');
 
-  const apiKey = process.env.GEMINI_API_KEY || process.env.CUSTOM_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    console.warn('⚠️ Warning: GEMINI_API_KEY or CUSTOM_API_KEY secret is not configured in GitHub Secrets.');
-    console.warn('Please configure GEMINI_API_KEY in GitHub Repository Settings > Secrets and variables > Actions.');
+  let registry = loadAiModelRegistry();
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.CUSTOM_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+  const hasGeminiKey = apiKey.startsWith('AIza') && apiKey.length >= 30;
+  const hasAnyKeyedExternal = Boolean(
+    process.env.GROQ_API_KEY?.trim() ||
+    process.env.MISTRAL_API_KEY?.trim() ||
+    process.env.OPENROUTER_API_KEY?.trim() ||
+    process.env.CEREBRAS_API_KEY?.trim() ||
+    (process.env.CLOUDFLARE_ACCOUNT_ID?.trim() && process.env.CLOUDFLARE_API_TOKEN?.trim())
+  );
+  const canUseKeylessFallback = registry.keylessFallbackEnabled !== false;
+
+  if (!hasGeminiKey && !hasAnyKeyedExternal && !canUseKeylessFallback) {
+    console.warn('⚠️ Warning: No GEMINI_API_KEY or external AI keys configured and keyless fallback is disabled.');
     const summaryFile = process.env.GITHUB_STEP_SUMMARY;
     if (summaryFile && fs.existsSync(summaryFile)) {
-      const md = `## ⚠️ Autonomous Data Collection Notice\n\n- **Status**: GEMINI_API_KEY secret not found in Repository Secrets.\n- **Action**: Collection cycle skipped safely.\n\n> **To enable automated 24/7 AI collection:**\n> Go to **Settings > Secrets and variables > Actions** in your GitHub repository and add \`GEMINI_API_KEY\` with your Google AI Studio API key.\n`;
+      const md = `## ⚠️ Autonomous Data Collection Notice\n\n- **Status**: No active AI credentials found and keyless fallback is disabled.\n- **Action**: Collection cycle skipped safely.\n`;
       fs.appendFileSync(summaryFile, md, 'utf-8');
     }
     return;
+  }
+  if (!hasGeminiKey) {
+    console.log('ℹ️ GEMINI_API_KEY not configured; routing directly to external free-tier / last-resort keyless fallback.');
   }
 
   const dataDir = path.resolve(process.cwd(), 'data');
@@ -177,11 +192,12 @@ async function runCollector() {
   const dedupStrictness: 'strict' | 'balanced' = collectorOpts.dedupStrictness === 'balanced' ? 'balanced' : 'strict';
   const autoIntegrateSeed: boolean = collectorOpts.autoIntegrateSeed !== false;
 
-  const ai = new GoogleGenAI({
-    apiKey,
-    httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-  });
-  let registry = loadAiModelRegistry();
+  const ai = hasGeminiKey
+    ? new GoogleGenAI({
+        apiKey,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      })
+    : null;
   const preferredModel = (process.env.INPUT_MODEL_PREFERENCE || collectorOpts.modelPreference || 'auto').trim();
   let modelsToTry = getHealthyGeminiCandidates(preferredModel, registry);
   console.log(`🤖 AI Model Priority (Registry-Backed): ${modelsToTry.join(' -> ')}`);
@@ -258,6 +274,7 @@ JSON Schema:
   let encountered404 = false;
 
   const tryGeminiList = async (candidates: string[]) => {
+    if (!ai) return false;
     for (const model of candidates) {
       try {
         console.log(`🤖 Attempting generation with model: ${model}...`);
@@ -305,35 +322,50 @@ JSON Schema:
     return false;
   };
 
-  await tryGeminiList(modelsToTry);
+  if (hasGeminiKey) {
+    await tryGeminiList(modelsToTry);
 
-  // If 404s occurred and Gemini generation didn't succeed, attempt live catalog discovery once
-  if (!generatedText && encountered404) {
-    console.log('🔎 404 model error detected; running live Gemini model auto-discovery...');
-    try {
-      const discovery = await discoverLiveModels({ geminiApiKey: apiKey });
-      registry = discovery.registry;
-      const freshCandidates = getHealthyGeminiCandidates(preferredModel, registry).filter((m) => !modelsToTry.includes(m));
-      if (freshCandidates.length > 0) {
-        console.log(`🆕 Discovered fresh healthy Gemini models: ${freshCandidates.join(', ')}`);
-        await tryGeminiList(freshCandidates);
-      }
-    } catch (_) {}
+    // If 404s occurred and Gemini generation didn't succeed, attempt live catalog discovery once
+    if (!generatedText && encountered404) {
+      console.log('🔎 404 model error detected; running live Gemini model auto-discovery...');
+      try {
+        const discovery = await discoverLiveModels({ geminiApiKey: apiKey });
+        registry = discovery.registry;
+        const freshCandidates = getHealthyGeminiCandidates(preferredModel, registry).filter((m) => !modelsToTry.includes(m));
+        if (freshCandidates.length > 0) {
+          console.log(`🆕 Discovered fresh healthy Gemini models: ${freshCandidates.join(', ')}`);
+          await tryGeminiList(freshCandidates);
+        }
+      } catch (_) {}
+    }
   }
 
-  // Multi-provider Free-Tier Failover across configured external providers
+  // Multi-provider Keyed Free-Tier Failover across configured external providers
   if (!generatedText) {
-    const externalProviders = (registry.providerOrder || ['groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'])
-      .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini');
-    for (const providerId of externalProviders) {
+    const externalPrompt = buildExternalFallbackPrompt(prompt, { responseMimeType: 'application/json' });
+    const keyedProviders = (registry.providerOrder || ['groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'])
+      .filter((p): p is Exclude<ProviderId, 'gemini' | 'pollinations'> => p !== 'gemini' && p !== 'pollinations');
+    for (const providerId of keyedProviders) {
       console.log(`🔄 Attempting external free-tier failover via ${providerId.toUpperCase()}...`);
-      const extRes = await callExternalFreeProvider(providerId, prompt, { registry });
+      const extRes = await callExternalFreeProvider(providerId, externalPrompt, { registry });
       if (extRes && extRes.text) {
         generatedText = extRes.text;
         successfulModel = extRes.modelUsed;
         recordRegistryUsage(providerId, extRes.modelUsed, true);
         console.log(`✅ Successfully generated response via ${extRes.modelUsed}!`);
         break;
+      }
+    }
+
+    // Last-resort keyless serverless fallback (Pollinations) ONLY if enabled and all keyed tiers failed
+    if (!generatedText && registry.keylessFallbackEnabled !== false) {
+      console.log('🔄 Attempting last-resort keyless failover via POLLINATIONS...');
+      const keylessRes = await callExternalFreeProvider('pollinations', externalPrompt, { registry });
+      if (keylessRes && keylessRes.text) {
+        generatedText = keylessRes.text;
+        successfulModel = keylessRes.modelUsed;
+        recordRegistryUsage('pollinations', keylessRes.modelUsed, true);
+        console.log(`✅ Successfully generated response via ${keylessRes.modelUsed}!`);
       }
     }
   }
@@ -348,22 +380,16 @@ JSON Schema:
     return;
   }
 
-  // Parse JSON response
-  let cleaned = generatedText.trim();
-  if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/i, '');
-  if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '');
-  if (cleaned.endsWith('```')) cleaned = cleaned.replace(/\s*```$/, '');
-  cleaned = cleaned.trim();
-
+  // Parse JSON response resiliently (handles Markdown code fences, prose preambles, and Windows paths)
   let parsedItems: any[] = [];
   try {
-    parsedItems = JSON.parse(cleaned);
-    if (!Array.isArray(parsedItems)) {
-      parsedItems = [parsedItems];
-    }
+    const parsed = parseAiJson(generatedText);
+    parsedItems = Array.isArray(parsed)
+      ? parsed
+      : (parsed && Array.isArray((parsed as any).issues) ? (parsed as any).issues : [parsed]);
   } catch (parseErr: any) {
     console.warn('⚠️ Failed to parse JSON from AI response:', parseErr.message);
-    console.log('Raw output preview:', cleaned.substring(0, 300));
+    console.log('Raw output preview:', generatedText.trim().substring(0, 300));
     const summaryFile = process.env.GITHUB_STEP_SUMMARY;
     if (summaryFile && fs.existsSync(summaryFile)) {
       const md = `## ⚠️ Autonomous Data Collection Notice\n\n- **Status**: AI output JSON parse error. Cycle skipped safely.\n`;
@@ -377,9 +403,23 @@ JSON Schema:
   const batchNormalizedTitles = new Set<string>();
   const nowIso = new Date().toISOString();
 
+  const asCleanString = (val: unknown): string => {
+    if (typeof val === 'string') return val.trim();
+    if (typeof val === 'number' && Number.isFinite(val)) return String(val);
+    return '';
+  };
+  const asCleanStringArray = (val: unknown): string[] => {
+    if (!Array.isArray(val)) return [];
+    return val.map((item) => asCleanString(item)).filter(Boolean);
+  };
+  const filterSafeHttpUrls = (val: unknown): string[] => {
+    return asCleanStringArray(val).filter((u) => /^https?:\/\//i.test(u));
+  };
+
   for (const raw of parsedItems) {
-    const code = (raw.code || '').trim();
-    const title = (raw.title || '').trim();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const code = asCleanString((raw as any).code);
+    const title = asCleanString((raw as any).title);
 
     if (!title) continue;
 
@@ -388,10 +428,10 @@ JSON Schema:
     const normalizedTitle = title.toLowerCase().replace(/\s+/g, '');
     const isDupTitle =
       batchNormalizedTitles.has(normalizedTitle) ||
-      existingIssues.some(ex => ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle);
+      existingIssues.some(ex => typeof ex?.title === 'string' && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle);
     const isDupCodeStrict = dedupStrictness === 'strict' && normalizedCode.length >= 4 && avoidCodes.has(normalizedCode);
     const isDupCodeAndTitle = existingIssues.some(
-      ex => ex.code && ex.code.toLowerCase().trim() === normalizedCode && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
+      ex => typeof ex?.code === 'string' && typeof ex?.title === 'string' && ex.code.toLowerCase().trim() === normalizedCode && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
     );
 
     if (isDupTitle || isDupCodeAndTitle || isDupCodeStrict) {
@@ -401,32 +441,42 @@ JSON Schema:
 
     const cleanCode = code || 'WIN-GEN-' + Math.floor(1000 + Math.random() * 9000);
     const issueId = `gh-${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
+    const resolvedCategory = asCleanString((raw as any).category) || targetCategory;
+    const resolvedTitleEn = asCleanString((raw as any).title_en) || title;
+    const resolvedSymptoms = asCleanString((raw as any).symptoms) || title;
+    const resolvedSymptomsEn = asCleanString((raw as any).symptoms_en) || resolvedSymptoms;
+    const resolvedScript = asCleanString((raw as any).script);
+    const resolvedSteps = asCleanStringArray((raw as any).manualSteps);
+    const resolvedStepsEn = asCleanStringArray((raw as any).manualSteps_en);
+    const resolvedUrls = filterSafeHttpUrls((raw as any).sourceUrls);
+    const resolvedVersions = asCleanStringArray((raw as any).windowsVersions);
+    const resolvedKeywords = asCleanStringArray((raw as any).searchKeywords);
 
     const formattedIssue: KnownIssue = {
       id: issueId,
-      category: raw.category || targetCategory,
+      category: resolvedCategory,
       code: cleanCode,
-      title: title,
-      title_en: raw.title_en || title,
-      symptoms: raw.symptoms || title,
-      symptoms_en: raw.symptoms_en || raw.symptoms || '',
-      script: (raw.script && typeof raw.script === 'string' && raw.script.trim().length >= 15)
-        ? raw.script.trim()
-        : generateDefaultPowerShellScript(cleanCode, raw.category || targetCategory, title),
-      manualSteps: Array.isArray(raw.manualSteps) && raw.manualSteps.length > 0 ? raw.manualSteps : [
+      title,
+      title_en: resolvedTitleEn,
+      symptoms: resolvedSymptoms,
+      symptoms_en: resolvedSymptomsEn,
+      script: resolvedScript.length >= 15
+        ? resolvedScript
+        : generateDefaultPowerShellScript(cleanCode, resolvedCategory, title),
+      manualSteps: resolvedSteps.length > 0 ? resolvedSteps : [
         'Windows 설정 > 문제 해결 도구를 실행합니다.',
         '관리자 권한 명령 프롬프트에서 sfc /scannow 검사를 진행합니다.'
       ],
-      manualSteps_en: Array.isArray(raw.manualSteps_en) && raw.manualSteps_en.length > 0 ? raw.manualSteps_en : [
+      manualSteps_en: resolvedStepsEn.length > 0 ? resolvedStepsEn : [
         'Run Windows Settings > Troubleshooters.',
         'Run sfc /scannow in Administrator Command Prompt.'
       ],
-      sourceUrls: Array.isArray(raw.sourceUrls) && raw.sourceUrls.length > 0 ? raw.sourceUrls : [
+      sourceUrls: resolvedUrls.length > 0 ? resolvedUrls : [
         'https://support.microsoft.com/windows'
       ],
       source: 'GitHub Actions Autonomous Collector',
-      windowsVersions: Array.isArray(raw.windowsVersions) && raw.windowsVersions.length > 0 ? raw.windowsVersions : targetWindowsVersions,
-      searchKeywords: Array.isArray(raw.searchKeywords) ? raw.searchKeywords : [cleanCode, targetCategory, 'Windows Fix'],
+      windowsVersions: resolvedVersions.length > 0 ? resolvedVersions : targetWindowsVersions,
+      searchKeywords: resolvedKeywords.length > 0 ? resolvedKeywords : [cleanCode, targetCategory, 'Windows Fix'],
       upvoteCount: 0,
       upvotedBy: [],
       downvotedBy: [],
@@ -498,6 +548,7 @@ JSON Schema:
 
         const webhookRes = await fetch(syncEndpoint, {
           method: 'POST',
+          signal: AbortSignal.timeout(15000),
           headers,
           body: JSON.stringify({
             issues: newIssues,

@@ -81,9 +81,10 @@ export const LibraryAnalyticsChart: React.FC<LibraryAnalyticsChartProps> = ({
     const keywordFreq: Record<string, number> = {};
 
     for (const act of userActivity) {
-      const q = (act.query || '').trim();
+      if (!act || typeof act !== 'object') continue;
+      const q = typeof act.query === 'string' ? act.query.trim() : '';
       const lowerQ = q.toLowerCase();
-      let matchedCategory = act.metadata?.category || '';
+      let matchedCategory = typeof act.metadata?.category === 'string' ? act.metadata.category : '';
 
       // Count keywords
       if (q) {
@@ -209,6 +210,7 @@ export const LibraryAnalyticsChart: React.FC<LibraryAnalyticsChartProps> = ({
     if (!active || !payload || !payload.length) return null;
 
     const currentItem = categoryData.find(c => (language === 'en' ? c.nameEn : c.nameKo) === label) || categoryData[0];
+    if (!currentItem) return null;
     const totalCount = (payload[0]?.value || 0) + (payload[1]?.value || 0);
 
     return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   Shield,
@@ -39,6 +39,26 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
   const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const messageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleClearMessage = () => {
+    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
+    messageTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) setActionMessage(null);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (messageTimeoutRef.current) {
+        clearTimeout(messageTimeoutRef.current);
+        messageTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const getAuthHeader = (): Record<string, string> => {
     const rawToken = localStorage.getItem('winfix_admin_token');
@@ -53,6 +73,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
         headers: getAuthHeader()
       });
       const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
       if (res.ok && data.success && Array.isArray(data.users)) {
         setUsers(data.users);
         setActionMessage(null);
@@ -66,13 +87,16 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
         type: 'error'
       });
     } catch (e: any) {
+      if (!isMountedRef.current) return;
       console.warn("Failed to fetch users from server DB:", e);
       setActionMessage({
         text: isEn ? 'Unable to reach member database API.' : '서버 회원 데이터베이스에 연결할 수 없습니다.',
         type: 'error'
       });
     }
-    setIsLoading(false);
+    if (isMountedRef.current) {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -90,6 +114,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
         body: JSON.stringify({ status: newStatus })
       });
       const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
       if (res.ok && data.success) {
         setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus } : u));
         setActionMessage({
@@ -100,9 +125,10 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
         setActionMessage({ text: data.error || 'Failed to update user', type: 'error' });
       }
     } catch (e: any) {
+      if (!isMountedRef.current) return;
       setActionMessage({ text: e.message || 'Error updating status', type: 'error' });
     }
-    setTimeout(() => setActionMessage(null), 3000);
+    scheduleClearMessage();
   };
 
   const handleDeleteUser = async (user: MemberUser) => {
@@ -113,6 +139,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
         headers: getAuthHeader()
       });
       const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
       if (res.ok && data.success) {
         setUsers(prev => prev.filter(u => u.id !== user.id));
         setActionMessage({
@@ -123,9 +150,10 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
         setActionMessage({ text: data.error || 'Failed to delete user', type: 'error' });
       }
     } catch (e: any) {
+      if (!isMountedRef.current) return;
       setActionMessage({ text: e.message || 'Error deleting user', type: 'error' });
     }
-    setTimeout(() => setActionMessage(null), 3000);
+    scheduleClearMessage();
   };
 
   const handleExportJson = () => {
@@ -143,7 +171,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
     if (statusFilter !== 'all' && u.status !== statusFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      return u.email.toLowerCase().includes(q) || (u.displayName || '').toLowerCase().includes(q);
+      return (u.email || '').toLowerCase().includes(q) || (u.displayName || '').toLowerCase().includes(q);
     }
     return true;
   });
@@ -316,7 +344,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
 
                     {/* Display Name */}
                     <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
-                      {u.displayName || u.email.split('@')[0]}
+                      {u.displayName || (u.email || '').split('@')[0] || '-'}
                     </td>
 
                     {/* Role */}
@@ -356,7 +384,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
 
                     {/* Last Login */}
                     <td className="py-3 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '-'}
+                      {u.lastLoginAt && !Number.isNaN(Date.parse(u.lastLoginAt)) ? new Date(u.lastLoginAt).toLocaleDateString() : '-'}
                     </td>
 
                     {/* Actions */}

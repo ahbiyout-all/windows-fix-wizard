@@ -131,7 +131,7 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
         headers['Authorization'] = `Bearer ${activeToken}`;
       }
 
-      const url = `https://api.github.com/repos/${owner}/${repo}/actions/runs?per_page=25`;
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs?per_page=25`;
       const res = await fetch(url, { headers });
 
       if (!res.ok) {
@@ -147,16 +147,20 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
       const data = await res.json();
       if (data.workflow_runs && Array.isArray(data.workflow_runs) && data.workflow_runs.length > 0) {
         const enriched: EnrichedRun[] = data.workflow_runs.map((r: any) => {
-          const startTime = new Date(r.run_started_at || r.created_at).getTime();
-          const endTime = new Date(r.updated_at || r.created_at).getTime();
-          let durSec = Math.max(1, Math.round((endTime - startTime) / 1000));
+          const startTime = new Date(r.run_started_at || r.created_at || Date.now()).getTime();
+          const endTime = new Date(r.updated_at || r.created_at || Date.now()).getTime();
+          const rawDiffSec = Number.isFinite(startTime) && Number.isFinite(endTime)
+            ? Math.round((endTime - startTime) / 1000)
+            : 1;
+          let durSec = Number.isFinite(rawDiffSec) ? Math.max(1, rawDiffSec) : 1;
           if (durSec > 7200) durSec = 95; // Guard against abnormal clock skew
 
           const mins = Math.floor(durSec / 60);
           const secs = durSec % 60;
           const formattedDur = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-          const dateObj = new Date(r.created_at);
+          const parsedDate = new Date(r.created_at);
+          const dateObj = Number.isFinite(parsedDate.getTime()) ? parsedDate : new Date();
           const timeLabel = `${dateObj.getMonth() + 1}/${dateObj.getDate()} ${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
 
           let workflowType: 'pages' | 'collector' | 'other' = 'other';

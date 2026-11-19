@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
-import { createServer as createViteServer } from "vite";
+import type http from "http";
+import type { ViteDevServer } from "vite";
 import cron from "node-cron";
 import { GoogleGenAI } from "@google/genai";
 import path from "path";
@@ -20,6 +21,8 @@ import {
   discoverLiveModels,
   callExternalFreeProvider,
   contentsToPromptText,
+  buildExternalFallbackPrompt,
+  stripMarkdownJsonFences,
   recordRegistryUsage,
   getProviderServerReadiness,
   isProhibitedGeminiModel,
@@ -48,6 +51,16 @@ const timingSafeEqualStrings = (a: string, b: string): boolean => {
   const hashA = crypto.createHash('sha256').update(a, 'utf8').digest();
   const hashB = crypto.createHash('sha256').update(b, 'utf8').digest();
   return crypto.timingSafeEqual(hashA, hashB);
+};
+
+const sanitizePlainObject = (item: any): Record<string, any> | null => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+  const clean: Record<string, any> = {};
+  for (const [k, v] of Object.entries(item)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    clean[k] = v;
+  }
+  return clean;
 };
 
 // Global inline cache and throttling configurations to self-heal and avoid 429 quota exhaustion
@@ -183,7 +196,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.105.11';
+  return '3.106.7';
 }
 
 const BACKUP_SENSITIVE_KEY_EXACT = new Set([
@@ -285,15 +298,33 @@ function readSystemConfigObject(): Record<string, any> {
   return {};
 }
 
+function writeJsonFileAtomic(filePath: string, data: any) {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  const serialized = JSON.stringify(data, null, 2);
+  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    fs.writeFileSync(tmpPath, serialized, 'utf8');
+    fs.renameSync(tmpPath, filePath);
+  } catch (err) {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch {}
+    fs.writeFileSync(filePath, serialized, 'utf8');
+  }
+}
+
 function writeSystemConfigObject(updates: Record<string, any>): Record<string, any> {
   const current = readSystemConfigObject();
+  const safeUpdates = sanitizePlainObject(updates) || {};
   const merged = {
     ...current,
-    ...updates,
-    updatedAt: updates.updatedAt || getKSTISOString()
+    ...safeUpdates,
+    updatedAt: safeUpdates.updatedAt || getKSTISOString()
   };
   const sysPath = path.join(DATA_DIR, 'system_config.json');
-  fs.writeFileSync(sysPath, JSON.stringify(merged, null, 2), 'utf8');
+  writeJsonFileAtomic(sysPath, merged);
   return merged;
 }
 
@@ -373,7 +404,9 @@ async function ensureIssuesSeeded(): Promise<any[]> {
   const filePath = getJsonFilePath('issues');
   if (fs.existsSync(filePath)) {
     try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (fs.statSync(filePath).size > 10) {
+        return [];
+      }
     } catch {
       return [];
     }
@@ -388,7 +421,7 @@ async function ensureIssuesSeeded(): Promise<any[]> {
           createdAt: issue.createdAt || getKSTISOString(),
           source: issue.source || "System Grounding (Initial Setup)"
         }));
-        fs.writeFileSync(filePath, JSON.stringify(seeded, null, 2), 'utf8');
+        writeJsonFileAtomic(filePath, seeded);
         return seeded;
       } catch (e) {
         console.error("Error lazy seeding issues:", e);
@@ -411,7 +444,7 @@ function readLocalCollection(collection: string): any[] {
     if (collection === 'system_event_logs') {
       try {
         const seededLogs = generateInitialSystemEventLogs(50);
-        fs.writeFileSync(filePath, JSON.stringify(seededLogs, null, 2), 'utf8');
+        writeJsonFileAtomic(filePath, seededLogs);
         return seededLogs;
       } catch (e) {
         return [];
@@ -421,7 +454,8 @@ function readLocalCollection(collection: string): any[] {
   }
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     console.error(`Error reading File DB collection ${collection}:`, e);
     return [];
@@ -431,7 +465,7 @@ function readLocalCollection(collection: string): any[] {
 function writeLocalCollection(collection: string, data: any[]) {
   const filePath = getJsonFilePath(collection);
   try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    writeJsonFileAtomic(filePath, data);
   } catch (e) {
     console.error(`Error writing File DB collection ${collection}:`, e);
   }
@@ -647,13 +681,12 @@ function createLastKnownGoodBackupSync(customReason?: string): { success: boolea
       data: snapshotData
     };
 
-    const rawJson = JSON.stringify(payload, null, 2);
-    fs.writeFileSync(LAST_KNOWN_GOOD_PATH, rawJson, 'utf8');
+    writeJsonFileAtomic(LAST_KNOWN_GOOD_PATH, payload);
 
-    // Save timestamped copy in snapshots directory
+    // Save timestamped copy in snapshots directory atomically
     const fileTimestamp = createdAt.replace(/[:.]/g, '-');
     const snapshotFile = path.join(LKG_SNAPSHOTS_DIR, `snapshot_${fileTimestamp}.json`);
-    fs.writeFileSync(snapshotFile, rawJson, 'utf8');
+    writeJsonFileAtomic(snapshotFile, payload);
 
     // Automatically purge snapshots exceeding the retention limit
     const purgeInfo = purgeOldLastKnownGoodSnapshotsSync();
@@ -680,13 +713,20 @@ function createLastKnownGoodBackupSync(customReason?: string): { success: boolea
 
 function addLocalLog(collection: string, logData: any) {
   try {
+    const cleanLog = sanitizePlainObject(logData);
+    if (!cleanLog) return;
     const logs = readLocalCollection(collection);
     const suffix = crypto.randomBytes(3).toString('hex');
-    const baseId = logData.id || `log-${Date.now()}`;
-    const uniqueId = baseId.includes(suffix) ? baseId : `${baseId}-${suffix}`;
+    const rawBaseId = typeof cleanLog.id === 'string' && cleanLog.id.trim()
+      ? cleanLog.id.trim().slice(0, 100)
+      : `log-${Date.now()}`;
+    const uniqueId = rawBaseId.includes(suffix) ? rawBaseId : `${rawBaseId}-${suffix}`;
+    const ts = typeof cleanLog.timestamp === 'string' && cleanLog.timestamp.trim()
+      ? cleanLog.timestamp
+      : getKSTISOString();
     logs.unshift({
-      timestamp: logData.timestamp || getKSTISOString(),
-      ...logData,
+      ...cleanLog,
+      timestamp: ts,
       id: uniqueId
     });
     writeLocalCollection(collection, logs.slice(0, 1000)); // Keep max 1000 logs
@@ -755,11 +795,17 @@ async function saveIssuesToServer(issuesData: any[], options: { skipDuplicates?:
 
   const localIssues = readLocalCollection('issues');
 
-  for (const issueData of issuesData) {
+  for (const rawIssueData of issuesData) {
     try {
+      const cleanIssue = sanitizePlainObject(rawIssueData);
+      if (!cleanIssue) {
+        skippedCount++;
+        continue;
+      }
+
       // 1. Structural Validation
       const requiredFields = ['title', 'code', 'category', 'symptoms'];
-      const missing = requiredFields.filter(f => !issueData[f]);
+      const missing = requiredFields.filter(f => !cleanIssue[f] || typeof cleanIssue[f] !== 'string' || !cleanIssue[f].trim());
       if (missing.length > 0) {
         console.warn(`Skipping invalid issue data: missing ${missing.join(', ')}`);
         skippedCount++;
@@ -768,17 +814,17 @@ async function saveIssuesToServer(issuesData: any[], options: { skipDuplicates?:
 
       // Check duplicates in local array database
       let matchedLocalIdx = -1;
-      if (issueData.id && typeof issueData.id === 'string' && !issueData.id.startsWith('temp_') && !issueData.id.startsWith('staged-')) {
-        matchedLocalIdx = localIssues.findIndex(i => i.id === issueData.id);
+      if (cleanIssue.id && typeof cleanIssue.id === 'string' && !cleanIssue.id.startsWith('temp_') && !cleanIssue.id.startsWith('staged-')) {
+        matchedLocalIdx = localIssues.findIndex(i => i.id === cleanIssue.id);
       }
-      if (matchedLocalIdx === -1 && issueData.code && issueData.code !== 'N/A' && issueData.title) {
+      if (matchedLocalIdx === -1 && cleanIssue.code && cleanIssue.code !== 'N/A' && cleanIssue.title) {
         matchedLocalIdx = localIssues.findIndex(i => 
-          i.code?.toUpperCase().trim() === issueData.code?.toUpperCase().trim() && 
-          i.title?.toLowerCase().trim() === issueData.title?.toLowerCase().trim()
+          i.code?.toUpperCase().trim() === cleanIssue.code?.toUpperCase().trim() && 
+          i.title?.toLowerCase().trim() === cleanIssue.title?.toLowerCase().trim()
         );
       }
-      if (matchedLocalIdx === -1 && issueData.title) {
-        matchedLocalIdx = localIssues.findIndex(i => i.title?.toLowerCase().trim() === issueData.title?.toLowerCase().trim());
+      if (matchedLocalIdx === -1 && cleanIssue.title) {
+        matchedLocalIdx = localIssues.findIndex(i => i.title?.toLowerCase().trim() === cleanIssue.title?.toLowerCase().trim());
       }
 
       if (matchedLocalIdx !== -1 && skipDuplicates) {
@@ -787,9 +833,9 @@ async function saveIssuesToServer(issuesData: any[], options: { skipDuplicates?:
         continue;
       }
 
-      // Guarantee PowerShell script is populated
-      if (!issueData.script || typeof issueData.script !== 'string' || issueData.script.trim().length < 15) {
-        issueData.script = generateDefaultPowerShellScript(issueData.code, issueData.category, issueData.title);
+      // Guarantee PowerShell script is populated without mutating caller input
+      if (!cleanIssue.script || typeof cleanIssue.script !== 'string' || cleanIssue.script.trim().length < 15) {
+        cleanIssue.script = generateDefaultPowerShellScript(cleanIssue.code, cleanIssue.category, cleanIssue.title);
       }
 
       let issueId = `ai-cron-${Date.now()}-${addedCount}`;
@@ -797,17 +843,17 @@ async function saveIssuesToServer(issuesData: any[], options: { skipDuplicates?:
         issueId = localIssues[matchedLocalIdx].id || issueId;
         localIssues[matchedLocalIdx] = {
           ...localIssues[matchedLocalIdx],
-          ...issueData,
+          ...cleanIssue,
           id: issueId,
           updatedAt: getKSTISOString()
         };
         updatedCount++;
       } else {
         localIssues.push({
-          ...issueData,
+          ...cleanIssue,
           id: issueId,
-          source: issueData.source || "Automated AI Search (Autonomous Engine)",
-          createdAt: issueData.createdAt || getKSTISOString()
+          source: cleanIssue.source || "Automated AI Search (Autonomous Engine)",
+          createdAt: cleanIssue.createdAt || getKSTISOString()
         });
         addedCount++;
       }
@@ -1027,6 +1073,8 @@ async function executeServerGeminiCall(
   pruneExpiredCircuitBreakers(registry);
 
   const promptString = contentsToPromptText(contents);
+  const wantsJsonOutput = options.config?.responseMimeType === 'application/json';
+  const externalPromptString = buildExternalFallbackPrompt(promptString, options.config);
 
   // Workload-aware Quota Splitting:
   // If routingPolicy is 'quota-split' and the task does NOT need streaming or Google Search grounding,
@@ -1037,14 +1085,19 @@ async function executeServerGeminiCall(
     !options.enableSearch &&
     (options.workloadType === 'classification' || options.workloadType === 'fast-diagnostic')
   ) {
+    const sysCfg = readSystemConfigObject();
     const splitProviders = (registry.providerOrder || []).filter(
       (p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && (p === 'groq' || p === 'mistral' || p === 'cloudflare')
     );
     for (const p of splitProviders) {
-      const splitRes = await callExternalFreeProvider(p, promptString, { registry });
+      const splitRes = await callExternalFreeProvider(p, externalPromptString, {
+        customKey: p === 'groq' ? (sysCfg.groqApiKey || undefined) : undefined,
+        registry
+      });
       if (splitRes && splitRes.text) {
         recordRegistryUsage(p, splitRes.modelUsed, false);
-        return { text: splitRes.text, modelUsed: `${splitRes.modelUsed} [Quota-Split]`, keyUsed: splitRes.keyUsed };
+        const normalizedText = wantsJsonOutput ? stripMarkdownJsonFences(splitRes.text) : splitRes.text;
+        return { text: normalizedText, modelUsed: `${splitRes.modelUsed} [Quota-Split]`, keyUsed: splitRes.keyUsed };
       }
     }
   }
@@ -1178,19 +1231,36 @@ async function executeServerGeminiCall(
     }
   }
 
-  // Secondary multi-provider free-tier AI failover (Groq / Mistral / OpenRouter :free / Cerebras / Cloudflare)
+  // Secondary multi-provider keyed free-tier AI failover (Groq / Mistral / OpenRouter :free / Cerebras / Cloudflare)
   const customKeyStr = (options.customApiKey || '').trim();
-  const secondaryRes = await callSecondaryFreeAiApi(promptString, {
+  const secondaryRes = await callSecondaryFreeAiApi(externalPromptString, {
     groqKey: customKeyStr.startsWith('gsk_') ? customKeyStr : undefined,
     openrouterKey: customKeyStr.startsWith('sk-or-') ? customKeyStr : undefined
   });
 
   if (secondaryRes) {
+    const normalizedText = wantsJsonOutput ? stripMarkdownJsonFences(secondaryRes.text) : secondaryRes.text;
     if (options.stream && options.onChunk) {
-      options.onChunk(secondaryRes.text);
+      options.onChunk(normalizedText);
     }
     recordRegistryUsage(secondaryRes.provider, secondaryRes.modelUsed, true);
-    return { text: secondaryRes.text, modelUsed: secondaryRes.modelUsed, keyUsed: secondaryRes.keyUsed };
+    return { text: normalizedText, modelUsed: secondaryRes.modelUsed, keyUsed: secondaryRes.keyUsed };
+  }
+
+  // Last-resort keyless serverless AI fallback (Pollinations.ai — only when ALL keyed providers are unset or exhausted)
+  const latestRegistry = loadAiModelRegistry();
+  if (latestRegistry.keylessFallbackEnabled !== false) {
+    const keylessRes = await callExternalFreeProvider('pollinations', externalPromptString, {
+      registry: latestRegistry
+    });
+    if (keylessRes && keylessRes.text) {
+      const normalizedText = wantsJsonOutput ? stripMarkdownJsonFences(keylessRes.text) : keylessRes.text;
+      if (options.stream && options.onChunk) {
+        options.onChunk(normalizedText);
+      }
+      recordRegistryUsage('pollinations', keylessRes.modelUsed, true);
+      return { text: normalizedText, modelUsed: keylessRes.modelUsed, keyUsed: keylessRes.keyUsed };
+    }
   }
 
   if (validKeys.length === 0) {
@@ -1215,7 +1285,7 @@ async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey
     const registry = loadAiModelRegistry();
     const config = readSystemConfigObject();
 
-    const providerKeyMap: Partial<Record<Exclude<ProviderId, 'gemini'>, string>> = {
+    const providerKeyMap: Partial<Record<Exclude<ProviderId, 'gemini' | 'pollinations'>, string>> = {
       groq: customKeys?.groqKey || process.env.GROQ_API_KEY || config.groqApiKey || "",
       mistral: process.env.MISTRAL_API_KEY || "",
       openrouter: customKeys?.openrouterKey || process.env.OPENROUTER_API_KEY || config.openrouterApiKey || "",
@@ -1223,8 +1293,8 @@ async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey
       cloudflare: process.env.CLOUDFLARE_API_TOKEN || ""
     };
 
-    const externalOrder = (registry.providerOrder || ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'])
-      .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini');
+    const externalOrder = (registry.providerOrder || ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'])
+      .filter((p): p is Exclude<ProviderId, 'gemini' | 'pollinations'> => p !== 'gemini' && p !== 'pollinations');
 
     for (const providerId of externalOrder) {
       const res = await callExternalFreeProvider(providerId, promptText, {
@@ -1676,7 +1746,15 @@ async function runAiSyncInternal(): Promise<any> {
 
   if (!success || !syncDetails) {
     console.log(`[Engine Sync] Primary Gemini attempt standby (${lastFailureReason || 'All models busy'}). Attempting Multi-Provider Free-Tier Failover...`);
-    const secResult = await callSecondaryFreeAiApi(fullPrompt);
+    const externalSyncPrompt = buildExternalFallbackPrompt(fullPrompt, { responseMimeType: 'application/json' });
+    let secResult = await callSecondaryFreeAiApi(externalSyncPrompt);
+    if (!secResult) {
+      const latestSyncRegistry = loadAiModelRegistry();
+      if (latestSyncRegistry.keylessFallbackEnabled !== false) {
+        console.log('[Engine Sync] All keyed providers unavailable; trying last-resort keyless Pollinations fallback...');
+        secResult = await callExternalFreeProvider('pollinations', externalSyncPrompt, { registry: latestSyncRegistry });
+      }
+    }
     if (secResult && secResult.text) {
       recordRegistryUsage(secResult.provider, secResult.modelUsed, true);
       try {
@@ -2106,9 +2184,9 @@ async function runMaintenance(options: {
       updatedAt: now
     };
 
-    const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
+    const localPath = path.join(DATA_DIR, 'maintenance_config.json');
     try {
-      fs.writeFileSync(localPath, JSON.stringify(nextSettings, null, 2), 'utf8');
+      writeJsonFileAtomic(localPath, nextSettings);
       writeSystemConfigObject(nextSettings);
     } catch {}
 
@@ -2138,37 +2216,42 @@ async function runMaintenance(options: {
   }
 }
 
-// Initial scheduler setup from saved configuration on boot
-getMaintenanceSettings().then(settings => {
-  const intervalMin = settings.engineIntervalMin || 60;
-  setupEngineScheduler(intervalMin);
-  setupMaintenanceScheduler(settings);
+let backgroundSchedulersInitialized = false;
+function initializeBackgroundSchedulers() {
+  if (backgroundSchedulersInitialized) return;
+  backgroundSchedulersInitialized = true;
 
-  // Non-blocking startup overdue check: re-read latest settings inside timer so manual runs during warmup are respected
-  if (settings.maintenanceEnabled !== false) {
-    setTimeout(async () => {
-      try {
-        const latestSettings = await getMaintenanceSettings();
-        if (latestSettings.maintenanceEnabled === false) return;
-        const expectedIntervalMs =
-          latestSettings.maintenanceScheduleMode === 'weekly'
-            ? 7 * 86400 * 1000
-            : latestSettings.maintenanceScheduleMode === 'interval'
-              ? Math.max(1, Number(latestSettings.maintenanceIntervalHours) || 24) * 3600 * 1000
-              : 24 * 3600 * 1000;
-        const lastRunMs = latestSettings.lastMaintenanceAt ? new Date(latestSettings.lastMaintenanceAt).getTime() : 0;
-        if (!lastRunMs || isNaN(lastRunMs) || (Date.now() - lastRunMs > expectedIntervalMs)) {
-          console.log("[MAINTENANCE] Detected overdue/missing maintenance run at startup; triggering catch-up run...");
-          await runMaintenance({ triggeredBy: 'startup-overdue' }).catch(() => {});
-        }
-      } catch {}
-    }, 25000);
-  }
-}).catch(err => {
-  console.error("Failed to load initial scheduling settings on startup:", err);
-  setupEngineScheduler(60); // fallback to 60 mins
-  setupMaintenanceScheduler({ maintenanceEnabled: true, maintenanceScheduleMode: 'daily', maintenanceRunHour: 0 });
-});
+  getMaintenanceSettings().then(settings => {
+    const intervalMin = settings.engineIntervalMin || 60;
+    setupEngineScheduler(intervalMin);
+    setupMaintenanceScheduler(settings);
+
+    // Non-blocking startup overdue check: re-read latest settings inside timer so manual runs during warmup are respected
+    if (settings.maintenanceEnabled !== false) {
+      setTimeout(async () => {
+        try {
+          const latestSettings = await getMaintenanceSettings();
+          if (latestSettings.maintenanceEnabled === false) return;
+          const expectedIntervalMs =
+            latestSettings.maintenanceScheduleMode === 'weekly'
+              ? 7 * 86400 * 1000
+              : latestSettings.maintenanceScheduleMode === 'interval'
+                ? Math.max(1, Number(latestSettings.maintenanceIntervalHours) || 24) * 3600 * 1000
+                : 24 * 3600 * 1000;
+          const lastRunMs = latestSettings.lastMaintenanceAt ? new Date(latestSettings.lastMaintenanceAt).getTime() : 0;
+          if (!lastRunMs || isNaN(lastRunMs) || (Date.now() - lastRunMs > expectedIntervalMs)) {
+            console.log("[MAINTENANCE] Detected overdue/missing maintenance run at startup; triggering catch-up run...");
+            await runMaintenance({ triggeredBy: 'startup-overdue' }).catch(() => {});
+          }
+        } catch {}
+      }, 25000);
+    }
+  }).catch(err => {
+    console.error("Failed to load initial scheduling settings on startup:", err);
+    setupEngineScheduler(60); // fallback to 60 mins
+    setupMaintenanceScheduler({ maintenanceEnabled: true, maintenanceScheduleMode: 'daily', maintenanceRunHour: 0 });
+  });
+}
 
 // Non-blocking periodic Live AI Model Discovery (40s after boot, then every 6 hours)
 const runScheduledModelDiscovery = () => {
@@ -2218,7 +2301,8 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
     const targetRepo = isValidGithubRepo(rawCandidateRepo)
       ? rawCandidateRepo
       : (process.env.GITHUB_REPO && isValidGithubRepo(process.env.GITHUB_REPO) ? process.env.GITHUB_REPO.trim() : 'AhBiYout-all/windows-fix-wizard');
-    const targetBranch = ghConfig.branch || 'main';
+    const rawCandidateBranch = typeof ghConfig.branch === 'string' ? ghConfig.branch.trim() : '';
+    const targetBranch = isValidGitRef(rawCandidateBranch) ? rawCandidateBranch : 'main';
     const authToken = ghConfig.token || process.env.GITHUB_TOKEN;
 
     const headers: Record<string, string> = {
@@ -2261,7 +2345,7 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
         const remoteAt = remoteFeed?.lastCollectedAt ? new Date(remoteFeed.lastCollectedAt).getTime() : 0;
         const localAt = localFeed?.lastCollectedAt ? new Date(localFeed.lastCollectedAt).getTime() : 0;
         if (remoteFeed && remoteAt > localAt) {
-          fs.writeFileSync(feedPath, JSON.stringify(remoteFeed, null, 2), 'utf8');
+          writeJsonFileAtomic(feedPath, remoteFeed);
         }
       }
     } catch {}
@@ -2279,8 +2363,19 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
         localByCodeTitle.set(key, item);
       });
 
+      const sanitizeRemoteIssue = (rawItem: any): Record<string, any> | null => {
+        if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) return null;
+        const clean: Record<string, any> = {};
+        for (const [k, v] of Object.entries(rawItem)) {
+          if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+          clean[k] = v;
+        }
+        return clean;
+      };
+
       const deltaIssues: any[] = [];
-      for (const remote of remoteIssues) {
+      for (const rawRemote of remoteIssues) {
+        const remote = sanitizeRemoteIssue(rawRemote);
         if (!remote || !remote.title || !remote.code || !remote.category || !remote.symptoms) continue;
         const remoteKey = `${String(remote.code || '').toUpperCase().trim()}::${String(remote.title || '').toLowerCase().trim()}`;
         const existing = (remote.id && localById.get(String(remote.id))) || localByCodeTitle.get(remoteKey);
@@ -2328,7 +2423,6 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
       }
     }
 
-    lastGithubAutoIntegrateTime = Date.now();
     return {
       success: true,
       skipped: false,
@@ -2347,6 +2441,7 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
       totalIssuesCount: readLocalCollection('issues').length
     };
   } finally {
+    lastGithubAutoIntegrateTime = Date.now();
     isGithubAutoIntegrateRunning = false;
   }
 }
@@ -2362,7 +2457,7 @@ cron.schedule('*/15 * * * *', async () => {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.DEFAULT_APP_PORT) || 3000;
 
   // [SECURITY HARDENING] Disable X-Powered-By header to hide server technology stack
   app.disable("x-powered-by");
@@ -2415,6 +2510,7 @@ async function startServer() {
   const rateLimitAuth = createRateLimiter(15, 60000, "AUTH_LOGIN_REGISTER");
   const rateLimitPublicAi = createRateLimiter(30, 60000, "PUBLIC_AI");
   const rateLimitPublicLogs = createRateLimiter(40, 60000, "PUBLIC_LOGS");
+  const rateLimitAutoIntegrate = createRateLimiter(15, 60000, "GITHUB_AUTO_INTEGRATE");
 
   // Seed database on startup (Removed to save quota)
   // await seedDatabase();
@@ -2520,8 +2616,9 @@ async function startServer() {
   });
 
   // --- NATIVE FILE DATABASE API ENDPOINTS ---
-  app.get("/api/issues", (req, res) => {
+  app.get("/api/issues", async (req, res) => {
     try {
+      await ensureIssuesSeeded();
       const category = (req.query.category as string || "전체").trim();
       const version = (req.query.version as string || "전체").trim();
       const rawQuery = ((req.query.q || req.query.query) as string || "").trim().toLowerCase();
@@ -2570,8 +2667,9 @@ async function startServer() {
     }
   });
 
-  app.get("/api/issues/counts", (req, res) => {
+  app.get("/api/issues/counts", async (req, res) => {
     try {
+      await ensureIssuesSeeded();
       const list = readLocalCollection('issues');
       const counts: Record<string, number> = { '전체': list.length };
 
@@ -2773,6 +2871,33 @@ async function startServer() {
   // ==========================================
   // SERVER-SIDE GEMINI API ROUTES
   // ==========================================
+  const sanitizePublicAiConfig = (rawCfg: any): Record<string, any> | undefined => {
+    if (!rawCfg || typeof rawCfg !== 'object' || Array.isArray(rawCfg)) return undefined;
+    const allowed: Record<string, any> = {};
+    if (typeof rawCfg.temperature === 'number' && Number.isFinite(rawCfg.temperature)) {
+      allowed.temperature = Math.min(2, Math.max(0, rawCfg.temperature));
+    }
+    if (typeof rawCfg.maxOutputTokens === 'number' && Number.isFinite(rawCfg.maxOutputTokens)) {
+      allowed.maxOutputTokens = Math.min(8192, Math.max(16, Math.floor(rawCfg.maxOutputTokens)));
+    }
+    if (typeof rawCfg.topP === 'number' && Number.isFinite(rawCfg.topP)) {
+      allowed.topP = Math.min(1, Math.max(0, rawCfg.topP));
+    }
+    if (typeof rawCfg.topK === 'number' && Number.isFinite(rawCfg.topK)) {
+      allowed.topK = Math.min(100, Math.max(1, Math.floor(rawCfg.topK)));
+    }
+    if (rawCfg.responseMimeType === 'application/json' || rawCfg.responseMimeType === 'text/plain') {
+      allowed.responseMimeType = rawCfg.responseMimeType;
+    }
+    if (rawCfg.responseSchema && typeof rawCfg.responseSchema === 'object') {
+      allowed.responseSchema = rawCfg.responseSchema;
+    }
+    if (typeof rawCfg.systemInstruction === 'string' && rawCfg.systemInstruction.length <= 8000) {
+      allowed.systemInstruction = rawCfg.systemInstruction;
+    }
+    return Object.keys(allowed).length > 0 ? allowed : undefined;
+  };
+
   app.post("/api/ai/generate", rateLimitPublicAi, async (req, res) => {
     const { prompt, contents, model, config, enableSearch, customApiKey } = req.body || {};
     const clientKey = customApiKey || (req.headers['x-gemini-api-key'] as string);
@@ -2792,10 +2917,10 @@ async function startServer() {
 
     try {
       const result = await executeServerGeminiCall(payload, { 
-        model, 
-        config, 
-        enableSearch,
-        customApiKey: clientKey 
+        model: typeof model === 'string' ? model : undefined, 
+        config: sanitizePublicAiConfig(config), 
+        enableSearch: Boolean(enableSearch),
+        customApiKey: typeof clientKey === 'string' ? clientKey : undefined 
       });
       res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
     } catch (err: any) {
@@ -2830,40 +2955,53 @@ async function startServer() {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
+    let clientClosed = false;
+    req.on("close", () => {
+      clientClosed = true;
+    });
+
+    const safeSseWrite = (chunk: string) => {
+      if (!clientClosed && !res.writableEnded) {
+        res.write(chunk);
+      }
+    };
+
     try {
       const { prompt, contents, model, config, enableSearch, customApiKey } = req.body || {};
       const clientKey = customApiKey || (req.headers['x-gemini-api-key'] as string);
       const payload = contents || prompt;
       if (!payload) {
-        res.write(`data: ${JSON.stringify({ error: "Prompt or contents payload is required" })}\n\n`);
-        res.write("data: [DONE]\n\n");
-        return res.end();
+        safeSseWrite(`data: ${JSON.stringify({ error: "Prompt or contents payload is required" })}\n\n`);
+        safeSseWrite("data: [DONE]\n\n");
+        if (!res.writableEnded) res.end();
+        return;
       }
       const payloadLen = typeof payload === 'string' ? payload.length : JSON.stringify(payload).length;
       if (payloadLen > 32000) {
-        res.write(`data: ${JSON.stringify({ error: "Prompt payload exceeds 32,000 character safety limit" })}\n\n`);
-        res.write("data: [DONE]\n\n");
-        return res.end();
+        safeSseWrite(`data: ${JSON.stringify({ error: "Prompt payload exceeds 32,000 character safety limit" })}\n\n`);
+        safeSseWrite("data: [DONE]\n\n");
+        if (!res.writableEnded) res.end();
+        return;
       }
 
       await executeServerGeminiCall(payload, {
-        model,
-        config,
-        enableSearch,
-        customApiKey: clientKey,
+        model: typeof model === 'string' ? model : undefined,
+        config: sanitizePublicAiConfig(config),
+        enableSearch: Boolean(enableSearch),
+        customApiKey: typeof clientKey === 'string' ? clientKey : undefined,
         stream: true,
         onChunk: (chunkText) => {
-          res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
+          safeSseWrite(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
         }
       });
 
-      res.write("data: [DONE]\n\n");
-      res.end();
+      safeSseWrite("data: [DONE]\n\n");
+      if (!res.writableEnded) res.end();
     } catch (err: any) {
       console.info("[API AI Stream Standby]:", getCleanErrorMessage(err));
-      res.write(`data: ${JSON.stringify({ text: "AI 서비스가 현재 대기 상태입니다. 가이드북 탭에서 관련 증상을 확인해 주세요." })}\n\n`);
-      res.write("data: [DONE]\n\n");
-      res.end();
+      safeSseWrite(`data: ${JSON.stringify({ text: "AI 서비스가 현재 대기 상태입니다. 가이드북 탭에서 관련 증상을 확인해 주세요." })}\n\n`);
+      safeSseWrite("data: [DONE]\n\n");
+      if (!res.writableEnded) res.end();
     }
   });
 
@@ -2876,9 +3014,16 @@ async function startServer() {
     try {
       if (targetPrompt) {
         const result = await executeServerGeminiCall(targetPrompt, {
-          model: model || undefined,
+          model: typeof model === 'string' ? model : undefined,
           enableSearch: true,
-          workloadType: 'heavy-grounded'
+          workloadType: 'heavy-grounded',
+          config: {
+            responseMimeType: 'application/json',
+            systemInstruction:
+              'You are a Windows 10/11 troubleshooting diagnostic assistant. Return a strictly valid JSON object with keys: ' +
+              '"title" (string), "diagnosis" (string), "isScriptApplicable" (boolean), "script" (string PowerShell or empty string), ' +
+              '"scriptSafetyWarning" (string), "manualSteps" (string[]), and "sources" (array of { "title": string, "url": string }).'
+          }
         });
         if (result && result.text) {
           return res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
@@ -2895,8 +3040,10 @@ async function startServer() {
 
   app.post("/api/ai/verify-issue", requireAdmin, async (req, res) => {
     try {
-      const { issue, prompt } = req.body;
-      const targetPrompt = prompt || `Review this Windows issue and verify its technical accuracy:\n${JSON.stringify(issue, null, 2)}`;
+      const { issue, prompt } = req.body || {};
+      const targetPrompt = (typeof prompt === 'string' && prompt.trim())
+        ? prompt
+        : `Review this Windows issue and verify its technical accuracy:\n${JSON.stringify(issue || {}, null, 2)}`;
       const result = await executeServerGeminiCall(targetPrompt, {
         workloadType: 'fast-diagnostic'
       });
@@ -2916,8 +3063,10 @@ async function startServer() {
 
   app.post("/api/ai/reclassify-chunk", requireAdmin, async (req, res) => {
     try {
-      const { issuesChunk, prompt } = req.body;
-      const targetPrompt = prompt || `Reclassify the following Windows troubleshooting issues with accuracy into standard categories and hardware component tags:\n${JSON.stringify(issuesChunk, null, 2)}`;
+      const { issuesChunk, prompt } = req.body || {};
+      const targetPrompt = (typeof prompt === 'string' && prompt.trim())
+        ? prompt
+        : `Reclassify the following Windows troubleshooting issues with accuracy into standard categories and hardware component tags:\n${JSON.stringify(issuesChunk || [], null, 2)}`;
       const result = await executeServerGeminiCall(targetPrompt, {
         workloadType: 'classification'
       });
@@ -2930,7 +3079,10 @@ async function startServer() {
 
   app.post("/api/ai/optimize-knowledge", requireAdmin, async (req, res) => {
     try {
-      const { prompt } = req.body;
+      const { prompt } = req.body || {};
+      if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+        return res.status(400).json({ success: false, error: "Optimization prompt is required" });
+      }
       const result = await executeServerGeminiCall(prompt, {
         workloadType: 'fast-diagnostic'
       });
@@ -2947,8 +3099,11 @@ async function startServer() {
 
   app.post("/api/ai/search-trends", requireAdmin, async (req, res) => {
     try {
-      const { prompt, batchSize } = req.body;
-      const targetPrompt = prompt || `Search for ${batchSize || 3} recent Windows 10/11 troubleshooting guides and issues. Return raw JSON array.`;
+      const { prompt, batchSize } = req.body || {};
+      const safeBatch = Math.min(Math.max(parseInt(String(batchSize || 3), 10) || 3, 1), 10);
+      const targetPrompt = (typeof prompt === 'string' && prompt.trim())
+        ? prompt
+        : `Search for ${safeBatch} recent Windows 10/11 troubleshooting guides and issues. Return raw JSON array.`;
       const result = await executeServerGeminiCall(targetPrompt, {
         enableSearch: true,
         workloadType: 'heavy-grounded'
@@ -3134,7 +3289,7 @@ async function startServer() {
       if (pruneExpiredCircuitBreakers(registry)) {
         saveAiModelRegistry(registry);
       }
-      const readiness = getProviderServerReadiness();
+      const readiness = getProviderServerReadiness(registry);
       res.json({
         success: true,
         registry,
@@ -3155,12 +3310,12 @@ async function startServer() {
       await logSyncEvent({
         type: 'info',
         source: 'ai-model-discovery',
-        message: `AI 카탈로그 실시간 탐색 완료 (Gemini ${discovery.geminiDiscoveredCount}종 · OpenRouter :free ${discovery.openrouterDiscoveredCount}종)`
+        message: `AI 카탈로그 실시간 탐색 완료 (Gemini ${discovery.geminiDiscoveredCount}종 · OpenRouter :free ${discovery.openrouterDiscoveredCount}종 · Pollinations 키리스 ${discovery.pollinationsDiscoveredCount}종)`
       });
       res.json({
         success: true,
         ...discovery,
-        readiness: getProviderServerReadiness()
+        readiness: getProviderServerReadiness(discovery.registry)
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -3169,18 +3324,24 @@ async function startServer() {
 
   app.post("/api/ai/resilience-config", requireAdmin, async (req, res) => {
     try {
-      const { routingPolicy, providerOrder, geminiModels } = req.body || {};
+      const { routingPolicy, providerOrder, geminiModels, keylessFallbackEnabled } = req.body || {};
       const registry = loadAiModelRegistry();
 
       if (routingPolicy === 'quota-split' || routingPolicy === 'gemini-first') {
         registry.routingPolicy = routingPolicy;
       }
 
-      const validProviders: ProviderId[] = ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'];
+      if (typeof keylessFallbackEnabled === 'boolean') {
+        registry.keylessFallbackEnabled = keylessFallbackEnabled;
+      }
+
+      const validProviders: ProviderId[] = ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'];
       if (Array.isArray(providerOrder) && providerOrder.length > 0) {
-        const filtered = providerOrder.filter((p: any): p is ProviderId => validProviders.includes(p));
+        const filtered = Array.from(new Set(providerOrder.filter((p: any): p is ProviderId => validProviders.includes(p))));
         const missing = validProviders.filter((p) => !filtered.includes(p));
-        registry.providerOrder = [...filtered, ...missing];
+        const combined = [...filtered, ...missing];
+        // Strictly pin keyless Pollinations at the very end as last-resort only
+        registry.providerOrder = [...combined.filter((p) => p !== 'pollinations'), 'pollinations'];
       }
 
       if (Array.isArray(geminiModels) && geminiModels.length > 0) {
@@ -3202,9 +3363,9 @@ async function startServer() {
       await logSyncEvent({
         type: 'info',
         source: 'ai-resilience-config',
-        message: `AI 라우팅 정책 업데이트 (${registry.routingPolicy}, 순서: ${registry.providerOrder.join(' -> ')})`
+        message: `AI 라우팅 정책 업데이트 (${registry.routingPolicy}, 키리스 폴백: ${registry.keylessFallbackEnabled ? 'ON' : 'OFF'}, 순서: ${registry.providerOrder.join(' -> ')})`
       });
-      res.json({ success: true, registry });
+      res.json({ success: true, registry, readiness: getProviderServerReadiness(registry) });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -3233,8 +3394,22 @@ async function startServer() {
       const probePrompt = 'Reply cleanly with OK.';
 
       if (provider && provider !== 'gemini') {
+        const validExternalProviders: Exclude<ProviderId, 'gemini'>[] = ['groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'];
+        if (typeof provider !== 'string' || !validExternalProviders.includes(provider as Exclude<ProviderId, 'gemini'>)) {
+          return res.status(400).json({ success: false, error: "Invalid AI provider specified." });
+        }
         const target = provider as Exclude<ProviderId, 'gemini'>;
-        const result = await callExternalFreeProvider(target, probePrompt, { maxTokens: 8 });
+        const sysCfg = readSystemConfigObject();
+        const savedKey = target === 'groq'
+          ? (typeof sysCfg.groqApiKey === 'string' ? sysCfg.groqApiKey : undefined)
+          : target === 'openrouter'
+            ? (typeof sysCfg.openrouterApiKey === 'string' ? sysCfg.openrouterApiKey : undefined)
+            : undefined;
+        const result = await callExternalFreeProvider(target, probePrompt, {
+          customKey: savedKey,
+          maxTokens: 8,
+          bypassEnabledCheck: target === 'pollinations'
+        });
         if (result && result.text) {
           recordRegistryUsage(target, result.modelUsed, false);
           return res.json({
@@ -3249,7 +3424,9 @@ async function startServer() {
           success: false,
           provider: target,
           latencyMs: Date.now() - started,
-          error: `${target.toUpperCase()} 서버 환경변수(Secret)가 미설정되었거나 호출에 실패했습니다.`
+          error: target === 'pollinations'
+            ? 'Pollinations 키리스 공용 엔드포인트 호출이 일시 실패했거나 응답 시간이 초과되었습니다.'
+            : `${target.toUpperCase()} 서버 환경변수(Secret) 또는 저장된 API 키가 미설정되었거나 호출에 실패했습니다.`
         });
       }
 
@@ -3525,15 +3702,18 @@ async function startServer() {
       }
 
       const safeVisitorId = visitorId.trim().slice(0, 120);
+      if (!/^[a-zA-Z0-9_\-:.]{3,120}$/.test(safeVisitorId)) {
+        return res.status(400).json({ success: false, error: "Invalid visitorId format" });
+      }
       const safeUserId = typeof userId === 'string' ? userId.trim().slice(0, 120) : null;
       const safeUserEmail = typeof userEmail === 'string' ? userEmail.trim().slice(0, 160) : null;
       const safeActiveTab = typeof activeTab === 'string' && activeTab.trim() ? activeTab.trim().slice(0, 40) : 'guidebook';
       const safeEntryUrl = typeof entryUrl === 'string' && entryUrl.trim() ? entryUrl.trim().slice(0, 200) : '/';
 
-      const ua = (req.headers["user-agent"] as string) || "";
+      const ua = String(req.headers["user-agent"] || "").slice(0, 512);
       const rawIp = (req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1";
-      const ip = rawIp.split(',')[0].trim();
-      const language = (req.headers["accept-language"] as string)?.split(",")[0] || "ko-KR";
+      const ip = rawIp.split(',')[0].trim().slice(0, 64);
+      const language = String(req.headers["accept-language"] || "").split(",")[0].slice(0, 32) || "ko-KR";
       const { os, browser, deviceType } = parseUserAgent(ua);
 
       const logs = readLocalCollection("logs_visitor");
@@ -3596,7 +3776,7 @@ async function startServer() {
           // Record security warning in admin log
           addLocalLog("logs_admin", {
             action: 'autoblock',
-            target: visitorId,
+            target: safeVisitorId,
             details: `[비정상 방문자 자동 차단] IP: ${ip} | ${abnormalCheck.reason}`,
             severity: 'warning',
             timestamp: now,
@@ -3623,7 +3803,6 @@ async function startServer() {
 
       res.json({
         success: true,
-        record: currentRecord,
         isBlocked: !!currentRecord.isBlocked,
         blockReason: currentRecord.blockReason || "",
         stats: {
@@ -3653,7 +3832,10 @@ async function startServer() {
 
   app.post("/api/visitor/autoblock-settings", requireAdmin, (req, res) => {
     try {
-      const newSettings = req.body;
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+        return res.status(400).json({ success: false, error: "Invalid autoblock settings payload." });
+      }
+      const newSettings = sanitizePlainObject(req.body) || {};
       const settings = { ...getAutoBlockSettings(), ...newSettings };
       writeLocalCollection("autoblock_settings", [settings]);
 
@@ -4040,7 +4222,8 @@ async function startServer() {
         return res.status(404).json({ success: false, error: "해당 사용자를 찾을 수 없습니다." });
       }
 
-      if (targetUser.role === 'admin' && getAdminEmailList().includes(targetUser.email)) {
+      const normalizedTargetEmail = String(targetUser.email || '').toLowerCase().trim();
+      if (targetUser.role === 'admin' && normalizedTargetEmail && getAdminEmailList().includes(normalizedTargetEmail)) {
         return res.status(403).json({ success: false, error: "시스템 최고 관리자 계정은 삭제할 수 없습니다." });
       }
 
@@ -4151,7 +4334,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/logs/summary", requireAdmin, (req, res) => {
+  app.get("/api/logs/summary", requireAdmin, async (req, res) => {
     try {
       const logDefs = [
         { type: 'admin', labelKo: '관리자 활동 로그', labelEn: 'Admin Activity Logs', icon: 'ShieldCheck', color: 'purple' },
@@ -4196,6 +4379,11 @@ async function startServer() {
         };
       });
 
+      const maintSettings = await getMaintenanceSettings();
+      const retentionMonths = Number.isFinite(Number(maintSettings?.cleanupMonths))
+        ? Math.max(0, Number(maintSettings.cleanupMonths))
+        : 1;
+
       res.json({
         success: true,
         summary,
@@ -4204,7 +4392,7 @@ async function startServer() {
           ? `${(totalSizeBytes / (1024 * 1024)).toFixed(2)} MB` 
           : `${(totalSizeBytes / 1024).toFixed(1)} KB`,
         totalCount,
-        retentionMonths: getAutoBlockSettings() ? 1 : 1
+        retentionMonths
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -4485,6 +4673,28 @@ async function startServer() {
     }
   });
 
+  const sanitizeRestoreObject = (item: any): Record<string, any> | null => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const clean: Record<string, any> = {};
+    for (const [k, v] of Object.entries(item)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      clean[k] = v;
+    }
+    return clean;
+  };
+
+  const restoreConfigPreservingRedactedSecrets = (colName: string, docs: Record<string, any>) => {
+    const cleanIncoming = sanitizeRestoreObject(docs);
+    if (!cleanIncoming) return;
+    const existingCfg = colName === 'system_config' ? readSystemConfigObject() : readLocalConfigObject(colName);
+    for (const [k, v] of Object.entries(cleanIncoming)) {
+      if (v === '[REDACTED_FOR_BACKUP]' && existingCfg[k] !== undefined) {
+        cleanIncoming[k] = existingCfg[k];
+      }
+    }
+    writeJsonFileAtomic(getJsonFilePath(colName), cleanIncoming);
+  };
+
   app.post("/api/admin/last-known-good/restore-snapshot", requireAdmin, async (req, res) => {
     try {
       const { filename } = req.body;
@@ -4517,12 +4727,13 @@ async function startServer() {
         if (!allowedCols.has(colName)) continue;
         const docs = snapshotData[colName];
         if (objectCols.has(colName) && docs && typeof docs === 'object' && !Array.isArray(docs)) {
-          fs.writeFileSync(getJsonFilePath(colName), JSON.stringify(docs, null, 2), 'utf8');
+          restoreConfigPreservingRedactedSecrets(colName, docs);
           restoredRecordsCount += 1;
           if (colName === 'maintenance_config') maintenanceRestored = true;
         } else if (Array.isArray(docs)) {
-          writeLocalCollection(colName, docs);
-          restoredRecordsCount += docs.length;
+          const safeDocs = docs.map(sanitizeRestoreObject).filter((d): d is Record<string, any> => d !== null);
+          writeLocalCollection(colName, safeDocs);
+          restoredRecordsCount += safeDocs.length;
         }
       }
       if (maintenanceRestored) {
@@ -4571,12 +4782,13 @@ async function startServer() {
         if (!allowedCols.has(colName)) continue;
         const docs = snapshotData[colName];
         if (objectCols.has(colName) && docs && typeof docs === 'object' && !Array.isArray(docs)) {
-          fs.writeFileSync(getJsonFilePath(colName), JSON.stringify(docs, null, 2), 'utf8');
+          restoreConfigPreservingRedactedSecrets(colName, docs);
           restoredRecordsCount += 1;
           if (colName === 'maintenance_config') maintenanceRestored = true;
         } else if (Array.isArray(docs)) {
-          writeLocalCollection(colName, docs);
-          restoredRecordsCount += docs.length;
+          const safeDocs = docs.map(sanitizeRestoreObject).filter((d): d is Record<string, any> => d !== null);
+          writeLocalCollection(colName, safeDocs);
+          restoredRecordsCount += safeDocs.length;
         }
       }
       if (maintenanceRestored) {
@@ -4639,8 +4851,9 @@ async function startServer() {
           if (!safeCol || !allowedRestoreCols.has(safeCol)) continue;
 
           if (safeCol === 'issues') {
-            const validation = validateKnownIssuesData(colItems);
-            const validRecords = validation.validRecords.length > 0 ? validation.validRecords : colItems;
+            const safeIssueInputs = colItems.map(sanitizeRestoreObject).filter((d): d is Record<string, any> => d !== null);
+            const validation = validateKnownIssuesData(safeIssueInputs);
+            const validRecords = validation.validRecords.length > 0 ? validation.validRecords : safeIssueInputs;
             let currentIssues = effectiveStrategy === 'overwrite' ? [] : readLocalCollection('issues');
 
             if (effectiveStrategy === 'overwrite') {
@@ -4684,12 +4897,13 @@ async function startServer() {
               totalCount += (resMerge.added + resMerge.updated);
             }
           } else {
+            const safeColItems = colItems.map(sanitizeRestoreObject).filter((d): d is Record<string, any> => d !== null);
             let currentList = effectiveStrategy === 'overwrite' ? [] : readLocalCollection(safeCol);
             if (effectiveStrategy === 'overwrite') {
-              currentList = colItems;
+              currentList = safeColItems;
             } else if (effectiveStrategy === 'skip_existing') {
-              const existingKeys = new Set(currentList.map((item: any) => item.id || item.code || JSON.stringify(item)));
-              for (const newItem of colItems) {
+              const existingKeys = new Set(currentList.map((item: any) => item?.id || item?.code || JSON.stringify(item)));
+              for (const newItem of safeColItems) {
                 const key = newItem.id || newItem.code || JSON.stringify(newItem);
                 if (!existingKeys.has(key)) {
                   currentList.push({ ...newItem, updatedAt: getKSTISOString() });
@@ -4698,8 +4912,8 @@ async function startServer() {
               }
             } else {
               // merge
-              const existingMap = new Map(currentList.map((item: any) => [item.id || item.code || JSON.stringify(item), item]));
-              for (const newItem of colItems) {
+              const existingMap = new Map(currentList.map((item: any) => [item?.id || item?.code || JSON.stringify(item), item]));
+              for (const newItem of safeColItems) {
                 const key = newItem.id || newItem.code || JSON.stringify(newItem);
                 existingMap.set(key, { ...existingMap.get(key), ...newItem, updatedAt: getKSTISOString() });
               }
@@ -4707,7 +4921,7 @@ async function startServer() {
             }
             writeLocalCollection(safeCol, currentList);
             restoredSummary[safeCol] = { total: currentList.length, strategy: effectiveStrategy };
-            totalCount += colItems.length;
+            totalCount += safeColItems.length;
           }
         }
 
@@ -4734,8 +4948,10 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "Invalid or unsupported restore collection name." });
       }
 
+      const safeDataItems = data.map(sanitizeRestoreObject).filter((d): d is Record<string, any> => d !== null);
+
       if (safeCollectionName === 'issues') {
-        const validation = validateKnownIssuesData(data);
+        const validation = validateKnownIssuesData(safeDataItems);
         if (!validation.isValid && req.body.strictValidation) {
           return res.status(400).json({
             success: false,
@@ -4749,7 +4965,7 @@ async function startServer() {
           });
         }
 
-        const validRecordsToSave = validation.validRecords.length > 0 ? validation.validRecords : data;
+        const validRecordsToSave = validation.validRecords.length > 0 ? validation.validRecords : safeDataItems;
 
         if (effectiveStrategy === 'overwrite') {
           writeLocalCollection('issues', validRecordsToSave);
@@ -4828,7 +5044,7 @@ async function startServer() {
         await logSyncEvent({
           type: 'info',
           source: 'adminRestore',
-          message: `온라인 백업 자료로 로컬 이슈 DB 복구/업데이트 완료 (입력: ${data.length}개, 유효: ${validation.validCount}개, 신규: ${result.added}, 수정: ${result.updated})`
+          message: `온라인 백업 자료로 로컬 이슈 DB 복구/업데이트 완료 (입력: ${safeDataItems.length}개, 유효: ${validation.validCount}개, 신규: ${result.added}, 수정: ${result.updated})`
         });
         return res.json({
           success: true,
@@ -4847,15 +5063,15 @@ async function startServer() {
 
       let currentList = effectiveStrategy === 'overwrite' ? [] : readLocalCollection(safeCollectionName);
       if (effectiveStrategy === 'merge') {
-        const existingMap = new Map(currentList.map((item: any) => [item.id || item.code || JSON.stringify(item), item]));
-        for (const newItem of data) {
+        const existingMap = new Map(currentList.map((item: any) => [item?.id || item?.code || JSON.stringify(item), item]));
+        for (const newItem of safeDataItems) {
           const key = newItem.id || newItem.code || JSON.stringify(newItem);
           existingMap.set(key, { ...existingMap.get(key), ...newItem, updatedAt: getKSTISOString() });
         }
         currentList = Array.from(existingMap.values());
       } else if (effectiveStrategy === 'skip_existing') {
-        const existingKeys = new Set(currentList.map((item: any) => item.id || item.code || JSON.stringify(item)));
-        for (const newItem of data) {
+        const existingKeys = new Set(currentList.map((item: any) => item?.id || item?.code || JSON.stringify(item)));
+        for (const newItem of safeDataItems) {
           const key = newItem.id || newItem.code || JSON.stringify(newItem);
           if (!existingKeys.has(key)) {
             currentList.push({ ...newItem, updatedAt: getKSTISOString() });
@@ -4863,7 +5079,7 @@ async function startServer() {
           }
         }
       } else {
-        currentList = data;
+        currentList = safeDataItems;
       }
 
       writeLocalCollection(safeCollectionName, currentList);
@@ -5192,9 +5408,15 @@ async function startServer() {
         enableAlerts: settings.enableAlerts !== undefined ? Boolean(settings.enableAlerts) : (existingMaint.enableAlerts ?? true),
         alertOnApiExhaustion: settings.alertOnApiExhaustion !== undefined ? Boolean(settings.alertOnApiExhaustion) : (existingMaint.alertOnApiExhaustion ?? true),
         alertOnTimeout: settings.alertOnTimeout !== undefined ? Boolean(settings.alertOnTimeout) : (existingMaint.alertOnTimeout ?? true),
-        consecutiveFailuresLimit: settings.consecutiveFailuresLimit !== undefined ? (parseInt(settings.consecutiveFailuresLimit, 10) || 3) : (existingMaint.consecutiveFailuresLimit ?? 3),
+        consecutiveFailuresLimit: (() => {
+          const parsed = settings.consecutiveFailuresLimit !== undefined ? parseInt(settings.consecutiveFailuresLimit, 10) : (existingMaint.consecutiveFailuresLimit ?? 3);
+          return Number.isFinite(parsed) ? Math.min(20, Math.max(1, parsed)) : 3;
+        })(),
         smtpHost: settings.smtpHost !== undefined ? String(settings.smtpHost).trim() : (existingMaint.smtpHost ?? ""),
-        smtpPort: settings.smtpPort !== undefined ? (parseInt(settings.smtpPort, 10) || 587) : (existingMaint.smtpPort ?? 587),
+        smtpPort: (() => {
+          const parsed = settings.smtpPort !== undefined ? parseInt(settings.smtpPort, 10) : (existingMaint.smtpPort ?? 587);
+          return Number.isFinite(parsed) ? Math.min(65535, Math.max(1, parsed)) : 587;
+        })(),
         smtpUser: settings.smtpUser !== undefined ? String(settings.smtpUser).trim() : (existingMaint.smtpUser ?? ""),
         smtpPass: resolvedSmtpPass,
         adsenseClientId: settings.adsenseClientId !== undefined ? String(settings.adsenseClientId).trim() : (existingMaint.adsenseClientId ?? ""),
@@ -5204,9 +5426,9 @@ async function startServer() {
         updatedAt: getKSTISOString()
       };
 
-      // 1. Write to local maintenance_config.json
-      const localPath = path.join(process.cwd(), 'data', 'maintenance_config.json');
-      fs.writeFileSync(localPath, JSON.stringify(cleanSettings, null, 2), 'utf8');
+      // 1. Write to local maintenance_config.json atomically (ensuring DATA_DIR exists)
+      const localPath = path.join(DATA_DIR, 'maintenance_config.json');
+      writeJsonFileAtomic(localPath, cleanSettings);
 
       // 2. Safely merge into system_config.json without wiping groqApiKey/openrouterApiKey/stagingAutomationConfig
       writeSystemConfigObject(cleanSettings);
@@ -5244,10 +5466,28 @@ async function startServer() {
   app.post("/api/settings/api-keys", requireAdmin, async (req, res) => {
     try {
       const config = req.body;
-      if (config && Array.isArray(config.keys)) {
-        const localPath = path.join(process.cwd(), 'data', 'api_keys_config.json');
-        fs.writeFileSync(localPath, JSON.stringify(config, null, 2), 'utf8');
+      if (!config || typeof config !== 'object' || Array.isArray(config) || !Array.isArray(config.keys)) {
+        return res.status(400).json({ success: false, error: "Invalid api-keys config payload" });
       }
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      const sanitizedKeys = config.keys
+        .slice(0, 50)
+        .filter((k: any) => k && typeof k === 'object' && typeof k.key === 'string')
+        .map((k: any, idx: number) => ({
+          id: typeof k.id === 'string' ? k.id.slice(0, 64) : `key-${idx + 1}`,
+          name: typeof k.name === 'string' ? k.name.slice(0, 80) : `API Key ${idx + 1}`,
+          key: k.key.trim().slice(0, 256),
+          isActive: k.isActive !== false,
+          isCustom: Boolean(k.isCustom)
+        }));
+      const cleanConfig = {
+        keys: sanitizedKeys,
+        updatedAt: getKSTISOString()
+      };
+      const localPath = path.join(DATA_DIR, 'api_keys_config.json');
+      writeJsonFileAtomic(localPath, cleanConfig);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -5337,12 +5577,21 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "No valid issues array (1..500 items) provided in payload." });
       }
 
-      console.log(`[GitHub Webhook] Received ${incomingIssues.length} issues from GitHub Actions`);
-      
-      const issuesWithSource = incomingIssues.map(item => ({
-        ...item,
-        source: item.source || "GitHub Actions Autonomous Collector"
-      }));
+      const issuesWithSource = incomingIssues
+        .map((item) => sanitizePlainObject(item))
+        .filter((item): item is Record<string, any> => item !== null)
+        .map((item) => ({
+          ...item,
+          source: typeof item.source === 'string' && item.source.trim()
+            ? item.source
+            : "GitHub Actions Autonomous Collector"
+        }));
+
+      if (issuesWithSource.length === 0) {
+        return res.status(400).json({ success: false, error: "No valid issue objects provided in payload." });
+      }
+
+      console.log(`[GitHub Webhook] Received ${issuesWithSource.length} issues from GitHub Actions`);
 
       const syncResult = await saveIssuesToServer(issuesWithSource);
       
@@ -5435,8 +5684,8 @@ async function startServer() {
     }
   });
 
-  // 1-2. Automatic GitHub-to-Main Dataset Integration endpoint (cooldown-guarded)
-  app.post("/api/github/auto-integrate", async (req, res) => {
+  // 1-2. Automatic GitHub-to-Main Dataset Integration endpoint (cooldown + rate-limit guarded)
+  app.post("/api/github/auto-integrate", rateLimitAutoIntegrate, async (req, res) => {
     try {
       const requestedForce = Boolean(req.body?.force);
       const force = requestedForce && verifyAdminAuthHeader(req.headers.authorization).ok;
@@ -5471,13 +5720,14 @@ async function startServer() {
         'User-Agent': 'WindowsFixWizard-App'
       };
       
-      const authToken = token || process.env.GITHUB_TOKEN;
+      const ghConfigSaved = readLocalCollection('github_config')[0] || {};
+      const authToken = token || ghConfigSaved.token || process.env.GITHUB_TOKEN;
       if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
       let parsed: any[] = [];
-      const response = await fetch(rawUrl, { headers });
+      const response = await fetch(rawUrl, { headers, signal: AbortSignal.timeout(15000) });
 
       if (response.ok) {
         const text = await response.text();
@@ -5486,6 +5736,7 @@ async function startServer() {
         // Fallback to GitHub Contents API
         const apiUrl = `https://api.github.com/repos/${cleanRepo}/contents/${cleanPath}?ref=${encodeURIComponent(targetBranch)}`;
         const apiRes = await fetch(apiUrl, {
+          signal: AbortSignal.timeout(15000),
           headers: {
             ...headers,
             'Accept': 'application/vnd.github.v3.raw'
@@ -5508,7 +5759,7 @@ async function startServer() {
       try {
         const ghConfig = readLocalCollection('github_config')[0] || {};
         ghConfig.repo = cleanRepo;
-        ghConfig.branch = branch;
+        ghConfig.branch = targetBranch;
         ghConfig.lastSyncAt = getKSTISOString();
         ghConfig.lastSyncCount = parsed.length;
         ghConfig.lastSyncStatus = `Manual Pull: +${syncResult.added} new, ~${syncResult.updated} updated`;
@@ -5925,11 +6176,15 @@ async function startServer() {
   const sanitizeCollectorOptions = (input: any) => {
     const current = loadCollectorOptions();
     const cronExpr = typeof input.scheduleCron === 'string' && input.scheduleCron.trim()
-      ? input.scheduleCron.trim()
+      ? input.scheduleCron.trim().replace(/\s+/g, ' ')
       : current.scheduleCron;
 
-    if (!cron.validate(cronExpr)) {
-      throw new Error(`유효하지 않은 Cron 스케줄 표현식입니다: "${cronExpr}" (예: "0 */6 * * *")`);
+    if (
+      /[\r\n'"]/.test(cronExpr) ||
+      cronExpr.split(' ').length !== 5 ||
+      !cron.validate(cronExpr)
+    ) {
+      throw new Error(`유효하지 않은 5필드 POSIX Cron 스케줄 표현식입니다: "${cronExpr}" (예: "0 */6 * * *")`);
     }
 
     const batchParsed = parseInt(String(input.batchSize ?? current.batchSize), 10);
@@ -5979,13 +6234,21 @@ async function startServer() {
   };
 
   const buildCollectorWorkflowYamlFromOptions = (opts: any) => {
-    const defaultTopic = opts.topicMode === 'fixed' && opts.fixedTopic ? opts.fixedTopic : 'all';
+    const sanitizeYamlScalar = (val: unknown, fallback: string) => {
+      const cleaned = String(val ?? fallback).replace(/[\r\n'"]/g, '').trim();
+      return cleaned || fallback;
+    };
+    const safeCron = sanitizeYamlScalar(opts.scheduleCron, '0 */6 * * *');
+    const defaultTopic = opts.topicMode === 'fixed' && opts.fixedTopic
+      ? sanitizeYamlScalar(opts.fixedTopic, 'all')
+      : 'all';
+    const safeModelPref = sanitizeYamlScalar(opts.modelPreference, 'auto');
     return `name: Windows Fix Autonomous Collector & GitOps Sync
 
 on:
-  # Automated scheduled run (Configured via Admin GitOps Options: ${opts.scheduleCron} UTC)
+  # Automated scheduled run (Configured via Admin GitOps Options: ${safeCron} UTC)
   schedule:
-    - cron: '${opts.scheduleCron}'
+    - cron: '${safeCron}'
 
   # Manual execution trigger from GitHub Web UI or API dispatch
   workflow_dispatch:
@@ -6012,7 +6275,7 @@ on:
       model_preference:
         description: 'Preferred Gemini AI Model (auto or model ID)'
         required: false
-        default: '${opts.modelPreference || 'auto'}'
+        default: '${safeModelPref}'
       target_windows:
         description: 'Comma-separated Windows versions'
         required: false
@@ -6119,7 +6382,7 @@ jobs:
   app.post("/api/github/collector-options", requireAdmin, async (req, res) => {
     try {
       const cleanOptions = sanitizeCollectorOptions(req.body || {});
-      fs.writeFileSync(getCollectorOptionsPath(), JSON.stringify(cleanOptions, null, 2), 'utf8');
+      writeJsonFileAtomic(getCollectorOptionsPath(), cleanOptions);
 
       // Synchronize engineBatchSize to system_config.json & maintenance_config.json, and autoDeployPages to github_config
       try {
@@ -6132,7 +6395,7 @@ jobs:
           const parsedMaint = JSON.parse(fs.readFileSync(maintPath, 'utf8'));
           parsedMaint.engineBatchSize = cleanOptions.batchSize;
           parsedMaint.updatedAt = cleanOptions.updatedAt;
-          fs.writeFileSync(maintPath, JSON.stringify(parsedMaint, null, 2), 'utf8');
+          writeJsonFileAtomic(maintPath, parsedMaint);
         }
         const ghConfig = readLocalCollection('github_config')[0] || {};
         ghConfig.autoDeployPages = cleanOptions.autoDeployPages;
@@ -6175,7 +6438,7 @@ jobs:
       }
 
       const cleanOptions = sanitizeCollectorOptions(incomingOpts || loadCollectorOptions());
-      fs.writeFileSync(getCollectorOptionsPath(), JSON.stringify(cleanOptions, null, 2), 'utf8');
+      writeJsonFileAtomic(getCollectorOptionsPath(), cleanOptions);
 
       // Also sync local workflow file
       const workflowYaml = buildCollectorWorkflowYamlFromOptions(cleanOptions);
@@ -6196,7 +6459,7 @@ jobs:
       const upsertGithubFile = async (filePath: string, contentStr: string, commitMessage: string) => {
         const getUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`;
         let sha: string | undefined;
-        const getRes = await fetch(getUrl, { headers });
+        const getRes = await fetch(getUrl, { headers, signal: (AbortSignal as any).timeout(15000) });
         if (getRes.status === 401) {
           throw new Error("GitHub 인증 실패 (401): PAT 토큰('repo', 'workflow' 권한)을 확인하세요.");
         }
@@ -6212,7 +6475,8 @@ jobs:
             content: Buffer.from(contentStr, 'utf8').toString('base64'),
             branch: targetBranch,
             ...(sha ? { sha } : {})
-          })
+          }),
+          signal: (AbortSignal as any).timeout(15000)
         });
         if (!putRes.ok) {
           const errText = await putRes.text();
@@ -6255,22 +6519,29 @@ jobs:
   });
 
   // 6. Real-time GitHub Releases update check system
-  let cachedReleaseData: any = null;
-  let cachedReleaseTime = 0;
+  const releaseCacheByRepo = new Map<string, { response: any; cachedAt: number }>();
 
   app.get("/api/github/check-update", async (req, res) => {
     try {
       const ghConfig = readLocalCollection('github_config')[0] || {};
-      const targetRepo = ((req.query.repo as string) || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const configuredRepo = (ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetRepo = (typeof req.query.repo === 'string' && req.query.repo.trim()
+        ? req.query.repo.trim()
+        : configuredRepo);
       if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
       }
+      const isAdminCaller = verifyAdminAuthHeader(req.headers.authorization).ok;
       const token = ghConfig.token || process.env.GITHUB_TOKEN || "";
+      // Only attach configured admin GitHub PAT for the configured repo or verified admin requests
+      const canUseToken = Boolean(token) && (isAdminCaller || targetRepo.toLowerCase() === configuredRepo.toLowerCase());
+      const cacheKey = `${targetRepo.toLowerCase()}:${canUseToken ? 'auth' : 'pub'}`;
       const now = Date.now();
 
-      // Cache for 5 minutes to prevent hitting GitHub rate limits
-      if (cachedReleaseData && (now - cachedReleaseTime < 5 * 60 * 1000) && cachedReleaseData.repo === targetRepo) {
-        return res.json(cachedReleaseData.response);
+      // Cache for 5 minutes per (repo, auth-scope) to prevent rate-limit exhaustion and cross-repo thrashing
+      const cachedEntry = releaseCacheByRepo.get(cacheKey);
+      if (cachedEntry && (now - cachedEntry.cachedAt < 5 * 60 * 1000)) {
+        return res.json(cachedEntry.response);
       }
 
       const currentVersion = getAppVersion();
@@ -6279,12 +6550,12 @@ jobs:
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'WindowsFixWizard-App'
       };
-      if (token) {
+      if (canUseToken) {
         headers['Authorization'] = `token ${token}`;
       }
 
       const apiUrl = `https://api.github.com/repos/${targetRepo}/releases/latest`;
-      const response = await fetch(apiUrl, { headers });
+      const response = await fetch(apiUrl, { headers, signal: (AbortSignal as any).timeout(8000) });
 
       if (!response.ok) {
         const fallbackData = {
@@ -6351,8 +6622,11 @@ jobs:
         pagesUrl: "https://ahbiyout-all.github.io/windows-fix-wizard/"
       };
 
-      cachedReleaseData = { repo: targetRepo, response: responsePayload };
-      cachedReleaseTime = now;
+      if (releaseCacheByRepo.size >= 20) {
+        const oldestKey = releaseCacheByRepo.keys().next().value;
+        if (oldestKey) releaseCacheByRepo.delete(oldestKey);
+      }
+      releaseCacheByRepo.set(cacheKey, { response: responsePayload, cachedAt: now });
 
       res.json(responsePayload);
     } catch (err: any) {
@@ -6670,19 +6944,39 @@ jobs:
     res.status(404).json({ success: false, error: `Route ${req.method} ${req.url} not found` });
   });
 
-  // Vite middleware for development (initialized asynchronously so port 3000 binds immediately)
-  if (process.env.NODE_ENV !== "production") {
-    const vitePromise = createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    }).catch((err) => {
-      console.error("Failed to initialize Vite dev server:", err);
-      throw err;
-    });
+  let serverRef: http.Server | null = null;
+  let vitePromise: Promise<ViteDevServer> | null = null;
 
+  const getViteServer = (): Promise<ViteDevServer> => {
+    if (!vitePromise) {
+      vitePromise = (async () => {
+        const { createServer: createViteServer } = await import("vite");
+        return createViteServer({
+          server: {
+            middlewareMode: true,
+            hmr:
+              process.env.DISABLE_HMR === "true"
+                ? false
+                : serverRef
+                  ? { server: serverRef }
+                  : undefined,
+          },
+          appType: "spa",
+        });
+      })().catch((err) => {
+        console.error("Failed to initialize Vite dev server:", err);
+        vitePromise = null;
+        throw err;
+      });
+    }
+    return vitePromise;
+  };
+
+  // Vite middleware for development (lazy-loaded after port 3000 binds so dev readiness checks succeed immediately)
+  if (process.env.NODE_ENV !== "production") {
     app.use(async (req, res, next) => {
       try {
-        const vite = await vitePromise;
+        const vite = await getViteServer();
         vite.middlewares(req, res, next);
       } catch (err) {
         next(err);
@@ -6696,11 +6990,24 @@ jobs:
     });
   }
 
-  await ensureIssuesSeeded();
-
-  app.listen(PORT, "0.0.0.0", () => {
+  serverRef = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    setImmediate(() => {
+      void ensureIssuesSeeded();
+      initializeBackgroundSchedulers();
+      if (process.env.NODE_ENV !== "production") {
+        void getViteServer().catch(() => {});
+      }
+    });
+  });
+
+  serverRef.on("error", (err: any) => {
+    console.error(`[SERVER] Failed to bind 0.0.0.0:${PORT}:`, err?.message || err);
+    process.exit(1);
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("[SERVER] Fatal startup error:", err);
+  process.exit(1);
+});

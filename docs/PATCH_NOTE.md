@@ -1,6 +1,158 @@
-# Patch Note - System Update (v3.105.11)
+# Patch Note - System Update (v3.106.7)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.7] - 2026-11-19
+
+### 🔧 Bug Fixes & Runtime/Stability Hardening (14차 심층 자아성찰 및 비동기·다운로드·AI 라우터 정밀 보완)
+- **Pollinations HTML 오류 페이지 오인 차단 및 AI 모델 레지스트리 방어 강화 (`lib/ai-resilience-router.ts`)**:
+  - `callExternalFreeProvider()`의 `pollinations` 분기가 프록시/게이트웨이 HTML 응답(`<!DOCTYPE html>`, `text/html`)을 일반 텍스트 완료 응답으로 수용하던 결함을 차단하고, JSON 파싱 성공 후 본문이 비어 있는 오류 객체도 거부하도록 수정.
+  - `loadAiModelRegistry()` 내 `geminiModels`/`openrouterFreeModels`/`pollinationsModels` 요소 타입·`null` 검증을 추가해 손상된 레지스트리로 인한 런타임 `TypeError`를 방지하고, `cloudflare` 모델 경로 세그먼트 문자 검증을 적용.
+- **대시보드 업타임 타이머 스래싱·`NaN` 타임스탬프 및 차트 널 가드 수정 (`src/components/DashboardWidget.tsx`, `src/components/LibraryAnalyticsChart.tsx`)**:
+  - `DashboardWidget`에서 `telemetry.engineStartTime` 미수신 시 렌더마다 `new Date().toISOString()`이 재생성되어 매초 업타임 인터벌을 파괴·재생성하던 문제를 `useRef` 고정 폴백으로 해결하고, `realTrendsData`/`last24HoursData`에 `Number.isFinite` 날짜 검증을 추가.
+  - `LibraryAnalyticsChart`의 `userActivity` 순회 및 `CustomTooltip`에 비객체/`null` 가드를 추가.
+- **프론트엔드 파일 다운로드 조기 해제·샌드박스 서비스 상태·언마운트 누수 일괄 보완 (`src/App.tsx`, `src/utils/logArchiveManager.ts`, `src/components/SystemRestoreUtility.tsx`, `src/components/PowerShellSandbox.tsx`, `src/components/SystemEventLogPanel.tsx`, `src/components/GitHubPagesDeployDoc.tsx`, `src/components/MemberManagementPanel.tsx`, `src/components/SystemInfoWidget.tsx`)**:
+  - 브라우저 Blob 다운로드 직후 동기 `URL.revokeObjectURL()` 호출로 인해 대용량 백업/스냅샷/ZIP/YAML/`.ps1`/`.log` 다운로드가 간헐적으로 절단·실패할 수 있던 13개 지점에 `1000ms` 지연 해제를 적용.
+  - `PowerShellSandbox` 일괄 실행 시 `Stop-Service`/`Start-Service` 직후 같은 스크립트 내 `Get-Service`가 최신 서비스 상태를 즉시 참조하도록 `servicesRef` 동기화를 추가하고, `localStorage` 버전 이력 요소 스키마·날짜를 검증.
+  - `SystemEventLogPanel`의 JSON 로그 불러오기/CSV 내보내기/검색에서 비문자열·`null` 입력과 잘못된 `TimeCreated` 크래시를 방어하고, 전 감사 대상 컴포넌트에 `isMountedRef` 및 타이머 정리를 추가.
+- **서버 원자적 LKG 스냅샷 쓰기 및 설정 범위 검증·버전 동기화 (`server.ts`, `package.json`, `src/App.tsx`, `src/components/QuickSystemScanUtility.tsx`, `docs/PATCH_NOTE.md`)**:
+  - `createLastKnownGoodBackupSync()`의 `last_known_good.json` 및 타임스탬프 스냅샷 저장을 `writeJsonFileAtomic()`으로 전환해 예기치 않은 중단 시 부분 쓰기 손상을 방지.
+  - `DELETE /api/admin/users/:id`의 최고 관리자 보호 이메일 비교를 소문자·트림 정규화하고, `POST /api/settings/maintenance`의 `smtpPort`(`1..65535`) 및 `consecutiveFailuresLimit`(`1..20`) 범위를 클램핑하며, 전 모듈 버전을 `v3.106.7`로 동기화.
+
+---
+
+## [v3.106.6] - 2026-11-19
+
+### 🔧 Bug Fixes & Runtime/Persistence Hardening (13차 심층 자아성찰 및 비동기·YAML·IndexedDB 정밀 보완)
+- **GitHub Actions 대시보드 `NaN` 소요 시간 전파 및 타이머 누수 수정 (`src/components/DeploymentDashboardWidget.tsx`, `src/components/GitHubWorkflowStatus.tsx`)**:
+  - 대기 중(`queued`) 또는 타임스탬프 누락 워크플로 실행 데이터 수신 시 `NaN` 소요 시간이 `NaNs` 및 평균/최단 지표 전체로 전파되던 문제를 `Number.isFinite` 검증으로 해결.
+  - `GitHubWorkflowStatus`의 `dispatch`/토스트 타이머 언마운트 누수 정리 및 URL 경로 세그먼트 `encodeURIComponent` 적용.
+- **IndexedDB 트랜잭션 커밋 보장 및 연결 핸들 재사용 (`src/utils/idbStorage.ts`)**:
+  - `idbSet`/`idbRemove`가 트랜잭션 `oncomplete` 이전에 조기 완료되던 문제와 매 호출마다 DB 핸들을 새로 열고 닫지 않던 문제를 단일 연결 캐싱 및 `tx.oncomplete` 대기로 개선.
+- **프론트엔드 진단 패널 클로저·인증키 파싱 방어 (`src/components/InteractiveRoadmap.tsx`, `src/App.tsx`, `src/components/QuickSystemScanUtility.tsx`)**:
+  - `uwes-set-validator-script` 이벤트 핸들러가 최신 `language`/`targetOS`/`isAdminElevated` 상태를 반영하도록 `runDiagnosticsRef`로 최신화하고, 자가성찰 감사 배열 안전한 접근(`logsArr`/`auditArr`) 및 스크롤 타이머 해제를 추가.
+  - `getApiKeyConfig()`에서 `localStorage`의 손상·부분 스키마(`keys` 누락 등)로 인한 초기 렌더 크래시를 방어.
+- **서버 원자적 JSON 저장·5필드 POSIX Cron·입력 검증 보강 (`server.ts`, `package.json`, `lib/ai-resilience-router.ts`, `docs/PATCH_NOTE.md`)**:
+  - 유지보수 설정, API 키 설정, 수집 옵션, 피드 메타데이터 및 백업 복원 설정 쓰기를 `writeJsonFileAtomic()`으로 일원화해 부분 쓰기 및 `DATA_DIR` 미생성 `ENOENT` 위험을 제거.
+  - `sanitizeCollectorOptions()`/`buildCollectorWorkflowYamlFromOptions()`에 GitHub Actions 호환 5필드 POSIX Cron 검증·YAML 스칼라 제어문자 제거 및 `push-collector-options` `15초` 타임아웃을 적용하고, `POST /api/visitor/autoblock-settings`에 `req.body` 객체/프로토타입 정제를 추가.
+  - 전 모듈 및 빠른 시스템 진단 배너 버전을 `v3.106.6`으로 동기화.
+
+---
+
+## [v3.106.5] - 2026-11-19
+
+### 🔧 Bug Fixes & Operational Consistency (12차 심층 자아성찰 및 체인 테스트·수집기 안정화)
+- **`POST /api/ai/test-chain` 저장 키(`system_config.json`) 누락 및 제공자 검증 보완 (`server.ts`)**:
+  - 관리자 UI에서 `system_config.json`에 저장한 `groqApiKey`·`openrouterApiKey`가 `test-chain` 테스트 호출 시 전달되지 않아 저장된 키가 있음에도 미설정으로 실패하던 불일치를 해결하고 `provider` 화이트리스트 검증을 추가.
+- **관리자 AI 엔드포인트 빈 바디 크래시 방어 및 자동 동기화 폴백 JSON 강화 (`server.ts`)**:
+  - `POST /api/ai/verify-issue`, `/reclassify-chunk`, `/optimize-knowledge`, `/search-trends`의 `req.body` 미전달 방어 및 `/optimize-knowledge` 필수 `prompt` 검증(HTTP 400)을 추가.
+  - `runAiSync()` 외부·키리스 폴백 호출 시 `buildExternalFallbackPrompt(..., { responseMimeType: 'application/json' })`을 적용해 비-Gemini 응답의 JSON 파싱 성공률을 향상.
+- **GitHub Pull 설정 토큰 폴백 및 Collector 파싱·타임아웃 견고화 (`server.ts`, `scripts/github-collector.ts`)**:
+  - `POST /api/github/pull-from-repo`가 `ghConfig.token`을 참조하고 검증된 `targetBranch`를 저장하며 `AbortSignal.timeout(15000)`을 적용하도록 수정.
+  - `scripts/github-collector.ts`에서 비객체·`null`·숫자형 `code` 등으로 인한 `TypeError` 크래시를 차단하고 `sourceUrls`의 HTTP(S) 스킴 필터링 및 웹훅 `15초` 타임아웃을 추가.
+- **`ai-model-registry.json` 원자적 저장 및 버전 동기화 (`lib/ai-resilience-router.ts`, `package.json`, `src/App.tsx`, `server.ts`, `docs/PATCH_NOTE.md`)**:
+  - `saveAiModelRegistry()`에 임시 파일 + `renameSync` 기반 원자적 저장을 적용하고 전 모듈 버전을 `v3.106.5`로 동기화.
+
+---
+
+## [v3.106.4] - 2026-11-19
+
+### 🔧 Bug Fixes & Browser/Runtime Stability (11차 심층 자아성찰 및 런타임 크래시 수정)
+- **브라우저 초기 렌더 `ReferenceError: process is not defined` 치명적 오류 수정 (`src/App.tsx`)**:
+  - `vite.config.ts`에 `process.env` `define` 매핑이 없는 상태에서 `getApiKeyConfig()`가 초기화(`useState(getApiKeyConfig())`) 시점에 `process.env.GEMINI_API_KEY`/`CUSTOM_API_KEY`를 직접 참조해 Vite 개발 모드 브라우저에서 즉시 런타임 오류를 유발하던 문제를 `typeof process !== 'undefined'` 가드로 해결.
+- **클라이언트 PowerShell 디지털 서명 폴백 `Buffer is not defined` 수정 (`src/utils/psVerifier.ts`)**:
+  - 브라우저 환경에서 오프라인/폴백 서명 시 Node 전용 `Buffer.from(...)` 호출로 실패하던 문제를 `TextEncoder` + `btoa` 기반 UTF-8 안전 Base64 인코더(Node 환경은 `Buffer` 폴백)로 교체해 브라우저·서버 양쪽 호환성을 확보.
+- **`addLocalLog` 비문자열 `id` 크래시 및 콜드 스타트 시딩 레이스 해결 (`server.ts`)**:
+  - `POST /api/logs/add` 등에서 `log.id`가 숫자·객체로 전달될 때 `baseId.includes(...)`에서 `TypeError`가 발생해 로그가 묵살되던 결함을 수정하고, `__proto__`/`constructor`/`prototype` 키를 제거하는 `sanitizePlainObject()` 적용.
+  - `GET /api/issues`, `GET /api/issues/counts`에서 초기 시딩 중 빈 배열이 반환되지 않도록 `await ensureIssuesSeeded()`를 보장하고, 빈 파일(`size <= 10`) 시 자동 재시딩 및 `writeJsonFileAtomic()` 기반 원자적 JSON 파일 쓰기를 도입.
+
+### 🛡️ Security Hardening
+- **`POST /api/github/sync` & `saveIssuesToServer()` 입력 정제 및 프로토타입 오염 차단 (`server.ts`)**:
+  - 웹훅 페이로드 배열 내 `null`·원시값으로 인한 `TypeError` 전체 배치 실패를 차단하고, 모든 수신 이슈 객체에 `sanitizePlainObject()`를 적용해 프로토타입 오염 키 및 비정상 필수 필드를 필터링.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 버전을 `v3.106.4`로 동기화.
+
+---
+
+## [v3.106.3] - 2026-11-19
+
+### 🔧 Bug Fixes & Startup Reliability (개발 서버 기동 지연 및 포트 바인딩 오류 수정)
+- **Express 포트 `3000` 선바인딩 및 Vite/데이터 시딩 비동기 지연 로드 (`server.ts`)**:
+  - `server.ts` 최상단에서 `vite` 모듈을 즉시 임포트하고 `app.listen(3000)` 이전에 `createViteServer()` 초기화·464KB `data/issues.json` 동기 파싱(`ensureIssuesSeeded`)·스케줄러 초기화를 수행해 개발 서버 기동 헬스체크가 타임아웃되던 문제를 해결.
+  - `app.listen(PORT, "0.0.0.0")` 실행 후 `setImmediate`에서 동적 `import("vite")`, `ensureIssuesSeeded()`, `initializeBackgroundSchedulers()`를 백그라운드로 초기화하도록 변경해 `/api/health` 및 HTTP 소켓이 즉시 응답하도록 개선.
+- **Vite HMR 독립 포트(`24678`) 충돌 제거 및 기동 예외 복구 (`server.ts`)**:
+  - Vite HMR이 별도 포트 `24678`을 점유해 재시작 시 `EADDRINUSE`가 발생할 수 있던 구성을 `DISABLE_HMR === "true"` 시 비활성화하거나 기존 `http.Server` 인스턴스에 바인딩(`{ server: serverRef }`)하도록 수정.
+  - `vitePromise` 실패 시 재시도 가능하도록 `null` 초기화하고 `serverRef.on('error')` 및 `startServer().catch()` 안전 처리를 추가.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 버전을 `v3.106.3`으로 동기화.
+
+---
+
+## [v3.106.2] - 2026-11-18
+
+### 🔧 Bug Fixes & AI Pipeline Resilience (10차 심층 자아성찰 및 누락 경로·복원 안정화)
+- **GitHub Autonomous Collector 무키/외부 폴백 도달 불가 결함 및 JSON 파싱 수정 (`scripts/github-collector.ts`)**:
+  - `GEMINI_API_KEY`가 미설정된 환경에서 스크립트가 즉시 조기 종료되어 Groq/Mistral/OpenRouter 및 Pollinations 키리스 최후 폴백 분기가 실행되지 않던 버그를 수정.
+  - 외부 프로바이더 및 키리스 폴백 호출 시 `buildExternalFallbackPrompt(..., { responseMimeType: 'application/json' })`를 적용하고 `parseAiJson()`으로 Markdown 코드 펜스·서두 문구·Windows 경로 역슬래시까지 복구 파싱하도록 개선.
+- **Quota-Split 키 연동 및 서버 키 준비상태 UI 불일치 해결 (`server.ts`, `lib/ai-resilience-router.ts`)**:
+  - `executeServerGeminiCall()`의 Quota-Split 경로가 `data/system_config.json`에 저장된 `groqApiKey`를 전달하지 않던 누락을 수정.
+  - `getProviderServerReadiness()`가 환경변수(`process.env`)뿐 아니라 `data/api_keys_config.json`·`data/system_config.json`의 활성 키까지 반영하도록 개선해 AI Resilience Hub 상태 표시를 실동작과 일치화.
+- **로그 보관 기간(`retentionMonths`) 하드코딩 수정 (`server.ts`)**:
+  - `GET /api/logs/summary`의 데드 조건문(`getAutoBlockSettings() ? 1 : 1`)을 제거하고 실제 `maintenance_config.json`의 `cleanupMonths` 설정값을 반환하도록 수정.
+
+### 🛡️ Security Hardening & Input Sanitization
+- **`POST /api/visitor/log` IDOR PII 노출 차단 (`server.ts`)**:
+  - 비인증 방문자 로그 엔드포인트 응답에서 타 방문자 `visitorId` 조회 시 `ip`, `userEmail`, `userId`, `userAgent` 등이 포함되던 `record` 객체 반환을 제거(클라이언트 필요 필드인 `isBlocked`, `blockReason`, `stats`만 반환)하고 `visitorId` 형식 검증을 추가.
+- **`GET /api/github/check-update` & `/api/github/auto-integrate` 남용 및 브랜치 검증 방어 (`server.ts`)**:
+  - 미인증 `?repo=` 쿼리 파라미터로 타 저장소 조회 시 관리자 PAT 토큰이 첨부되거나 단일 전역 캐시가 덮어써지던 문제를 수정(저장소/인증 스코프별 20슬롯 LRU 캐시 및 `AbortSignal.timeout(8000)` 적용).
+  - `syncGithubDatasetIntoMainData()`의 `targetBranch`에 `isValidGitRef()` 검증을 추가하고, 실패 시에도 `finally`에서 쿨다운 타임스탬프를 갱신하며 `POST /api/github/auto-integrate`에 `rateLimitAutoIntegrate`를 적용.
+- **LKG·관리자 복원 프로토타입 오염 및 마스킹 시크릿 손실 방어 (`server.ts`)**:
+  - `POST /api/admin/restore`에서 비객체/null 레코드로 인한 `TypeError` 크래시를 차단하고 `__proto__`/`constructor`/`prototype` 키를 필터링하며, LKG 복원 시 `[REDACTED_FOR_BACKUP]` 플레이스홀더가 기존 실자격증명을 덮어쓰지 않도록 보호.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 기본 버전을 `v3.106.2`로 동기화.
+
+---
+
+## [v3.106.1] - 2026-11-18
+
+### 🔧 Bug Fixes & Architectural Integrity (9차 심층 자아성찰 및 키리스 폴백 라우팅 보완)
+- **키리스 최후 폴백(`pollinations`) 순서 고정 및 GitHub Collector 일관화 (`lib/ai-resilience-router.ts`, `server.ts`, `scripts/github-collector.ts`, `src/App.tsx`)**:
+  - `loadAiModelRegistry()` 및 `POST /api/ai/resilience-config`, UI 우선순위 조작(`handleMoveProviderOrder`)에서 `pollinations`가 키 기반 프로바이더 위로 승격되어 UI와 실제 실행 순서가 어긋나는 문제를 방지하고 항상 최후 보루(`Last-Resort Fixed`)로 고정.
+  - `scripts/github-collector.ts`에서도 키 보유 프로바이더를 먼저 시도한 뒤 모두 실패하고 `keylessFallbackEnabled !== false`일 때만 Pollinations를 호출하도록 일치화.
+  - `runAiSync()` 엔진 백업 경로도 `callSecondaryFreeAiApi` 실패 시 활성화된 경우 Pollinations 최후 폴백을 활용하도록 연결.
+- **외부·키리스 폴백 프롬프트 컨텍스트 및 JSON 출력 복원 (`lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`)**:
+  - `buildExternalFallbackPrompt()` 및 `stripMarkdownJsonFences()`를 추가해 Gemini가 아닌 외부 무료·키리스 프로바이더로 우회 시에도 `systemInstruction`과 `responseMimeType: 'application/json'` 요구사항이 누락되지 않고 Markdown 코드 펜스를 제거해 정상 파싱되도록 수정.
+  - `POST /api/ai/diagnose` 및 클라이언트 진단 프롬프트가 구조화된 `TroubleshootingResult` JSON 스키마를 명시해 폴백 AI 응답이 `parseAiJson()` 실패로 묵살되지 않도록 개선.
+
+### 🛡️ Security Hardening & Stream Resilience
+- **공개 AI 엔드포인트 `config` 화이트리스트 및 SSE 연결 종료 방어 (`server.ts`)**:
+  - `POST /api/ai/generate` 및 `POST /api/ai/stream`에서 `sanitizePublicAiConfig()`로 허용된 생성 파라미터만 전달하고, 클라이언트 연결 종료 후 `res.write` 호출을 차단.
+  - `sanitizePromptForKeylessEndpoint()`에 Slack 토큰(`xox*`), AWS 키(`AKIA*`), `passkey:*`, URL 민감 파라미터 마스킹을 추가.
+- **`POST /api/settings/api-keys` 입력 스키마 정규화 (`server.ts`)**:
+  - 저장 전 `DATA_DIR` 보장 및 키 항목 수·필드 길이·프로토타입 오염 방지 정규화를 적용.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 기본 버전을 `v3.106.1`로 동기화.
+
+---
+
+## [v3.106.0] - 2026-11-18
+
+### 🚀 Major New Features & Integrations (무가입·무키 AI 모델 조사 및 최후 폴백 라우터 연동)
+- **키리스(No-Signup / No-API-Key) 무료 서버리스 폴백 계층(`pollinations`) 통합 (`lib/ai-resilience-router.ts`, `server.ts`)**:
+  - 회원가입과 API 키 발급 없이 호출 가능한 `https://text.pollinations.ai/openai` 엔드포인트를 AI Resilience 라우터에 통합.
+  - 우선순위 격리 원칙 적용: Quota-Split 선분산(`groq`, `mistral`, `cloudflare`) 및 2차 키 기반 무료 티어(`callSecondaryFreeAiApi`)에서 제외하고, **Gemini 키 및 등록된 모든 API 키가 미설정되거나 소진(429/404/401)된 경우에만 최후 폴백(Last-Resort Failover)** 으로 실행되도록 설계(실패 시 기존 로컬 DB 폴백으로 안전하게 귀결).
+- **실시간 키리스 모델 카탈로그 탐색 및 Admin 제어 대시보드 확장 (`src/App.tsx`)**:
+  - `discoverLiveModels()`에서 OpenRouter `:free` 풀과 병렬로 `https://text.pollinations.ai/models`를 조회해 사용 가능한 텍스트 모델을 동기화.
+  - 관리자 AI Resilience Hub에 **키리스 최후 폴백 활성화 스위치(`keylessFallbackEnabled`)**, Pollinations 동적 모델 풀 뷰, 개별 연결 테스트 지원 및 **2026 키리스 AI 조사 비교 요약(Pollinations · OVHcloud 익명 티어 · Hack Club / Duck.ai / WebLLM 제외 사유)** 을 추가.
+
+### 🛡️ Security Hardening & Guardrails
+- **공용 키리스 엔드포인트 민감정보 보호 및 서킷 브레이커 (`lib/ai-resilience-router.ts`)**:
+  - `sanitizePromptForKeylessEndpoint()`를 통해 외부 공용 프록시 전송 전 프롬프트 내 API 키(`AIza...`, `gsk_...`, `sk-...`, `ghp_...`)·Bearer 토큰·관리자 세션 문자열을 `[REDACTED_*]`로 자동 마스킹.
+  - 페이로드 `private: true` 플래그 고정, `AbortSignal.timeout(15000)` 및 모델별 `404` 6시간 서킷 브레이커 격리 적용.
+- **시스템 버전 전면 동기화 (`package.json`, `lib/ai-resilience-router.ts`, `server.ts`, `src/App.tsx`, `docs/PATCH_NOTE.md`)**:
+  - 전 모듈 버전을 `v3.106.0`으로 동기화.
 
 ---
 

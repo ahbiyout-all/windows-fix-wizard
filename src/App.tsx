@@ -335,17 +335,30 @@ export const getApiKeyConfig = (): ApiKeyConfig => {
   try {
     const saved = localStorage.getItem('winfix_api_keys_config');
     if (saved) {
-      config = JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const validMode: ApiKeyConfig['mode'] =
+          parsed.mode === 'load-balance' || parsed.mode === 'single' || parsed.mode === 'priority'
+            ? parsed.mode
+            : 'priority';
+        config = {
+          mode: validMode,
+          keys: Array.isArray(parsed.keys)
+            ? parsed.keys.filter((k: any) => k && typeof k === 'object' && typeof k.key === 'string')
+            : []
+        };
+      }
     }
   } catch(e) {}
   
-  // Ensure env keys always exist in the config if not manually removed and valid
-  const envKey = process.env.GEMINI_API_KEY;
+  // Ensure env keys only apply when safely defined (avoid ReferenceError: process is not defined in Vite browser bundles)
+  const safeProcessEnv = typeof process !== 'undefined' && process?.env ? process.env : undefined;
+  const envKey = safeProcessEnv?.GEMINI_API_KEY;
   if (envKey && isValidApiKeyFormat(envKey) && !config.keys.some(k => k.key === envKey)) {
     config.keys.push({ name: 'Default App Key', key: envKey, isActive: true, isCustom: false });
   }
 
-  const customEnvKey = process.env.CUSTOM_API_KEY;
+  const customEnvKey = safeProcessEnv?.CUSTOM_API_KEY;
   if (customEnvKey && isValidApiKeyFormat(customEnvKey) && !config.keys.some(k => k.key === customEnvKey)) {
     config.keys.push({ name: 'Secret Custom Key', key: customEnvKey, isActive: true, isCustom: false });
   }
@@ -693,7 +706,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.105.11";
+const APP_VERSION = "3.106.7";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1317,8 +1330,8 @@ export default function App() {
 
   const dynamicWorkflowYaml = useMemo(() => buildCollectorWorkflowYaml(collectorOptions), [collectorOptions]);
 
-  // Adaptive AI Model Resilience & Multi-Provider Free-Tier Router Hub (v3.100.0)
-  type ResilienceProviderId = 'gemini' | 'groq' | 'mistral' | 'openrouter' | 'cerebras' | 'cloudflare';
+  // Adaptive AI Model Resilience & Multi-Provider Free-Tier Router Hub (v3.100.0 -> v3.106.0)
+  type ResilienceProviderId = 'gemini' | 'groq' | 'mistral' | 'openrouter' | 'cerebras' | 'cloudflare' | 'pollinations';
   interface ResilienceGeminiModel {
     id: string;
     displayName: string;
@@ -1339,9 +1352,9 @@ export default function App() {
     failureCount: number;
   }
   interface ResilienceStrategyItem {
-    id: ResilienceProviderId | 'github-models';
+    id: ResilienceProviderId | 'github-models' | 'ovh-anonymous';
     name: string;
-    status: 'active' | 'trial' | 'retired';
+    status: 'active' | 'keyless' | 'trial' | 'retired';
     envVars: string[];
     freeTierLimits: string;
     strengths: string;
@@ -1355,15 +1368,18 @@ export default function App() {
       updatedAt: string;
       lastDiscoveryAt: string | null;
       routingPolicy: 'quota-split' | 'gemini-first';
+      keylessFallbackEnabled?: boolean;
       providerOrder: ResilienceProviderId[];
       geminiModels: ResilienceGeminiModel[];
       openrouterFreeModels: string[];
+      pollinationsModels?: string[];
       providerModels: Record<Exclude<ResilienceProviderId, 'gemini'>, string[]>;
       circuitBreakers: Record<string, ResilienceCircuitBreaker>;
       telemetry: {
         totalRequests: number;
         geminiRequests: number;
         freeProviderRequests: number;
+        keylessRequests?: number;
         failoverSaves: number;
         circuitTrips404: number;
         lastProviderUsed: string | null;
@@ -1372,7 +1388,7 @@ export default function App() {
         perProviderUsage: Record<ResilienceProviderId, number>;
       };
     };
-    readiness: Record<ResilienceProviderId, { configured: boolean; envHint: string }>;
+    readiness: Record<ResilienceProviderId, { configured: boolean; envHint: string; keyless?: boolean }>;
     strategyCatalog: ResilienceStrategyItem[];
   }
 
@@ -3325,7 +3341,7 @@ export default function App() {
       }));
       setResilienceNotice({
         type: 'success',
-        message: `실시간 모델 탐색 완료: Gemini ${data.geminiDiscoveredCount || 0}종 · OpenRouter :free ${data.openrouterDiscoveredCount || 0}종 동기화됨`
+        message: `실시간 모델 탐색 완료: Gemini ${data.geminiDiscoveredCount || 0}종 · OpenRouter :free ${data.openrouterDiscoveredCount || 0}종 · Pollinations 키리스 ${data.pollinationsDiscoveredCount || 0}종 동기화됨`
       });
     } catch (err: any) {
       setResilienceNotice({ type: 'error', message: `실시간 모델 탐색 실패: ${err.message}` });
@@ -3338,11 +3354,15 @@ export default function App() {
     nextPolicy: 'quota-split' | 'gemini-first',
     nextProviderOrder: ResilienceProviderId[],
     nextGeminiModels: ResilienceGeminiModel[],
-    successMsg?: string
+    successMsg?: string,
+    nextKeylessEnabled?: boolean
   ) => {
     if (!isAdmin) return;
     setIsSavingResilience(true);
     setResilienceNotice(null);
+    const resolvedKeylessEnabled = typeof nextKeylessEnabled === 'boolean'
+      ? nextKeylessEnabled
+      : (resilienceStatus?.registry.keylessFallbackEnabled !== false);
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch('/api/ai/resilience-config', {
@@ -3351,14 +3371,19 @@ export default function App() {
         body: JSON.stringify({
           routingPolicy: nextPolicy,
           providerOrder: nextProviderOrder,
-          geminiModels: nextGeminiModels
+          geminiModels: nextGeminiModels,
+          keylessFallbackEnabled: resolvedKeylessEnabled
         })
       });
       const data = await parseJsonResponse(resp);
       if (!resp.ok || !data.success) {
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
-      setResilienceStatus((prev) => (prev ? { ...prev, registry: data.registry } : prev));
+      setResilienceStatus((prev) => (prev ? {
+        ...prev,
+        registry: data.registry,
+        readiness: data.readiness || prev.readiness
+      } : prev));
       setResilienceNotice({
         type: 'success',
         message: successMsg || 'AI 라우팅 정책 및 모델 우선순위가 저장되었습니다.'
@@ -3412,10 +3437,30 @@ export default function App() {
     const order = [...resilienceStatus.registry.providerOrder];
     const targetIdx = index + delta;
     if (targetIdx < 0 || targetIdx >= order.length) return;
+    // Prevent moving keyed providers past or moving 'pollinations' out of fixed last-resort slot
+    if (order[index] === 'pollinations' || order[targetIdx] === 'pollinations') return;
     const temp = order[index];
     order[index] = order[targetIdx];
     order[targetIdx] = temp;
     setResilienceStatus({ ...resilienceStatus, registry: { ...resilienceStatus.registry, providerOrder: order } });
+  };
+
+  const handleToggleKeylessFallback = () => {
+    if (!resilienceStatus) return;
+    const nextVal = !(resilienceStatus.registry.keylessFallbackEnabled !== false);
+    setResilienceStatus({
+      ...resilienceStatus,
+      registry: { ...resilienceStatus.registry, keylessFallbackEnabled: nextVal }
+    });
+    persistResilienceConfig(
+      resilienceStatus.registry.routingPolicy,
+      resilienceStatus.registry.providerOrder,
+      resilienceStatus.registry.geminiModels,
+      nextVal
+        ? '키리스 최후 폴백(Pollinations · 무가입/무키)을 활성화했습니다.'
+        : '키리스 최후 폴백(Pollinations)을 비활성화했습니다. 이제 키 미설정·소진 시 로컬 DB로만 폴백합니다.',
+      nextVal
+    );
   };
 
   const handleResetCircuitBreaker = async (modelId?: string) => {
@@ -8667,7 +8712,7 @@ export default function App() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleRestoreServerSnapshot = (filename: string) => {
@@ -8723,7 +8768,7 @@ export default function App() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e: any) {
       customAlert(language === 'en' ? `Snapshot download failed: ${e.message}` : `스냅샷 다운로드 실패: ${e.message}`);
     }
@@ -9111,7 +9156,7 @@ export default function App() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       } else {
         const fullPayload = { metadata: metadataObj, data: exportData };
         const jsonBlob = new Blob([JSON.stringify(fullPayload, null, 2)], { type: 'application/json' });
@@ -9123,7 +9168,7 @@ export default function App() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
 
       setShowExportModal(false);
@@ -9174,7 +9219,7 @@ export default function App() {
         document.body.appendChild(downloadAnchorNode);
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       };
 
       if ('showSaveFilePicker' in window && window.self === window.top) {
@@ -9246,7 +9291,7 @@ export default function App() {
       document.body.appendChild(dlLink);
       dlLink.click();
       document.body.removeChild(dlLink);
-      URL.revokeObjectURL(dlUrl);
+      setTimeout(() => URL.revokeObjectURL(dlUrl), 1000);
 
       customAlert(`[Jamstack 정적 데이터셋 동기화 완료!]\n\n• 총 통합 레코드: ${currentList.length}개\n• Cloud Firestore 외부 DB 의존성 없이 100% 서버리스로 정렬되었습니다.\n• GitHub Pages 배포 및 커밋용 'issues.json' 파일이 다운로드되었습니다.`);
       await logAdminAction('import', 'jamstack_dataset_sync', `Jamstack 정적 dataset 동기화 완료 (${currentList.length}개 레코드)`, 'success', 'DATABASE');
@@ -9275,7 +9320,7 @@ export default function App() {
         document.body.appendChild(a);
         a.click();
         a.remove();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         await logAdminAction('export', 'last_known_good_download', 'Last-Known-Good 스냅샷 JSON 다운로드 완료', 'info', 'DATABASE');
       } else {
         const clientSnap = localStorage.getItem('winfix_last_known_good_client');
@@ -9290,7 +9335,7 @@ export default function App() {
           document.body.appendChild(a);
           a.click();
           a.remove();
-          URL.revokeObjectURL(url);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
         } else {
           customAlert(language === 'en' ? "No snapshot file available for download." : "다운로드 가능한 스냅샷 파일이 없습니다.");
         }
@@ -9504,7 +9549,7 @@ export default function App() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
       console.warn("Auto download of issues.json failed:", e);
     }
@@ -11017,7 +11062,7 @@ export default function App() {
         ? `\n\n[Advanced Knowledge Base - High Priority]\n${aiOptimizedKnowledge}\n\nApply the patterns above to your diagnosis if relevant.`
         : '';
 
-      const promptData = `Windows Version: ${version}\nError/Symptom: ${query}${knowledgeContext}\n\nPlease provide the official Microsoft solution or highly trusted community solutions for this specific error. Provide a clear diagnosis, a safe PowerShell fix script (if applicable). \n\nCRITICAL SAFETY RULES:\n1. If you provide a script, you MUST explicitly detail all potential risks in the 'scriptSafetyWarning' field. This includes registry modifications, system service changes, file deletions, or security settings changes.\n2. If a script is too risky or not applicable, leave the 'script' field empty and set 'isScriptApplicable' to false, then explain why in 'scriptSafetyWarning'.\n3. Ensure any provided script is safe, effective, and follows best practices.\n\nProvide step-by-step manual instructions and source URLs. Respond in ${language === 'en' ? 'English' : 'Korean'}.`;
+      const promptData = `Windows Version: ${version}\nError/Symptom: ${query}${knowledgeContext}\n\nPlease provide the official Microsoft solution or highly trusted community solutions for this specific error. Provide a clear diagnosis, a safe PowerShell fix script (if applicable).\n\nCRITICAL SAFETY RULES:\n1. If you provide a script, you MUST explicitly detail all potential risks in the 'scriptSafetyWarning' field. This includes registry modifications, system service changes, file deletions, or security settings changes.\n2. If a script is too risky or not applicable, leave the 'script' field empty and set 'isScriptApplicable' to false, then explain why in 'scriptSafetyWarning'.\n3. Ensure any provided script is safe, effective, and follows best practices.\n\nReturn strictly valid raw JSON with keys: {"title": string, "diagnosis": string, "isScriptApplicable": boolean, "script": string, "scriptSafetyWarning": string, "manualSteps": string[], "sources": [{"title": string, "url": string}]}. Respond in ${language === 'en' ? 'English' : 'Korean'}.`;
 
       const diagResp = await fetch('/api/ai/diagnose', {
         method: 'POST',
@@ -15726,10 +15771,12 @@ export default function App() {
                           {language === 'en' ? 'Server Free Providers' : '서버 무료 AI 프로바이더'}
                         </div>
                         <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                          {configuredCount} / 6 Ready
+                          {configuredCount} / {Object.keys(resilienceStatus?.readiness || {}).length || 7} Ready
                         </div>
                         <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-                          {language === 'en' ? `OpenRouter :free pool: ${reg?.openrouterFreeModels?.length || 4} slugs` : `OpenRouter :free 풀 ${reg?.openrouterFreeModels?.length || 4}개 모델`}
+                          {language === 'en'
+                            ? `OpenRouter :free: ${reg?.openrouterFreeModels?.length || 4} · Keyless: ${reg?.keylessFallbackEnabled !== false ? 'ON' : 'OFF'}`
+                            : `OpenRouter :free ${reg?.openrouterFreeModels?.length || 4}종 · 키리스 폴백 ${reg?.keylessFallbackEnabled !== false ? 'ON' : 'OFF'}`}
                         </div>
                       </div>
 
@@ -16022,6 +16069,51 @@ export default function App() {
                       })}
                     </div>
 
+                    {/* Keyless Last-Resort Safety & Privacy Guard */}
+                    {(() => {
+                      const keylessEnabled = resilienceStatus.registry.keylessFallbackEnabled !== false;
+                      const keylessCount = resilienceStatus.registry.telemetry?.keylessRequests ?? resilienceStatus.registry.telemetry?.perProviderUsage?.pollinations ?? 0;
+                      return (
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="font-bold text-slate-900 dark:text-slate-100">
+                                {language === 'en'
+                                  ? 'Keyless Last-Resort Fallback (Pollinations · Zero-Signup)'
+                                  : '무가입·무키 최후 폴백 계층 (Pollinations.ai 서버리스)'}
+                              </span>
+                              <span className={`font-mono text-[11px] font-bold ${keylessEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                · {keylessEnabled ? 'ENABLED (Last-Resort Only)' : 'DISABLED'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                              {language === 'en'
+                                ? 'Executed only when Gemini and all configured API keys are unset or exhausted. Outbound prompts automatically mask API keys/Bearer tokens and enforce private: true.'
+                                : 'Gemini 및 등록된 모든 API 키(Groq/Mistral/OpenRouter/Cerebras/Cloudflare)가 미설정되었거나 소진된 경우에만 마지막으로 호출됩니다. 전송 전 프롬프트 내 키·토큰 문자열은 자동 마스킹됩니다.'}
+                            </p>
+                            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                              Endpoint: text.pollinations.ai/openai · Mode: private=true · Keyless Calls: {keylessCount}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={keylessEnabled}
+                            disabled={isSavingResilience}
+                            onClick={handleToggleKeylessFallback}
+                            className={`px-3.5 py-2.5 min-h-[40px] rounded-lg border text-xs font-semibold flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:opacity-50 ${
+                              keylessEnabled
+                                ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                                : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <span>{keylessEnabled ? '키리스 최후 폴백 ON' : '키리스 최후 폴백 OFF'}</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+
                     {/* Provider Priority Chain */}
                     <div className="space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -16030,7 +16122,7 @@ export default function App() {
                             {language === 'en' ? 'Failover Execution Order & Server Readiness' : '프로바이더 페일오버 체인 및 서버 환경변수 연동 상태'}
                           </h3>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            모든 외부 AI 키는 브라우저에 저장하지 않고 서버 환경변수(.env) 및 GitHub Secrets로만 안전하게 주입됩니다.
+                            모든 외부 AI 키는 브라우저에 저장하지 않고 서버 환경변수(.env) 및 GitHub Secrets로만 안전하게 주입됩니다. (키리스 계층은 최후 폴백 전용)
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -16064,11 +16156,15 @@ export default function App() {
                         {resilienceStatus.registry.providerOrder.map((pid, idx) => {
                           const info = resilienceStatus.readiness?.[pid];
                           const usage = resilienceStatus.registry.telemetry?.perProviderUsage?.[pid] || 0;
+                          const isKeylessProvider = pid === 'pollinations';
+                          const keylessActive = resilienceStatus.registry.keylessFallbackEnabled !== false;
                           const models = pid === 'gemini'
                             ? resilienceStatus.registry.geminiModels.filter((m) => m.enabled).slice(0, 2).map((m) => m.id)
                             : pid === 'openrouter'
                               ? (resilienceStatus.registry.openrouterFreeModels || []).slice(0, 2)
-                              : (resilienceStatus.registry.providerModels?.[pid] || []);
+                              : isKeylessProvider
+                                ? (resilienceStatus.registry.pollinationsModels || resilienceStatus.registry.providerModels?.[pid] || []).slice(0, 3)
+                                : (resilienceStatus.registry.providerModels?.[pid] || []);
                           return (
                             <div key={pid} className="p-3.5 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                               <div className="flex items-start gap-3 min-w-0">
@@ -16080,9 +16176,15 @@ export default function App() {
                                     <span className="text-xs font-bold uppercase tracking-wide text-slate-900 dark:text-slate-100">
                                       {pid}
                                     </span>
-                                    <span className={`text-[11px] font-semibold ${info?.configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                                      · {info?.configured ? 'Configured (Server Env)' : `Not Set (${info?.envHint || 'ENV'})`}
-                                    </span>
+                                    {isKeylessProvider ? (
+                                      <span className={`text-[11px] font-semibold ${keylessActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                        · {keylessActive ? 'Keyless Free (No API Key · Last-Resort)' : 'Keyless Disabled (Toggle OFF)'}
+                                      </span>
+                                    ) : (
+                                      <span className={`text-[11px] font-semibold ${info?.configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                                        · {info?.configured ? 'Configured (Server Env)' : `Not Set (${info?.envHint || 'ENV'})`}
+                                      </span>
+                                    )}
                                     <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
                                       · Usage: {usage}
                                     </span>
@@ -16102,24 +16204,32 @@ export default function App() {
                                 >
                                   {testingChainProvider === pid ? '테스트 중...' : '연결 테스트'}
                                 </button>
-                                <button
-                                  type="button"
-                                  disabled={idx === 0}
-                                  onClick={() => handleMoveProviderOrder(idx, -1)}
-                                  className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                                  title="우선순위 상향"
-                                >
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={idx === resilienceStatus.registry.providerOrder.length - 1}
-                                  onClick={() => handleMoveProviderOrder(idx, 1)}
-                                  className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                                  title="우선순위 하향"
-                                >
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                </button>
+                                {isKeylessProvider ? (
+                                  <span className="px-2 py-1 text-[11px] font-mono text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                                    Last-Resort Fixed
+                                  </span>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={idx === 0}
+                                      onClick={() => handleMoveProviderOrder(idx, -1)}
+                                      className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                      title="우선순위 상향"
+                                    >
+                                      <ChevronUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={idx >= resilienceStatus.registry.providerOrder.length - 1 || resilienceStatus.registry.providerOrder[idx + 1] === 'pollinations'}
+                                      onClick={() => handleMoveProviderOrder(idx, 1)}
+                                      className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                      title="우선순위 하향"
+                                    >
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
@@ -16127,17 +16237,32 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* OpenRouter Live :free Slugs */}
-                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
-                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        OpenRouter 동적 <code className="font-mono">:free</code> 모델 풀 (종료된 google/gemini-2.0-flash-exp:free 대체 완료)
+                    {/* OpenRouter :free & Pollinations Keyless Dynamic Pools */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          OpenRouter 동적 <code className="font-mono">:free</code> 모델 풀 (키 필요)
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(resilienceStatus.registry.openrouterFreeModels || []).map((slug) => (
+                            <code key={slug} className="text-[11px] font-mono px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                              {slug}
+                            </code>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {(resilienceStatus.registry.openrouterFreeModels || []).map((slug) => (
-                          <code key={slug} className="text-[11px] font-mono px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
-                            {slug}
-                          </code>
-                        ))}
+
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Pollinations 동적 키리스 텍스트 풀 (가입·키 불필요)
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(resilienceStatus.registry.pollinationsModels || resilienceStatus.registry.providerModels?.pollinations || ['openai', 'openai-fast', 'mistral']).map((slug) => (
+                            <code key={slug} className="text-[11px] font-mono px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                              {slug}
+                            </code>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -16167,11 +16292,19 @@ export default function App() {
                                 <span className={
                                   item.status === 'active'
                                     ? 'text-emerald-600 dark:text-emerald-400 font-bold'
-                                    : item.status === 'trial'
-                                      ? 'text-amber-600 dark:text-amber-400 font-bold'
-                                      : 'text-rose-600 dark:text-rose-400 font-bold'
+                                    : item.status === 'keyless'
+                                      ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                                      : item.status === 'trial'
+                                        ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                        : 'text-rose-600 dark:text-rose-400 font-bold'
                                 }>
-                                  {item.status === 'active' ? 'ACTIVE FREE' : item.status === 'trial' ? 'TRIAL CREDIT' : 'RETIRED (2026)'}
+                                  {item.status === 'active'
+                                    ? 'ACTIVE FREE'
+                                    : item.status === 'keyless'
+                                      ? 'KEYLESS (NO AUTH)'
+                                      : item.status === 'trial'
+                                        ? 'TRIAL / CAPPED'
+                                        : 'RETIRED (2026)'}
                                 </span>
                               </td>
                               <td className="py-3 px-3 align-top text-slate-600 dark:text-slate-300 leading-relaxed min-w-[200px]">
@@ -16183,12 +16316,31 @@ export default function App() {
                                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{item.privacyNote}</div>
                               </td>
                               <td className="py-3 px-3 align-top font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                {item.envVars.length > 0 ? item.envVars.join(', ') : 'N/A (Excluded)'}
+                                {item.envVars.length > 0
+                                  ? item.envVars.join(', ')
+                                  : (item.status === 'keyless' ? 'None (Keyless Toggle)' : 'N/A (Excluded)')}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        2026 회원가입·API 키 없는 무료 AI 모델 조사 요약 및 제외 기준
+                      </h4>
+                      <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed list-disc pl-4">
+                        <li>
+                          <strong>채택 — Pollinations.ai (<code className="font-mono">text.pollinations.ai/openai</code>)</strong>: 별도 회원가입이나 API 키 발급 없이 표준 OpenAI Chat Completions 형식으로 호출 가능해, 기존 API 키 전체 미설정·소진 시 최후 폴백으로 연동했습니다.
+                        </li>
+                        <li>
+                          <strong>비교 참조 — OVHcloud AI Endpoints 익명 티어</strong>: 무가입 호출이 가능하나 IP당 약 2 RPM 제한이 엄격해 다중 사용자 서버리스 백업용으로는 제한적입니다.
+                        </li>
+                        <li>
+                          <strong>제외 — Hack Club AI · Duck.ai/g4f · WebLLM</strong>: Hack Club은 계정·키(<code className="font-mono">sk-hc-</code>) 발급이 필요하고, Duck.ai/g4f 비공식 프록시는 캡차·차단 위험으로 안정성이 낮으며, WebLLM은 브라우저 1GB+ 모델 다운로드가 필요해 제외했습니다.
+                        </li>
+                      </ul>
                     </div>
                   </div>
                 )}

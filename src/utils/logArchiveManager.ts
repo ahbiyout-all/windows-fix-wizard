@@ -259,7 +259,7 @@ export async function downloadHiddenArchive(archiveId: string): Promise<boolean>
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;
   } catch (err) {
     console.error('[logArchiveManager] Failed to download hidden archive:', err);

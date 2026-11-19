@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Shield, 
   ShieldCheck,
@@ -56,6 +56,16 @@ export const SystemRestoreUtility: React.FC<SystemRestoreUtilityProps> = ({
   const [restorePointType, setRestorePointType] = useState<'MODIFY_SETTINGS' | 'APPLICATION_INSTALL' | 'DEVICE_DRIVER_INSTALL'>('MODIFY_SETTINGS');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedPointForRollback, setSelectedPointForRollback] = useState<number | null>(42);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Simulated / Sample restore points list for inspection preview
   const [restorePoints, setRestorePoints] = useState<SimulatedRestorePoint[]>([
@@ -190,7 +200,8 @@ Start-Process "rstrui.exe"`;
       document.body.removeChild(textarea);
     }
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2500);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedId(null), 2500);
   };
 
   // Download .ps1 file
@@ -203,7 +214,7 @@ Start-Process "rstrui.exe"`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Quick dispatch to sandbox

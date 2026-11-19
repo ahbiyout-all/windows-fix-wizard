@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Copy, Check, Download, FileCode, Shield, CheckCircle2, AlertTriangle, 
   ExternalLink, ChevronDown, ChevronUp, Globe, Terminal, Sparkles, FolderGit2,
@@ -110,6 +110,17 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
   const [selectedBranch, setSelectedBranch] = useState(branch);
   const [isVerifying, setIsVerifying] = useState(false);
   const [lastVerifiedAt, setLastVerifiedAt] = useState<Date | null>(null);
+  const isMountedRef = useRef(true);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current = [];
+    };
+  }, []);
 
   const [checks, setChecks] = useState<VerificationCheck[]>([
     {
@@ -175,7 +186,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
     const indexIdx = updatedChecks.findIndex(c => c.id === 'index_html');
     if (indexIdx !== -1) {
       updatedChecks[indexIdx].status = 'checking';
-      setChecks([...updatedChecks]);
+      if (isMountedRef.current) setChecks([...updatedChecks]);
       const startTime = performance.now();
       try {
         const res = await fetch('./index.html?t=' + Date.now(), { cache: 'no-cache' });
@@ -223,7 +234,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
     const feedIdx = updatedChecks.findIndex(c => c.id === 'static_feed');
     if (feedIdx !== -1) {
       updatedChecks[feedIdx].status = 'checking';
-      setChecks([...updatedChecks]);
+      if (isMountedRef.current) setChecks([...updatedChecks]);
       const startTime = performance.now();
       try {
         const res = await fetch('./data/issues.json?t=' + Date.now());
@@ -262,7 +273,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
     const spaIdx = updatedChecks.findIndex(c => c.id === 'spa_404');
     if (spaIdx !== -1) {
       updatedChecks[spaIdx].status = 'checking';
-      setChecks([...updatedChecks]);
+      if (isMountedRef.current) setChecks([...updatedChecks]);
       try {
         const res = await fetch('./404.html?t=' + Date.now());
         if (res.ok) {
@@ -301,6 +312,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
       };
     }
 
+    if (!isMountedRef.current) return;
     setChecks(updatedChecks);
     setIsVerifying(false);
     setLastVerifiedAt(new Date());
@@ -331,13 +343,19 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
   const handleCopyYaml = () => {
     void copySafe(activeYaml);
     setCopiedYaml(true);
-    setTimeout(() => setCopiedYaml(false), 2500);
+    const t = setTimeout(() => {
+      if (isMountedRef.current) setCopiedYaml(false);
+    }, 2500);
+    timersRef.current.push(t);
   };
 
   const handleCopyBadgeMd = () => {
     void copySafe(badgeMarkdownSnippet);
     setCopiedBadgeMd(true);
-    setTimeout(() => setCopiedBadgeMd(false), 2500);
+    const t = setTimeout(() => {
+      if (isMountedRef.current) setCopiedBadgeMd(false);
+    }, 2500);
+    timersRef.current.push(t);
   };
 
   const handleDownloadYaml = () => {
@@ -349,7 +367,7 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (

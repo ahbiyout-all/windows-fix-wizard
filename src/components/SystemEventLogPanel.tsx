@@ -143,11 +143,28 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
   const [importedStatus, setImportedStatus] = useState<string | null>(null);
   const [specViewMode, setSpecViewMode] = useState<'device' | 'virtual_win11'>('device');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMountedRef = useRef(true);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const scheduleTimeout = (fn: () => void, ms: number) => {
+    const t = setTimeout(() => {
+      if (isMountedRef.current) fn();
+    }, ms);
+    timersRef.current.push(t);
+  };
 
   useEffect(() => {
+    isMountedRef.current = true;
     detectSystemInfo()
-      .then(info => setSystemInfo(info))
+      .then(info => {
+        if (isMountedRef.current) setSystemInfo(info);
+      })
       .catch(err => console.warn('System info detection fallback:', err));
+    return () => {
+      isMountedRef.current = false;
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current = [];
+    };
   }, []);
 
   const isMobileDevice = useMemo(() => {
@@ -167,7 +184,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
 • 모드: 가상 참조 시뮬레이션`;
       void copyTextSafe(win11Spec);
       setCopiedSpec(true);
-      setTimeout(() => setCopiedSpec(false), 2000);
+      scheduleTimeout(() => setCopiedSpec(false), 2000);
       return;
     }
 
@@ -183,7 +200,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
 • 시간대 및 로캘: ${systemInfo.timezone} (${systemInfo.language})`;
     void copyTextSafe(specText);
     setCopiedSpec(true);
-    setTimeout(() => setCopiedSpec(false), 2000);
+    scheduleTimeout(() => setCopiedSpec(false), 2000);
   };
 
   const copyTextSafe = async (text: string) => {
@@ -207,7 +224,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
     const psCmd = `Get-WinEvent -LogName System,Application -MaxEvents 50 | Select-Object TimeCreated, Id, LevelDisplayName, ProviderName, Message | ConvertTo-Json -Depth 2 | Out-File -FilePath "$HOME\\Desktop\\MyWindowsLogs.json" -Encoding utf8; Write-Host "내 PC 이벤트 로그 50건이 바탕화면 MyWindowsLogs.json 파일로 저장되었습니다!" -ForegroundColor Green`;
     void copyTextSafe(psCmd);
     setCopiedPsScript(true);
-    setTimeout(() => setCopiedPsScript(false), 2500);
+    scheduleTimeout(() => setCopiedPsScript(false), 2500);
   };
 
   const handleSharePowerShellCommand = async () => {
@@ -225,7 +242,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
     }
     void copyTextSafe(psCmd);
     setCopiedShareLink(true);
-    setTimeout(() => setCopiedShareLink(false), 3000);
+    scheduleTimeout(() => setCopiedShareLink(false), 3000);
   };
 
   const handleImportJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -233,35 +250,53 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
+      if (!isMountedRef.current) return;
       try {
         const parsed = JSON.parse(ev.target?.result as string);
-        const list = Array.isArray(parsed) ? parsed : (parsed.logs || [parsed]);
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Invalid JSON structure');
+        }
+        const rawList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.logs) ? parsed.logs : [parsed]);
+        const list = rawList.filter((item: any) => item && typeof item === 'object');
         if (list.length > 0) {
-          const formatted: SystemEventLog[] = list.map((item: any, idx: number) => ({
-            id: `user-evt-${Date.now()}-${idx}`,
-            eventId: Number(item.Id || item.eventId || item.EventID || 1000),
-            level: (item.LevelDisplayName === 'Error' || item.level === 'Error' || item.Level === 2) ? 'Error' :
-                   (item.LevelDisplayName === 'Warning' || item.level === 'Warning' || item.Level === 3) ? 'Warning' : 'Info',
-            provider: item.ProviderName || item.provider || item.Source || 'User System',
-            channel: item.Channel || item.channel || 'System',
-            source: item.source || item.ProviderName || 'Local PC',
-            taskCategory: item.taskCategory || 'User Imported Event',
-            computer: item.MachineName || item.computer || (systemInfo?.osName ? `${systemInfo.osName}-PC` : 'MY-PC'),
-            user: item.UserId || item.user || 'NT AUTHORITY\\SYSTEM',
-            processId: item.ProcessId || (1000 + idx),
-            threadId: item.ThreadId || (2000 + idx),
-            timestamp: item.TimeCreated ? new Date(item.TimeCreated).toLocaleString() : new Date().toLocaleString(),
-            message: item.Message || item.message || JSON.stringify(item),
-            detailsXml: item.detailsXml || item.Xml
-          }));
+          const formatted: SystemEventLog[] = list.map((item: any, idx: number) => {
+            const rawTs = item.TimeCreated || item.timestamp;
+            const parsedMs = rawTs ? Date.parse(String(rawTs)) : NaN;
+            const safeTimestamp = Number.isFinite(parsedMs) ? new Date(parsedMs).toISOString() : new Date().toISOString();
+            return {
+              id: `user-evt-${Date.now()}-${idx}`,
+              eventId: Number(item.Id || item.eventId || item.EventID) || 1000,
+              level: (item.LevelDisplayName === 'Error' || item.level === 'Error' || item.Level === 2) ? 'Error' :
+                     (item.LevelDisplayName === 'Warning' || item.level === 'Warning' || item.Level === 3) ? 'Warning' : 'Info',
+              provider: String(item.ProviderName || item.provider || item.Source || 'User System'),
+              channel: String(item.Channel || item.channel || 'System'),
+              source: String(item.source || item.ProviderName || 'Local PC'),
+              taskCategory: String(item.taskCategory || 'User Imported Event'),
+              computer: String(item.MachineName || item.computer || (systemInfo?.osName ? `${systemInfo.osName}-PC` : 'MY-PC')),
+              user: String(item.UserId || item.user || 'NT AUTHORITY\\SYSTEM'),
+              processId: Number(item.ProcessId) || (1000 + idx),
+              threadId: Number(item.ThreadId) || (2000 + idx),
+              timestamp: safeTimestamp,
+              message: String(item.Message || item.message || JSON.stringify(item)),
+              detailsXml: item.detailsXml || item.Xml
+            };
+          });
           setLogs(formatted);
           setImportedStatus(isEn ? `Imported ${formatted.length} events from your PC!` : `내 PC에서 추출한 ${formatted.length}개 이벤트를 성공적으로 불러왔습니다!`);
-          setTimeout(() => setImportedStatus(null), 4000);
+          scheduleTimeout(() => setImportedStatus(null), 4000);
+        } else {
+          setImportedStatus(isEn ? 'No valid event entries found in JSON file.' : 'JSON 파일에서 유효한 이벤트 항목을 찾지 못했습니다.');
+          scheduleTimeout(() => setImportedStatus(null), 3000);
         }
       } catch (err) {
         setImportedStatus(isEn ? 'Failed to parse JSON file.' : 'JSON 로그 파일 형식이 올바르지 않습니다.');
-        setTimeout(() => setImportedStatus(null), 3000);
+        scheduleTimeout(() => setImportedStatus(null), 3000);
       }
+    };
+    reader.onerror = () => {
+      if (!isMountedRef.current) return;
+      setImportedStatus(isEn ? 'Failed to read JSON file.' : 'JSON 파일을 읽는 중 오류가 발생했습니다.');
+      scheduleTimeout(() => setImportedStatus(null), 3000);
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -345,6 +380,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
         });
         if (res.ok) {
           const data = await res.json();
+          if (!isMountedRef.current) return;
           if (data.success && Array.isArray(data.logs) && data.logs.length > 0) {
             setLogs(data.logs);
             setIsLoading(false);
@@ -355,6 +391,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
     } catch (e) {
       console.warn("Event logs API fetch fallback:", e);
     }
+    if (!isMountedRef.current) return;
     setLogs(generateFallbackLogs());
     setIsLoading(false);
   };
@@ -385,10 +422,10 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
         const q = searchQuery.toLowerCase();
         const errCode = getEventErrorCode(log).toLowerCase();
         const matchCode = errCode.includes(q);
-        const matchId = String(log.eventId).includes(q);
-        const matchMsg = log.message.toLowerCase().includes(q);
-        const matchProvider = log.provider.toLowerCase().includes(q);
-        const matchSource = log.source.toLowerCase().includes(q);
+        const matchId = String(log.eventId ?? '').includes(q);
+        const matchMsg = String(log.message ?? '').toLowerCase().includes(q);
+        const matchProvider = String(log.provider ?? '').toLowerCase().includes(q);
+        const matchSource = String(log.source ?? '').toLowerCase().includes(q);
         return matchCode || matchId || matchMsg || matchProvider || matchSource;
       }
 
@@ -418,10 +455,10 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
       `"${getEventErrorCode(l)}"`,
       l.level,
       l.timestamp,
-      `"${l.provider.replace(/"/g, '""')}"`,
+      `"${String(l.provider ?? '').replace(/"/g, '""')}"`,
       l.channel,
-      `"${l.source.replace(/"/g, '""')}"`,
-      `"${l.message.replace(/"/g, '""')}"`
+      `"${String(l.source ?? '').replace(/"/g, '""')}"`,
+      `"${String(l.message ?? '').replace(/"/g, '""')}"`
     ]);
     const csvString = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
@@ -439,7 +476,7 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
     if (!xml) return;
     void copyTextSafe(xml);
     setCopiedXml(true);
-    setTimeout(() => setCopiedXml(false), 2000);
+    scheduleTimeout(() => setCopiedXml(false), 2000);
   };
 
   return (
@@ -874,7 +911,9 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
                     </span>
 
                     <span className="font-mono text-[10px] text-slate-400">
-                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      {log.timestamp && !Number.isNaN(Date.parse(log.timestamp))
+                        ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                        : (log.timestamp || '-')}
                     </span>
                   </div>
 
@@ -981,7 +1020,9 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
 
                       {/* Time Created */}
                       <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        {log.timestamp && !Number.isNaN(Date.parse(log.timestamp))
+                          ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                          : (log.timestamp || '-')}
                       </td>
 
                       {/* Event ID */}

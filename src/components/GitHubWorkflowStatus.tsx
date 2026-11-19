@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Github, 
   CheckCircle2, 
@@ -127,6 +127,8 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
   const [isDispatching, setIsDispatching] = useState(false);
   const [dispatchToast, setDispatchToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dispatchRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeToken = useMemo(() => {
     if (token) return token;
@@ -146,7 +148,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowFile}/runs?per_page=1`;
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?per_page=1`;
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
       };
@@ -214,16 +216,21 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
 
   // Dispatch workflow run manually via GitHub REST API
   const handleTriggerDispatch = async () => {
+    const scheduleToastClear = (ms: number) => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setDispatchToast(null), ms);
+    };
+
     if (!activeToken) {
       setDispatchToast(language === 'en' ? 'PAT Token required' : 'GitHub PAT 토큰 필요');
-      setTimeout(() => setDispatchToast(null), 3000);
+      scheduleToastClear(3000);
       return;
     }
 
     setIsDispatching(true);
     setDispatchToast(null);
     try {
-      const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowFile}/dispatches`;
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
       const res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -240,18 +247,18 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
       if (res.ok || res.status === 204) {
         setDispatchToast(language === 'en' ? 'Workflow triggered successfully!' : '워크플로 가동 요청 성공!');
         if (onTriggerSuccess) onTriggerSuccess();
-        setTimeout(() => {
+        if (dispatchRefreshTimerRef.current) clearTimeout(dispatchRefreshTimerRef.current);
+        dispatchRefreshTimerRef.current = setTimeout(() => {
           fetchStatus();
         }, 2500);
       } else {
-        const errText = await res.text();
         setDispatchToast(language === 'en' ? `Dispatch failed: ${res.status}` : `실행 실패: ${res.status}`);
       }
     } catch (err: any) {
       setDispatchToast(err?.message || 'Trigger failed');
     } finally {
       setIsDispatching(false);
-      setTimeout(() => setDispatchToast(null), 4000);
+      scheduleToastClear(4000);
     }
   };
 
@@ -259,7 +266,11 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     fetchStatus();
     // Auto polling every 45 seconds for real-time status updates
     const interval = setInterval(fetchStatus, 45000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (dispatchRefreshTimerRef.current) clearTimeout(dispatchRefreshTimerRef.current);
+    };
   }, [fetchStatus]);
 
   const getStatusColor = () => {
@@ -304,6 +315,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
     if (!lastRun?.run_started_at || !lastRun?.updated_at) return 0;
     const start = new Date(lastRun.run_started_at).getTime();
     const end = new Date(lastRun.updated_at).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
     return Math.max(0, Math.round((end - start) / 1000));
   }, [lastRun]);
 

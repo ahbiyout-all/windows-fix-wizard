@@ -232,6 +232,9 @@ export function InteractiveRoadmap({ language }: Props) {
   const intervalRef = useRef<any>(null);
   const simIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reflectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const runDiagnosticsRef = useRef<(code: string) => void>(() => {});
 
   // Poll real-time Multi-Node telemetry and Sentinel logs from Backend API
   useEffect(() => {
@@ -344,32 +347,36 @@ export function InteractiveRoadmap({ language }: Props) {
 
       let step = 0;
       reflectionIntervalRef.current = setInterval(() => {
+        if (!isMountedRef.current) return;
         step += 25;
         setReflectionProgress(step);
+
+        const logsArr = Array.isArray(data?.logs) ? data.logs : [];
+        const auditArr = Array.isArray(data?.auditResults) ? data.auditResults : [];
 
         if (step === 25) {
           setReflectionLogs(prev => [
             ...prev,
-            data.success && data.logs[1] ? data.logs[1] : (language === 'ko' ? '[체크 1/4] 타겟 파일 상태 확인 완료' : '[CHECK 1/4] Checked file target sizes')
+            data?.success && logsArr[1] ? logsArr[1] : (language === 'ko' ? '[체크 1/4] 타겟 파일 상태 확인 완료' : '[CHECK 1/4] Checked file target sizes')
           ]);
-          if (data.success && data.auditResults[0]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-1' ? data.auditResults[0] : item));
+          if (data?.success && auditArr[0]) {
+            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-1' ? auditArr[0] : item));
           }
         } else if (step === 50) {
           setReflectionLogs(prev => [
             ...prev,
-            data.success && data.logs[2] ? data.logs[2] : (language === 'ko' ? '[체크 2/4] 검증 모듈 기능 갱신 체크 완료' : '[CHECK 2/4] Custom buttons verification')
+            data?.success && logsArr[2] ? logsArr[2] : (language === 'ko' ? '[체크 2/4] 검증 모듈 기능 갱신 체크 완료' : '[CHECK 2/4] Custom buttons verification')
           ]);
-          if (data.success && data.auditResults[1]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-2' ? data.auditResults[1] : item));
+          if (data?.success && auditArr[1]) {
+            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-2' ? auditArr[1] : item));
           }
         } else if (step === 75) {
           setReflectionLogs(prev => [
             ...prev,
-            data.success && data.logs[3] ? data.logs[3] : (language === 'ko' ? '[체크 3/4] 영속 리드 이미지 무결성 정상' : '[CHECK 3/4] Checked DB mapping integrity')
+            data?.success && logsArr[3] ? logsArr[3] : (language === 'ko' ? '[체크 3/4] 영속 리드 이미지 무결성 정상' : '[CHECK 3/4] Checked DB mapping integrity')
           ]);
-          if (data.success && data.auditResults[2]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-3' ? data.auditResults[2] : item));
+          if (data?.success && auditArr[2]) {
+            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-3' ? auditArr[2] : item));
           }
         } else if (step === 100) {
           if (reflectionIntervalRef.current) {
@@ -379,13 +386,13 @@ export function InteractiveRoadmap({ language }: Props) {
           setIsSelfReflecting(false);
           setReflectionLogs(prev => [
             ...prev,
-            data.success && data.logs[4] ? data.logs[4] : '',
+            data?.success && logsArr[4] ? logsArr[4] : '',
             language === 'ko'
               ? '[자가 검증 성공] 전체 고정 아키텍처 및 정밀 오류 검증 엔진의 무결성 자아성찰이 정상 통과되었습니다.'
               : '[SUCCESS] Deep self-reflection & multi-state diagnostic audit complete! System is 100% robust.'
-          ]);
-          if (data.success && data.auditResults[3]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-4' ? data.auditResults[3] : item));
+          ].filter(Boolean));
+          if (data?.success && auditArr[3]) {
+            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-4' ? auditArr[3] : item));
           } else {
             setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-4' ? { ...item, status: 'success', value: 'Port 3000 Secured' } : item));
           }
@@ -393,12 +400,16 @@ export function InteractiveRoadmap({ language }: Props) {
       }, 505);
     } catch (err) {
       console.error("Failed to run remote code self-reflection audit:", err);
-      setIsSelfReflecting(false);
+      if (isMountedRef.current) {
+        setIsSelfReflecting(false);
+      }
     }
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
@@ -409,6 +420,10 @@ export function InteractiveRoadmap({ language }: Props) {
       if (reflectionIntervalRef.current) {
         clearInterval(reflectionIntervalRef.current);
         reflectionIntervalRef.current = null;
+      }
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
       }
     };
   }, []);
@@ -676,16 +691,19 @@ export function InteractiveRoadmap({ language }: Props) {
     setSafetyScore(Math.max(baseScore, 10));
   };
 
+  runDiagnosticsRef.current = runLiveDeepDiagnostics;
+
   useEffect(() => {
     const handleRemoteScriptReceived = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail && typeof customEvent.detail.script === 'string') {
         const receivedScript = customEvent.detail.script;
         setActiveScript(receivedScript);
-        runLiveDeepDiagnostics(receivedScript);
+        runDiagnosticsRef.current(receivedScript);
         setActiveTab('validator');
         // Scroll to the verifier cockpit so the user sees results immediately
-        setTimeout(() => {
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = setTimeout(() => {
           const targetElement = document.getElementById('interactive-roadmap-dashboard');
           if (targetElement) {
             targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });

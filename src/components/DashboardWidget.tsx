@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ResponsiveContainer,
   ComposedChart,
@@ -33,9 +33,10 @@ interface DashboardWidgetProps {
 export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, language = 'ko', defaultTab = 'engine' }) => {
   const [activeView, setActiveView] = useState<'engine' | 'deployment'>(defaultTab);
 
+  const fallbackStartRef = useRef<string>(new Date().toISOString());
   // Extract and shield data
   const telemetry = engineStatus?.telemetry || {};
-  const startStr = telemetry.engineStartTime || new Date().toISOString();
+  const startStr = telemetry.engineStartTime || fallbackStartRef.current;
   
   // Use preseeded baseline + live additions to prevent unpolished empty charts
   const successCount = telemetry.totalSyncSuccesses !== undefined ? telemetry.totalSyncSuccesses : 132;
@@ -95,16 +96,21 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
   }, [startStr]);
 
   // Transform recent runs for historical trendline
-  const realTrendsData = [...syncRunRecords].reverse().map((run: any) => {
-    const dateObj = new Date(run.timestamp);
-    const shortTime = `${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(dateObj.getDate()).padStart(2, '0')} ${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
-    return {
-      name: shortTime,
-      durationSec: parseFloat(((run.durationMs || 3500) / 1000).toFixed(2)),
-      items: run.syncedItemsCount || 4,
-      outcome: run.success ? 1 : 0
-    };
-  });
+  const realTrendsData = [...syncRunRecords]
+    .reverse()
+    .map((run: any) => {
+      const dateObj = new Date(run?.timestamp);
+      const isValidDate = Number.isFinite(dateObj.getTime());
+      const shortTime = isValidDate
+        ? `${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(dateObj.getDate()).padStart(2, '0')} ${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`
+        : '--/-- --:--';
+      return {
+        name: shortTime,
+        durationSec: parseFloat(((run?.durationMs || 3500) / 1000).toFixed(2)),
+        items: run?.syncedItemsCount || 4,
+        outcome: run?.success ? 1 : 0
+      };
+    });
 
   const fallbackTrendsData = Array.from({ length: 10 }, (_, i) => {
     const d = new Date(Date.now() - (9 - i) * 600000);
@@ -188,10 +194,11 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
 
     // Incorporate modern, actual live syncRunRecords from the previous 24 hours if available
     syncRunRecords.forEach((run: any) => {
-      const runTime = new Date(run.timestamp).getTime();
+      const runTime = new Date(run?.timestamp).getTime();
+      if (!Number.isFinite(runTime)) return;
       const matchedSlot = slots.find(s => runTime >= s.timestampStart && runTime < s.timestampEnd);
       if (matchedSlot) {
-        if (run.success) {
+        if (run?.success) {
           matchedSlot.Success += 1;
         } else {
           matchedSlot.Failure += 1;
