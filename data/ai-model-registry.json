@@ -1,7 +1,7 @@
 {
   "version": "3.100.0",
-  "updatedAt": "2026-11-19T19:59:29.969Z",
-  "lastDiscoveryAt": "2026-11-18T23:55:04.217Z",
+  "updatedAt": "2026-11-20T05:51:50.027Z",
+  "lastDiscoveryAt": "2026-11-20T05:51:49.840Z",
   "routingPolicy": "quota-split",
   "keylessFallbackEnabled": true,
   "providerOrder": [
@@ -22,7 +22,7 @@
       "enabled": true,
       "priority": 1,
       "source": "default",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-3.1-flash-lite",
@@ -32,7 +32,7 @@
       "enabled": true,
       "priority": 2,
       "source": "default",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-3.8-flash",
@@ -42,7 +42,7 @@
       "enabled": true,
       "priority": 3,
       "source": "default",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-flash-latest",
@@ -61,7 +61,7 @@
       "enabled": true,
       "priority": 7,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-3.5-flash-lite",
@@ -71,7 +71,7 @@
       "enabled": true,
       "priority": 7,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-2.5-flash",
@@ -81,7 +81,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-3.5-flash",
@@ -91,7 +91,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-omni-flash-preview",
@@ -101,7 +101,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-3.6-flash",
@@ -111,7 +111,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-3.7-flash",
@@ -121,7 +121,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-4-argon",
@@ -131,7 +131,7 @@
       "enabled": true,
       "priority": 9,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-2.5-pro",
@@ -141,7 +141,7 @@
       "enabled": true,
       "priority": 12,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-4-carbon",
@@ -151,7 +151,7 @@
       "enabled": false,
       "priority": 20,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     },
     {
       "id": "gemini-4-neon",
@@ -161,7 +161,7 @@
       "enabled": false,
       "priority": 20,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-18T23:55:04.217Z"
+      "lastVerifiedAt": "2026-11-20T05:51:49.840Z"
     }
   ],
   "openrouterFreeModels": [
@@ -169,19 +169,17 @@
     "google/gemma-4-31b-it:free",
     "inclusionai/ling-3.2-flash:free",
     "baidu/ernie-5.5-flash-preview:free",
-    "thinkingmachines/inkling-2-small:free",
     "liquid/lfm-3-1.7b:free",
     "particle-ai/particle-1:free",
     "recursive/flint-v1.0:free",
     "nvidia/nemotron-3.5-super-vl:free",
     "dots-studio/dots-3-note-preview:free",
     "nvidia/nemotron-3.5-lightning:free",
-    "cohere/north-mini-code:free"
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
   ],
   "pollinationsModels": [
-    "openai",
-    "openai-fast",
-    "mistral"
+    "openai-fast"
   ],
   "providerModels": {
     "groq": [
@@ -198,14 +196,14 @@
       "google/gemma-4-31b-it:free",
       "inclusionai/ling-3.2-flash:free",
       "baidu/ernie-5.5-flash-preview:free",
-      "thinkingmachines/inkling-2-small:free",
       "liquid/lfm-3-1.7b:free",
       "particle-ai/particle-1:free",
       "recursive/flint-v1.0:free",
       "nvidia/nemotron-3.5-super-vl:free",
       "dots-studio/dots-3-note-preview:free",
       "nvidia/nemotron-3.5-lightning:free",
-      "cohere/north-mini-code:free"
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     ],
     "cerebras": [
       "gpt-oss-120b",
@@ -216,9 +214,7 @@
       "@cf/google/gemma-3-12b-it"
     ],
     "pollinations": [
-      "openai",
-      "openai-fast",
-      "mistral"
+      "openai-fast"
     ]
   },
   "circuitBreakers": {
@@ -227,8 +223,8 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"models/gemini-flash-latest is not found for API version v1, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported me",
-      "trippedAt": "2026-11-18T23:55:02.899Z",
-      "expiresAt": "2026-11-19T23:55:02.899Z",
+      "trippedAt": "2026-11-20T05:51:49.175Z",
+      "expiresAt": "2026-11-21T05:51:49.175Z",
       "failureCount": 1
     },
     "gemini-2.5-flash-lite": {
@@ -236,8 +232,8 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use models/gemini-3.5-flash-lite for the latest features and improvements. We recomm",
-      "trippedAt": "2026-11-18T23:55:03.036Z",
-      "expiresAt": "2026-11-19T23:55:03.036Z",
+      "trippedAt": "2026-11-20T05:51:49.243Z",
+      "expiresAt": "2026-11-21T05:51:49.243Z",
       "failureCount": 1
     },
     "gemini-2.5-flash": {
@@ -245,8 +241,8 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to",
-      "trippedAt": "2026-11-18T23:55:03.346Z",
-      "expiresAt": "2026-11-19T23:55:03.346Z",
+      "trippedAt": "2026-11-20T05:51:49.391Z",
+      "expiresAt": "2026-11-21T05:51:49.391Z",
       "failureCount": 1
     },
     "gemini-2.5-pro": {
@@ -254,8 +250,8 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-pro is no longer available to new users. Please update your code to use models/gemini-3.1-pro-preview for the latest features and improvements. We recommend yo",
-      "trippedAt": "2026-11-18T23:55:04.167Z",
-      "expiresAt": "2026-11-19T23:55:04.167Z",
+      "trippedAt": "2026-11-20T05:51:49.808Z",
+      "expiresAt": "2026-11-21T05:51:49.808Z",
       "failureCount": 1
     }
   },
@@ -265,7 +261,7 @@
     "freeProviderRequests": 1,
     "keylessRequests": 1,
     "failoverSaves": 1,
-    "circuitTrips404": 12,
+    "circuitTrips404": 16,
     "lastProviderUsed": "pollinations",
     "lastModelUsed": "Pollinations (openai) [Keyless]",
     "lastUpdatedAt": "2026-11-19T19:59:29.969Z",
