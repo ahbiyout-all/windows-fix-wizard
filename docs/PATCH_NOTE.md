@@ -1,6 +1,31 @@
-# Patch Note - System Update (v3.106.7)
+# Patch Note - System Update (v3.106.9)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.9] - 2026-11-19
+
+### 🔧 Bug Fixes & Keyless Fallback (Pollinations) Stability Optimization
+- **Pollinations 키리스 폴백 15초 조기 타임아웃 및 402 IP 호출 제한 대응 (`lib/ai-resilience-router.ts`, `server.ts`)**:
+  - JSON 다건 이슈 수집 시 `15초` 타임아웃으로 Pollinations 응답이 끊기던 문제를 `32초` 예산(`timeoutMs` 옵션 지원)으로 상향했습니다.
+  - Pollinations HTTP `402` (`FREE_LIMIT`: IP당 45초 간격 제한) 및 `429` 응답을 감지해 대기 시간이 18초 이하일 경우 자동 대기 후 1회 재시도하고, 초과 시 정확한 잔여 대기 시간을 반환해 `"No valid key"` 오인 경고가 뜨지 않도록 개선했습니다.
+- **수동 수집 프롬프트 경량화·중복 재시도 방지 및 한국어 안내 개선 (`src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`, `docs/PATCH_NOTE.md`)**:
+  - Gemini 키 비활성/쿨다운 상태에서 수동 수집 시 2건 이하로 프롬프트 크기를 최적화해 Pollinations 응답 성공률을 높이고, 쿨다운 오류 발생 시 1.5초 뒤 중복 재시도로 IP 제한을 다시 유발하지 않도록 즉시 반환 처리했습니다.
+  - 대기/한도 안내 메시지를 사용자 친화적 한국어·영어 문구로 개선하고 전 모듈 버전을 `v3.106.9`로 동기화했습니다.
+
+---
+
+## [v3.106.8] - 2026-11-19
+
+### 🔧 Bug Fixes & AI Collection Sync Pipeline Overhaul
+- **AI 자동 수집("지금 즉시 실행") `0 added, 0 updated` 및 저장 누락 근본 수정 (`src/App.tsx`, `server.ts`)**:
+  - `handleTriggerAiSearch()`가 수집된 이슈를 더미 Firestore 스텁(`getDocs`/`setDoc`/`updateDoc`)으로 흘려보내 실제 서버 DB에 전혀 저장되지 않던 결함을 제거하고, 서버 `POST /api/issues/sync`(및 정적 호스트용 IndexedDB 병합)로 직접 영구 저장한 뒤 실집계 건수(`added`/`updated`)를 반환하도록 전환했습니다.
+  - `callAiWithFallback()` 및 `/api/ai/generate`가 이슈 수집 요청에 대해 로컬 진단 폴백(`system-local-grounding`, `code`/`title` 미포함)을 정상 응답으로 반환해 `0 added, 0 updated` 성공 알림이 뜨던 문제를 차단하고, 수집 요청 실패·대기 시 명확한 상태 안내와 `responseMimeType: "application/json"`·한국어/표준 카테고리 정규화를 적용했습니다.
+  - `localExistingMap['title:...']` 대입 누락 오타를 수정하고, 스테이징 활성 시 수집 건수 알림을 보완했습니다.
+- **서버 AI 다중 키·모델 타임아웃 예산 및 폴백 전이 개선 (`server.ts`, `lib/ai-resilience-router.ts`, `package.json`, `src/components/QuickSystemScanUtility.tsx`, `docs/PATCH_NOTE.md`)**:
+  - `executeServerGeminiCall()`에 Gemini 단계 총 시간 예산(`20초`)과 모델별 호출 타임아웃(`12초`)·키당 일시 오류 상한(`2회`)을 적용해 무응답·오류 키 환경에서도 장시간 블로킹 없이 무료/키리스(Pollinations) 폴백으로 신속하게 전환되도록 개선했습니다.
+  - `/api/ai/search-trends` 폴백 JSON 강제 옵션 및 오류 상태 응답을 보완하고 전 모듈 버전을 `v3.106.8`로 동기화했습니다.
 
 ---
 

@@ -421,6 +421,8 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
   const isVerification = contentsStr.includes("Please verify if the following troubleshooting information") ||
     contentsStr.includes("You are a Windows technical expert") ||
     contentsStr.includes("verificationStatus");
+  const isCollection = config?.purpose === 'collection' ||
+    (contentsStr.includes('troubleshooting guides for Windows') && contentsStr.includes('"code"') && contentsStr.includes('"manualSteps"'));
 
   if (IS_GITHUB_PAGES) {
     if (isVerification) {
@@ -440,6 +442,7 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
   }
 
   // Full-Stack Server Mode
+  let serverErrorDetail = '';
   try {
     const headers = await getAuthHeaders();
     const res = await fetch('/api/ai/generate', {
@@ -452,15 +455,13 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
       body: JSON.stringify({
         prompt: contents,
         config,
+        purpose: config?.purpose || (isCollection ? 'collection' : undefined),
         enableSearch: !!(config && config.tools),
         customApiKey: clientKey
       })
     });
 
     const data = await res.json().catch(() => ({}));
-    if (data && data.text) {
-      return data.text;
-    }
     if (data && data.standby && isVerification) {
       return JSON.stringify({
         status: "verified",
@@ -470,8 +471,20 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
         revisedSymptoms: null
       });
     }
+    if (data && data.standby && (isCollection || data.modelUsed === 'system-standby')) {
+      serverErrorDetail = data.notice || data.error || 'AI 서비스가 대기 상태입니다.';
+      throw new Error(serverErrorDetail);
+    }
+    if (data && data.text) {
+      return data.text;
+    }
+    serverErrorDetail = data?.error || data?.notice || (!res.ok ? `HTTP ${res.status}` : '');
   } catch (serverErr: any) {
+    if (serverErrorDetail) {
+      throw serverErr;
+    }
     console.warn("Server AI call fetch failed:", serverErr?.message || serverErr);
+    serverErrorDetail = serverErr?.message || '';
   }
 
   // Safe heuristic fallback for verification
@@ -485,7 +498,7 @@ export const callAiWithFallback = async (ai: any, contents: string, config?: any
     });
   }
 
-  throw new Error('AI 서비스가 대기 상태입니다. (로컬 데이터베이스 진단 사용 권장)');
+  throw new Error(serverErrorDetail || 'AI 서비스가 대기 상태입니다. (로컬 데이터베이스 진단 사용 권장)');
 };
 
 export const getAiClient = () => {
@@ -706,7 +719,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.106.7";
+const APP_VERSION = "3.106.9";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -7809,20 +7822,25 @@ export default function App() {
       ];
       const randomFocus = focusAreas[Math.floor(Math.random() * focusAreas.length)];
 
-      const avoidList = dbIssues.slice(0, 20).map(i => i.title_en || i.title).join(', ');
+      const effectiveCount = (!isAuto && apiKeyStatus && apiKeyStatus.status !== 'active')
+        ? Math.min(count, 2)
+        : count;
+      const avoidList = dbIssues.slice(0, 12).map(i => i.code ? `${i.code} ${i.title_en || i.title}` : (i.title_en || i.title)).join(', ');
 
-      const prompt = `Search the web for details on ${count} DIFFERENT troubleshooting guides for Windows error codes or issues.
+      const prompt = `Search the web for details on ${effectiveCount} DIFFERENT troubleshooting guides for Windows error codes or issues.
         CRITICAL: Focus on category "${randomCategory}" and area "${randomFocus}". 
         
         DO NOT generate any of the following issues as they already exist in my database:
         [${avoidList}]
 
-        Do NOT generate generic errors like 'Update is slow'. Find unique, specific error codes or new trending issues (2024-2025).
+        Do NOT generate generic errors like 'Update is slow'. Find unique, specific error codes or new trending issues (2024-2026).
         
-        IMPORTANT JSON RULES:
+        IMPORTANT LANGUAGE & JSON RULES:
+        - Write "title", "symptoms", and "manualSteps" in natural Korean (한국어). Keep "title_en", "symptoms_en", "manualSteps_en" in English.
+        - "category" MUST be exactly one of: "업데이트", "네트워크", "시스템/블루스크린", "스토어/앱", "정품인증", "보안/백신".
         - Escape all backslashes in file paths, registry keys, and scripts (use double backslashes e.g. C:\\\\Windows\\\\System32 or HKLM:\\\\SOFTWARE).
         - Ensure double quotes within strings are properly escaped.
-        - Return ONLY a raw JSON array of ${count} objects without markdown decoration:
+        - Return ONLY a raw JSON array of ${effectiveCount} objects without markdown decoration:
         [
           { 
             "category": "업데이트"|"네트워크"|"시스템/블루스크린"|"스토어/앱"|"정품인증"|"보안/백신", 
@@ -7841,34 +7859,46 @@ export default function App() {
         ]`;
 
       let text = "";
-      let retries = 3;
+      const retries = 2;
       
       for (let i = 0; i < retries; i++) {
         try {
           const response = await callAiWithFallback(ai, prompt, {
-              tools: [{ googleSearch: {} }]
-            });
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            purpose: "collection"
+          });
           text = response;
           break;
         } catch (err: any) {
-          if (i === retries - 1) throw err;
-          await new Promise(r => setTimeout(r, 2000));
+          const msg = String(err?.message || '');
+          const isImmediateCooldown =
+            msg.includes('FREE_LIMIT') ||
+            msg.includes('간격 제한') ||
+            msg.includes('unavailable or throttled') ||
+            msg.includes('429');
+          if (isImmediateCooldown || i === retries - 1) throw err;
+          await new Promise(r => setTimeout(r, 1500));
         }
       }
       if (!text) throw new Error("No response from AI");
       
-      let issuesData: any;
+      let rawIssuesData: any[];
       try {
         const parsed = parseAiJson(text);
         if (Array.isArray(parsed)) {
-          issuesData = parsed;
+          rawIssuesData = parsed;
         } else if (parsed && typeof parsed === 'object') {
           if (Array.isArray(parsed.issues)) {
-            issuesData = parsed.issues;
+            rawIssuesData = parsed.issues;
           } else if (Array.isArray(parsed.data)) {
-            issuesData = parsed.data;
+            rawIssuesData = parsed.data;
+          } else if (parsed.diagnosis && !parsed.code && !parsed.title) {
+            throw new Error(language === 'en'
+              ? "AI Service is currently in standby mode (local fallback diagnosis returned)."
+              : "AI 서비스가 대기 상태이므로 신규 이슈를 수집할 수 없습니다.");
           } else {
-            issuesData = [parsed];
+            rawIssuesData = [parsed];
           }
         } else {
           throw new Error("Parsed AI result is neither an array nor an object");
@@ -7878,8 +7908,52 @@ export default function App() {
         throw parseErr;
       }
 
+      const normalizeCollectedCategory = (rawCat: unknown): string => {
+        const val = String(rawCat || '').trim();
+        const canonical = ['업데이트', '네트워크', '시스템/블루스크린', '스토어/앱', '정품인증', '보안/백신'];
+        if (canonical.includes(val)) return val;
+        const lower = val.toLowerCase();
+        if (lower.includes('update') || lower.includes('업데이트')) return '업데이트';
+        if (lower.includes('net') || lower.includes('wifi') || lower.includes('dns') || lower.includes('네트워크')) return '네트워크';
+        if (lower.includes('store') || lower.includes('app') || lower.includes('스토어') || lower.includes('앱')) return '스토어/앱';
+        if (lower.includes('activ') || lower.includes('licens') || lower.includes('정품')) return '정품인증';
+        if (lower.includes('secur') || lower.includes('defend') || lower.includes('보안') || lower.includes('백신')) return '보안/백신';
+        return '시스템/블루스크린';
+      };
+
+      const issuesData = rawIssuesData
+        .filter((item: any) => item && typeof item === 'object' && !Array.isArray(item))
+        .map((item: any) => {
+          const title = String(item.title || item.title_en || '').trim();
+          const code = String(item.code || '').trim();
+          const symptoms = String(item.symptoms || item.symptoms_en || title).trim();
+          return {
+            ...item,
+            category: normalizeCollectedCategory(item.category),
+            code,
+            title,
+            title_en: String(item.title_en || title).trim(),
+            symptoms,
+            symptoms_en: String(item.symptoms_en || symptoms).trim(),
+            manualSteps: Array.isArray(item.manualSteps) && item.manualSteps.length > 0
+              ? item.manualSteps.map((s: any) => String(s))
+              : (Array.isArray(item.manualSteps_en) && item.manualSteps_en.length > 0
+                ? item.manualSteps_en.map((s: any) => String(s))
+                : ['Windows 설정 > 문제 해결사 실행', '관리자 권한 PowerShell에서 sfc /scannow 실행']),
+            sourceUrls: Array.isArray(item.sourceUrls) ? item.sourceUrls.map((u: any) => String(u)).filter(Boolean) : [],
+            windowsVersions: Array.isArray(item.windowsVersions) && item.windowsVersions.length > 0
+              ? item.windowsVersions.map((v: any) => String(v))
+              : ['Windows 11', 'Windows 10'],
+            isLatest: item.isLatest !== false,
+            source: String(item.source || 'AI Auto-Search'),
+          };
+        })
+        .filter((item: any) => item.code.length > 0 && item.title.length > 0 && item.symptoms.length > 0);
+
       if (!Array.isArray(issuesData) || issuesData.length === 0) {
-        throw new Error("AI response did not contain any valid issue items");
+        throw new Error(language === 'en'
+          ? "AI response did not contain any valid issue items with code and title"
+          : "AI 응답에서 유효한 오류 코드/제목 항목을 추출하지 못했습니다.");
       }
 
       if (useStaging) {
@@ -7891,144 +7965,119 @@ export default function App() {
         } as KnownIssue));
         
         setStagedIssues(prev => [...prev, ...newIssues]);
-        setTriggeringAi(false);
-        // Do NOT refresh counts or lists during local staging to save quota
-        return { added: issuesData.length, updated: 0 };
+        if (!isAuto) {
+          customAlert(language === 'en'
+            ? `Collected ${newIssues.length} issue(s) into local staging queue.`
+            : `수집된 ${newIssues.length}건의 이슈를 로컬 스테이징 대기열에 추가했습니다.`);
+        }
+        return { added: newIssues.length, updated: 0 };
       }
 
-      const issuesRef = collection(db, "issues");
-      
-      // 1. Local Cache Deduplication & Change Detection 
-      // We check dbIssues (already loaded in memory) to avoid initial Firestore reads
       const localExistingMap: Record<string, KnownIssue> = {};
       dbIssues.forEach(iss => {
         if (iss.code) localExistingMap[`code:${iss.code}`] = iss;
-        if (iss.title) localExistingMap[`title:${iss.title}`]; // Prefer code if both exist
+        if (iss.title) localExistingMap[`title:${iss.title}`] = iss;
       });
 
-      // 2. Efficient Bulk Duplicate Check for items NOT in local memory
-      const remainingData = issuesData.filter(issueData => {
-        const localMatch = localExistingMap[`code:${issueData.code}`] || localExistingMap[`title:${issueData.title}`];
-        return !localMatch;
-      });
+      let skippedCount = 0;
+      let duplicateSkippedCount = 0;
 
-      const codes = Array.from(new Set(remainingData.map(i => String(i.code)).filter(Boolean)));
-      const titles = Array.from(new Set(remainingData.map(i => String(i.title)).filter(Boolean)));
-      
-      const existingIds: Record<string, string> = {}; // key -> docId
-
-      // Firestore 'in' queries can handle up to 30 elements
-      if (codes.length > 0) {
-        try {
-          const qC = firestoreQuery(issuesRef, where("code", "in", codes));
-          const snapC = await getDocs(qC);
-          snapC.forEach(d => { existingIds[`code:${d.data().code}`] = d.id; });
-        } catch (e) { console.warn("Bulk code lookup failed", e); }
-      }
-      
-      if (titles.length > 0) {
-        try {
-          const qT = firestoreQuery(issuesRef, where("title", "in", titles));
-          const snapT = await getDocs(qT);
-          snapT.forEach(d => { 
-            if (!existingIds[`code:${d.data().code}`]) {
-              existingIds[`title:${d.data().title}`] = d.id; 
-            }
-          });
-        } catch (e) { console.warn("Bulk title lookup failed", e); }
-      }
-
-      // 3. Process Sync with batched knowledge
-      for (const issueData of issuesData) {
-        if (!issueData.code || !issueData.title) continue;
-
-        // Check local memory first, then found IDs
-        const localMatch = localExistingMap[`code:${issueData.code}`] || localExistingMap[`title:${issueData.title}`];
-        const existingId = localMatch?.id || existingIds[`code:${issueData.code}`] || existingIds[`title:${issueData.title}`];
-
-        if (existingId) {
-          // Change Detection (Anti-Redundant-Update)
-          // If we have local data, check if any meaningful field changed
-          let shouldUpdate = true;
-          if (localMatch) {
-            const hasChanges = 
-              issueData.title !== localMatch.title ||
-              issueData.symptoms !== localMatch.symptoms ||
-              issueData.script !== localMatch.script ||
-              JSON.stringify(issueData.manualSteps) !== JSON.stringify(localMatch.manualSteps) ||
-              issueData.category !== localMatch.category;
-            
-            if (!hasChanges) {
-              shouldUpdate = false;
-              console.log(`Skipping update for [${issueData.title}] - no changes detected.`);
-            }
-          }
-
-          if (shouldUpdate) {
-            await updateDoc(doc(db, "issues", existingId), { 
-              ...issueData, 
-              updatedAt: new Date() 
-            });
-            updatedCount++;
-          }
-        } else {
-          const issueId = `ai-${Date.now()}-${addedCount}`;
-          await setDoc(doc(db, "issues", issueId), { 
-            id: issueId, 
-            ...issueData, 
-            source: "AI Auto-Search", 
-            createdAt: new Date() 
-          });
-          addedCount++;
+      if (!IS_GITHUB_PAGES) {
+        const authHeaders = await getAuthHeaders();
+        const syncResp = await fetch('/api/issues/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ issues: issuesData, skipDuplicates: false })
+        });
+        const syncData = await parseJsonResponse<any>(syncResp);
+        if (!syncResp.ok || !syncData?.success) {
+          throw new Error(syncData?.error || `HTTP ${syncResp.status}`);
         }
+        const resObj = syncData.result || syncData;
+        addedCount = Number(resObj.added || 0);
+        updatedCount = Number(resObj.updated || 0);
+        skippedCount = Number(resObj.skipped || 0);
+        duplicateSkippedCount = Number(resObj.duplicateSkipped || 0);
+      } else {
+        const basePool = await getFullUnfilteredIssuesPool();
+        const preparedIssues = issuesData.map((issueData, idx) => {
+          const localMatch = localExistingMap[`code:${issueData.code}`] || localExistingMap[`title:${issueData.title}`];
+          return {
+            ...issueData,
+            id: localMatch?.id || `ai-${Date.now()}-${idx}`,
+            createdAt: localMatch?.createdAt || getKSTISOString(),
+            updatedAt: getKSTISOString(),
+            source: 'AI Auto-Search'
+          } as KnownIssue;
+        });
+        const mergeResult = mergeIssuesDeduplicated(basePool, preparedIssues);
+        addedCount = mergeResult.addedCount;
+        updatedCount = mergeResult.updatedCount;
+        setFullIssuesPool(mergeResult.merged);
+        setDbIssues(mergeResult.merged);
+        await idbSet('winfix_merged_issues', mergeResult.merged);
+        try {
+          localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(mergeResult.merged));
+          localStorage.setItem('winfix_db_issues_cache', JSON.stringify(mergeResult.merged.slice(0, 200)));
+        } catch (_) {}
       }
-    
+
       if (!isAuto) {
-        fetchCategoryCounts(true);
-        fetchIssues(false, true);
-        customAlert(`Sync successful: ${addedCount} added, ${updatedCount} updated`);
+        await fetchCategoryCounts(true);
+        await fetchIssues(false, true);
+        if (addedCount > 0 || updatedCount > 0) {
+          customAlert(language === 'en'
+            ? `Sync successful: ${addedCount} added, ${updatedCount} updated`
+            : `AI 수집 및 저장 완료: ${addedCount}개 추가, ${updatedCount}개 업데이트됨`);
+        } else {
+          customAlert(language === 'en'
+            ? `Sync finished: 0 new changes (${issuesData.length} analyzed, ${skippedCount + duplicateSkippedCount} skipped/duplicate)`
+            : `수집 완료: 새로 추가/갱신된 항목이 없습니다 (분석 ${issuesData.length}건, 중복·스킵 ${skippedCount + duplicateSkippedCount}건)`);
+        }
       } else {
         await logAdminAction('verify', 'ai_search', language === 'en' ? `Bulk Auto-Collection finished: ${addedCount} added, ${updatedCount} updated` : `대량 자동 수집 완료: ${addedCount}개 추가됨, ${updatedCount}개 업데이트됨`, 'success', 'AI');
       }
       const now = new Date();
       setLastSyncAt(now);
-      
-      // Persist to Firestore status
       try {
-        await setDoc(doc(db, 'system_config', 'status'), { 
-          lastSyncAt: now.toISOString(),
-          lastSyncBy: user?.email || (isAuto ? 'system-auto' : 'manual')
-        }, { merge: true });
-        trackUsage(0, 1);
-      } catch (dbErr) {
-        console.warn("Failed to persist sync status:", dbErr);
-      }
+        localStorage.setItem('winfix_sync_last_at', now.toISOString());
+      } catch (_) {}
+      trackUsage(0, 1);
 
       return { added: addedCount, updated: updatedCount };
 
     } catch (err: any) {
-      const isStandbyOrQuota = err.message?.includes('Settings') || 
-                               err.message?.includes('대기') || 
-                               err.message?.includes('유효하지') ||
-                               err.message?.includes('429') ||
-                               err.message?.includes('Quota') ||
-                               err.message?.includes('RESOURCE_EXHAUSTED') ||
-                               err.message?.includes('Quarantined') ||
-                               err.message?.includes('API key not valid');
+      const errMessageStr = String(err?.message || err || '');
+      const isStandbyOrQuota = errMessageStr.includes('Settings') || 
+                               errMessageStr.includes('대기') || 
+                               errMessageStr.includes('유효하지') ||
+                               errMessageStr.includes('429') ||
+                               errMessageStr.includes('Quota') ||
+                               errMessageStr.includes('RESOURCE_EXHAUSTED') ||
+                               errMessageStr.includes('Quarantined') ||
+                               errMessageStr.includes('API key not valid') ||
+                               errMessageStr.includes('unavailable or throttled') ||
+                               errMessageStr.includes('FREE_LIMIT') ||
+                               errMessageStr.includes('간격 제한') ||
+                               errMessageStr.includes('한도');
       
       if (isStandbyOrQuota) {
-        console.info("AI Sync standby/cooldown:", err.message);
+        console.info("AI Sync standby/cooldown:", errMessageStr);
       } else {
-        console.warn("AI Sync failed:", err.message || err);
+        console.warn("AI Sync failed:", errMessageStr);
       }
 
-      let errorMsg = err.message || String(err);
-      if (typeof errorMsg === 'string' && (errorMsg.includes('429') || errorMsg.includes('Quota') || errorMsg.includes('RESOURCE_EXHAUSTED'))) {
+      let errorMsg = errMessageStr;
+      if (errMessageStr.includes('FREE_LIMIT') || errMessageStr.includes('간격 제한')) {
+        errorMsg = errMessageStr;
+      } else if (errMessageStr.includes('429') || errMessageStr.includes('Quota') || errMessageStr.includes('RESOURCE_EXHAUSTED')) {
         errorMsg = language === 'en' ? "Gemini API Quota Exceeded. Please try again tomorrow or upgrade your plan." : "Gemini API 하루 사용량을 초과했습니다. 내일 다시 시도해주세요.";
-      } else if (typeof errorMsg === 'string' && (errorMsg.includes('403') || errorMsg.includes('PERMISSION_DENIED'))) {
+      } else if (errMessageStr.includes('403') || errMessageStr.includes('PERMISSION_DENIED')) {
         errorMsg = language === 'en' ? "Gemini API Access Denied. Search grounding requires API Key billing." : "Gemini API 접근이 거부되었습니다. 결제가 필요한 기능일 수 있습니다.";
       } else if (isStandbyOrQuota) {
-        errorMsg = language === 'en' ? "AI Service is in standby. Serving from local database." : "AI 서비스가 대기 상태입니다. 내장 데이터베이스를 통해 정상 작동합니다.";
+        errorMsg = language === 'en'
+          ? "AI collection is temporarily in cooldown/standby. Please wait ~45 seconds and retry."
+          : "Google API 키가 쿨다운 대기 중이며 무료 AI 폴백도 일시 혼잡 상태입니다. 약 45초 후 다시 시도해 주세요.";
       }
       
       if (!isAuto) {

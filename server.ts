@@ -20,6 +20,7 @@ import {
   pruneExpiredCircuitBreakers,
   discoverLiveModels,
   callExternalFreeProvider,
+  getPollinationsRateLimitStatus,
   contentsToPromptText,
   buildExternalFallbackPrompt,
   stripMarkdownJsonFences,
@@ -196,7 +197,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.7';
+  return '3.106.9';
 }
 
 const BACKUP_SENSITIVE_KEY_EXACT = new Set([
@@ -1116,13 +1117,27 @@ async function executeServerGeminiCall(
   let lastError: any = null;
   let encountered404 = false;
 
+  const geminiBudgetDeadline = Date.now() + 20000;
+  const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
+  };
+
   const attemptGeminiKeyLoop = async (modelsToUse: string[]) => {
     for (const k of validKeys) {
+      if (Date.now() > geminiBudgetDeadline) break;
       const ai = new GoogleGenAI({
         apiKey: k.value,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+        httpOptions: { timeout: 12000, headers: { 'User-Agent': 'aistudio-build' } }
       });
+      let transientErrorsOnKey = 0;
       for (const modelName of modelsToUse) {
+        if (Date.now() > geminiBudgetDeadline) break;
         try {
           const configToUse = { ...options.config };
           if (options.enableSearch && !configToUse.tools) {
@@ -1152,11 +1167,15 @@ async function executeServerGeminiCall(
           } else {
             let response: any = null;
             try {
-              response = await ai.models.generateContent({
-                model: modelName,
-                contents,
-                config: configToUse
-              });
+              response = await withTimeout(
+                ai.models.generateContent({
+                  model: modelName,
+                  contents,
+                  config: configToUse
+                }),
+                12000,
+                `Gemini(${modelName})`
+              );
             } catch (firstTryErr: any) {
               const firstClass = classifyAiError(firstTryErr);
               if (firstClass.type === 'INVALID_KEY') {
@@ -1172,14 +1191,18 @@ async function executeServerGeminiCall(
               if (firstClass.type === 'MODEL_NOT_FOUND_404') {
                 throw firstTryErr;
               }
-              if (configToUse.tools) {
+              if (configToUse.tools && Date.now() < geminiBudgetDeadline) {
                 const fallbackConfig = { ...configToUse };
                 delete fallbackConfig.tools;
-                response = await ai.models.generateContent({
-                  model: modelName,
-                  contents,
-                  config: fallbackConfig
-                });
+                response = await withTimeout(
+                  ai.models.generateContent({
+                    model: modelName,
+                    contents,
+                    config: fallbackConfig
+                  }),
+                  10000,
+                  `Gemini(${modelName})`
+                );
               } else {
                 throw firstTryErr;
               }
@@ -1206,6 +1229,11 @@ async function executeServerGeminiCall(
             keyThrottledUntil.set(k.name, now + 15 * 60 * 1000);
             break;
           }
+          transientErrorsOnKey++;
+          if (transientErrorsOnKey >= 2) {
+            console.warn(`[AI Timeout/Transient Guard] Aborting remaining Gemini models for key '${k.name}' after ${transientErrorsOnKey} transient failures.`);
+            break;
+          }
         }
       }
     }
@@ -1216,14 +1244,14 @@ async function executeServerGeminiCall(
     const primaryRes = await attemptGeminiKeyLoop(candidateModels);
     if (primaryRes) return primaryRes;
 
-    // Live auto-discovery recovery if 404s tripped models
-    if (encountered404 && !options.stream) {
+    // Live auto-discovery recovery if 404s tripped models and budget permits
+    if (encountered404 && !options.stream && Date.now() < geminiBudgetDeadline) {
       try {
         console.log('[AI Resilience] 404 detected — running live Gemini catalog auto-discovery...');
         const discovery = await discoverLiveModels({ geminiApiKey: validKeys[0].value });
         registry = discovery.registry;
         const fresh = getHealthyGeminiCandidates(options.model, registry).filter((m) => !candidateModels.includes(m));
-        if (fresh.length > 0) {
+        if (fresh.length > 0 && Date.now() < geminiBudgetDeadline) {
           const recoveryRes = await attemptGeminiKeyLoop(fresh);
           if (recoveryRes) return recoveryRes;
         }
@@ -1251,7 +1279,8 @@ async function executeServerGeminiCall(
   const latestRegistry = loadAiModelRegistry();
   if (latestRegistry.keylessFallbackEnabled !== false) {
     const keylessRes = await callExternalFreeProvider('pollinations', externalPromptString, {
-      registry: latestRegistry
+      registry: latestRegistry,
+      timeoutMs: wantsJsonOutput ? 32000 : 24000
     });
     if (keylessRes && keylessRes.text) {
       const normalizedText = wantsJsonOutput ? stripMarkdownJsonFences(keylessRes.text) : keylessRes.text;
@@ -1263,9 +1292,14 @@ async function executeServerGeminiCall(
     }
   }
 
+  const pollStatus = getPollinationsRateLimitStatus();
+  if (pollStatus.inCooldown) {
+    throw new Error(`Google AI 키 할당량 소진 및 무료 폴백 호출 간격 제한(FREE_LIMIT): 약 ${pollStatus.remainingSeconds}초 후 다시 시도해 주세요.`);
+  }
+
   if (validKeys.length === 0) {
     const info = getApiKeyInfo();
-    throw new Error(`Google AI API keys are unavailable or throttled (${info.placeholderReason || "No valid key"}). Serving queries via local database & GitOps cache.`);
+    throw new Error(`Google AI API keys are unavailable or throttled (${info.placeholderReason || "Cooldown/Exhausted"}). Serving queries via local database & GitOps cache.`);
   }
 
   if (lastError) {
@@ -2899,7 +2933,7 @@ async function startServer() {
   };
 
   app.post("/api/ai/generate", rateLimitPublicAi, async (req, res) => {
-    const { prompt, contents, model, config, enableSearch, customApiKey } = req.body || {};
+    const { prompt, contents, model, config, enableSearch, customApiKey, purpose } = req.body || {};
     const clientKey = customApiKey || (req.headers['x-gemini-api-key'] as string);
     const payload = contents || prompt;
     if (!payload) {
@@ -2914,11 +2948,20 @@ async function startServer() {
       payloadStr.includes("You are a Windows technical expert") ||
       payloadStr.includes("verificationStatus") ||
       payloadStr.includes('"status": "verified"');
+    const isCollectionPrompt =
+      purpose === 'collection' ||
+      config?.purpose === 'collection' ||
+      (payloadStr.includes('troubleshooting guides for Windows') && payloadStr.includes('"code"') && payloadStr.includes('"manualSteps"')) ||
+      (payloadStr.includes('Return ONLY a raw JSON array') && payloadStr.includes('"manualSteps"'));
 
     try {
+      const sanitizedConfig = sanitizePublicAiConfig(config);
+      const effectiveConfig = isCollectionPrompt
+        ? { responseMimeType: 'application/json', ...(sanitizedConfig || {}) }
+        : sanitizedConfig;
       const result = await executeServerGeminiCall(payload, { 
         model: typeof model === 'string' ? model : undefined, 
-        config: sanitizePublicAiConfig(config), 
+        config: effectiveConfig, 
         enableSearch: Boolean(enableSearch),
         customApiKey: typeof clientKey === 'string' ? clientKey : undefined 
       });
@@ -2935,6 +2978,17 @@ async function startServer() {
           modelUsed: 'system-heuristic-verifier',
           standby: true,
           notice: cleanMsg
+        });
+      }
+
+      if (isCollectionPrompt) {
+        return res.json({
+          success: false,
+          text: '',
+          modelUsed: 'system-standby',
+          standby: true,
+          notice: cleanMsg,
+          error: cleanMsg
         });
       }
 
@@ -3106,12 +3160,14 @@ async function startServer() {
         : `Search for ${safeBatch} recent Windows 10/11 troubleshooting guides and issues. Return raw JSON array.`;
       const result = await executeServerGeminiCall(targetPrompt, {
         enableSearch: true,
-        workloadType: 'heavy-grounded'
+        workloadType: 'heavy-grounded',
+        config: { responseMimeType: 'application/json' }
       });
       res.json({ success: true, text: result.text, modelUsed: result.modelUsed });
     } catch (err: any) {
-      console.info("[API AI Search Trends Standby]:", getCleanErrorMessage(err));
-      res.json({ success: true, text: "[]", standby: true });
+      const cleanMsg = getCleanErrorMessage(err);
+      console.info("[API AI Search Trends Standby]:", cleanMsg);
+      res.json({ success: false, text: "[]", standby: true, error: cleanMsg });
     }
   });
 

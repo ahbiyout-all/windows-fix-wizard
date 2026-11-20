@@ -133,7 +133,7 @@ export const DEFAULT_GEMINI_MODELS: DiscoveredGeminiModel[] = [
 ];
 
 export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
-  version: '3.106.7',
+  version: '3.106.9',
   updatedAt: new Date().toISOString(),
   lastDiscoveryAt: null,
   routingPolicy: 'quota-split',
@@ -612,7 +612,7 @@ export async function discoverLiveModels(options?: {
       try {
         const orResp = await fetch('https://openrouter.ai/api/v1/models', {
           signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.7' }
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.9' }
         });
         if (orResp.ok) {
           const json: any = await orResp.json();
@@ -639,7 +639,7 @@ export async function discoverLiveModels(options?: {
       try {
         const pollResp = await fetch('https://text.pollinations.ai/models', {
           signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.7' }
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.9' }
         });
         if (pollResp.ok) {
           const json: any = await pollResp.json();
@@ -773,6 +773,7 @@ export async function callExternalFreeProvider(
     customKey?: string;
     cloudflareAccountId?: string;
     maxTokens?: number;
+    timeoutMs?: number;
     registry?: AiModelRegistry;
     bypassEnabledCheck?: boolean;
   }
@@ -940,54 +941,109 @@ export async function callExternalFreeProvider(
       ? registry.pollinationsModels
       : (registry.providerModels.pollinations || DEFAULT_AI_MODEL_REGISTRY.providerModels.pollinations);
     const models = rawModels.filter((m) => !isCircuitOpen(registry, `pollinations:${m}`));
+    const timeoutMs = Math.min(Math.max(Number(options?.timeoutMs) || 32000, 10000), 45000);
+
     for (const model of models.slice(0, 3)) {
-      try {
-        const resp = await fetch('https://text.pollinations.ai/openai', {
-          method: 'POST',
-          signal: AbortSignal.timeout(15000),
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.7'
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: sanitizedPrompt }],
-            temperature: 0.3,
-            private: true,
-            ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {})
-          })
-        });
-        if (resp.ok) {
-          const contentType = (resp.headers.get('content-type') || '').toLowerCase();
-          const rawBody = await resp.text();
-          let text = '';
-          let parsedJson = false;
-          try {
-            const parsed: any = JSON.parse(rawBody);
-            parsedJson = true;
-            text = parsed?.choices?.[0]?.message?.content || parsed?.text || '';
-          } catch {
-            const looksLikeHtml = contentType.includes('text/html') || /^\s*(?:<!doctype|<html|<head|<body)\b/i.test(rawBody);
-            if (!looksLikeHtml) {
-              text = rawBody || '';
-            }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const remainingCooldownMs = pollinationsCooldownUntil - Date.now();
+        if (remainingCooldownMs > 0) {
+          if (remainingCooldownMs <= 18000 && attempt === 0) {
+            await new Promise((r) => setTimeout(r, remainingCooldownMs + 500));
+          } else {
+            break;
           }
-          if ((!parsedJson || String(text).trim()) && String(text).trim()) {
-            return {
-              text: String(text),
-              modelUsed: `Pollinations (${model}) [Keyless]`,
-              keyUsed: 'KEYLESS_NO_AUTH',
-              provider: 'pollinations'
-            };
-          }
-        } else if (resp.status === 404) {
-          tripCircuitBreaker(registry, `pollinations:${model}`, 'pollinations', 404, 'Pollinations HTTP 404', 6);
         }
-      } catch (_) {}
+        try {
+          const resp = await fetch('https://text.pollinations.ai/openai', {
+            method: 'POST',
+            signal: AbortSignal.timeout(timeoutMs),
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.9'
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: 'user', content: sanitizedPrompt }],
+              temperature: 0.3,
+              private: true,
+              ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {})
+            })
+          });
+          if (resp.ok) {
+            pollinationsCooldownUntil = 0;
+            pollinationsCooldownMessage = '';
+            const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+            const rawBody = await resp.text();
+            let text = '';
+            let parsedJson = false;
+            try {
+              const parsed: any = JSON.parse(rawBody);
+              parsedJson = true;
+              text = parsed?.choices?.[0]?.message?.content || parsed?.text || '';
+            } catch {
+              const looksLikeHtml = contentType.includes('text/html') || /^\s*(?:<!doctype|<html|<head|<body)\b/i.test(rawBody);
+              if (!looksLikeHtml) {
+                text = rawBody || '';
+              }
+            }
+            if ((!parsedJson || String(text).trim()) && String(text).trim()) {
+              return {
+                text: String(text),
+                modelUsed: `Pollinations (${model}) [Keyless]`,
+                keyUsed: 'KEYLESS_NO_AUTH',
+                provider: 'pollinations'
+              };
+            }
+            break;
+          } else if (resp.status === 402 || resp.status === 429) {
+            const errBody = await resp.text().catch(() => '');
+            const retryMatch = errBody.match(/retry after\s+(\d+)\s*s/i) || errBody.match(/(\d+)\s*seconds/i);
+            const headerRetry = parseInt(resp.headers.get('retry-after') || '', 10);
+            const waitSec = Math.min(
+              Math.max(retryMatch ? parseInt(retryMatch[1], 10) : (Number.isFinite(headerRetry) ? headerRetry : 20), 2),
+              60
+            );
+            pollinationsCooldownUntil = Date.now() + waitSec * 1000;
+            pollinationsCooldownMessage = `Pollinations FREE_LIMIT (${waitSec}s cooldown)`;
+            if (waitSec <= 18 && attempt === 0) {
+              await new Promise((r) => setTimeout(r, (waitSec + 1) * 1000));
+              continue;
+            }
+            break;
+          } else if (resp.status === 404) {
+            tripCircuitBreaker(registry, `pollinations:${model}`, 'pollinations', 404, 'Pollinations HTTP 404', 6);
+            break;
+          } else {
+            break;
+          }
+        } catch (err: any) {
+          pollinationsCooldownMessage = err?.message || 'Pollinations request timeout';
+          break;
+        }
+      }
     }
   }
 
   return null;
+}
+
+let pollinationsCooldownUntil = 0;
+let pollinationsCooldownMessage = '';
+
+export function getPollinationsRateLimitStatus(): {
+  inCooldown: boolean;
+  remainingSeconds: number;
+  message: string;
+} {
+  const remainingMs = pollinationsCooldownUntil - Date.now();
+  if (remainingMs > 0) {
+    return {
+      inCooldown: true,
+      remainingSeconds: Math.max(1, Math.ceil(remainingMs / 1000)),
+      message: pollinationsCooldownMessage || 'Pollinations rate limit active'
+    };
+  }
+  return { inCooldown: false, remainingSeconds: 0, message: '' };
 }
 
 export function recordRegistryUsage(provider: ProviderId, modelUsed: string, wasFailover = false): void {
