@@ -719,7 +719,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.106.9";
+const APP_VERSION = "3.106.10";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1805,6 +1805,11 @@ export default function App() {
   const [batchDurationMinutes, setBatchDurationMinutes] = useState(60);
   const [batchItemCount, setBatchItemCount] = useState(3);
   const batchEndTimeRef = useRef(0);
+  const batchTimerRef = useRef<number | null>(null);
+  const batchConsecutiveErrorsRef = useRef(0);
+  const batchIntervalSecondsRef = useRef(60);
+  const batchDurationMinutesRef = useRef(60);
+  const batchItemCountRef = useRef(3);
   const [editForm, setEditForm] = useState<Partial<KnownIssue>>({});
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -2065,8 +2070,19 @@ export default function App() {
   const syncStagedLockRef = useRef<boolean>(false);
   const autoSyncCooldownUntilRef = useRef<number>(0);
   const stagedIssuesRef = useRef<KnownIssue[]>(stagedIssues);
+  const useStagingRef = useRef<boolean>(useStaging);
+  const dbIssuesRef = useRef<KnownIssue[]>(dbIssues);
+  const fullIssuesPoolRef = useRef<KnownIssue[]>(fullIssuesPool);
   const pendingGitOpsRef = useRef<boolean>(pendingGitOpsCommit);
   const handleSyncStagedIssuesRef = useRef<(triggerType?: 'threshold' | 'interval' | 'manual' | 'retry') => Promise<void>>(async () => {});
+  const handleTriggerAiSearchRef = useRef<(isAuto?: boolean, count?: number) => Promise<{
+    added: number;
+    updated: number;
+    error?: string;
+    isQuotaOrStandby?: boolean;
+    rateLimitWaitSec?: number;
+    skippedBusy?: boolean;
+  }>>(async () => ({ added: 0, updated: 0 }));
   const defaultMaintenanceSettings = {
     cleanupMonths: 1,
     linkVerifyFrequencyDays: 7,
@@ -2235,9 +2251,13 @@ export default function App() {
                 localStorage.setItem('winfix_openrouter_api_key', data.config.openrouterApiKey);
               }
               if (data.config.stagingAutomationConfig && typeof data.config.stagingAutomationConfig === 'object') {
+                const rawCfg = data.config.stagingAutomationConfig;
                 const syncedCfg: StagingAutomationConfig = {
-                  ...DEFAULT_STAGING_AUTOMATION,
-                  ...data.config.stagingAutomationConfig,
+                  enabled: rawCfg.enabled !== undefined ? Boolean(rawCfg.enabled) : DEFAULT_STAGING_AUTOMATION.enabled,
+                  threshold: Math.max(1, Math.min(100, Math.round(Number(rawCfg.threshold) || DEFAULT_STAGING_AUTOMATION.threshold))),
+                  intervalMinutes: Math.max(0, Math.min(1440, Math.round(Number(rawCfg.intervalMinutes ?? DEFAULT_STAGING_AUTOMATION.intervalMinutes)))),
+                  autoCommitGithub: rawCfg.autoCommitGithub !== undefined ? Boolean(rawCfg.autoCommitGithub) : DEFAULT_STAGING_AUTOMATION.autoCommitGithub,
+                  triggerPagesDeploy: rawCfg.triggerPagesDeploy !== undefined ? Boolean(rawCfg.triggerPagesDeploy) : DEFAULT_STAGING_AUTOMATION.triggerPagesDeploy,
                 };
                 setStagingAutomation(syncedCfg);
                 localStorage.setItem('winfix_staging_automation', JSON.stringify(syncedCfg));
@@ -2671,10 +2691,31 @@ export default function App() {
     }
   };
 
-  // Save staging toggle
+  // Save staging toggle & sync refs for async/batch closures
   useEffect(() => {
+    useStagingRef.current = useStaging;
     localStorage.setItem('winfix_use_staging', useStaging.toString());
   }, [useStaging]);
+
+  useEffect(() => {
+    dbIssuesRef.current = dbIssues;
+  }, [dbIssues]);
+
+  useEffect(() => {
+    fullIssuesPoolRef.current = fullIssuesPool;
+  }, [fullIssuesPool]);
+
+  useEffect(() => {
+    batchIntervalSecondsRef.current = Math.max(10, Math.min(3600, Math.round(Number(batchIntervalSeconds) || 60)));
+  }, [batchIntervalSeconds]);
+
+  useEffect(() => {
+    batchDurationMinutesRef.current = Math.max(1, Math.min(1440, Math.round(Number(batchDurationMinutes) || 60)));
+  }, [batchDurationMinutes]);
+
+  useEffect(() => {
+    batchItemCountRef.current = Math.max(1, Math.min(20, Math.round(Number(batchItemCount) || 3)));
+  }, [batchItemCount]);
 
   // Save staged issues to localStorage & sync ref
   useEffect(() => {
@@ -7721,80 +7762,189 @@ export default function App() {
     fetchIssues(false);
   }, [selectedCategory, selectedVersionFilter]);
 
+  const clearBatchTimer = () => {
+    if (batchTimerRef.current !== null) {
+      window.clearTimeout(batchTimerRef.current);
+      batchTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      isBatchCollectingRef.current = false;
+      clearBatchTimer();
+    };
+  }, []);
+
   const handleStartBatchCollection = async () => {
-    if (isBatchCollecting) return;
+    if (isBatchCollecting || isBatchCollectingRef.current) return;
+    clearBatchTimer();
+
+    const safeIntervalSec = Math.max(10, Math.min(3600, Math.round(Number(batchIntervalSeconds) || 60)));
+    const safeDurationMin = Math.max(1, Math.min(1440, Math.round(Number(batchDurationMinutes) || 60)));
+    const safeItemCount = Math.max(1, Math.min(20, Math.round(Number(batchItemCount) || 3)));
+
+    setBatchIntervalSeconds(safeIntervalSec);
+    setBatchDurationMinutes(safeDurationMin);
+    setBatchItemCount(safeItemCount);
+    batchIntervalSecondsRef.current = safeIntervalSec;
+    batchDurationMinutesRef.current = safeDurationMin;
+    batchItemCountRef.current = safeItemCount;
+    batchConsecutiveErrorsRef.current = 0;
+
     setIsBatchCollecting(true);
     isBatchCollectingRef.current = true;
     setBatchCollectionCount(0);
     setBatchCollectionUpdatedCount(0);
     batchCollectionCountRef.current = 0;
     batchCollectionUpdatedCountRef.current = 0;
-    batchEndTimeRef.current = Date.now() + (batchDurationMinutes * 60 * 1000);
+    batchEndTimeRef.current = Date.now() + (safeDurationMin * 60 * 1000);
     setBatchStatus(language === 'en' ? "Initializing..." : "초기화 중...");
-    
+
     runBatchCollection();
   };
 
   const handleStopBatchCollection = () => {
+    clearBatchTimer();
     setIsBatchCollecting(false);
     isBatchCollectingRef.current = false;
+    batchConsecutiveErrorsRef.current = 0;
     fetchCategoryCounts();
     fetchIssues(false);
   };
 
   const runBatchCollection = async () => {
+    clearBatchTimer();
     if (!isBatchCollectingRef.current) return;
 
-    if (Date.now() > batchEndTimeRef.current) {
+    if (Date.now() >= batchEndTimeRef.current) {
       setBatchStatus(language === 'en' ? "Time limit reached." : "수집 시간 만료.");
       customAlert(language === 'en' ? "Batch collection time limit reached." : "설정된 수집 시간이 만료되어 자동 수집을 종료합니다.");
       handleStopBatchCollection();
       return;
     }
 
+    const activeIntervalSec = Math.max(10, Math.min(3600, batchIntervalSecondsRef.current || 60));
+    const activeBatchCount = Math.max(1, Math.min(20, batchItemCountRef.current || 3));
+
     try {
       setBatchStatus(language === 'en' ? "Analyzing web trends..." : "웹 트렌드 분석 중...");
-      const result = await handleTriggerAiSearch(true, batchItemCount);
+      const result = await handleTriggerAiSearchRef.current(true, activeBatchCount);
+
+      if (!isBatchCollectingRef.current) return;
+
+      if (result.skippedBusy) {
+        setBatchStatus(language === 'en' ? "Previous AI task active, waiting 10s..." : "다른 AI 작업 완료 대기 중 (10초 후 재시도)...");
+        batchTimerRef.current = window.setTimeout(runBatchCollection, 10 * 1000);
+        return;
+      }
+
+      if (result.error) {
+        batchConsecutiveErrorsRef.current += 1;
+
+        if (result.isQuotaOrStandby) {
+          const isTemporaryCooldown =
+            typeof result.rateLimitWaitSec === 'number' &&
+            result.rateLimitWaitSec > 0 &&
+            !result.error.includes('하루 사용량') &&
+            !result.error.includes('Quota Exceeded') &&
+            !result.error.includes('접근이 거부') &&
+            !result.error.includes('Access Denied');
+
+          if (isTemporaryCooldown && batchConsecutiveErrorsRef.current < 5) {
+            const waitSec = Math.max(activeIntervalSec, Math.min((result.rateLimitWaitSec || 45) + 5, 120));
+            if (Date.now() + waitSec * 1000 >= batchEndTimeRef.current) {
+              setBatchStatus(language === 'en' ? "Time limit reached." : "수집 시간 만료.");
+              handleStopBatchCollection();
+              return;
+            }
+            setBatchStatus(language === 'en' ? `Rate cooldown: retrying in ${waitSec}s...` : `API 쿨다운 대기 (${waitSec}초 후 재시도)...`);
+            batchTimerRef.current = window.setTimeout(runBatchCollection, waitSec * 1000);
+            return;
+          }
+
+          console.info("Batch iteration standby/cooldown:", result.error);
+          setBatchStatus(language === 'en' ? "AI Standby (serving local DB)" : "AI 대기 상태 (로컬 DB 유지)");
+          handleStopBatchCollection();
+          return;
+        }
+
+        if (batchConsecutiveErrorsRef.current >= 5) {
+          setBatchStatus(language === 'en' ? "Paused after 5 consecutive errors." : "연속 5회 오류로 자동 수집이 중지되었습니다.");
+          customAlert(language === 'en' ? `Batch collection stopped after 5 consecutive errors: ${result.error}` : `연속 5회 오류로 자동 수집을 중지했습니다: ${result.error}`);
+          handleStopBatchCollection();
+          return;
+        }
+
+        const backoffSec = activeIntervalSec + 30;
+        if (Date.now() + backoffSec * 1000 >= batchEndTimeRef.current) {
+          setBatchStatus(language === 'en' ? "Time limit reached." : "수집 시간 만료.");
+          handleStopBatchCollection();
+          return;
+        }
+        setBatchStatus(language === 'en' ? `Error occurred, retrying in ${backoffSec}s...` : `일시 오류로 ${backoffSec}초 후 재시도...`);
+        batchTimerRef.current = window.setTimeout(runBatchCollection, backoffSec * 1000);
+        return;
+      }
+
+      batchConsecutiveErrorsRef.current = 0;
       batchCollectionCountRef.current += result.added;
       batchCollectionUpdatedCountRef.current += result.updated;
       setBatchCollectionCount(batchCollectionCountRef.current);
       setBatchCollectionUpdatedCount(batchCollectionUpdatedCountRef.current);
-      
+
       if (isBatchCollectingRef.current) {
-        setBatchStatus(language === 'en' ? `Waiting ${batchIntervalSeconds}s...` : `${batchIntervalSeconds}초 대기 중...`);
-        setTimeout(runBatchCollection, batchIntervalSeconds * 1000);
+        if (Date.now() + activeIntervalSec * 1000 >= batchEndTimeRef.current) {
+          setBatchStatus(language === 'en' ? "Time limit reached." : "수집 시간 만료.");
+          customAlert(language === 'en' ? "Batch collection time limit reached." : "설정된 수집 시간이 만료되어 자동 수집을 종료합니다.");
+          handleStopBatchCollection();
+          return;
+        }
+        setBatchStatus(language === 'en' ? `Waiting ${activeIntervalSec}s...` : `${activeIntervalSec}초 대기 중...`);
+        batchTimerRef.current = window.setTimeout(runBatchCollection, activeIntervalSec * 1000);
       }
     } catch (err: any) {
-      const isQuotaOrStandby = err.message?.includes('Quota') || 
-                              err.message?.includes('429') || 
-                              err.message?.includes('Resource has been exhausted') ||
-                              err.message?.includes('rate limit') ||
-                              err.message?.includes('Settings') ||
-                              err.message?.includes('대기') ||
-                              err.message?.includes('유효하지') ||
-                              err.message?.includes('Quarantined');
+      const msg = String(err?.message || err || '');
+      batchConsecutiveErrorsRef.current += 1;
+      const isQuotaOrStandby =
+        msg.includes('Quota') ||
+        msg.includes('429') ||
+        msg.includes('Resource has been exhausted') ||
+        msg.includes('rate limit') ||
+        msg.includes('Settings') ||
+        msg.includes('대기') ||
+        msg.includes('유효하지') ||
+        msg.includes('Quarantined');
 
-      if (isQuotaOrStandby) {
-        console.info("Batch iteration standby/cooldown:", err.message);
+      if (isQuotaOrStandby || batchConsecutiveErrorsRef.current >= 5) {
+        console.info("Batch iteration standby/cooldown:", msg);
         setBatchStatus(language === 'en' ? "AI Standby (serving local DB)" : "AI 대기 상태 (로컬 DB 유지)");
         handleStopBatchCollection();
       } else {
-        console.warn("Batch iteration paused:", err.message);
+        console.warn("Batch iteration paused:", msg);
+        const backoffSec = activeIntervalSec + 30;
         setBatchStatus(language === 'en' ? "Retrying soon..." : "잠시 후 재시도...");
         if (isBatchCollectingRef.current) {
-          setTimeout(runBatchCollection, (batchIntervalSeconds + 30) * 1000);
+          batchTimerRef.current = window.setTimeout(runBatchCollection, backoffSec * 1000);
         }
       }
     }
   };
 
-  const handleTriggerAiSearch = async (isAuto = false, count = 3): Promise<{ added: number, updated: number }> => {
+  const handleTriggerAiSearch = async (isAuto = false, count = 3): Promise<{
+    added: number;
+    updated: number;
+    error?: string;
+    isQuotaOrStandby?: boolean;
+    rateLimitWaitSec?: number;
+    skippedBusy?: boolean;
+  }> => {
     if (!isAuto && !user && !isAdmin) {
       customAlert(language === 'en' ? "Login required." : "로그인이 필요합니다.");
-      return { added: 0, updated: 0 };
+      return { added: 0, updated: 0, error: "Login required" };
     }
     
-    if (triggeringAi) return { added: 0, updated: 0 };
+    if (triggeringAi) return { added: 0, updated: 0, skippedBusy: true };
 
     let addedCount = 0;
     let updatedCount = 0;
@@ -7822,10 +7972,19 @@ export default function App() {
       ];
       const randomFocus = focusAreas[Math.floor(Math.random() * focusAreas.length)];
 
+      const safeRequestedCount = Math.max(1, Math.min(20, Math.round(Number(count) || 3)));
       const effectiveCount = (!isAuto && apiKeyStatus && apiKeyStatus.status !== 'active')
-        ? Math.min(count, 2)
-        : count;
-      const avoidList = dbIssues.slice(0, 12).map(i => i.code ? `${i.code} ${i.title_en || i.title}` : (i.title_en || i.title)).join(', ');
+        ? Math.min(safeRequestedCount, 2)
+        : safeRequestedCount;
+
+      const currentPool = mergeIssuesDeduplicated(
+        stagedIssuesRef.current,
+        mergeIssuesDeduplicated(fullIssuesPoolRef.current, dbIssuesRef.current).merged
+      ).merged;
+      const avoidList = currentPool
+        .slice(0, 20)
+        .map(i => i.code ? `${i.code} ${i.title_en || i.title}` : (i.title_en || i.title))
+        .join(', ');
 
       const prompt = `Search the web for details on ${effectiveCount} DIFFERENT troubleshooting guides for Windows error codes or issues.
         CRITICAL: Focus on category "${randomCategory}" and area "${randomFocus}". 
@@ -7956,10 +8115,11 @@ export default function App() {
           : "AI 응답에서 유효한 오류 코드/제목 항목을 추출하지 못했습니다.");
       }
 
-      if (useStaging) {
+      if (useStagingRef.current) {
+        const batchTs = Date.now();
         const newIssues = issuesData.map((data, idx) => ({
           ...data,
-          id: `staged-${Date.now()}-${idx}`,
+          id: `staged-${batchTs}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
           source: "AI Auto-Search",
           createdAt: getKSTISOString()
         } as KnownIssue));
@@ -7974,7 +8134,7 @@ export default function App() {
       }
 
       const localExistingMap: Record<string, KnownIssue> = {};
-      dbIssues.forEach(iss => {
+      dbIssuesRef.current.forEach(iss => {
         if (iss.code) localExistingMap[`code:${iss.code}`] = iss;
         if (iss.title) localExistingMap[`title:${iss.title}`] = iss;
       });
@@ -8067,6 +8227,11 @@ export default function App() {
         console.warn("AI Sync failed:", errMessageStr);
       }
 
+      const waitMatch = errMessageStr.match(/(\d+)\s*(?:초|sec)/i);
+      const rateLimitWaitSec = waitMatch ? Math.max(10, Math.min(180, Number(waitMatch[1]))) : (
+        errMessageStr.includes('FREE_LIMIT') || errMessageStr.includes('간격 제한') || errMessageStr.includes('unavailable or throttled') ? 45 : undefined
+      );
+
       let errorMsg = errMessageStr;
       if (errMessageStr.includes('FREE_LIMIT') || errMessageStr.includes('간격 제한')) {
         errorMsg = errMessageStr;
@@ -8085,11 +8250,21 @@ export default function App() {
       } else {
         await logAdminAction('verify', 'ai_search', language === 'en' ? `Auto-Collection standby: ${errorMsg}` : `자동 수집 대기 모드: ${errorMsg}`, 'info', 'AI');
       }
-      return { added: 0, updated: 0 };
+      return {
+        added: 0,
+        updated: 0,
+        error: errorMsg,
+        isQuotaOrStandby: isStandbyOrQuota,
+        rateLimitWaitSec,
+      };
     } finally {
       setTriggeringAi(false);
     }
   };
+
+  useEffect(() => {
+    handleTriggerAiSearchRef.current = handleTriggerAiSearch;
+  });
 
   const executeGitHubDatabaseCommit = async (
     issuesForCommit: KnownIssue[],
@@ -8098,11 +8273,16 @@ export default function App() {
   ): Promise<{ committed: boolean; commitSha?: string; commitUrl?: string; error?: string }> => {
     const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
     const targetBranch = githubBranch.trim() || 'main';
+    const sanitizePat = (val: string) => {
+      const trimmed = val.trim();
+      return trimmed && !trimmed.includes('••••') ? trimmed : '';
+    };
     const storedToken = (() => {
-      if (githubToken.trim()) return githubToken.trim();
+      const fromState = sanitizePat(githubToken);
+      if (fromState) return fromState;
       try {
         const local = localStorage.getItem('winfix_github_config');
-        return local ? (JSON.parse(local).token || '') : '';
+        return local ? sanitizePat(String(JSON.parse(local).token || '')) : '';
       } catch {
         return '';
       }
@@ -8114,6 +8294,7 @@ export default function App() {
         const resp = await fetch('/api/github/push-to-repo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders },
+          signal: AbortSignal.timeout(20000),
           body: JSON.stringify({
             repo: targetRepo,
             branch: targetBranch,
@@ -8166,7 +8347,7 @@ export default function App() {
       };
 
       let fileSha: string | undefined = undefined;
-      const getRes = await fetch(fileUrl, { headers });
+      const getRes = await fetch(fileUrl, { headers, signal: AbortSignal.timeout(15000) });
       if (getRes.status === 401 || getRes.status === 403) {
         throw new Error('GitHub 인증 실패 (401/403): PAT 권한(repo)을 확인해 주세요.');
       }
@@ -8187,6 +8368,7 @@ export default function App() {
       const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
         method: 'PUT',
         headers,
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           message: commitMessage,
           content: contentBase64,
@@ -8206,6 +8388,7 @@ export default function App() {
           await fetch(`https://api.github.com/repos/${targetRepo}/actions/workflows/deploy-pages.yml/dispatches`, {
             method: 'POST',
             headers,
+            signal: AbortSignal.timeout(10000),
             body: JSON.stringify({ ref: targetBranch }),
           });
         } catch (_) {}
@@ -8329,17 +8512,47 @@ export default function App() {
     const queueSnapshot = [...stagedIssues];
     const snapshotSet = new Set<KnownIssue>(queueSnapshot);
 
+    const normalizeStagedItem = (raw: any): KnownIssue | null => {
+      if (!raw || typeof raw !== 'object') return null;
+      const title = String(raw.title || raw.title_en || '').trim();
+      const code = String(raw.code || '').trim();
+      const category = String(raw.category || '시스템/블루스크린').trim() || '시스템/블루스크린';
+      const symptoms = String(raw.symptoms || raw.symptoms_en || title).trim();
+      if (!title || !code || !symptoms) return null;
+      return {
+        ...raw,
+        title,
+        code,
+        category,
+        symptoms,
+        manualSteps: Array.isArray(raw.manualSteps) && raw.manualSteps.length > 0
+          ? raw.manualSteps.map((s: any) => String(s))
+          : ['Windows 설정 > 문제 해결사 실행', '관리자 권한 PowerShell에서 sfc /scannow 실행'],
+        windowsVersions: Array.isArray(raw.windowsVersions) && raw.windowsVersions.length > 0
+          ? raw.windowsVersions.map((v: any) => String(v))
+          : ['Windows 11', 'Windows 10'],
+      } as KnownIssue;
+    };
+
+    const validSnapshot: KnownIssue[] = [];
+    const malformedItems: KnownIssue[] = [];
+    for (const item of queueSnapshot) {
+      const normalized = normalizeStagedItem(item);
+      if (normalized) validSnapshot.push(normalized);
+      else if (item) malformedItems.push(item);
+    }
+
     const unfilteredPool = await getFullUnfilteredIssuesPool();
-    const { uniqueCandidates, duplicateItems } = partitionStagedIssues(queueSnapshot, unfilteredPool);
+    const { uniqueCandidates, duplicateItems } = partitionStagedIssues(validSnapshot, unfilteredPool);
     setSyncTotal(uniqueCandidates.length || queueSnapshot.length);
     setSyncProgress(0);
 
     let mergedAdded = 0;
     let mergedUpdated = 0;
     let serverDuplicateSkipped = 0;
-    const failedItems: KnownIssue[] = [];
+    const failedItems: KnownIssue[] = [...malformedItems];
     const succeededItems: KnownIssue[] = [];
-    let dbErrorMsg = '';
+    let dbErrorMsg = malformedItems.length > 0 ? `필수 필드(code/title/symptoms) 누락 항목 ${malformedItems.length}건 보존됨` : '';
     let latestIssuesForCommit: KnownIssue[] = [...unfilteredPool];
 
     try {
@@ -8353,15 +8566,31 @@ export default function App() {
               const resp = await fetch('/api/issues/sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...authHeaders },
+                signal: AbortSignal.timeout(20000),
                 body: JSON.stringify({ issues: chunk, skipDuplicates: true }),
               });
               const data = await parseJsonResponse(resp);
               if (resp.ok && data.success) {
                 const resObj = data.result || data;
-                mergedAdded += Number(resObj.added || 0);
-                mergedUpdated += Number(resObj.updated || 0);
-                serverDuplicateSkipped += Number(resObj.duplicateSkipped || 0);
-                succeededItems.push(...chunk);
+                const chunkAdded = Number(resObj.added || 0);
+                const chunkUpdated = Number(resObj.updated || 0);
+                const chunkDupSkipped = Number(resObj.duplicateSkipped || 0);
+                const chunkTotalSkipped = Number(resObj.skipped || 0);
+                const nonDupSkipped = Math.max(0, chunkTotalSkipped - chunkDupSkipped);
+
+                mergedAdded += chunkAdded;
+                mergedUpdated += chunkUpdated;
+                serverDuplicateSkipped += chunkDupSkipped;
+
+                if (nonDupSkipped > 0 && chunkAdded === 0 && chunkUpdated === 0 && chunkDupSkipped === 0) {
+                  failedItems.push(...chunk);
+                  if (!dbErrorMsg) dbErrorMsg = `서버 DB 유효성 검증에서 ${nonDupSkipped}건이 거부되었습니다.`;
+                } else {
+                  succeededItems.push(...chunk);
+                  if (nonDupSkipped > 0 && !dbErrorMsg) {
+                    dbErrorMsg = `일부 비정상 항목 ${nonDupSkipped}건이 스킵되었습니다.`;
+                  }
+                }
               } else {
                 failedItems.push(...chunk);
                 if (!dbErrorMsg) dbErrorMsg = data.error || `HTTP ${resp.status}`;
@@ -18353,10 +18582,14 @@ export default function App() {
                       </label>
                       <input 
                         type="number" 
-                        min="5" 
-                        max="300" 
+                        min="10" 
+                        max="3600" 
                         value={batchIntervalSeconds}
-                        onChange={(e) => setBatchIntervalSeconds(Number(e.target.value))}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setBatchIntervalSeconds(raw === '' ? 0 : Number(raw));
+                        }}
+                        onBlur={() => setBatchIntervalSeconds(prev => Math.max(10, Math.min(3600, Math.round(Number(prev) || 60))))}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                     </div>
@@ -18369,7 +18602,11 @@ export default function App() {
                         min="1" 
                         max="1440" 
                         value={batchDurationMinutes}
-                        onChange={(e) => setBatchDurationMinutes(Number(e.target.value))}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setBatchDurationMinutes(raw === '' ? 0 : Number(raw));
+                        }}
+                        onBlur={() => setBatchDurationMinutes(prev => Math.max(1, Math.min(1440, Math.round(Number(prev) || 60))))}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                     </div>
@@ -18382,7 +18619,11 @@ export default function App() {
                         min="1" 
                         max="20" 
                         value={batchItemCount}
-                        onChange={(e) => setBatchItemCount(Number(e.target.value))}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setBatchItemCount(raw === '' ? 0 : Number(raw));
+                        }}
+                        onBlur={() => setBatchItemCount(prev => Math.max(1, Math.min(20, Math.round(Number(prev) || 3))))}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                     </div>

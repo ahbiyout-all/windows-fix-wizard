@@ -197,7 +197,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.9';
+  return '3.106.10';
 }
 
 const BACKUP_SENSITIVE_KEY_EXACT = new Set([
@@ -5985,7 +5985,8 @@ async function startServer() {
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
       const targetBranch = typeof branch === 'string' && isValidGitRef(branch) ? branch.trim() : 'main';
-      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+      const cleanProvidedToken = (typeof token === 'string' && token.trim() && !token.includes('••••')) ? token.trim() : '';
+      const authToken = cleanProvidedToken || ghConfig.token || process.env.GITHUB_TOKEN;
       const shouldAutoDeploy = typeof deployPages === 'boolean' ? deployPages : (ghConfig.autoDeployPages !== false);
 
       if (!isValidGithubRepo(targetRepo)) {
@@ -6011,16 +6012,16 @@ async function startServer() {
       // 1. Get current file sha if it exists
       let fileSha: string | undefined = undefined;
       try {
-        const getRes = await fetch(fileUrl, { headers });
-        if (getRes.status === 401) {
-          throw new Error("GitHub 인증 실패 (401 Bad Credentials): Personal Access Token(PAT)이 설정되지 않았거나 만료되었습니다. 'GitHub 연동 저장소 및 토큰 설정'에서 새 PAT 토큰('repo', 'workflow' 권한)을 입력하고 '연동 설정 저장'을 해주세요.");
+        const getRes = await fetch(fileUrl, { headers, signal: AbortSignal.timeout(15000) });
+        if (getRes.status === 401 || getRes.status === 403) {
+          throw new Error(`GitHub 인증/권한 실패 (${getRes.status}): Personal Access Token(PAT)의 'repo' 권한을 확인하고 다시 저장해 주세요.`);
         }
         if (getRes.ok) {
           const fileInfo: any = await getRes.json();
           fileSha = fileInfo.sha;
         }
       } catch (e: any) {
-        if (e.message?.includes('GitHub 인증 실패')) throw e;
+        if (e.message?.includes('GitHub 인증')) throw e;
         // file might not exist yet
       }
 
@@ -6035,6 +6036,7 @@ async function startServer() {
           ...headers,
           'Content-Type': 'application/json'
         },
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           message,
           content: contentBase64,
@@ -6044,8 +6046,8 @@ async function startServer() {
       });
 
       if (!putRes.ok) {
-        if (putRes.status === 401) {
-          throw new Error("GitHub 인증 실패 (401 Bad Credentials): Personal Access Token(PAT)이 설정되지 않았거나 만료되었습니다. 'GitHub 연동 저장소 및 토큰 설정'에서 새 PAT 토큰('repo', 'workflow' 권한)을 입력하고 '연동 설정 저장'을 해주세요.");
+        if (putRes.status === 401 || putRes.status === 403) {
+          throw new Error(`GitHub 인증/권한 실패 (${putRes.status}): Personal Access Token(PAT)의 'repo', 'workflow' 권한을 확인하고 다시 저장해 주세요.`);
         }
         const errBody = await putRes.text();
         throw new Error(`GitHub 커밋 푸시 실패 (${putRes.status}): ${errBody || putRes.statusText}`);
@@ -6066,9 +6068,10 @@ async function startServer() {
               'User-Agent': 'WindowsFixWizard-App',
               'Content-Type': 'application/json'
             },
+            signal: AbortSignal.timeout(10000),
             body: JSON.stringify({ ref: targetBranch })
           });
-          pagesTriggerResult = deployRes.ok ? "triggered" : "skipped";
+          pagesTriggerResult = deployRes.ok ? "triggered" : `skipped (${deployRes.status})`;
         } catch (e: any) {
           pagesTriggerResult = `failed: ${e.message}`;
         }
@@ -6077,6 +6080,16 @@ async function startServer() {
       const [owner, repoName] = targetRepo.split('/');
       const pagesUrl = `https://${owner.toLowerCase()}.github.io/${repoName.toLowerCase()}/`;
 
+      try {
+        const ghConfigs = readLocalCollection('github_config');
+        const nextGhCfg = {
+          ...(ghConfigs[0] || { repo: targetRepo, branch: targetBranch }),
+          lastSyncAt: getKSTISOString(),
+          lastSyncStatus: `GitOps Push: ${issues.length} issues committed (${String(putData?.commit?.sha || '').slice(0, 7) || 'OK'})`
+        };
+        writeLocalCollection('github_config', [nextGhCfg]);
+      } catch (_) {}
+
       await logSyncEvent({
         type: 'success',
         source: 'github-push-to-repo',
@@ -6084,9 +6097,15 @@ async function startServer() {
         details: { targetRepo, count: issues.length, commit: putData?.commit?.sha, pagesTriggerResult }
       });
 
+      const pagesNotice = shouldAutoDeploy
+        ? (pagesTriggerResult === 'triggered'
+            ? ' GitHub Pages 자동 배포가 시작되었습니다.'
+            : ` (Pages 워크플로 트리거 상태: ${pagesTriggerResult})`)
+        : '';
+
       res.json({
         success: true,
-        message: `GitHub(${targetRepo})에 ${issues.length}개의 데이터베이스가 성공적으로 푸시되었습니다!${shouldAutoDeploy ? ' GitHub Pages 자동 배포가 시작되었습니다.' : ''}`,
+        message: `GitHub(${targetRepo})에 ${issues.length}개의 데이터베이스가 성공적으로 푸시되었습니다!${pagesNotice}`,
         count: issues.length,
         commitSha: putData?.commit?.sha,
         commitUrl: putData?.commit?.html_url,

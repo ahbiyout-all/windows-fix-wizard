@@ -1,6 +1,21 @@
-# Patch Note - System Update (v3.106.9)
+# Patch Note - System Update (v3.106.10)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.10] - 2026-11-20
+
+### 🔧 Bug Fixes & Batch/Staging GitOps Pipeline Hardening
+- **대량 데이터 수집 모드 타이머 누수·데드 캐치·스테일 클로저 및 입력 범위 보완 (`src/App.tsx`)**:
+  - `runBatchCollection()`의 `setTimeout` 핸들을 `batchTimerRef`로 추적해 중지/재시작·컴포넌트 언마운트 시 중복 타이머 루프가 겹치지 않도록 정리했습니다.
+  - `handleTriggerAiSearch()`가 오류를 내부에서 삼켜 `runBatchCollection()`의 쿼터/대기 예외 분기(`try/catch`)가 데드 코드로 남던 결함을 수정해 `error`, `isQuotaOrStandby`, `rateLimitWaitSec`, `skippedBusy` 구조화 응답을 반환하도록 개선했습니다(일시 쿨다운 시 잔여 시간 기반 백오프, 일일 한도/연속 5회 오류 시 안전 중지).
+  - 장시간 배치 실행 중 `useStaging`, `dbIssues`, `fullIssuesPool`, `stagedIssues`, 주기/개수 설정 변경이 반영되지 않던 스테일 클로저를 최신 `useRef` 동기화로 해결하고, `avoidList`에 스테이징 대기열과 전체 DB 풀을 반영해 반복 중복 생성을 줄였습니다.
+  - 수집 간격(10~3600초)·수집 시간(1~1440분)·1회 개수(1~20개) 입력 필드에 빈 값(`0ms` 무한 루프 위험) 방지 및 포커스 해제/시작 시 안전 범위 보정을 추가했습니다.
+- **로컬 대기열 ➔ GitOps 자동 동기화 데이터 정합성 및 GitHub 푸시 보안·타임아웃 강화 (`src/App.tsx`, `server.ts`)**:
+  - `executeGitHubDatabaseCommit()` 및 `/api/github/push-to-repo`에서 마스킹된 토큰(`••••`)이 전달될 경우 서버 PAT/환경변수를 덮어쓰지 않도록 차단하고, GitHub REST API 호출에 `AbortSignal.timeout`을 적용해 네트워크 지연 시 동기화 잠금이 영구 고착되지 않도록 수정했습니다.
+  - `/api/github/push-to-repo`에 `403` 권한 오류 진단, Pages 워크플로 트리거 결과 정확 표시, 푸시 후 `github_config.lastSyncAt` 갱신을 반영했습니다.
+  - `handleSyncStagedIssues()`가 서버 유효성 검증에서 거부된 비정상 항목까지 성공으로 간주해 대기열에서 삭제하지 않도록 개선하고, 서버 설정(`stagingAutomationConfig`) 로드 시 임계치/주기 범위 검증 및 전 모듈 버전(`v3.106.10`) 동기화를 완료했습니다.
 
 ---
 
