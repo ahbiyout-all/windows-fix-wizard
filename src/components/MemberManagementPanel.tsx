@@ -3,6 +3,7 @@ import {
   Users,
   Shield,
   UserCheck,
+  UserPlus,
   Ban,
   Trash2,
   RefreshCw,
@@ -10,7 +11,13 @@ import {
   Filter,
   CheckCircle2,
   AlertCircle,
-  Download
+  Download,
+  Edit2,
+  X,
+  Key,
+  Save,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export interface MemberUser {
@@ -20,6 +27,7 @@ export interface MemberUser {
   role: 'admin' | 'member';
   authProvider: 'google' | 'email';
   status: 'active' | 'blocked';
+  hasPassword?: boolean;
   createdAt: string;
   lastLoginAt: string;
 }
@@ -27,6 +35,13 @@ export interface MemberUser {
 interface MemberManagementPanelProps {
   language?: 'ko' | 'en';
 }
+
+const PROTECTED_ADMIN_EMAILS = new Set([
+  'redmunlight@gmail.com',
+  'ahbiyout@gmail.com',
+  'ahbiyoutwinfixwizard@gmail.com',
+  'ahbiyoutwinfix@gmail.com'
+]);
 
 export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   language = 'ko'
@@ -39,6 +54,19 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
   const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Add / Edit Member Modal State
+  const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [formEmail, setFormEmail] = useState<string>('');
+  const [formDisplayName, setFormDisplayName] = useState<string>('');
+  const [formPassword, setFormPassword] = useState<string>('');
+  const [formRole, setFormRole] = useState<'admin' | 'member'>('member');
+  const [formStatus, setFormStatus] = useState<'active' | 'blocked'>('active');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
   const isMountedRef = useRef(true);
   const messageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -46,7 +74,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
     messageTimeoutRef.current = setTimeout(() => {
       if (isMountedRef.current) setActionMessage(null);
-    }, 3000);
+    }, 3500);
   };
 
   useEffect(() => {
@@ -102,6 +130,139 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  const openCreateModal = (prefillEmail = '') => {
+    const clean = prefillEmail.trim().toLowerCase();
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean);
+    setEditorMode('create');
+    setEditingUserId(null);
+    setFormEmail(clean);
+    setFormDisplayName(looksLikeEmail ? clean.split('@')[0] : '');
+    setFormPassword('');
+    setFormRole(PROTECTED_ADMIN_EMAILS.has(clean) ? 'admin' : 'member');
+    setFormStatus('active');
+    setShowPassword(false);
+    setFormError('');
+  };
+
+  const openEditModal = (u: MemberUser) => {
+    setEditorMode('edit');
+    setEditingUserId(u.id);
+    setFormEmail(u.email);
+    setFormDisplayName(u.displayName || u.email.split('@')[0] || '');
+    setFormPassword('');
+    setFormRole(u.role);
+    setFormStatus(u.status);
+    setShowPassword(false);
+    setFormError('');
+  };
+
+  const closeEditorModal = () => {
+    if (isSubmitting) return;
+    setEditorMode(null);
+    setEditingUserId(null);
+    setFormError('');
+    setFormPassword('');
+  };
+
+  const handleSubmitMemberForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+
+    const cleanEmail = formEmail.trim().toLowerCase();
+    const cleanName = formDisplayName.trim();
+    const pwd = formPassword;
+
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setFormError(isEn ? 'Please enter a valid email address.' : '유효한 이메일 주소를 입력해주세요.');
+      return;
+    }
+
+    if (editorMode === 'create') {
+      if (!pwd || pwd.length < 6 || pwd.length > 128) {
+        setFormError(isEn ? 'Password must be 6-128 characters.' : '초기 비밀번호는 6자 이상 128자 이하로 입력해주세요.');
+        return;
+      }
+    } else if (editorMode === 'edit') {
+      if (!cleanName) {
+        setFormError(isEn ? 'Display name cannot be empty.' : '닉네임/이름을 입력해주세요.');
+        return;
+      }
+      if (pwd && (pwd.length < 6 || pwd.length > 128)) {
+        setFormError(isEn ? 'New password must be 6-128 characters.' : '변경할 비밀번호는 6자 이상 128자 이하로 입력해주세요.');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (editorMode === 'create') {
+        const res = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeader()
+          },
+          body: JSON.stringify({
+            email: cleanEmail,
+            displayName: cleanName || cleanEmail.split('@')[0],
+            password: pwd,
+            role: formRole,
+            status: formStatus
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!isMountedRef.current) return;
+        if (!res.ok || !data.success || !data.user) {
+          setFormError(data?.error || (isEn ? `Registration failed (HTTP ${res.status})` : `회원 등록 실패 (HTTP ${res.status})`));
+          setIsSubmitting(false);
+          return;
+        }
+        setUsers(prev => [data.user, ...prev]);
+        setEditorMode(null);
+        setActionMessage({
+          text: isEn ? `Registered ${data.user.email} successfully.` : `회원 '${data.user.email}' 계정이 등록되었습니다.`,
+          type: 'success'
+        });
+        scheduleClearMessage();
+      } else if (editorMode === 'edit' && editingUserId) {
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(editingUserId)}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeader()
+          },
+          body: JSON.stringify({
+            email: cleanEmail,
+            displayName: cleanName,
+            role: formRole,
+            status: formStatus,
+            ...(pwd ? { newPassword: pwd } : {})
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!isMountedRef.current) return;
+        if (!res.ok || !data.success || !data.user) {
+          setFormError(data?.error || (isEn ? `Update failed (HTTP ${res.status})` : `회원 수정 실패 (HTTP ${res.status})`));
+          setIsSubmitting(false);
+          return;
+        }
+        setUsers(prev => prev.map(u => u.id === editingUserId ? { ...u, ...data.user } : u));
+        setEditorMode(null);
+        setEditingUserId(null);
+        setActionMessage({
+          text: isEn ? `Updated ${data.user.email} successfully.` : `회원 '${data.user.email}' 정보가 수정되었습니다.`,
+          type: 'success'
+        });
+        scheduleClearMessage();
+      }
+    } catch (err: any) {
+      if (!isMountedRef.current) return;
+      setFormError(err?.message || (isEn ? 'Network request failed.' : '서버 통신 중 오류가 발생했습니다.'));
+    } finally {
+      if (isMountedRef.current) setIsSubmitting(false);
+    }
+  };
 
   const handleUpdateStatus = async (user: MemberUser, newStatus: 'active' | 'blocked') => {
     try {
@@ -183,6 +344,12 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
     blocked: users.filter(u => u.status === 'blocked').length
   };
 
+  const editingTargetUser = editingUserId ? users.find(u => u.id === editingUserId) : null;
+  const isEditingProtectedAdmin = Boolean(
+    editingTargetUser &&
+    PROTECTED_ADMIN_EMAILS.has((editingTargetUser.email || '').toLowerCase().trim())
+  );
+
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 sm:p-6 space-y-5">
       {/* Header */}
@@ -192,7 +359,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
             <Users className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 {isEn ? 'Member & Account Management' : '회원 및 계정 데이터 관리 (Zero Cloud DB)'}
               </h3>
@@ -202,14 +369,24 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {isEn 
-                ? 'Manage registered Google OAuth and email members stored permanently in the local file database with zero cloud charges.' 
-                : '클라우드 과금 없이 로컬 파일 DB(data/users.json)에 영구 저장된 Google 및 이메일 회원 계정을 안전하게 관리합니다.'}
+                ? 'Register, edit, and manage Google OAuth and email members stored permanently in the local file database.' 
+                : '클라우드 과금 없이 로컬 파일 DB(data/users.json)에 영구 저장된 Google 및 이메일 회원 계정을 등록·수정·관리합니다.'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
           <button
+            type="button"
+            onClick={() => openCreateModal()}
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>{isEn ? 'Add Member' : '회원 등록'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={fetchUsers}
             disabled={isLoading}
             className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
@@ -219,6 +396,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={handleExportJson}
             className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
             title={isEn ? 'Export user list to JSON' : '회원 목록 JSON 백업 내보내기'}
@@ -239,6 +417,162 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
           {actionMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
           <span>{actionMessage.text}</span>
         </div>
+      )}
+
+      {/* Inline Create / Edit Member Drawer */}
+      {editorMode && (
+        <form
+          onSubmit={handleSubmitMemberForm}
+          className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-indigo-200 dark:border-indigo-800/60 space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {editorMode === 'create' ? (
+                <UserPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              ) : (
+                <Edit2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              )}
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {editorMode === 'create'
+                  ? (isEn ? 'Register New Member' : '신규 회원 / 관리자 계정 등록')
+                  : (isEn ? 'Edit Member Details' : '회원 정보 및 비밀번호 수정')}
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={closeEditorModal}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {formError && (
+            <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                {isEn ? 'Email Address' : '이메일 계정'}
+              </label>
+              <input
+                type="email"
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+                disabled={editorMode === 'edit' && isEditingProtectedAdmin}
+                required
+                placeholder="name@example.com"
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                {isEn ? 'Display Name' : '닉네임 / 이름'}
+              </label>
+              <input
+                type="text"
+                value={formDisplayName}
+                onChange={(e) => setFormDisplayName(e.target.value)}
+                maxLength={80}
+                placeholder={isEn ? 'Display name' : '홍길동 또는 관리자'}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                {isEn ? 'Role' : '권한 / 등급'}
+              </label>
+              <select
+                value={formRole}
+                onChange={(e) => setFormRole(e.target.value as 'admin' | 'member')}
+                disabled={editorMode === 'edit' && isEditingProtectedAdmin}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+              >
+                <option value="member">{isEn ? 'Member (Standard)' : '일반 회원 (MEMBER)'}</option>
+                <option value="admin">{isEn ? 'Administrator (ADMIN)' : '관리자 (ADMIN)'}</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                {isEn ? 'Status' : '계정 상태'}
+              </label>
+              <select
+                value={formStatus}
+                onChange={(e) => setFormStatus(e.target.value as 'active' | 'blocked')}
+                disabled={editorMode === 'edit' && isEditingProtectedAdmin}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+              >
+                <option value="active">{isEn ? 'Active' : '정상 활성'}</option>
+                <option value="blocked">{isEn ? 'Blocked' : '이용 제한'}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-1">
+            <div className="flex-1 max-w-md">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-indigo-500" />
+                <span>
+                  {editorMode === 'create'
+                    ? (isEn ? 'Initial Password (min 6 chars)' : '초기 로그인 비밀번호 (6자 이상 필수)')
+                    : (isEn ? 'New Password (leave blank to keep current)' : '새 비밀번호 변경/설정 (유지하려면 비워둠)')}
+                </span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={formPassword}
+                  onChange={(e) => setFormPassword(e.target.value)}
+                  minLength={editorMode === 'create' ? 6 : undefined}
+                  maxLength={128}
+                  required={editorMode === 'create'}
+                  placeholder={editorMode === 'create' ? '•••••••• (6+)' : (isEn ? 'Optional new password' : '새 비밀번호 입력 (선택)')}
+                  className="w-full pl-3 pr-9 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  aria-label="Toggle password visibility"
+                >
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                type="button"
+                onClick={closeEditorModal}
+                disabled={isSubmitting}
+                className="px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                {isEn ? 'Cancel' : '취소'}
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>
+                  {isSubmitting
+                    ? (isEn ? 'Saving...' : '저장 중...')
+                    : editorMode === 'create'
+                      ? (isEn ? 'Register Account' : '회원 등록 저장')
+                      : (isEn ? 'Save Changes' : '수정 내용 저장')}
+                </span>
+              </button>
+            </div>
+          </div>
+        </form>
       )}
 
       {/* Status Counters */}
@@ -313,10 +647,10 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
                 <th className="py-3 px-3 w-48">{isEn ? 'Email / Account' : '이메일 계정'}</th>
                 <th className="py-3 px-3 w-32">{isEn ? 'Display Name' : '닉네임/이름'}</th>
                 <th className="py-3 px-3 w-28">{isEn ? 'Role' : '권한/등급'}</th>
-                <th className="py-3 px-3 w-28">{isEn ? 'Auth Provider' : '가입 경로'}</th>
+                <th className="py-3 px-3 w-32">{isEn ? 'Auth / Password' : '가입 경로'}</th>
                 <th className="py-3 px-3 w-24">{isEn ? 'Status' : '계정 상태'}</th>
                 <th className="py-3 px-3 w-36">{isEn ? 'Last Login' : '최근 접속'}</th>
-                <th className="py-3 px-3 w-28 text-center">{isEn ? 'Actions' : '관리'}</th>
+                <th className="py-3 px-3 w-32 text-center">{isEn ? 'Actions' : '관리'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
@@ -329,114 +663,150 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-10 text-center text-slate-400">
                     <Users className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                    {isEn ? "No members match criteria." : "해당 조건의 회원이 없습니다."}
+                    <div className="mb-3">
+                      {isEn ? "No members match criteria." : "해당 조건의 회원이 없습니다."}
+                    </div>
+                    {searchQuery.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => openCreateModal(searchQuery.trim())}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>
+                          {isEn
+                            ? `Register "${searchQuery.trim()}"`
+                            : `'${searchQuery.trim()}' 계정 바로 등록하기`}
+                        </span>
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                    {/* Email */}
-                    <td className="py-3 px-3 font-mono font-medium text-slate-900 dark:text-slate-100">
-                      {u.email}
-                    </td>
+                filteredUsers.map((u) => {
+                  const isProtectedRow = PROTECTED_ADMIN_EMAILS.has((u.email || '').toLowerCase().trim());
+                  return (
+                    <tr key={u.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                      {/* Email */}
+                      <td className="py-3 px-3 font-mono font-medium text-slate-900 dark:text-slate-100">
+                        {u.email}
+                      </td>
 
-                    {/* Display Name */}
-                    <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
-                      {u.displayName || (u.email || '').split('@')[0] || '-'}
-                    </td>
+                      {/* Display Name */}
+                      <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
+                        {u.displayName || (u.email || '').split('@')[0] || '-'}
+                      </td>
 
-                    {/* Role */}
-                    <td className="py-3 px-3">
-                      {u.role === 'admin' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300">
-                          <Shield className="w-3 h-3 text-amber-500" />
-                          ADMIN
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
-                          <UserCheck className="w-3 h-3 text-blue-500" />
-                          MEMBER
-                        </span>
-                      )}
-                    </td>
+                      {/* Role */}
+                      <td className="py-3 px-3">
+                        {u.role === 'admin' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300">
+                            <Shield className="w-3 h-3 text-amber-500" />
+                            ADMIN
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+                            <UserCheck className="w-3 h-3 text-blue-500" />
+                            MEMBER
+                          </span>
+                        )}
+                      </td>
 
-                    {/* Provider */}
-                    <td className="py-3 px-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        {u.authProvider === 'google' ? 'Google OAuth' : 'Email/Password'}
-                      </span>
-                    </td>
+                      {/* Provider & Password Status */}
+                      <td className="py-3 px-3">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            {u.authProvider === 'google' ? 'Google OAuth' : 'Email/Password'}
+                          </span>
+                          {u.hasPassword === false && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+                              {isEn ? 'No PW' : '비번 미설정'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* Status */}
-                    <td className="py-3 px-3">
-                      {u.status === 'blocked' ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300">
-                          {isEn ? 'Blocked' : '제한'}
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300">
-                          {isEn ? 'Active' : '정상'}
-                        </span>
-                      )}
-                    </td>
+                      {/* Status */}
+                      <td className="py-3 px-3">
+                        {u.status === 'blocked' ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300">
+                            {isEn ? 'Blocked' : '제한'}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300">
+                            {isEn ? 'Active' : '정상'}
+                          </span>
+                        )}
+                      </td>
 
-                    {/* Last Login */}
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                      {u.lastLoginAt && !Number.isNaN(Date.parse(u.lastLoginAt)) ? new Date(u.lastLoginAt).toLocaleDateString() : '-'}
-                    </td>
+                      {/* Last Login */}
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                        {u.lastLoginAt && !Number.isNaN(Date.parse(u.lastLoginAt)) ? new Date(u.lastLoginAt).toLocaleDateString() : '-'}
+                      </td>
 
-                    {/* Actions */}
-                    <td className="py-3 px-3 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {u.role !== 'admin' && (
-                          <>
-                            <button
-                              onClick={() => handleUpdateStatus(u, u.status === 'blocked' ? 'active' : 'blocked')}
-                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                u.status === 'blocked'
-                                  ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                                  : 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
-                              }`}
-                              title={u.status === 'blocked' ? '계정 제한 해제' : '계정 이용 제한'}
-                            >
-                              <Ban className="w-3.5 h-3.5" />
-                            </button>
+                      {/* Actions */}
+                      <td className="py-3 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(u)}
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
+                            title={isEn ? 'Edit member' : '회원 정보 / 비밀번호 수정'}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
 
-                            {confirmDeleteId === u.id ? (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => handleDeleteUser(u)}
-                                  className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[10px] font-bold cursor-pointer"
-                                >
-                                  {isEn ? 'Confirm' : '삭제'}
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDeleteId(null)}
-                                  className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-md text-[10px] font-semibold cursor-pointer"
-                                >
-                                  {isEn ? 'Cancel' : '취소'}
-                                </button>
-                              </div>
-                            ) : (
+                          {!isProtectedRow && (
+                            <>
                               <button
-                                onClick={() => setConfirmDeleteId(u.id)}
-                                className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                                title="계정 삭제"
+                                type="button"
+                                onClick={() => handleUpdateStatus(u, u.status === 'blocked' ? 'active' : 'blocked')}
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                  u.status === 'blocked'
+                                    ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                                    : 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                                }`}
+                                title={u.status === 'blocked' ? '계정 제한 해제' : '계정 이용 제한'}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Ban className="w-3.5 h-3.5" />
                               </button>
-                            )}
-                          </>
-                        )}
-                        {u.role === 'admin' && (
-                          <span className="text-[10px] text-slate-400 italic">Protected</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+
+                              {confirmDeleteId === u.id ? (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteUser(u)}
+                                    className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[10px] font-bold cursor-pointer"
+                                  >
+                                    {isEn ? 'Confirm' : '삭제'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteId(null)}
+                                    className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-md text-[10px] font-semibold cursor-pointer"
+                                  >
+                                    {isEn ? 'Cancel' : '취소'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(u.id)}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                                  title="계정 삭제"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

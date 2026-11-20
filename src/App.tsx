@@ -719,7 +719,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.106.10";
+const APP_VERSION = "3.106.12";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1779,7 +1779,11 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authRequiresPasskey, setAuthRequiresPasskey] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminPasswordSaving, setAdminPasswordSaving] = useState(false);
+  const [adminPasswordNotice, setAdminPasswordNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [adminPasskey, setAdminPasskey] = useState('');
   const [showAdminPasskeyText, setShowAdminPasskeyText] = useState(false);
   const [adminPasskeyLoading, setAdminPasskeyLoading] = useState(false);
@@ -7280,10 +7284,11 @@ export default function App() {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
+    setAuthRequiresPasskey(false);
     try {
       const endpoint = authMode === 'signup' ? '/api/auth/register' : '/api/auth/login';
       const cleanEmail = authEmail.trim().toLowerCase();
-      
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7294,9 +7299,19 @@ export default function App() {
         })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        throw new Error(data.error || (authMode === 'signup' ? "회원가입에 실패했습니다." : "로그인에 실패했습니다."));
+        const msg = data?.error || (authMode === 'signup' ? "회원가입에 실패했습니다." : "로그인에 실패했습니다.");
+        setAuthRequiresPasskey(
+          Boolean(data?.requiresPasskey) ||
+          msg.includes('비상 패스키') ||
+          msg.includes('비상 인증')
+        );
+        setAuthError(msg);
+        if (res.status >= 500) {
+          console.warn("Email auth server warning:", res.status, msg);
+        }
+        return;
       }
 
       const loggedUser = data.user;
@@ -7319,15 +7334,60 @@ export default function App() {
 
       setUser({ email: loggedUser.email, displayName: loggedUser.displayName || loggedUser.email.split('@')[0] });
       localStorage.setItem('winfix_user_session', JSON.stringify({ email: loggedUser.email, displayName: loggedUser.displayName }));
-      
+
       setShowAuthModal(false);
       setAuthEmail('');
       setAuthPassword('');
+      setAuthRequiresPasskey(false);
     } catch (error: any) {
-      console.error("Email auth error:", error);
-      setAuthError(error.message || (authMode === 'signup' ? "회원가입 처리 중 오류가 발생했습니다." : "이메일 또는 비밀번호가 잘못되었습니다."));
+      console.warn("Email auth network failure:", error?.message || error);
+      setAuthError(error?.message || (authMode === 'signup' ? "회원가입 처리 중 네트워크 오류가 발생했습니다." : "로그인 서버에 연결할 수 없습니다."));
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  const handleSetAdminEmailPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    const pwd = adminNewPassword.trim();
+    if (pwd.length < 6 || pwd.length > 128) {
+      setAdminPasswordNotice({
+        type: 'error',
+        text: language === 'en' ? 'Password must be 6-128 characters.' : '비밀번호는 6자 이상 128자 이하로 입력해주세요.'
+      });
+      return;
+    }
+    setAdminPasswordSaving(true);
+    setAdminPasswordNotice(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const targetEmail = (adminSessionEmail || user?.email || 'ahbiyoutwinfix@gmail.com').trim();
+      const resp = await fetch('/api/admin/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ email: targetEmail, newPassword: pwd })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.success) {
+        setAdminPasswordNotice({
+          type: 'error',
+          text: data?.error || (language === 'en' ? 'Failed to save password.' : '비밀번호 설정에 실패했습니다.')
+        });
+        return;
+      }
+      setAdminNewPassword('');
+      setAdminPasswordNotice({
+        type: 'success',
+        text: data.message || (language === 'en' ? 'Admin email password saved.' : '관리자 이메일 로그인 비밀번호가 설정되었습니다.')
+      });
+    } catch (err: any) {
+      setAdminPasswordNotice({
+        type: 'error',
+        text: err?.message || (language === 'en' ? 'Network error.' : '네트워크 오류가 발생했습니다.')
+      });
+    } finally {
+      setAdminPasswordSaving(false);
     }
   };
 
@@ -19535,7 +19595,7 @@ export default function App() {
                 <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
                     <button
-                      onClick={() => { setAuthMode('login'); setAuthError(''); setAdminPasskeyError(''); }}
+                      onClick={() => { setAuthMode('login'); setAuthError(''); setAuthRequiresPasskey(false); setAdminPasskeyError(''); }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                         authMode === 'login'
                           ? 'bg-blue-600 text-white shadow-xs'
@@ -19546,7 +19606,7 @@ export default function App() {
                       <span>{language === 'ko' ? '통합 로그인' : 'Unified Login'}</span>
                     </button>
                     <button
-                      onClick={() => { setAuthMode('signup'); setAuthError(''); }}
+                      onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthRequiresPasskey(false); }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                         authMode === 'signup'
                           ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-xs'
@@ -19556,7 +19616,7 @@ export default function App() {
                       {language === 'ko' ? '회원가입' : 'Sign Up'}
                     </button>
                     <button
-                      onClick={() => { setAuthMode('admin'); setAuthError(''); setAdminPasskeyError(''); }}
+                      onClick={() => { setAuthMode('admin'); setAuthError(''); setAuthRequiresPasskey(false); setAdminPasskeyError(''); }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                         authMode === 'admin'
                           ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
@@ -19638,9 +19698,26 @@ export default function App() {
                       </div>
 
                       {authError && (
-                        <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
-                          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                          <span className="leading-relaxed">{authError}</span>
+                        <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-600 dark:text-red-400 flex flex-col gap-2">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span className="leading-relaxed">{authError}</span>
+                          </div>
+                          {authRequiresPasskey && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthMode('admin');
+                                setAuthError('');
+                                setAuthRequiresPasskey(false);
+                                setAdminPasskeyError('');
+                              }}
+                              className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                              <span>{language === 'ko' ? '관리자 비상 인증(패스키) 탭으로 이동' : 'Switch to Admin Passkey Tab'}</span>
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -19738,6 +19815,35 @@ export default function App() {
                               <span>{language === 'ko' ? '세션 로그아웃' : 'Log Out'}</span>
                             </button>
                           </div>
+
+                          <form onSubmit={handleSetAdminEmailPassword} className="pt-3 mt-2 border-t border-amber-200/70 dark:border-amber-800/40 text-left space-y-2">
+                            <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-200">
+                              {language === 'ko' ? '이메일 로그인용 비밀번호 설정 / 변경' : 'Set / Update Email Login Password'}
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="password"
+                                minLength={6}
+                                maxLength={128}
+                                value={adminNewPassword}
+                                onChange={(e) => setAdminNewPassword(e.target.value)}
+                                placeholder={language === 'ko' ? '새 비밀번호 (6자 이상)' : 'New password (min 6 chars)'}
+                                className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-amber-500"
+                              />
+                              <button
+                                type="submit"
+                                disabled={adminPasswordSaving || adminNewPassword.trim().length < 6}
+                                className="px-3.5 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer shrink-0"
+                              >
+                                {adminPasswordSaving ? (language === 'ko' ? '저장 중...' : 'Saving...') : (language === 'ko' ? '저장' : 'Save')}
+                              </button>
+                            </div>
+                            {adminPasswordNotice && (
+                              <p className={`text-[11px] ${adminPasswordNotice.type === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {adminPasswordNotice.text}
+                              </p>
+                            )}
+                          </form>
                         </div>
                       ) : (
                         <>

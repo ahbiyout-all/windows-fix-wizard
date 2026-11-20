@@ -197,7 +197,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.10';
+  return '3.106.12';
 }
 
 const BACKUP_SENSITIVE_KEY_EXACT = new Set([
@@ -4086,8 +4086,16 @@ async function startServer() {
         return res.status(403).json({ success: false, error: "이용이 제한된 계정입니다. 관리자에게 문의하세요." });
       }
 
-      if (user.authProvider === 'google' && !user.passwordHash) {
-        return res.status(400).json({ success: false, error: "해당 계정은 비밀번호가 설정되어 있지 않습니다. 관리자 비상 패스키를 이용하거나 신규 이메일 계정으로 가입해주세요." });
+      if (!user.passwordHash || !user.salt) {
+        const isAdminAcct = user.role === 'admin' || getAdminEmailList().includes(cleanEmail);
+        return res.status(400).json({
+          success: false,
+          requiresPasskey: isAdminAcct,
+          authProvider: user.authProvider || 'google',
+          error: isAdminAcct
+            ? "해당 관리자 계정은 이메일 비밀번호가 설정되어 있지 않습니다. '관리자 비상 인증' 탭의 마스터 패스키로 로그인하거나, 인증 후 관리자 계정의 비밀번호를 설정해주세요."
+            : "해당 계정은 비밀번호가 설정되어 있지 않습니다. 신규 이메일 계정으로 가입하거나 관리자에게 문의해주세요."
+        });
       }
 
       const isValid = verifyPasswordWithSalt(password, user.salt || '', user.passwordHash || '');
@@ -4116,6 +4124,61 @@ async function startServer() {
       });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message || "로그인 처리 중 오류가 발생했습니다." });
+    }
+  });
+
+  // POST /api/admin/set-password - Set or update email login password for an authenticated admin account
+  app.post("/api/admin/set-password", requireAdmin, rateLimitAuth, (req, res) => {
+    try {
+      const { email, newPassword } = req.body || {};
+      const cleanEmail = (typeof email === 'string' && email.trim() ? email : 'ahbiyoutwinfix@gmail.com').toLowerCase().trim();
+      if (!getAdminEmailList().includes(cleanEmail)) {
+        return res.status(403).json({ success: false, error: "허용된 관리자 이메일 계정에만 비밀번호를 설정할 수 있습니다." });
+      }
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6 || newPassword.length > 128) {
+        return res.status(400).json({ success: false, error: "비밀번호는 6자리 이상 128자리 이하로 입력해주세요." });
+      }
+
+      const users = readLocalCollection('users');
+      const idx = users.findIndex((u: any) => u.email?.toLowerCase().trim() === cleanEmail);
+      const { salt, hash } = hashPasswordWithSalt(newPassword);
+      const now = getKSTISOString();
+
+      if (idx !== -1) {
+        users[idx] = {
+          ...users[idx],
+          role: 'admin',
+          salt,
+          passwordHash: hash,
+          status: 'active',
+          updatedAt: now
+        };
+      } else {
+        users.unshift({
+          id: `usr-admin-${Date.now()}`,
+          email: cleanEmail,
+          displayName: 'AhBiYout Administrator',
+          role: 'admin',
+          authProvider: 'email',
+          salt,
+          passwordHash: hash,
+          status: 'active',
+          createdAt: now,
+          lastLoginAt: now
+        });
+      }
+      writeLocalCollection('users', users);
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'ADMIN_SET_PASSWORD',
+        details: `관리자 이메일 로그인 비밀번호 설정/변경: ${cleanEmail}`,
+        operator: cleanEmail
+      });
+
+      res.json({ success: true, message: `${cleanEmail} 계정의 이메일 비밀번호가 안전하게 설정되었습니다.` });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message || "비밀번호 설정 중 오류가 발생했습니다." });
     }
   });
 
@@ -4202,6 +4265,7 @@ async function startServer() {
         role: u.role || 'member',
         authProvider: u.authProvider || 'email',
         status: u.status || 'active',
+        hasPassword: Boolean(u.passwordHash && u.salt),
         createdAt: u.createdAt || '',
         lastLoginAt: u.lastLoginAt || ''
       }));
@@ -4225,14 +4289,99 @@ async function startServer() {
     }
   });
 
-  // PATCH /api/admin/users/:id - Admin: Update member role or status (block/unblock)
+  // POST /api/admin/users - Admin: Register new member or admin account directly into data/users.json
+  app.post("/api/admin/users", requireAdmin, (req, res) => {
+    try {
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 회원 등록 요청 형식입니다." });
+      }
+
+      const { email, password, displayName, role, status } = req.body;
+      const cleanEmail = typeof email === 'string' ? email.toLowerCase().trim() : '';
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 254) {
+        return res.status(400).json({ success: false, error: "유효한 이메일 주소를 입력해주세요." });
+      }
+
+      const users = readLocalCollection('users');
+      const existing = users.find((u: any) => u.email?.toLowerCase().trim() === cleanEmail);
+      if (existing) {
+        return res.status(409).json({ success: false, error: "이미 등록된 이메일 계정입니다." });
+      }
+
+      let salt = '';
+      let passwordHash = '';
+      if (password !== undefined && password !== null && String(password).trim() !== '') {
+        const pwdStr = String(password);
+        if (pwdStr.length < 6 || pwdStr.length > 128) {
+          return res.status(400).json({ success: false, error: "비밀번호는 6자리 이상 128자리 이하로 입력해주세요." });
+        }
+        const hashed = hashPasswordWithSalt(pwdStr);
+        salt = hashed.salt;
+        passwordHash = hashed.hash;
+      } else {
+        return res.status(400).json({ success: false, error: "초기 로그인 비밀번호(6자 이상)를 입력해주세요." });
+      }
+
+      const assignedRole: 'admin' | 'member' =
+        getAdminEmailList().includes(cleanEmail) || role === 'admin' ? 'admin' : 'member';
+      const assignedStatus: 'active' | 'blocked' =
+        assignedRole === 'admin' ? 'active' : (status === 'blocked' ? 'blocked' : 'active');
+      const safeDisplayName = typeof displayName === 'string' && displayName.trim()
+        ? displayName.trim().slice(0, 80)
+        : cleanEmail.split('@')[0];
+
+      const now = getKSTISOString();
+      const userId = `usr-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+      const newUser = {
+        id: userId,
+        email: cleanEmail,
+        displayName: safeDisplayName,
+        role: assignedRole,
+        authProvider: 'email',
+        salt,
+        passwordHash,
+        status: assignedStatus,
+        createdAt: now,
+        lastLoginAt: now
+      };
+
+      users.unshift(newUser);
+      writeLocalCollection('users', users);
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'ADMIN_CREATE_USER',
+        details: `관리자 직접 회원 등록: ${cleanEmail} (역할: ${assignedRole}, 상태: ${assignedStatus})`,
+        operator: cleanEmail
+      });
+
+      res.status(201).json({
+        success: true,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          displayName: newUser.displayName,
+          role: newUser.role,
+          authProvider: newUser.authProvider,
+          status: newUser.status,
+          hasPassword: true,
+          createdAt: newUser.createdAt,
+          lastLoginAt: newUser.lastLoginAt
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message || "회원 등록 중 오류가 발생했습니다." });
+    }
+  });
+
+  // PATCH /api/admin/users/:id - Admin: Update member profile, role, status, or password
   app.patch("/api/admin/users/:id", requireAdmin, (req, res) => {
     try {
       const userId = req.params.id;
       if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
         return res.status(400).json({ success: false, error: "유효하지 않은 사용자 수정 요청 형식입니다." });
       }
-      const { role, status, displayName } = req.body;
+      const { email, role, status, displayName, newPassword } = req.body;
       const users = readLocalCollection('users');
       const userIndex = users.findIndex((u: any) => u.id === userId);
 
@@ -4240,26 +4389,82 @@ async function startServer() {
         return res.status(404).json({ success: false, error: "해당 사용자를 찾을 수 없습니다." });
       }
 
-      if (role && (role === 'admin' || role === 'member')) {
-        users[userIndex].role = role;
-      }
-      if (status && (status === 'active' || status === 'blocked')) {
-        users[userIndex].status = status;
-      }
-      if (displayName && typeof displayName === 'string' && displayName.trim()) {
-        users[userIndex].displayName = displayName.trim().slice(0, 80);
+      const target = users[userIndex];
+      const currentEmail = String(target.email || '').toLowerCase().trim();
+      const isProtectedRootAdmin = getAdminEmailList().includes(currentEmail);
+
+      if (email !== undefined && typeof email === 'string') {
+        const nextEmail = email.toLowerCase().trim();
+        if (!nextEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail) || nextEmail.length > 254) {
+          return res.status(400).json({ success: false, error: "유효한 이메일 주소를 입력해주세요." });
+        }
+        if (nextEmail !== currentEmail) {
+          if (isProtectedRootAdmin) {
+            return res.status(403).json({ success: false, error: "최고 관리자 기본 이메일 주소는 변경할 수 없습니다." });
+          }
+          const dup = users.some((u: any, idx: number) => idx !== userIndex && u.email?.toLowerCase().trim() === nextEmail);
+          if (dup) {
+            return res.status(409).json({ success: false, error: "이미 다른 회원이 사용 중인 이메일 주소입니다." });
+          }
+          target.email = nextEmail;
+        }
       }
 
+      if (role && (role === 'admin' || role === 'member')) {
+        if (isProtectedRootAdmin && role !== 'admin') {
+          return res.status(403).json({ success: false, error: "시스템 기본 관리자 계정의 권한은 일반 회원으로 낮출 수 없습니다." });
+        }
+        target.role = role;
+      }
+
+      if (status && (status === 'active' || status === 'blocked')) {
+        if (isProtectedRootAdmin && status === 'blocked') {
+          return res.status(403).json({ success: false, error: "시스템 기본 관리자 계정은 차단할 수 없습니다." });
+        }
+        target.status = status;
+      }
+
+      if (displayName !== undefined && typeof displayName === 'string') {
+        const cleanName = displayName.trim();
+        if (!cleanName) {
+          return res.status(400).json({ success: false, error: "닉네임/이름은 비워둘 수 없습니다." });
+        }
+        target.displayName = cleanName.slice(0, 80);
+      }
+
+      if (newPassword !== undefined && newPassword !== null && String(newPassword).trim() !== '') {
+        const pwdStr = String(newPassword);
+        if (pwdStr.length < 6 || pwdStr.length > 128) {
+          return res.status(400).json({ success: false, error: "비밀번호는 6자리 이상 128자리 이하로 입력해주세요." });
+        }
+        const { salt, hash } = hashPasswordWithSalt(pwdStr);
+        target.salt = salt;
+        target.passwordHash = hash;
+      }
+
+      target.updatedAt = getKSTISOString();
+      users[userIndex] = target;
       writeLocalCollection('users', users);
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'ADMIN_UPDATE_USER',
+        details: `회원 정보 수정: ${target.email} (역할: ${target.role}, 상태: ${target.status})`,
+        operator: target.email
+      });
 
       res.json({
         success: true,
         user: {
-          id: users[userIndex].id,
-          email: users[userIndex].email,
-          displayName: users[userIndex].displayName,
-          role: users[userIndex].role,
-          status: users[userIndex].status
+          id: target.id,
+          email: target.email,
+          displayName: target.displayName,
+          role: target.role,
+          authProvider: target.authProvider || 'email',
+          status: target.status,
+          hasPassword: Boolean(target.passwordHash && target.salt),
+          createdAt: target.createdAt || '',
+          lastLoginAt: target.lastLoginAt || ''
         }
       });
     } catch (e: any) {

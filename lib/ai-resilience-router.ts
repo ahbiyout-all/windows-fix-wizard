@@ -133,7 +133,7 @@ export const DEFAULT_GEMINI_MODELS: DiscoveredGeminiModel[] = [
 ];
 
 export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
-  version: '3.106.10',
+  version: '3.106.12',
   updatedAt: new Date().toISOString(),
   lastDiscoveryAt: null,
   routingPolicy: 'quota-split',
@@ -612,7 +612,7 @@ export async function discoverLiveModels(options?: {
       try {
         const orResp = await fetch('https://openrouter.ai/api/v1/models', {
           signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.10' }
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.12' }
         });
         if (orResp.ok) {
           const json: any = await orResp.json();
@@ -639,7 +639,7 @@ export async function discoverLiveModels(options?: {
       try {
         const pollResp = await fetch('https://text.pollinations.ai/models', {
           signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.10' }
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.12' }
         });
         if (pollResp.ok) {
           const json: any = await pollResp.json();
@@ -959,7 +959,7 @@ export async function callExternalFreeProvider(
             signal: AbortSignal.timeout(timeoutMs),
             headers: {
               'Content-Type': 'application/json',
-              'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.10'
+              'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.12'
             },
             body: JSON.stringify({
               model,

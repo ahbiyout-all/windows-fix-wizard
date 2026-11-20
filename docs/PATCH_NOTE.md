@@ -1,6 +1,27 @@
-# Patch Note - System Update (v3.106.10)
+# Patch Note - System Update (v3.106.12)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.12] - 2026-11-20
+
+### 🚀 Major New Features & Enhancements
+- **회원 및 계정 데이터 관리(Zero Cloud DB) 직접 등록·수정 기능 추가 (`src/components/MemberManagementPanel.tsx`, `server.ts`)**:
+  - 기존 목록 조회·차단·삭제만 가능했던 관리자 회원 패널에 **회원 등록** 버튼 및 검색 결과 없음 시 **검색 이메일 즉시 등록** 버튼을 추가해, 관리자 계정을 포함한 신규 계정을 `data/users.json`에 바로 등록할 수 있도록 개선했습니다 (`POST /api/admin/users`).
+  - 모든 회원·관리자 행에 **정보/비밀번호 수정** 버튼을 추가해 닉네임, 이메일(기본 보호 관리자 제외), 권한(`ADMIN`/`MEMBER`), 상태(`정상`/`제한`), 로그인 비밀번호 변경을 지원하도록 `PATCH /api/admin/users/:id`를 확장하고 비밀번호 미설정 배지를 표시합니다.
+  - 패치 노트 및 전 모듈 버전을 `v3.106.12`로 동기화했습니다.
+
+---
+
+## [v3.106.11] - 2026-11-20
+
+### 🔧 Bug Fixes & 🛡️ Authentication UX Hardening
+- **비밀번호 미설정 계정 이메일 로그인 오류(`console.error`) 차단 및 비상 패스키 전환 UI 추가 (`src/App.tsx`, `server.ts`)**:
+  - `handleEmailAuth()`가 4xx 인증 응답(비밀번호 미설정 Google 계정, 비밀번호 불일치 등)을 예외로 던지고 `console.error`를 출력하던 문제를 수정해 정상적인 UI 안내 배너만 표시하도록 개선했습니다.
+  - `/api/auth/login` 응답에 `requiresPasskey` 플래그를 포함하고, 로그인 모달 오류 배너에 **관리자 비상 인증(패스키) 탭으로 이동** 원클릭 버튼을 추가했습니다.
+- **인증된 관리자용 이메일 비밀번호 설정 엔드포인트 추가 (`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`, `lib/ai-resilience-router.ts`, `docs/PATCH_NOTE.md`)**:
+  - 패스키 등으로 인증된 관리자가 `POST /api/admin/set-password`를 통해 관리자 이메일 계정의 로그인 비밀번호를 안전하게 등록·변경할 수 있도록 지원하고 전 모듈 버전을 `v3.106.11`로 동기화했습니다.
 
 ---
 
