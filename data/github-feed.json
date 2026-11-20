@@ -1,15 +1,15 @@
 {
-  "lastCollectedAt": "2026-11-19T19:59:29.970Z",
-  "modelUsed": "Pollinations (openai) [Keyless]",
-  "targetCategory": "디스플레이/그래픽",
+  "lastCollectedAt": "2026-11-20T14:56:58.168Z",
+  "modelUsed": "Pollinations (openai-fast) [Keyless]",
+  "targetCategory": "네트워크",
   "newlyAddedCount": 1,
-  "totalIssuesCount": 151,
+  "totalIssuesCount": 152,
   "newIssues": [
     {
-      "id": "gh-0x8007000e-mwnz4n1u",
-      "code": "0x8007000E",
-      "title": "디스플레이 드라이버 설치 시 \"시스템이 파일을 찾을 수 없습니다\" 오류",
-      "category": "디스플레이/그래픽"
+      "id": "gh-0x8024402f-mwp3rfp5",
+      "code": "0x8024402f",
+      "title": "네트워크 연결 끊김 오류 (0x8024402f)",
+      "category": "네트워크"
     }
   ]
 }

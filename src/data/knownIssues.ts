@@ -37,7 +37,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": true,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:16.333+09:00"
   },
   {
     "id": "seed-network-dns",
@@ -77,7 +80,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": false,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:16.470+09:00"
   },
   {
     "id": "seed-system-bsod",
@@ -117,7 +123,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": true,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/ko-kr/windows/%EB%B8%94%EB%A3%A8%EC%8A%A4%ED%81%AC%EB%A6%B0-%EC%98%A4%EB%A5%98-%ED%95%B4%EA%B2%B0-31ce781f-3590-2c3b-556b-6269afd28742"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:16.920+09:00"
   },
   {
     "id": "seed-activation-error",
@@ -156,7 +167,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": false,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/ko-kr/windows/windows-%EC%A0%95%ED%92%88-%EC%9D%B8%EC%A6%9D-%EC%98%A4%EB%A5%98%EC%97%90-%EB%8C%80%ED%95%9C-%EB%8F%84%EC%9B%80%EB%A7%90-090ec25c-a1cf-4077-b4b3-ea68ee5694d7"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:16.914+09:00"
   },
   {
     "id": "seed-store-failed",
@@ -195,7 +211,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": false,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/ko-kr/account-billing/microsoft-store-%EC%97%90%EC%84%9C-%EC%95%B1%EC%9D%84-%EC%B0%BE%EA%B1%B0%EB%82%98-%EC%84%A4%EC%B9%90%ED%95%A0-%EC%88%98-%EC%97%86%EB%8A%94-%EA%B2%BD%EC%9A%B0-ca530de4-cd19-f728-dae7-7368fb8b17b8"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:17.166+09:00"
   },
   {
     "id": "seed-defender-failed",
@@ -234,7 +255,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": true,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/ko-kr/windows/microsoft-defender-%EB%B0%B1%EC%8B%A0%EC%9D%98-%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0-9e6db3f2-d8ce-b24d-bfcd-ca8ed14995f9"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.135+09:00"
   },
   {
     "id": "seed-hardware-flicker",
@@ -274,7 +300,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": false,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:17.350+09:00"
   },
   {
     "id": "seed-performance-leak",
@@ -313,7 +342,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": true,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://answers.microsoft.com/ko-kr/windows/forum/all/dwmexe-%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%84%84%EC%88%98/f591cd64-bf6e-4ccb-b9fb-1c4b92b60bfe"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:17.356+09:00"
   },
   {
     "id": "seed-fs-system",
@@ -353,7 +387,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     ],
     "isLatest": false,
     "createdAt": "2026-09-03T16:35:51.830+09:00",
-    "source": "System Grounding (Initial Setup)"
+    "source": "System Grounding (Initial Setup)",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/ko-kr/topic/-0x80070057-%EC%98%A4%EB%A5%98%EB%8A%94-windows-7%EC%97%90%EC%84%9C-%EB%B0%B1%EC%97%85-%ED%8C%8C%EC%9D%BC%EC%9D%84-%EB%B0%B1%EC%97%85%ED%95%98%EB%A0%A4%EA%B3%A0-%ED%95%A0-%EB%95%8C-%EB%B0%9C%EC%83%9D%ED%95%A9%EB%8B%88%EB%8B%A4-b816cd9c-851f-50ab-d72b-8b5eaccc2073"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.200+09:00"
   },
   {
     "id": "kb-update-0x80070003",
@@ -391,7 +430,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "경로오류"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/windows/windows-update-troubleshooter"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:17.447+09:00"
   },
   {
     "id": "kb-update-0x80070422",
@@ -428,7 +472,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "업데이트 오류"
     ],
     "isLatest": false,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-windows-update-errors"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.378+09:00"
   },
   {
     "id": "kb-update-0x800f081f",
@@ -467,7 +516,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "RestoreHealth"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/application-management/dotnet-framework-35-installation-error-0x800f081f"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.378+09:00"
   },
   {
     "id": "kb-update-0x80070643",
@@ -505,7 +559,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "reagentc"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/topic/kb5028997-instructions-to-manually-resize-your-partition-to-install-the-winre-update-4da21244-e0ce-4ff0-bc37-9f445e342880"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.786+09:00"
   },
   {
     "id": "kb-network-0x800704cf",
@@ -542,7 +601,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "winsock"
     ],
     "isLatest": false,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.756+09:00"
   },
   {
     "id": "kb-system-kmode",
@@ -580,7 +642,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "드라이버크래시"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.361+09:00"
   },
   {
     "id": "kb-system-pagefault",
@@ -618,7 +683,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "가상메모리"
     ],
     "isLatest": false,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.962+09:00"
   },
   {
     "id": "kb-store-0x803f8001",
@@ -657,7 +725,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "wsreset"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:19.373+09:00"
   },
   {
     "id": "kb-store-0x80073d05",
@@ -693,7 +764,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "배포오류"
     ],
     "isLatest": false,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/application-management/app-install-issues"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.958+09:00"
   },
   {
     "id": "kb-activation-0xc004f074",
@@ -732,7 +808,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "라이선스"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-server/licensing-and-activation/troubleshoot-activation-error-0xc004f074"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:18.968+09:00"
   },
   {
     "id": "kb-hardware-code43",
@@ -770,7 +851,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "느낌표"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/windows/error-codes-in-device-manager-in-windows-f0e86359-b4d3-41c9-9440-abb61604521f"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:19.380+09:00"
   },
   {
     "id": "kb-performance-disk100",
@@ -809,7 +895,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "SSD 버벅임"
     ],
     "isLatest": true,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/windows/tips-to-improve-pc-performance-in-windows-b3b3ef4b-f4e2-4d71-83d5-e24a23b7b8a0"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:19.973+09:00"
   },
   {
     "id": "kb-storage-0x80070570",
@@ -847,7 +938,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
       "디스크오류"
     ],
     "isLatest": false,
-    "createdAt": "2026-09-03T07:45:54.488Z"
+    "createdAt": "2026-09-03T07:45:54.488Z",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:19.535+09:00"
   },
   {
     "id": "gh-0x00000124--whea-uncorrectable-error--mvhwcok6",
@@ -900,7 +994,13 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-21T09:15:26.934Z",
     "updatedAt": "2026-10-21T09:15:26.934Z",
     "verifiedAt": "2026-10-21T09:15:26.934Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://learn.microsoft.com/ko-kr/windows-hardware/drivers/debugger/bug-check-0x124--whea-uncorrectable-error",
+      "https://www.easeus.com/data-recovery/fix-blue-screen-code-124.html"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:19.824+09:00"
   },
   {
     "id": "gh-0x800f0922-mvhwdyid",
@@ -946,7 +1046,13 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-21T09:16:26.485Z",
     "updatedAt": "2026-10-21T18:16:26.641+09:00",
     "verifiedAt": "2026-10-21T09:16:26.485Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/topic/windows-10-and-windows-11-update-error-0x800f0922-troubleshooting-4b62d2e1-4c63-47a3-8be2-32b50937a44f",
+      "https://learn.microsoft.com/en-us/troubleshoot/windows-client/deployment/troubleshoot-windows-update-errors"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:19.964+09:00"
   },
   {
     "id": "gh-0x00000133-mvmde3db",
@@ -995,7 +1101,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-24T12:23:30.959Z",
     "updatedAt": "2026-10-24T12:23:30.959Z",
     "verifiedAt": "2026-10-24T12:23:30.959Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/windows/resolving-blue-screen-errors-in-windows-5c62b721-1207-4c4d-b613-044f5010e614"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:20.431+09:00"
   },
   {
     "id": "gh-0x00000139-mvmde3db",
@@ -1044,7 +1155,13 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-24T12:23:30.959Z",
     "updatedAt": "2026-10-24T12:23:30.959Z",
     "verifiedAt": "2026-10-24T12:23:30.959Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139-kernel-security-check-failure",
+      "https://support.microsoft.com/en-us/s480132/troubleshoot-blue-screen-errors"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:21.023+09:00"
   },
   {
     "id": "gh-0x88890004-mvmq3osg",
@@ -1091,7 +1208,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-24T18:19:20.512Z",
     "updatedAt": "2026-10-24T18:19:20.512Z",
     "verifiedAt": "2026-10-24T18:19:20.512Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/windows/fix-sound-or-audio-problems-in-windows-7302624d-2230-9f7a-7ead-7d81323f9d08"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:21.831+09:00"
   },
   {
     "id": "gh-0x00000437-mvmq3osg",
@@ -1140,7 +1262,13 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-24T18:19:20.512Z",
     "updatedAt": "2026-10-24T18:19:20.512Z",
     "verifiedAt": "2026-10-24T18:19:20.512Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/topic/error-1079-when-you-try-to-start-the-windows-audio-service-e5c9b744-8e3d-4c3e-83bb-132b4931a29f",
+      "https://learn.microsoft.com/en-us/windows/troubleshoot/windows-server/system-management-components/service-startup-permissions"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:21.203+09:00"
   },
   {
     "id": "gh-0x80070641-mvn314hj",
@@ -1185,7 +1313,10 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-25T00:21:15.895Z",
     "updatedAt": "2026-10-25T00:21:15.895Z",
     "verifiedAt": "2026-10-25T00:21:15.895Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": false,
+    "brokenLinks": [],
+    "lastLinkCheckAt": "2026-11-19T18:45:20.604+09:00"
   },
   {
     "id": "gh-0x800705b4-mvn314hk",
@@ -1230,7 +1361,12 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-10-25T00:21:15.895Z",
     "updatedAt": "2026-10-25T00:21:15.895Z",
     "verifiedAt": "2026-10-25T00:21:15.895Z",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "hasBrokenLinks": true,
+    "brokenLinks": [
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-a65c2763-718f-7b70-e448-f3d2f2d96924"
+    ],
+    "lastLinkCheckAt": "2026-11-19T18:45:21.425+09:00"
   },
   {
     "id": "gh-0x80070424-mvng1fes",
@@ -6837,6 +6973,53 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "createdAt": "2026-11-19T19:59:29.970Z",
     "updatedAt": "2026-11-19T19:59:29.970Z",
     "verifiedAt": "2026-11-19T19:59:29.970Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8024402f-mwp3rfp5",
+    "category": "네트워크",
+    "code": "0x8024402f",
+    "title": "네트워크 연결 끊김 오류 (0x8024402f)",
+    "title_en": "Network Connectivity Disruption Error (0x8024402f)",
+    "symptoms": "Windows 10/11에서 ‘네트워크 연결이 끊어졌습니다’ 메시지가 표시되며 인터넷에 접속할 수 없습니다. 이 오류는 DNS 캐시 손상, 라우터 설정 변경, 또는 Windows 네트워크 스택 문제로 인해 발생합니다.",
+    "symptoms_en": "In Windows 10/11, the message ‘Network connection has been lost’ appears and the internet becomes unreachable. This error arises from DNS cache corruption, router configuration changes, or issues within the Windows network stack.",
+    "script": "ipconfig /flushdns\nnetsh int ip reset\nnetsh winsock reset\nRestart-Computer -Force",
+    "manualSteps": [
+      "1. 관리자 권한으로 PowerShell을 실행합니다.",
+      "2. ‘ipconfig /flushdns’ 명령으로 DNS 캐시를 비웁니다.",
+      "3. ‘netsh int ip reset’와 ‘netsh winsock reset’ 명령을 차례로 실행합니다.",
+      "4. 컴퓨터를 재시작한 뒤 인터넷 연결을 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "1. Open PowerShell as an administrator.",
+      "2. Run ‘ipconfig /flushdns’ to clear the DNS cache.",
+      "3. Execute ‘netsh int ip reset’ followed by ‘netsh winsock reset’.",
+      "4. Restart the PC and test the internet connection again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/0x8024402f-network-connection-issue-8f0e1d4a-2c3b-4f1d-9b6a-6e2d4c3a1b2c",
+      "https://learn.microsoft.com/en-us/windows-server/networking/diagnostics/network-connection-problems"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8024402f 네트워크 연결 끊김",
+      "0x8024402f network connectivity issue",
+      "DNS 캐시 플러시",
+      "DNS flush",
+      "netsh int ip reset",
+      "netsh winsock reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-20T14:56:58.168Z",
+    "updatedAt": "2026-11-20T14:56:58.168Z",
+    "verifiedAt": "2026-11-20T14:56:58.168Z",
     "verificationStatus": "verified"
   }
 ];

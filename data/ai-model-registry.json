@@ -1,6 +1,6 @@
 {
   "version": "3.100.0",
-  "updatedAt": "2026-11-20T05:51:50.027Z",
+  "updatedAt": "2026-11-20T14:56:58.167Z",
   "lastDiscoveryAt": "2026-11-20T05:51:49.840Z",
   "routingPolicy": "quota-split",
   "keylessFallbackEnabled": true,
@@ -256,15 +256,15 @@
     }
   },
   "telemetry": {
-    "totalRequests": 4,
+    "totalRequests": 5,
     "geminiRequests": 3,
-    "freeProviderRequests": 1,
-    "keylessRequests": 1,
-    "failoverSaves": 1,
+    "freeProviderRequests": 2,
+    "keylessRequests": 2,
+    "failoverSaves": 2,
     "circuitTrips404": 16,
     "lastProviderUsed": "pollinations",
-    "lastModelUsed": "Pollinations (openai) [Keyless]",
-    "lastUpdatedAt": "2026-11-19T19:59:29.969Z",
+    "lastModelUsed": "Pollinations (openai-fast) [Keyless]",
+    "lastUpdatedAt": "2026-11-20T14:56:58.167Z",
     "perProviderUsage": {
       "gemini": 3,
       "groq": 0,
@@ -272,7 +272,7 @@
       "openrouter": 0,
       "cerebras": 0,
       "cloudflare": 0,
-      "pollinations": 1
+      "pollinations": 2
     }
   }
 }

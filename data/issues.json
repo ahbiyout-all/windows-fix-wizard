@@ -6972,5 +6972,52 @@
     "updatedAt": "2026-11-19T19:59:29.970Z",
     "verifiedAt": "2026-11-19T19:59:29.970Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8024402f-mwp3rfp5",
+    "category": "네트워크",
+    "code": "0x8024402f",
+    "title": "네트워크 연결 끊김 오류 (0x8024402f)",
+    "title_en": "Network Connectivity Disruption Error (0x8024402f)",
+    "symptoms": "Windows 10/11에서 ‘네트워크 연결이 끊어졌습니다’ 메시지가 표시되며 인터넷에 접속할 수 없습니다. 이 오류는 DNS 캐시 손상, 라우터 설정 변경, 또는 Windows 네트워크 스택 문제로 인해 발생합니다.",
+    "symptoms_en": "In Windows 10/11, the message ‘Network connection has been lost’ appears and the internet becomes unreachable. This error arises from DNS cache corruption, router configuration changes, or issues within the Windows network stack.",
+    "script": "ipconfig /flushdns\nnetsh int ip reset\nnetsh winsock reset\nRestart-Computer -Force",
+    "manualSteps": [
+      "1. 관리자 권한으로 PowerShell을 실행합니다.",
+      "2. ‘ipconfig /flushdns’ 명령으로 DNS 캐시를 비웁니다.",
+      "3. ‘netsh int ip reset’와 ‘netsh winsock reset’ 명령을 차례로 실행합니다.",
+      "4. 컴퓨터를 재시작한 뒤 인터넷 연결을 다시 시도합니다."
+    ],
+    "manualSteps_en": [
+      "1. Open PowerShell as an administrator.",
+      "2. Run ‘ipconfig /flushdns’ to clear the DNS cache.",
+      "3. Execute ‘netsh int ip reset’ followed by ‘netsh winsock reset’.",
+      "4. Restart the PC and test the internet connection again."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/0x8024402f-network-connection-issue-8f0e1d4a-2c3b-4f1d-9b6a-6e2d4c3a1b2c",
+      "https://learn.microsoft.com/en-us/windows-server/networking/diagnostics/network-connection-problems"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "0x8024402f 네트워크 연결 끊김",
+      "0x8024402f network connectivity issue",
+      "DNS 캐시 플러시",
+      "DNS flush",
+      "netsh int ip reset",
+      "netsh winsock reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-20T14:56:58.168Z",
+    "updatedAt": "2026-11-20T14:56:58.168Z",
+    "verifiedAt": "2026-11-20T14:56:58.168Z",
+    "verificationStatus": "verified"
   }
 ]
