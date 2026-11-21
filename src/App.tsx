@@ -55,6 +55,8 @@ import { SystemRestoreUtility } from './components/SystemRestoreUtility';
 import { QuickSystemScanUtility } from './components/QuickSystemScanUtility';
 import { SystemEventLogPanel } from './components/SystemEventLogPanel';
 import { MemberManagementPanel } from './components/MemberManagementPanel';
+import { PrivateRepoOpsHub } from './components/PrivateRepoOpsHub';
+import { AdminBackupPolicyModal } from './components/AdminBackupPolicyModal';
 import { InteractiveRoadmap } from './components/InteractiveRoadmap';
 import { DashboardWidget } from './components/DashboardWidget';
 import { DailyQuotaUsageChart } from './components/DailyQuotaUsageChart';
@@ -725,7 +727,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.107.0";
+const APP_VERSION = "3.109.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -9121,7 +9123,19 @@ export default function App() {
 
   // Advanced Multi-Snapshot Explorer Modal States
   const [showSnapshotExplorerModal, setShowSnapshotExplorerModal] = useState(false);
+  const [showAdminBackupPolicyModal, setShowAdminBackupPolicyModal] = useState(false);
+  const [adminBackupPolicyTab, setAdminBackupPolicyTab] = useState<'retention' | 'emergency-key'>('retention');
   const [snapshotTab, setSnapshotTab] = useState<'active' | 'server' | 'browser' | 'policy'>('active');
+
+  useEffect(() => {
+    const onOpenBackupPolicy = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ tab?: 'retention' | 'emergency-key' }>)?.detail;
+      setAdminBackupPolicyTab(detail?.tab === 'emergency-key' ? 'emergency-key' : 'retention');
+      setShowAdminBackupPolicyModal(true);
+    };
+    window.addEventListener('winfix-open-backup-policy', onOpenBackupPolicy);
+    return () => window.removeEventListener('winfix-open-backup-policy', onOpenBackupPolicy);
+  }, []);
   const [serverSnapshotsList, setServerSnapshotsList] = useState<{
     filename: string;
     createdAt: string;
@@ -18545,6 +18559,17 @@ export default function App() {
                         </p>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminBackupPolicyTab('retention');
+                        setShowAdminBackupPolicyModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>{language === 'en' ? 'Admin Backup Policy' : '백업 정책 · 긴급 키'}</span>
+                    </button>
                   </div>
 
                   {/* Primary Action Buttons */}
@@ -19214,6 +19239,9 @@ export default function App() {
 
               {/* Member & User Account Management Panel (Zero Cloud DB) */}
               <MemberManagementPanel language={language} />
+
+              {/* Private Repository Operations & Multi-Vault Hub */}
+              <PrivateRepoOpsHub language={language} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -22956,13 +22984,28 @@ export default function App() {
                       <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                         {language === 'en' ? `Stored Snapshots: ${lastKnownGoodInfo?.storedSnapshotsCount || serverSnapshotsList.length || 1}` : `현재 보관 중인 히스토리 스냅샷: ${lastKnownGoodInfo?.storedSnapshotsCount || serverSnapshotsList.length || 1}개`}
                       </span>
-                      <button
-                        onClick={() => handlePurgeOldSnapshots(lastKnownGoodInfo?.retentionCount || 7)}
-                        className="text-xs font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                        {language === 'en' ? 'Run Purge Policy Now' : '오래된 스냅샷 수동 정리 실행'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSnapshotExplorerModal(false);
+                            setShowLkgDetailsModal(false);
+                            setAdminBackupPolicyTab('retention');
+                            setShowAdminBackupPolicyModal(true);
+                          }}
+                          className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                          {language === 'en' ? 'Admin Backup Policy' : '보존 정책 · 긴급 키 설정'}
+                        </button>
+                        <button
+                          onClick={() => handlePurgeOldSnapshots(lastKnownGoodInfo?.retentionCount || 7)}
+                          className="text-xs font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          {language === 'en' ? 'Run Purge Policy Now' : '오래된 스냅샷 수동 정리 실행'}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -22991,6 +23034,18 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Admin Backup Policy & Emergency Key Rotation Modal (v3.109.0) */}
+      <AdminBackupPolicyModal
+        isOpen={showAdminBackupPolicyModal}
+        initialTab={adminBackupPolicyTab}
+        language={language}
+        onClose={() => setShowAdminBackupPolicyModal(false)}
+        onPolicyUpdated={() => {
+          fetchLastKnownGoodStatus();
+          fetchServerSnapshots();
+        }}
+      />
 
       {/* Scroll Top/Bottom Buttons (positioned safely above mobile Bottom Tab Bar & Safe-Area) */}
       <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-2.5 sm:bottom-24 sm:right-4 md:bottom-8 md:right-6 z-30 flex flex-col items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-lg transition-all duration-200 hover:shadow-xl">

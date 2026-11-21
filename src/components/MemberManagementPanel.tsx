@@ -105,8 +105,15 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
 
   useEffect(() => {
     isMountedRef.current = true;
+    const handleVaultSyncEvent = () => {
+      if (!isMountedRef.current) return;
+      void fetchPrivateBackupConfig();
+      void fetchUsers();
+    };
+    window.addEventListener('winfix-private-vault-updated', handleVaultSyncEvent);
     return () => {
       isMountedRef.current = false;
+      window.removeEventListener('winfix-private-vault-updated', handleVaultSyncEvent);
       if (messageTimeoutRef.current) {
         clearTimeout(messageTimeoutRef.current);
         messageTimeoutRef.current = null;
@@ -244,6 +251,7 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
       setVaultConfig(data.config);
       if (overrides?.clearToken || vaultTokenInput.trim()) setVaultTokenInput('');
       if (overrides?.clearEncryptionKey || vaultKeyInput.trim()) setVaultKeyInput('');
+      window.dispatchEvent(new CustomEvent('winfix-private-vault-updated'));
       setVaultMessage({
         text: overrides?.clearToken
           ? (isEn ? 'Saved Private Repo PAT cleared.' : '저장된 비공개 저장소 PAT가 삭제되었습니다.')

@@ -1,6 +1,38 @@
-# Patch Note - System Update (v3.107.0)
+# Patch Note - System Update (v3.109.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.109.0] - 2026-11-21
+
+### 🚀 Major New Features & Integrations
+- **관리자 백업 보존 · 긴급 암호화 키 순환 정책 모달 구축 (`src/components/AdminBackupPolicyModal.tsx`, `server.ts`, `src/App.tsx`, `src/components/PrivateRepoOpsHub.tsx`)**:
+  - **통합 보존 기간(Retention Policy) 관리 (`GET / POST /api/admin/backup-policy`)**: 비공개 GitHub 저장소 일별 암호화 스냅샷 보관 일수(1~90일 · KST 실행 시각 · 자동 실행 여부), 로컬 서버 LKG 복원점 최대 개수(1~50개 + 초과 스냅샷 즉시 정리 실행), 시스템 감사 로그 보관 개월 수(0=영구~36개월)를 단일 모달에서 통합 조회·검증·저장할 수 있습니다.
+  - **수동 긴급 AES-256-GCM 암호화 키 순환(Emergency Key Rotation)**: 유출 의심·정기 교체 시 즉시 256-bit 고엔트로피 무작위 키를 생성하고 기존 키 검증·확인 체크박스를 거쳐 회원·시스템·보안 금고 3종을 새 세대(`keyGeneration`)로 일괄 재암호화할 수 있습니다.
+  - **오프라인 긴급 순환 및 `.enc.json` 복구 번들 제공**: 비공개 저장소 PAT가 미설정되었거나 GitHub 접근이 제한된 비상 상황에서도 `localOnly` 모드로 서버 활성 키를 안전하게 순환하고, 새 키로 재암호화된 3종 금고(`membersVault`, `systemVault`, `securityVault`) 파일을 즉시 다운로드할 수 있습니다.
+
+### 🛡️ Security Hardening & Stability
+- **보존 정책 범위 검증 및 감사 로깅 강화 (`server.ts`)**:
+  - 모든 보존 기간·개수·시각 파라미터의 정수 범위 검증(1~90일, 0~23시, 1~50개, 0~36개월)을 적용하고, 정책 변경 및 긴급 키 순환 사유를 `logs_admin` 감사 로그에 기록(평문 키는 절대 비저장·비로깅)합니다.
+  - 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.109.0`으로 동기화했습니다.
+
+---
+
+## [v3.108.0] - 2026-11-21
+
+### 🚀 Major New Features & Integrations
+- **비공개 저장소(`windows-fix-wizard-admin`) 통합 보안 · 스냅샷 · 헬스체크 운영 허브 구축 (`server.ts`, `src/components/PrivateRepoOpsHub.tsx`, `src/App.tsx`)**:
+  - **전체 시스템 설정 · 다중 AI API 키 통합 암호화 금고**: 기존 회원 금고(`winfix-admin-vault.enc.json`)와 별도로 분리된 시스템 금고(`winfix-system-vault.enc.json`)를 도입해 Gemini 회전 키, 보조 무료 AI API 키(Groq, Mistral, OpenRouter, NVIDIA NIM, Hugging Face, Cohere 등), GitHub 수집 옵션, 유지보수 스케줄, 공개 저장소 연동 메타데이터를 병합/전체 교체 모드로 백업·복원 및 로컬 `.enc.json` 내보내기/복구할 수 있습니다.
+  - **일 1회 자동 일별 스냅샷 회전 · 시점 복원**: KST 기준 매일 1회(설정 시각 이후 자동 실행 + 수동 즉시 실행) 회원·시스템·보안 금고 통합 스냅샷을 날짜별 폴더(`backups/daily/YYYY-MM-DD/vault-bundle.enc.json`)에 생성하고 보존 일수(1~90일)를 초과한 과거 스냅샷을 자동 정리하며, 원하는 날짜를 선택해 시점 복원할 수 있습니다.
+  - **AES-256 암호화 키 순환(Key Rotation)**: 기존 키 검증 후 회원·시스템·보안 활성 금고 3종을 새 키와 증가된 세대 번호(`keyGeneration`)로 재암호화해 비공개 저장소에 일괄 반영한 뒤 서버 활성 키를 원자적으로 교체합니다.
+  - **비공개 보안 차단 규칙 동기화 · 월간 감사 로그 아카이빙**: 자동 차단 정책·차단 방문자 목록(`winfix-security-vault.enc.json`) 및 7종 로그 월별 암호화 아카이브(`archives/audit-logs-YYYY-MM.enc.json`)를 지원하며, API 키·시스템 설정·차단 규칙 변경 시 비차단 직렬 큐로 자동 동기화됩니다.
+  - **비공개 저장소 전용 서버 헬스체크 · 장애 알림 워크플로**: 점검 대상 URL, 주기(15/30/60분), 재시도 횟수, 알림 채널(비공개 이슈 자동 등록 / Webhook Secret / 병행)을 설정해 `.github/workflows/winfix-private-healthcheck.yml`을 원클릭 배포하거나 YAML로 내려받을 수 있습니다.
+
+### 🛡️ Security Hardening & Stability
+- **다중 금고 경로/URL 입력 검증 및 Public 저장소 업로드 차단 확장 (`server.ts`)**:
+  - 모든 신규 금고 푸시·스냅샷·아카이브·키 순환·워크플로 배포 경로에서 대상 저장소가 `Public`인 경우 즉시 차단하며, 폴더 프리픽스(`isValidRepoRelativePrefix`) 및 헬스체크 URL(`isValidHealthcheckUrl`, 셸 메타문자/개행 차단 + 워크플로 `env:` 바인딩)을 엄격히 검증합니다.
+  - 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.108.0`으로 동기화했습니다.
 
 ---
 

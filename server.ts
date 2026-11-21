@@ -178,6 +178,28 @@ function isValidRepoRelativeJsonPath(filePath: unknown): filePath is string {
   return /^[a-zA-Z0-9._-]+(\/[a-zA-Z0-9._-]+)*\.json$/.test(trimmed);
 }
 
+function isValidRepoRelativePrefix(prefix: unknown): prefix is string {
+  if (typeof prefix !== 'string') return false;
+  const trimmed = prefix.trim().replace(/\/+$/, '');
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 120) return false;
+  if (trimmed.includes('..') || trimmed.startsWith('/') || /[\s\\?:*"<>|]/.test(trimmed)) {
+    return false;
+  }
+  return /^[a-zA-Z0-9._-]+(\/[a-zA-Z0-9._-]+)*$/.test(trimmed);
+}
+
+function isValidHealthcheckUrl(rawUrl: unknown): boolean {
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.length > 500 || /[\r\n'"`$\\]/.test(trimmed)) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 function isSafeExternalHttpUrl(rawUrl: unknown): boolean {
   if (typeof rawUrl !== 'string') return false;
   try {
@@ -213,7 +235,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.107.0';
+  return '3.109.0';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
@@ -4061,6 +4083,8 @@ async function startServer() {
         admin: 'ADMIN'
       });
 
+      void schedulePrivateVaultSync('security', 'autoblock-settings-update');
+
       res.json({ success: true, settings });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -4672,25 +4696,52 @@ async function startServer() {
     }
   });
 
-  // --- Private Admin Repository AES-256-GCM Encrypted Backup & Restore ---
+  // --- Private Admin Repository AES-256-GCM Multi-Vault Backup, Snapshot Rotation, Key Rotation & Ops Hub ---
   const PRIVATE_BACKUP_CONFIG_FILE = path.join(DATA_DIR, 'private_backup_config.json');
   const PRIVATE_VAULT_FORMAT = 'winfix-admin-vault-v1';
   const PRIVATE_VAULT_AAD = Buffer.from(PRIVATE_VAULT_FORMAT, 'utf8');
+  type PrivateVaultType = 'members' | 'system' | 'security' | 'daily-bundle' | 'audit-archive';
 
   interface PrivateBackupConfigRecord {
     repo: string;
     branch: string;
     backupPath: string;
+    systemBackupPath: string;
+    securityBackupPath: string;
+    dailySnapshotPrefix: string;
+    auditArchivePrefix: string;
     token: string;
     encryptionKey: string;
     autoSyncOnUserChange: boolean;
+    autoSyncSystemOnChange: boolean;
+    autoSyncSecurityOnChange: boolean;
     includeLogs: boolean;
+    dailySnapshotEnabled: boolean;
+    dailySnapshotRetentionDays: number;
+    dailySnapshotHourKst: number;
+    keyGeneration: number;
     lastBackupAt: string | null;
     lastBackupStatus: string | null;
     lastBackupCount: number;
     lastBackupCommitSha: string | null;
     lastRestoreAt: string | null;
     lastRestoreStatus: string | null;
+    lastSystemBackupAt: string | null;
+    lastSystemBackupStatus: string | null;
+    lastSecurityBackupAt: string | null;
+    lastSecurityBackupStatus: string | null;
+    lastAuditArchiveAt: string | null;
+    lastAuditArchiveStatus: string | null;
+    lastDailySnapshotDate: string | null;
+    lastDailySnapshotAt: string | null;
+    lastDailySnapshotStatus: string | null;
+    lastKeyRotationAt: string | null;
+    lastHealthWorkflowDeployAt: string | null;
+    lastHealthWorkflowStatus: string | null;
+    healthcheckTargetUrl: string;
+    healthcheckIntervalMin: number;
+    healthcheckFailureThreshold: number;
+    healthcheckAlertMode: 'issue' | 'webhook' | 'both';
     updatedAt: string | null;
   }
 
@@ -4699,37 +4750,94 @@ async function startServer() {
       repo: 'AhBiYout-all/windows-fix-wizard-admin',
       branch: 'main',
       backupPath: 'backups/winfix-admin-vault.enc.json',
+      systemBackupPath: 'backups/winfix-system-vault.enc.json',
+      securityBackupPath: 'backups/winfix-security-vault.enc.json',
+      dailySnapshotPrefix: 'backups/daily',
+      auditArchivePrefix: 'archives',
       token: '',
       encryptionKey: '',
       autoSyncOnUserChange: false,
+      autoSyncSystemOnChange: true,
+      autoSyncSecurityOnChange: true,
       includeLogs: true,
+      dailySnapshotEnabled: true,
+      dailySnapshotRetentionDays: 14,
+      dailySnapshotHourKst: 3,
+      keyGeneration: 1,
       lastBackupAt: null,
       lastBackupStatus: null,
       lastBackupCount: 0,
       lastBackupCommitSha: null,
       lastRestoreAt: null,
       lastRestoreStatus: null,
+      lastSystemBackupAt: null,
+      lastSystemBackupStatus: null,
+      lastSecurityBackupAt: null,
+      lastSecurityBackupStatus: null,
+      lastAuditArchiveAt: null,
+      lastAuditArchiveStatus: null,
+      lastDailySnapshotDate: null,
+      lastDailySnapshotAt: null,
+      lastDailySnapshotStatus: null,
+      lastKeyRotationAt: null,
+      lastHealthWorkflowDeployAt: null,
+      lastHealthWorkflowStatus: null,
+      healthcheckTargetUrl: '',
+      healthcheckIntervalMin: 15,
+      healthcheckFailureThreshold: 2,
+      healthcheckAlertMode: 'issue',
       updatedAt: null
     };
     try {
       if (fs.existsSync(PRIVATE_BACKUP_CONFIG_FILE)) {
         const parsed = JSON.parse(fs.readFileSync(PRIVATE_BACKUP_CONFIG_FILE, 'utf8'));
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const retDays = Number(parsed.dailySnapshotRetentionDays);
+          const snapHour = Number(parsed.dailySnapshotHourKst);
+          const keyGen = Number(parsed.keyGeneration);
+          const hcInt = Number(parsed.healthcheckIntervalMin);
+          const hcThresh = Number(parsed.healthcheckFailureThreshold);
           return {
             ...defaults,
             repo: isValidGithubRepo(parsed.repo) ? parsed.repo.trim() : defaults.repo,
             branch: isValidGitRef(parsed.branch) ? parsed.branch.trim() : defaults.branch,
             backupPath: isValidRepoRelativeJsonPath(parsed.backupPath) ? parsed.backupPath.trim() : defaults.backupPath,
+            systemBackupPath: isValidRepoRelativeJsonPath(parsed.systemBackupPath) ? parsed.systemBackupPath.trim() : defaults.systemBackupPath,
+            securityBackupPath: isValidRepoRelativeJsonPath(parsed.securityBackupPath) ? parsed.securityBackupPath.trim() : defaults.securityBackupPath,
+            dailySnapshotPrefix: isValidRepoRelativePrefix(parsed.dailySnapshotPrefix) ? parsed.dailySnapshotPrefix.trim().replace(/\/+$/, '') : defaults.dailySnapshotPrefix,
+            auditArchivePrefix: isValidRepoRelativePrefix(parsed.auditArchivePrefix) ? parsed.auditArchivePrefix.trim().replace(/\/+$/, '') : defaults.auditArchivePrefix,
             token: typeof parsed.token === 'string' ? parsed.token.trim() : '',
             encryptionKey: typeof parsed.encryptionKey === 'string' ? parsed.encryptionKey : '',
             autoSyncOnUserChange: parsed.autoSyncOnUserChange === true,
+            autoSyncSystemOnChange: parsed.autoSyncSystemOnChange !== false,
+            autoSyncSecurityOnChange: parsed.autoSyncSecurityOnChange !== false,
             includeLogs: parsed.includeLogs !== false,
+            dailySnapshotEnabled: parsed.dailySnapshotEnabled !== false,
+            dailySnapshotRetentionDays: Number.isFinite(retDays) ? Math.min(90, Math.max(1, Math.round(retDays))) : defaults.dailySnapshotRetentionDays,
+            dailySnapshotHourKst: Number.isFinite(snapHour) ? Math.min(23, Math.max(0, Math.round(snapHour))) : defaults.dailySnapshotHourKst,
+            keyGeneration: Number.isFinite(keyGen) && keyGen >= 1 ? Math.round(keyGen) : defaults.keyGeneration,
             lastBackupAt: typeof parsed.lastBackupAt === 'string' ? parsed.lastBackupAt : null,
             lastBackupStatus: typeof parsed.lastBackupStatus === 'string' ? parsed.lastBackupStatus : null,
             lastBackupCount: Number.isFinite(Number(parsed.lastBackupCount)) ? Number(parsed.lastBackupCount) : 0,
             lastBackupCommitSha: typeof parsed.lastBackupCommitSha === 'string' ? parsed.lastBackupCommitSha : null,
             lastRestoreAt: typeof parsed.lastRestoreAt === 'string' ? parsed.lastRestoreAt : null,
             lastRestoreStatus: typeof parsed.lastRestoreStatus === 'string' ? parsed.lastRestoreStatus : null,
+            lastSystemBackupAt: typeof parsed.lastSystemBackupAt === 'string' ? parsed.lastSystemBackupAt : null,
+            lastSystemBackupStatus: typeof parsed.lastSystemBackupStatus === 'string' ? parsed.lastSystemBackupStatus : null,
+            lastSecurityBackupAt: typeof parsed.lastSecurityBackupAt === 'string' ? parsed.lastSecurityBackupAt : null,
+            lastSecurityBackupStatus: typeof parsed.lastSecurityBackupStatus === 'string' ? parsed.lastSecurityBackupStatus : null,
+            lastAuditArchiveAt: typeof parsed.lastAuditArchiveAt === 'string' ? parsed.lastAuditArchiveAt : null,
+            lastAuditArchiveStatus: typeof parsed.lastAuditArchiveStatus === 'string' ? parsed.lastAuditArchiveStatus : null,
+            lastDailySnapshotDate: typeof parsed.lastDailySnapshotDate === 'string' ? parsed.lastDailySnapshotDate : null,
+            lastDailySnapshotAt: typeof parsed.lastDailySnapshotAt === 'string' ? parsed.lastDailySnapshotAt : null,
+            lastDailySnapshotStatus: typeof parsed.lastDailySnapshotStatus === 'string' ? parsed.lastDailySnapshotStatus : null,
+            lastKeyRotationAt: typeof parsed.lastKeyRotationAt === 'string' ? parsed.lastKeyRotationAt : null,
+            lastHealthWorkflowDeployAt: typeof parsed.lastHealthWorkflowDeployAt === 'string' ? parsed.lastHealthWorkflowDeployAt : null,
+            lastHealthWorkflowStatus: typeof parsed.lastHealthWorkflowStatus === 'string' ? parsed.lastHealthWorkflowStatus : null,
+            healthcheckTargetUrl: typeof parsed.healthcheckTargetUrl === 'string' ? parsed.healthcheckTargetUrl.trim() : '',
+            healthcheckIntervalMin: [15, 30, 60].includes(hcInt) ? hcInt : 15,
+            healthcheckFailureThreshold: Number.isFinite(hcThresh) ? Math.min(5, Math.max(1, Math.round(hcThresh))) : 2,
+            healthcheckAlertMode: ['issue', 'webhook', 'both'].includes(parsed.healthcheckAlertMode) ? parsed.healthcheckAlertMode : 'issue',
             updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null
           };
         }
@@ -4751,6 +4859,10 @@ async function startServer() {
       repo: cfg.repo,
       branch: cfg.branch,
       backupPath: cfg.backupPath,
+      systemBackupPath: cfg.systemBackupPath,
+      securityBackupPath: cfg.securityBackupPath,
+      dailySnapshotPrefix: cfg.dailySnapshotPrefix,
+      auditArchivePrefix: cfg.auditArchivePrefix,
       hasSavedToken: Boolean(cfg.token),
       hasServerEnvToken: hasEnvToken,
       hasToken,
@@ -4760,18 +4872,54 @@ async function startServer() {
       hasEncryptionKey,
       encryptionKey: cfg.encryptionKey ? '••••••••' : '',
       autoSyncOnUserChange: cfg.autoSyncOnUserChange === true,
+      autoSyncSystemOnChange: cfg.autoSyncSystemOnChange !== false,
+      autoSyncSecurityOnChange: cfg.autoSyncSecurityOnChange !== false,
       includeLogs: cfg.includeLogs !== false,
+      dailySnapshotEnabled: cfg.dailySnapshotEnabled !== false,
+      dailySnapshotRetentionDays: cfg.dailySnapshotRetentionDays,
+      dailySnapshotHourKst: cfg.dailySnapshotHourKst,
+      keyGeneration: cfg.keyGeneration || 1,
       lastBackupAt: cfg.lastBackupAt,
       lastBackupStatus: cfg.lastBackupStatus,
       lastBackupCount: cfg.lastBackupCount,
       lastBackupCommitSha: cfg.lastBackupCommitSha,
       lastRestoreAt: cfg.lastRestoreAt,
       lastRestoreStatus: cfg.lastRestoreStatus,
+      lastSystemBackupAt: cfg.lastSystemBackupAt,
+      lastSystemBackupStatus: cfg.lastSystemBackupStatus,
+      lastSecurityBackupAt: cfg.lastSecurityBackupAt,
+      lastSecurityBackupStatus: cfg.lastSecurityBackupStatus,
+      lastAuditArchiveAt: cfg.lastAuditArchiveAt,
+      lastAuditArchiveStatus: cfg.lastAuditArchiveStatus,
+      lastDailySnapshotDate: cfg.lastDailySnapshotDate,
+      lastDailySnapshotAt: cfg.lastDailySnapshotAt,
+      lastDailySnapshotStatus: cfg.lastDailySnapshotStatus,
+      lastKeyRotationAt: cfg.lastKeyRotationAt,
+      lastHealthWorkflowDeployAt: cfg.lastHealthWorkflowDeployAt,
+      lastHealthWorkflowStatus: cfg.lastHealthWorkflowStatus,
+      healthcheckTargetUrl: cfg.healthcheckTargetUrl || '',
+      healthcheckIntervalMin: cfg.healthcheckIntervalMin || 15,
+      healthcheckFailureThreshold: cfg.healthcheckFailureThreshold || 2,
+      healthcheckAlertMode: cfg.healthcheckAlertMode || 'issue',
       updatedAt: cfg.updatedAt
     };
   };
 
-  const encryptAdminVault = (payloadObj: Record<string, any>, passphrase: string) => {
+  const resolvePrivateVaultCredentials = (cfg: PrivateBackupConfigRecord, overrides?: { token?: string; passphrase?: string }) => {
+    const cleanTokenOverride = (typeof overrides?.token === 'string' && overrides.token.trim() && !overrides.token.includes('••••')) ? overrides.token.trim() : '';
+    const authToken = cleanTokenOverride || cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim() || '';
+    const cleanPassOverride = (typeof overrides?.passphrase === 'string' && overrides.passphrase.trim() && !overrides.passphrase.includes('••••')) ? overrides.passphrase.trim() : '';
+    const passphrase = cleanPassOverride || cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '';
+    return { authToken, passphrase };
+  };
+
+  const encryptVaultEnvelope = (
+    vaultType: PrivateVaultType,
+    payloadObj: Record<string, any>,
+    passphrase: string,
+    keyGeneration: number = 1,
+    summaryCounts?: Record<string, number>
+  ) => {
     const cleanPass = String(passphrase || '');
     if (cleanPass.length < 8 || cleanPass.length > 256) {
       throw new Error("AES-256 암호화 키는 8자 이상 256자 이하로 입력해주세요.");
@@ -4787,6 +4935,8 @@ async function startServer() {
     const authTag = cipher.getAuthTag();
     return {
       format: PRIVATE_VAULT_FORMAT,
+      vaultType,
+      keyGeneration: Math.max(1, Math.round(keyGeneration || 1)),
       version: getAppVersion(),
       cipher: 'aes-256-gcm',
       kdf: 'scrypt',
@@ -4796,7 +4946,7 @@ async function startServer() {
       authTag: authTag.toString('hex'),
       checksumSha256,
       exportedAt: payloadObj.exportedAt,
-      counts: {
+      counts: summaryCounts || {
         users: Array.isArray(payloadObj.users) ? payloadObj.users.length : 0,
         adminLogs: Array.isArray(payloadObj.adminLogs) ? payloadObj.adminLogs.length : 0
       },
@@ -4804,7 +4954,11 @@ async function startServer() {
     };
   };
 
-  const decryptAdminVault = (vaultRaw: any, passphrase: string) => {
+  const encryptAdminVault = (payloadObj: Record<string, any>, passphrase: string, keyGeneration: number = 1) => {
+    return encryptVaultEnvelope('members', payloadObj, passphrase, keyGeneration);
+  };
+
+  const decryptVaultEnvelope = (vaultRaw: any, passphrase: string, allowedTypes?: PrivateVaultType[]) => {
     const cleanPass = String(passphrase || '');
     if (cleanPass.length < 8 || cleanPass.length > 256) {
       throw new Error("복호화할 AES-256 암호화 키(8자 이상)를 입력해주세요.");
@@ -4812,6 +4966,11 @@ async function startServer() {
     if (!vaultRaw || typeof vaultRaw !== 'object' || vaultRaw.format !== PRIVATE_VAULT_FORMAT || vaultRaw.cipher !== 'aes-256-gcm') {
       throw new Error("지원되지 않는 암호화 백업 파일 형식입니다.");
     }
+    const vaultType = (typeof vaultRaw.vaultType === 'string' ? vaultRaw.vaultType : 'members') as PrivateVaultType;
+    if (allowedTypes && !allowedTypes.includes(vaultType)) {
+      throw new Error(`예상된 금고 유형(${allowedTypes.join(', ')})과 일치하지 않습니다. 현재 파일 유형: ${vaultType}`);
+    }
+
     const saltHex = String(vaultRaw.salt || '');
     const ivHex = String(vaultRaw.iv || '');
     const authTagHex = String(vaultRaw.authTag || '');
@@ -4841,10 +5000,10 @@ async function startServer() {
         }
       }
       const parsed = JSON.parse(decrypted);
-      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.users)) {
-        throw new Error("복호화된 데이터에 유효한 회원 목록이 없습니다.");
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error("복호화된 금고 페이로드 구조가 유효하지 않습니다.");
       }
-      return parsed;
+      return { vaultType, keyGeneration: Number(vaultRaw.keyGeneration) || 1, payload: parsed };
     } catch (err: any) {
       if (String(err?.message || '').includes('Unsupported state or unable to authenticate data')) {
         throw new Error("복호화 실패: 암호화 키가 일치하지 않거나 백업 파일이 변조되었습니다.");
@@ -4853,7 +5012,15 @@ async function startServer() {
     }
   };
 
-  const buildEncryptedAdminVault = (includeLogs: boolean, passphrase: string) => {
+  const decryptAdminVault = (vaultRaw: any, passphrase: string) => {
+    const { payload } = decryptVaultEnvelope(vaultRaw, passphrase, ['members']);
+    if (!Array.isArray(payload.users)) {
+      throw new Error("복호화된 데이터에 유효한 회원 목록이 없습니다.");
+    }
+    return payload;
+  };
+
+  const buildEncryptedAdminVault = (includeLogs: boolean, passphrase: string, keyGeneration: number = 1) => {
     const users = readLocalCollection('users');
     const adminLogs = includeLogs ? readLocalCollection('logs_admin').slice(0, 200) : [];
     const exportedAt = getKSTISOString();
@@ -4864,9 +5031,127 @@ async function startServer() {
         users,
         adminLogs
       },
-      passphrase
+      passphrase,
+      keyGeneration
     );
     return { vault, usersCount: users.length, adminLogsCount: adminLogs.length, exportedAt };
+  };
+
+  const readJsonFileSafe = (filePath: string, fallback: any = null) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      }
+    } catch (_) {}
+    return fallback;
+  };
+
+  const buildSystemVaultPayload = () => {
+    const exportedAt = getKSTISOString();
+    const apiKeysConfig = readJsonFileSafe(path.join(DATA_DIR, 'api_keys_config.json'), { keys: [] });
+    const systemConfig = readSystemConfigObject();
+    const maintenanceConfig = readJsonFileSafe(path.join(DATA_DIR, 'maintenance_config.json'), {});
+    const collectorOptions = readJsonFileSafe(path.join(DATA_DIR, 'github-collector-options.json'), {});
+    const publicGithubConfig = readLocalCollection('github_config')[0] || null;
+    const aiModelRegistry = readJsonFileSafe(path.join(DATA_DIR, 'ai-model-registry.json'), null);
+
+    const apiKeyCount = (Array.isArray(apiKeysConfig?.keys) ? apiKeysConfig.keys.length : 0) +
+      SYSTEM_CONFIG_KEY_FIELDS.filter(field => Boolean(String(systemConfig?.[field] || '').trim())).length;
+
+    return {
+      payload: {
+        schema: PRIVATE_VAULT_FORMAT,
+        vaultType: 'system',
+        exportedAt,
+        apiKeysConfig,
+        systemConfig,
+        maintenanceConfig,
+        collectorOptions,
+        publicGithubConfig,
+        aiModelRegistry
+      },
+      counts: {
+        apiKeys: apiKeyCount,
+        hasSystemConfig: Object.keys(systemConfig).length > 0 ? 1 : 0,
+        hasCollectorOptions: Object.keys(collectorOptions || {}).length > 0 ? 1 : 0,
+        hasPublicGithubConfig: publicGithubConfig ? 1 : 0
+      },
+      exportedAt
+    };
+  };
+
+  const buildSecurityVaultPayload = () => {
+    const exportedAt = getKSTISOString();
+    const autoBlockSettings = getAutoBlockSettings();
+    const visitorLogs = readLocalCollection('logs_visitor');
+    const blockedVisitors = visitorLogs.filter((v: any) => v && v.isBlocked === true);
+    const adminLogs = readLocalCollection('logs_admin').slice(0, 200);
+    return {
+      payload: {
+        schema: PRIVATE_VAULT_FORMAT,
+        vaultType: 'security',
+        exportedAt,
+        autoBlockSettings,
+        blockedVisitors,
+        adminLogs
+      },
+      counts: {
+        blockedVisitors: blockedVisitors.length,
+        adminLogs: adminLogs.length
+      },
+      exportedAt
+    };
+  };
+
+  const buildAuditArchivePayload = (maxPerCollection: number = 1000) => {
+    const exportedAt = getKSTISOString();
+    const kstDate = exportedAt.slice(0, 10);
+    const kstMonth = exportedAt.slice(0, 7);
+    const adminLogs = readLocalCollection('logs_admin').slice(0, maxPerCollection);
+    const visitorLogs = readLocalCollection('logs_visitor').slice(0, maxPerCollection);
+    const backendLogs = readLocalCollection('logs_backend').slice(0, maxPerCollection);
+    const errorLogs = readLocalCollection('logs_error').slice(0, maxPerCollection);
+    const systemEventLogs = readLocalCollection('system_event_logs').slice(0, maxPerCollection);
+    const feedbackLogs = readLocalCollection('logs_feedback').slice(0, maxPerCollection);
+    const searchLogs = readLocalCollection('logs_search').slice(0, maxPerCollection);
+
+    const totalRecords =
+      adminLogs.length +
+      visitorLogs.length +
+      backendLogs.length +
+      errorLogs.length +
+      systemEventLogs.length +
+      feedbackLogs.length +
+      searchLogs.length;
+
+    return {
+      payload: {
+        schema: PRIVATE_VAULT_FORMAT,
+        vaultType: 'audit-archive',
+        exportedAt,
+        kstDate,
+        kstMonth,
+        logs: {
+          admin: adminLogs,
+          visitor: visitorLogs,
+          backend: backendLogs,
+          error: errorLogs,
+          systemEvents: systemEventLogs,
+          feedback: feedbackLogs,
+          search: searchLogs
+        }
+      },
+      counts: {
+        totalRecords,
+        admin: adminLogs.length,
+        visitor: visitorLogs.length,
+        backend: backendLogs.length,
+        error: errorLogs.length,
+        systemEvents: systemEventLogs.length
+      },
+      kstMonth,
+      exportedAt
+    };
   };
 
   const applyRestoredUsers = (restoredUsersRaw: any[], mode: 'merge' | 'replace') => {
@@ -4904,7 +5189,6 @@ async function startServer() {
       throw new Error("백업 파일에서 복원할 수 있는 유효한 회원 계정을 찾지 못했습니다.");
     }
 
-    // Create safety LKG snapshot before mutating users.json
     createLastKnownGoodBackupSync();
 
     const currentUsers = readLocalCollection('users');
@@ -4915,7 +5199,6 @@ async function startServer() {
     if (mode === 'replace') {
       const incomingByEmail = new Map(sanitizedIncoming.map(u => [u.email, u]));
       nextUsers = [...sanitizedIncoming];
-      // Ensure protected local root admins are never locked out even if missing from older backup
       for (const localU of currentUsers) {
         const localEmail = String(localU?.email || '').toLowerCase().trim();
         if (localEmail && adminEmailList.includes(localEmail) && !incomingByEmail.has(localEmail)) {
@@ -4963,45 +5246,186 @@ async function startServer() {
     };
   };
 
-  const executePrivateBackupPush = async (options?: {
-    repo?: string;
-    branch?: string;
-    backupPath?: string;
-    token?: string;
-    passphrase?: string;
-    includeLogs?: boolean;
-    reason?: string;
-  }) => {
-    const cfg = loadPrivateBackupConfig();
-    const targetRepo = options?.repo && isValidGithubRepo(options.repo) ? options.repo.trim() : cfg.repo;
-    const targetBranch = options?.branch && isValidGitRef(options.branch) ? options.branch.trim() : cfg.branch;
-    const targetPath = options?.backupPath && isValidRepoRelativeJsonPath(options.backupPath) ? options.backupPath.trim() : cfg.backupPath;
-    const includeLogs = options?.includeLogs !== undefined ? Boolean(options.includeLogs) : cfg.includeLogs;
-    const cleanTokenOverride = (typeof options?.token === 'string' && options.token.trim() && !options.token.includes('••••')) ? options.token.trim() : '';
-    const authToken = cleanTokenOverride || cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim() || '';
-    const cleanPassOverride = (typeof options?.passphrase === 'string' && options.passphrase.trim() && !options.passphrase.includes('••••')) ? options.passphrase.trim() : '';
-    const passphrase = cleanPassOverride || cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '';
+  const applyRestoredSystemConfig = (payload: any, mode: 'merge' | 'replace') => {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error("유효한 시스템 통합 금고 데이터가 아닙니다.");
+    }
+    createLastKnownGoodBackupSync();
 
-    if (!isValidGithubRepo(targetRepo)) {
-      throw new Error("유효한 비공개 GitHub 저장소('소유자/저장소명')가 필요합니다.");
-    }
-    if (!authToken) {
-      throw new Error("비공개 저장소 접근용 Personal Access Token(PAT)이 설정되어 있지 않습니다.");
-    }
-    if (!passphrase || passphrase.length < 8) {
-      throw new Error("AES-256 암호화 키(8자 이상)가 설정되어 있지 않습니다.");
+    let restoredApiKeysCount = 0;
+    const restoredSections: string[] = [];
+
+    // 1. Gemini multi-keys config (data/api_keys_config.json)
+    if (payload.apiKeysConfig && Array.isArray(payload.apiKeysConfig.keys)) {
+      const incomingKeys = payload.apiKeysConfig.keys
+        .filter((k: any) => k && typeof k === 'object' && typeof k.key === 'string' && k.key.trim())
+        .map((k: any, idx: number) => ({
+          id: typeof k.id === 'string' ? k.id.slice(0, 64) : `key-${idx + 1}`,
+          name: typeof k.name === 'string' ? k.name.slice(0, 80) : `API Key ${idx + 1}`,
+          key: k.key.trim().slice(0, 256),
+          isActive: k.isActive !== false,
+          isCustom: Boolean(k.isCustom)
+        }));
+
+      const apiKeysPath = path.join(DATA_DIR, 'api_keys_config.json');
+      if (mode === 'replace') {
+        writeJsonFileAtomic(apiKeysPath, { keys: incomingKeys, updatedAt: getKSTISOString() });
+        restoredApiKeysCount += incomingKeys.length;
+      } else {
+        const cur = readJsonFileSafe(apiKeysPath, { keys: [] });
+        const curKeys: any[] = Array.isArray(cur?.keys) ? cur.keys : [];
+        const byValue = new Map<string, any>(curKeys.map(k => [String(k?.key || '').trim(), k]));
+        for (const ik of incomingKeys) {
+          if (!byValue.has(ik.key)) {
+            byValue.set(ik.key, ik);
+            restoredApiKeysCount++;
+          } else {
+            byValue.set(ik.key, { ...byValue.get(ik.key), ...ik });
+          }
+        }
+        writeJsonFileAtomic(apiKeysPath, { keys: Array.from(byValue.values()), updatedAt: getKSTISOString() });
+      }
+      restoredSections.push('API Keys');
     }
 
-    const { vault, usersCount, adminLogsCount, exportedAt } = buildEncryptedAdminVault(includeLogs, passphrase);
-    const encodedPath = targetPath.split('/').map(seg => encodeURIComponent(seg)).join('/');
-    const contentsApiUrl = `https://api.github.com/repos/${targetRepo}/contents/${encodedPath}`;
+    // 2. System config (provider keys, SMTP, thresholds, etc.)
+    if (payload.systemConfig && typeof payload.systemConfig === 'object' && !Array.isArray(payload.systemConfig)) {
+      const cleanIncomingSys = sanitizePlainObject(payload.systemConfig) || {};
+      if (mode === 'replace') {
+        writeJsonFileAtomic(path.join(DATA_DIR, 'system_config.json'), {
+          ...cleanIncomingSys,
+          updatedAt: getKSTISOString()
+        });
+      } else {
+        const existingSys = readSystemConfigObject();
+        const nextSys: Record<string, any> = { ...existingSys };
+        for (const [k, v] of Object.entries(cleanIncomingSys)) {
+          if (v !== undefined && v !== null && String(v).trim() !== '') {
+            nextSys[k] = v;
+          } else if (!(k in nextSys)) {
+            nextSys[k] = v;
+          }
+        }
+        nextSys.updatedAt = getKSTISOString();
+        writeJsonFileAtomic(path.join(DATA_DIR, 'system_config.json'), nextSys);
+      }
+      restoredApiKeysCount += SYSTEM_CONFIG_KEY_FIELDS.filter(f => Boolean(String(cleanIncomingSys?.[f] || '').trim())).length;
+      restoredSections.push('System Config');
+    }
+
+    // 3. Maintenance config + reschedule live engine/maintenance cron
+    if (payload.maintenanceConfig && typeof payload.maintenanceConfig === 'object' && !Array.isArray(payload.maintenanceConfig)) {
+      const cleanMaint = sanitizePlainObject(payload.maintenanceConfig) || {};
+      const currentMaint = readJsonFileSafe(path.join(DATA_DIR, 'maintenance_config.json'), {});
+      const nextMaint = mode === 'replace'
+        ? { ...cleanMaint, updatedAt: getKSTISOString() }
+        : { ...currentMaint, ...cleanMaint, updatedAt: getKSTISOString() };
+      writeJsonFileAtomic(path.join(DATA_DIR, 'maintenance_config.json'), nextMaint);
+      try {
+        setupEngineScheduler(Number(nextMaint.engineIntervalMin) || 30, nextMaint.engineEnabled === true);
+        setupMaintenanceScheduler(nextMaint);
+      } catch (_) {}
+      restoredSections.push('Maintenance Scheduler');
+    }
+
+    // 4. GitHub auto-collector options
+    if (payload.collectorOptions && typeof payload.collectorOptions === 'object' && !Array.isArray(payload.collectorOptions)) {
+      const cleanCol = sanitizePlainObject(payload.collectorOptions) || {};
+      const colPath = path.join(DATA_DIR, 'github-collector-options.json');
+      const curCol = readJsonFileSafe(colPath, {});
+      const nextCol = mode === 'replace'
+        ? { ...cleanCol, updatedAt: getKSTISOString() }
+        : { ...curCol, ...cleanCol, updatedAt: getKSTISOString() };
+      writeJsonFileAtomic(colPath, nextCol);
+      restoredSections.push('Collector Options');
+    }
+
+    // 5. Public GitHub config
+    if (payload.publicGithubConfig && typeof payload.publicGithubConfig === 'object' && !Array.isArray(payload.publicGithubConfig)) {
+      const cleanGh = sanitizePlainObject(payload.publicGithubConfig) || {};
+      const curGh = readLocalCollection('github_config')[0] || {};
+      const nextGh = mode === 'replace'
+        ? { ...cleanGh, updatedAt: getKSTISOString() }
+        : { ...curGh, ...cleanGh, token: cleanGh.token || curGh.token || '', updatedAt: getKSTISOString() };
+      writeLocalCollection('github_config', [nextGh]);
+      restoredSections.push('GitHub Integration');
+    }
+
+    // 6. AI Model Registry
+    if (payload.aiModelRegistry && typeof payload.aiModelRegistry === 'object' && !Array.isArray(payload.aiModelRegistry)) {
+      const regPath = path.join(DATA_DIR, 'ai-model-registry.json');
+      writeJsonFileAtomic(regPath, payload.aiModelRegistry);
+      restoredSections.push('AI Model Registry');
+    }
+
+    return {
+      restoredSections,
+      restoredApiKeysCount,
+      mode
+    };
+  };
+
+  const applyRestoredSecurityConfig = (payload: any, mode: 'merge' | 'replace') => {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error("유효한 보안 차단 금고 데이터가 아닙니다.");
+    }
+    createLastKnownGoodBackupSync();
+
+    let blockedRestored = 0;
+    let updatedAutoBlock = false;
+
+    if (payload.autoBlockSettings && typeof payload.autoBlockSettings === 'object' && !Array.isArray(payload.autoBlockSettings)) {
+      const cleanSettings = sanitizePlainObject(payload.autoBlockSettings) || {};
+      const nextSettings = mode === 'replace' ? cleanSettings : { ...getAutoBlockSettings(), ...cleanSettings };
+      writeLocalCollection('autoblock_settings', [nextSettings]);
+      updatedAutoBlock = true;
+    }
+
+    if (Array.isArray(payload.blockedVisitors)) {
+      const currentVisitors = readLocalCollection('logs_visitor');
+      const incomingBlocked = payload.blockedVisitors.filter((v: any) => v && typeof v === 'object' && typeof v.visitorId === 'string');
+      if (mode === 'replace') {
+        for (const cur of currentVisitors) {
+          if (cur && cur.isBlocked) {
+            cur.isBlocked = false;
+            cur.autoBlocked = false;
+            cur.blockReason = '';
+          }
+        }
+      }
+      const byVisitorId = new Map<string, any>(currentVisitors.filter((v: any) => v?.visitorId).map((v: any) => [v.visitorId, v]));
+      for (const b of incomingBlocked) {
+        const existing = byVisitorId.get(b.visitorId);
+        if (existing) {
+          existing.isBlocked = true;
+          existing.blockReason = b.blockReason || existing.blockReason || '보안 금고에서 복원된 차단 규칙';
+          existing.blockedAt = b.blockedAt || existing.blockedAt || getKSTISOString();
+          existing.autoBlocked = Boolean(b.autoBlocked);
+        } else {
+          currentVisitors.unshift({
+            ...b,
+            isBlocked: true,
+            blockReason: b.blockReason || '보안 금고에서 복원된 차단 규칙'
+          });
+        }
+        blockedRestored++;
+      }
+      writeLocalCollection('logs_visitor', currentVisitors.slice(0, 1000));
+    }
+
+    return {
+      updatedAutoBlock,
+      blockedRestored,
+      mode
+    };
+  };
+
+  const verifyPrivateRepoOrThrow = async (targetRepo: string, authToken: string) => {
     const ghHeaders: Record<string, string> = {
       'Authorization': `Bearer ${authToken}`,
       'Accept': 'application/vnd.github.v3+json',
       'User-Agent': 'WindowsFixWizard-PrivateVault'
     };
-
-    // Check repository privacy so admin doesn't accidentally push encrypted member vault to a public repo
     const repoMetaRes = await fetch(`https://api.github.com/repos/${targetRepo}`, {
       headers: ghHeaders,
       signal: AbortSignal.timeout(12000)
@@ -5018,10 +5442,24 @@ async function startServer() {
         throw new Error(`보안 차단: '${targetRepo}' 저장소는 공개(Public) 상태입니다. 비공개(Private) 저장소로 설정 후 다시 시도하세요.`);
       }
     }
+    return ghHeaders;
+  };
 
-    // Read existing SHA if file already exists
+  const pushTextFileToPrivateRepo = async (params: {
+    repo: string;
+    branch: string;
+    filePath: string;
+    authToken: string;
+    contentText: string;
+    commitMessage: string;
+    ghHeaders?: Record<string, string>;
+  }) => {
+    const ghHeaders = params.ghHeaders || await verifyPrivateRepoOrThrow(params.repo, params.authToken);
+    const encodedPath = params.filePath.split('/').map(seg => encodeURIComponent(seg)).join('/');
+    const contentsApiUrl = `https://api.github.com/repos/${params.repo}/contents/${encodedPath}`;
+
     let fileSha: string | undefined;
-    const getFileRes = await fetch(`${contentsApiUrl}?ref=${encodeURIComponent(targetBranch)}`, {
+    const getFileRes = await fetch(`${contentsApiUrl}?ref=${encodeURIComponent(params.branch)}`, {
       headers: ghHeaders,
       signal: AbortSignal.timeout(12000)
     });
@@ -5030,9 +5468,7 @@ async function startServer() {
       if (existingInfo?.sha) fileSha = existingInfo.sha;
     }
 
-    const contentBase64 = Buffer.from(JSON.stringify(vault, null, 2), 'utf8').toString('base64');
-    const commitMsg = `🔐 [Private Vault] AES-256-GCM encrypted backup (${usersCount} users · ${options?.reason || 'manual'})`;
-
+    const contentBase64 = Buffer.from(params.contentText, 'utf8').toString('base64');
     const putRes = await fetch(contentsApiUrl, {
       method: 'PUT',
       headers: {
@@ -5041,20 +5477,154 @@ async function startServer() {
       },
       signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
-        message: commitMsg,
+        message: params.commitMessage,
         content: contentBase64,
-        branch: targetBranch,
+        branch: params.branch,
         ...(fileSha ? { sha: fileSha } : {})
       })
     });
 
     if (!putRes.ok) {
       const errTxt = await putRes.text().catch(() => '');
-      throw new Error(`비공개 저장소 암호화 백업 푸시 실패 (${putRes.status}): ${errTxt || putRes.statusText}`);
+      const err: any = new Error(`비공개 저장소 파일 커밋 실패 (${putRes.status}): ${errTxt || putRes.statusText}`);
+      err.httpStatus = putRes.status;
+      throw err;
     }
 
     const putJson: any = await putRes.json();
-    const commitSha = putJson?.commit?.sha || null;
+    return {
+      commitSha: putJson?.commit?.sha || null,
+      htmlUrl: putJson?.content?.html_url || `https://github.com/${params.repo}/blob/${params.branch}/${params.filePath}`
+    };
+  };
+
+  const fetchJsonFromPrivateRepo = async (params: {
+    repo: string;
+    branch: string;
+    filePath: string;
+    authToken: string;
+  }) => {
+    const encodedPath = params.filePath.split('/').map(seg => encodeURIComponent(seg)).join('/');
+    const contentsApiUrl = `https://api.github.com/repos/${params.repo}/contents/${encodedPath}?ref=${encodeURIComponent(params.branch)}`;
+    const ghRes = await fetch(contentsApiUrl, {
+      headers: {
+        'Authorization': `Bearer ${params.authToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-PrivateVault'
+      },
+      signal: AbortSignal.timeout(15000)
+    });
+    if (ghRes.status === 401 || ghRes.status === 403) {
+      throw new Error(`비공개 저장소 인증 실패 (${ghRes.status}): PAT 권한을 확인하세요.`);
+    }
+    if (ghRes.status === 404) {
+      const err: any = new Error(`${params.repo} (${params.branch})에 '${params.filePath}' 백업 파일이 아직 없습니다.`);
+      err.httpStatus = 404;
+      throw err;
+    }
+    if (!ghRes.ok) {
+      throw new Error(`GitHub 백업 조회 실패 (${ghRes.status})`);
+    }
+    const fileInfo: any = await ghRes.json();
+    if (fileInfo?.content) {
+      const rawText = Buffer.from(String(fileInfo.content), 'base64').toString('utf8');
+      return JSON.parse(rawText);
+    }
+    if (fileInfo?.download_url && isSafeExternalHttpUrl(fileInfo.download_url)) {
+      const rawRes = await fetch(fileInfo.download_url, {
+        headers: { 'Authorization': `Bearer ${params.authToken}`, 'User-Agent': 'WindowsFixWizard-PrivateVault' },
+        signal: AbortSignal.timeout(15000)
+      });
+      return await rawRes.json();
+    }
+    throw new Error("GitHub 응답에서 암호화 백업 본문을 읽을 수 없습니다.");
+  };
+
+  const listPrivateRepoDir = async (repo: string, branch: string, dirPath: string, authToken: string): Promise<any[]> => {
+    const cleanDir = dirPath.replace(/^\/+|\/+$/g, '');
+    const encodedPath = cleanDir.split('/').map(seg => encodeURIComponent(seg)).join('/');
+    const url = `https://api.github.com/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-PrivateVault'
+      },
+      signal: AbortSignal.timeout(12000)
+    });
+    if (res.status === 404) return [];
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`비공개 저장소 디렉터리 조회 인증 실패 (${res.status})`);
+    }
+    if (!res.ok) {
+      throw new Error(`비공개 저장소 목록 조회 실패 (${res.status})`);
+    }
+    const data: any = await res.json();
+    return Array.isArray(data) ? data : [];
+  };
+
+  const deletePrivateRepoFile = async (repo: string, branch: string, filePath: string, authToken: string, commitMessage: string) => {
+    const encodedPath = filePath.split('/').map(seg => encodeURIComponent(seg)).join('/');
+    const url = `https://api.github.com/repos/${repo}/contents/${encodedPath}`;
+    const ghHeaders = {
+      'Authorization': `Bearer ${authToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'WindowsFixWizard-PrivateVault',
+      'Content-Type': 'application/json'
+    };
+    const infoRes = await fetch(`${url}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders, signal: AbortSignal.timeout(10000) });
+    if (!infoRes.ok) return false;
+    const info: any = await infoRes.json();
+    if (!info?.sha) return false;
+    const delRes = await fetch(url, {
+      method: 'DELETE',
+      headers: ghHeaders,
+      signal: AbortSignal.timeout(12000),
+      body: JSON.stringify({
+        message: commitMessage,
+        sha: info.sha,
+        branch
+      })
+    });
+    return delRes.ok;
+  };
+
+  const executePrivateBackupPush = async (options?: {
+    repo?: string;
+    branch?: string;
+    backupPath?: string;
+    token?: string;
+    passphrase?: string;
+    includeLogs?: boolean;
+    reason?: string;
+  }) => {
+    const cfg = loadPrivateBackupConfig();
+    const targetRepo = options?.repo && isValidGithubRepo(options.repo) ? options.repo.trim() : cfg.repo;
+    const targetBranch = options?.branch && isValidGitRef(options.branch) ? options.branch.trim() : cfg.branch;
+    const targetPath = options?.backupPath && isValidRepoRelativeJsonPath(options.backupPath) ? options.backupPath.trim() : cfg.backupPath;
+    const includeLogs = options?.includeLogs !== undefined ? Boolean(options.includeLogs) : cfg.includeLogs;
+    const { authToken, passphrase } = resolvePrivateVaultCredentials(cfg, options);
+
+    if (!isValidGithubRepo(targetRepo)) {
+      throw new Error("유효한 비공개 GitHub 저장소('소유자/저장소명')가 필요합니다.");
+    }
+    if (!authToken) {
+      throw new Error("비공개 저장소 접근용 Personal Access Token(PAT)이 설정되어 있지 않습니다.");
+    }
+    if (!passphrase || passphrase.length < 8) {
+      throw new Error("AES-256 암호화 키(8자 이상)가 설정되어 있지 않습니다.");
+    }
+
+    const { vault, usersCount, adminLogsCount, exportedAt } = buildEncryptedAdminVault(includeLogs, passphrase, cfg.keyGeneration || 1);
+    const { commitSha, htmlUrl } = await pushTextFileToPrivateRepo({
+      repo: targetRepo,
+      branch: targetBranch,
+      filePath: targetPath,
+      authToken,
+      contentText: JSON.stringify(vault, null, 2),
+      commitMessage: `🔐 [Private Vault · Members] AES-256-GCM encrypted backup (${usersCount} users · ${options?.reason || 'manual'})`
+    });
+
     const latestCfg = loadPrivateBackupConfig();
     savePrivateBackupConfig({
       ...latestCfg,
@@ -5068,7 +5638,7 @@ async function startServer() {
     addLocalLog('logs_admin', {
       category: 'AUTH',
       action: 'PRIVATE_VAULT_BACKUP',
-      details: `비공개 저장소(${targetRepo}) AES-256-GCM 암호화 백업 완료: 회원 ${usersCount}명, 로그 ${adminLogsCount}건 (${options?.reason || 'manual'})`
+      details: `비공개 저장소(${targetRepo}) 회원 금고 AES-256-GCM 백업 완료: 회원 ${usersCount}명, 로그 ${adminLogsCount}건 (${options?.reason || 'manual'})`
     });
 
     return {
@@ -5079,45 +5649,475 @@ async function startServer() {
       adminLogsCount,
       exportedAt,
       commitSha,
-      htmlUrl: putJson?.content?.html_url || `https://github.com/${targetRepo}/blob/${targetBranch}/${targetPath}`
+      htmlUrl
     };
   };
 
-  let activeAutoBackupPromise: Promise<void> | null = null;
-  let queuedAutoBackupReason: string | null = null;
-  function schedulePrivateAdminBackupSync(reason: string): Promise<void> {
+  const executePrivateSystemBackupPush = async (options?: {
+    repo?: string;
+    branch?: string;
+    systemBackupPath?: string;
+    token?: string;
+    passphrase?: string;
+    reason?: string;
+  }) => {
     const cfg = loadPrivateBackupConfig();
-    const hasToken = Boolean(cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim());
-    const hasKey = Boolean(cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim());
-    if (!cfg.autoSyncOnUserChange || !hasToken || !hasKey) {
-      return Promise.resolve();
-    }
-    if (activeAutoBackupPromise) {
-      queuedAutoBackupReason = reason;
-      return activeAutoBackupPromise;
-    }
-    activeAutoBackupPromise = (async () => {
-      try {
-        await executePrivateBackupPush({ reason: `auto:${reason}` });
-      } catch (err: any) {
-        console.warn(`[Private Vault Auto-Sync] Failed (${reason}):`, err?.message || err);
-        const latestCfg = loadPrivateBackupConfig();
-        savePrivateBackupConfig({
-          ...latestCfg,
-          lastBackupStatus: `자동 백업 실패: ${String(err?.message || 'Unknown error').slice(0, 120)}`,
-          updatedAt: getKSTISOString()
-        });
-      } finally {
-        activeAutoBackupPromise = null;
-        if (queuedAutoBackupReason) {
-          const nextReason = queuedAutoBackupReason;
-          queuedAutoBackupReason = null;
-          void schedulePrivateAdminBackupSync(nextReason);
+    const targetRepo = options?.repo && isValidGithubRepo(options.repo) ? options.repo.trim() : cfg.repo;
+    const targetBranch = options?.branch && isValidGitRef(options.branch) ? options.branch.trim() : cfg.branch;
+    const targetPath = options?.systemBackupPath && isValidRepoRelativeJsonPath(options.systemBackupPath) ? options.systemBackupPath.trim() : cfg.systemBackupPath;
+    const { authToken, passphrase } = resolvePrivateVaultCredentials(cfg, options);
+
+    if (!isValidGithubRepo(targetRepo)) throw new Error("유효한 비공개 GitHub 저장소('소유자/저장소명')가 필요합니다.");
+    if (!authToken) throw new Error("비공개 저장소 전용 PAT가 설정되어 있지 않습니다.");
+    if (!passphrase || passphrase.length < 8) throw new Error("AES-256 암호화 키(8자 이상)가 필요합니다.");
+
+    const { payload, counts, exportedAt } = buildSystemVaultPayload();
+    const vault = encryptVaultEnvelope('system', payload, passphrase, cfg.keyGeneration || 1, counts);
+
+    const { commitSha, htmlUrl } = await pushTextFileToPrivateRepo({
+      repo: targetRepo,
+      branch: targetBranch,
+      filePath: targetPath,
+      authToken,
+      contentText: JSON.stringify(vault, null, 2),
+      commitMessage: `⚙️ [Private Vault · System] AES-256-GCM system & AI keys backup (${counts.apiKeys} keys · ${options?.reason || 'manual'})`
+    });
+
+    const latestCfg = loadPrivateBackupConfig();
+    savePrivateBackupConfig({
+      ...latestCfg,
+      lastSystemBackupAt: exportedAt,
+      lastSystemBackupStatus: `시스템·AI 키 금고 백업 완료 (키 ${counts.apiKeys}개 · ${options?.reason || 'manual'})`,
+      updatedAt: exportedAt
+    });
+
+    addLocalLog('logs_admin', {
+      category: 'SYSTEM',
+      action: 'PRIVATE_SYSTEM_VAULT_BACKUP',
+      details: `비공개 저장소(${targetRepo}) 전체 시스템·AI 키 AES-256-GCM 백업 완료 (API 키 ${counts.apiKeys}개 · ${options?.reason || 'manual'})`
+    });
+
+    return { repo: targetRepo, branch: targetBranch, backupPath: targetPath, counts, exportedAt, commitSha, htmlUrl };
+  };
+
+  const executePrivateSecurityBackupPush = async (options?: {
+    repo?: string;
+    branch?: string;
+    securityBackupPath?: string;
+    token?: string;
+    passphrase?: string;
+    reason?: string;
+  }) => {
+    const cfg = loadPrivateBackupConfig();
+    const targetRepo = options?.repo && isValidGithubRepo(options.repo) ? options.repo.trim() : cfg.repo;
+    const targetBranch = options?.branch && isValidGitRef(options.branch) ? options.branch.trim() : cfg.branch;
+    const targetPath = options?.securityBackupPath && isValidRepoRelativeJsonPath(options.securityBackupPath) ? options.securityBackupPath.trim() : cfg.securityBackupPath;
+    const { authToken, passphrase } = resolvePrivateVaultCredentials(cfg, options);
+
+    if (!isValidGithubRepo(targetRepo)) throw new Error("유효한 비공개 GitHub 저장소('소유자/저장소명')가 필요합니다.");
+    if (!authToken) throw new Error("비공개 저장소 전용 PAT가 설정되어 있지 않습니다.");
+    if (!passphrase || passphrase.length < 8) throw new Error("AES-256 암호화 키(8자 이상)가 필요합니다.");
+
+    const { payload, counts, exportedAt } = buildSecurityVaultPayload();
+    const vault = encryptVaultEnvelope('security', payload, passphrase, cfg.keyGeneration || 1, counts);
+
+    const { commitSha, htmlUrl } = await pushTextFileToPrivateRepo({
+      repo: targetRepo,
+      branch: targetBranch,
+      filePath: targetPath,
+      authToken,
+      contentText: JSON.stringify(vault, null, 2),
+      commitMessage: `🛡️ [Private Vault · Security] Blocklist & audit sync (${counts.blockedVisitors} blocked · ${options?.reason || 'manual'})`
+    });
+
+    const latestCfg = loadPrivateBackupConfig();
+    savePrivateBackupConfig({
+      ...latestCfg,
+      lastSecurityBackupAt: exportedAt,
+      lastSecurityBackupStatus: `차단 규칙·감사 로그 백업 완료 (차단 ${counts.blockedVisitors}건 · ${options?.reason || 'manual'})`,
+      updatedAt: exportedAt
+    });
+
+    addLocalLog('logs_admin', {
+      category: 'SECURITY',
+      action: 'PRIVATE_SECURITY_VAULT_BACKUP',
+      details: `비공개 저장소(${targetRepo}) 차단 규칙·감사 로그 AES-256-GCM 백업 완료 (차단 ${counts.blockedVisitors}건, 로그 ${counts.adminLogs}건)`
+    });
+
+    return { repo: targetRepo, branch: targetBranch, backupPath: targetPath, counts, exportedAt, commitSha, htmlUrl };
+  };
+
+  const executeAuditArchivePush = async (options?: {
+    repo?: string;
+    branch?: string;
+    token?: string;
+    passphrase?: string;
+    reason?: string;
+  }) => {
+    const cfg = loadPrivateBackupConfig();
+    const targetRepo = options?.repo && isValidGithubRepo(options.repo) ? options.repo.trim() : cfg.repo;
+    const targetBranch = options?.branch && isValidGitRef(options.branch) ? options.branch.trim() : cfg.branch;
+    const { authToken, passphrase } = resolvePrivateVaultCredentials(cfg, options);
+
+    if (!isValidGithubRepo(targetRepo)) throw new Error("유효한 비공개 GitHub 저장소('소유자/저장소명')가 필요합니다.");
+    if (!authToken) throw new Error("비공개 저장소 전용 PAT가 설정되어 있지 않습니다.");
+    if (!passphrase || passphrase.length < 8) throw new Error("AES-256 암호화 키(8자 이상)가 필요합니다.");
+
+    const { payload, counts, kstMonth, exportedAt } = buildAuditArchivePayload(1000);
+    const archivePath = `${cfg.auditArchivePrefix}/audit-logs-${kstMonth}.enc.json`;
+    const vault = encryptVaultEnvelope('audit-archive', payload, passphrase, cfg.keyGeneration || 1, counts);
+
+    const { commitSha, htmlUrl } = await pushTextFileToPrivateRepo({
+      repo: targetRepo,
+      branch: targetBranch,
+      filePath: archivePath,
+      authToken,
+      contentText: JSON.stringify(vault, null, 2),
+      commitMessage: `📜 [Private Archive] Monthly encrypted audit logs (${kstMonth} · ${counts.totalRecords} records)`
+    });
+
+    const latestCfg = loadPrivateBackupConfig();
+    savePrivateBackupConfig({
+      ...latestCfg,
+      lastAuditArchiveAt: exportedAt,
+      lastAuditArchiveStatus: `${kstMonth} 감사 아카이브 완료 (${counts.totalRecords}건)`,
+      updatedAt: exportedAt
+    });
+
+    return { repo: targetRepo, branch: targetBranch, archivePath, kstMonth, counts, exportedAt, commitSha, htmlUrl };
+  };
+
+  const executeDailySnapshotRotation = async (options?: {
+    repo?: string;
+    branch?: string;
+    token?: string;
+    passphrase?: string;
+    retentionDays?: number;
+    reason?: string;
+  }) => {
+    const cfg = loadPrivateBackupConfig();
+    const targetRepo = options?.repo && isValidGithubRepo(options.repo) ? options.repo.trim() : cfg.repo;
+    const targetBranch = options?.branch && isValidGitRef(options.branch) ? options.branch.trim() : cfg.branch;
+    const retentionDays = options?.retentionDays ? Math.min(90, Math.max(1, Math.round(options.retentionDays))) : cfg.dailySnapshotRetentionDays;
+    const { authToken, passphrase } = resolvePrivateVaultCredentials(cfg, options);
+
+    if (!isValidGithubRepo(targetRepo)) throw new Error("유효한 비공개 GitHub 저장소('소유자/저장소명')가 필요합니다.");
+    if (!authToken) throw new Error("비공개 저장소 전용 PAT가 설정되어 있지 않습니다.");
+    if (!passphrase || passphrase.length < 8) throw new Error("AES-256 암호화 키(8자 이상)가 필요합니다.");
+
+    const exportedAt = getKSTISOString();
+    const kstDate = exportedAt.slice(0, 10);
+    const users = readLocalCollection('users');
+    const adminLogs = cfg.includeLogs ? readLocalCollection('logs_admin').slice(0, 200) : [];
+    const systemBuilt = buildSystemVaultPayload();
+    const securityBuilt = buildSecurityVaultPayload();
+
+    const bundlePayload = {
+      schema: PRIVATE_VAULT_FORMAT,
+      vaultType: 'daily-bundle',
+      kstDate,
+      exportedAt,
+      members: { users, adminLogs },
+      system: systemBuilt.payload,
+      security: securityBuilt.payload
+    };
+    const counts = {
+      users: users.length,
+      apiKeys: systemBuilt.counts.apiKeys,
+      blockedVisitors: securityBuilt.counts.blockedVisitors,
+      adminLogs: adminLogs.length
+    };
+
+    const vault = encryptVaultEnvelope('daily-bundle', bundlePayload, passphrase, cfg.keyGeneration || 1, counts);
+    const snapshotPath = `${cfg.dailySnapshotPrefix}/${kstDate}/vault-bundle.enc.json`;
+    const ghHeaders = await verifyPrivateRepoOrThrow(targetRepo, authToken);
+    const { commitSha, htmlUrl } = await pushTextFileToPrivateRepo({
+      repo: targetRepo,
+      branch: targetBranch,
+      filePath: snapshotPath,
+      authToken,
+      ghHeaders,
+      contentText: JSON.stringify(vault, null, 2),
+      commitMessage: `🗓️ [Private Daily Snapshot] ${kstDate} full bundle (${users.length} users, ${counts.apiKeys} keys)`
+    });
+
+    // Rotate & prune old snapshots beyond retentionDays
+    const prunedDates: string[] = [];
+    try {
+      const entries = await listPrivateRepoDir(targetRepo, targetBranch, cfg.dailySnapshotPrefix, authToken);
+      const dateDirs = entries
+        .filter((e: any) => e && e.type === 'dir' && /^\d{4}-\d{2}-\d{2}$/.test(String(e.name || '')))
+        .map((e: any) => String(e.name))
+        .sort((a, b) => b.localeCompare(a));
+
+      const cutoffDateMs = Date.now() - retentionDays * 86400 * 1000;
+      for (let i = 0; i < dateDirs.length; i++) {
+        const dStr = dateDirs[i];
+        if (dStr === kstDate) continue;
+        const dMs = Date.parse(`${dStr}T00:00:00+09:00`);
+        if (i >= retentionDays || (Number.isFinite(dMs) && dMs < cutoffDateMs)) {
+          const oldFilePath = `${cfg.dailySnapshotPrefix}/${dStr}/vault-bundle.enc.json`;
+          const deleted = await deletePrivateRepoFile(
+            targetRepo,
+            targetBranch,
+            oldFilePath,
+            authToken,
+            `🧹 [Private Snapshot Rotation] Prune expired snapshot ${dStr} (retention ${retentionDays}d)`
+          );
+          if (deleted) prunedDates.push(dStr);
         }
       }
+    } catch (pruneErr: any) {
+      console.warn('[Private Daily Snapshot Prune] Warning:', pruneErr?.message || pruneErr);
+    }
+
+    const latestCfg = loadPrivateBackupConfig();
+    savePrivateBackupConfig({
+      ...latestCfg,
+      lastDailySnapshotDate: kstDate,
+      lastDailySnapshotAt: exportedAt,
+      lastDailySnapshotStatus: `${kstDate} 일별 스냅샷 완료 (정리 ${prunedDates.length}건 · ${options?.reason || 'manual'})`,
+      updatedAt: exportedAt
+    });
+
+    addLocalLog('logs_admin', {
+      category: 'SYSTEM',
+      action: 'PRIVATE_DAILY_SNAPSHOT',
+      details: `비공개 저장소(${targetRepo}) 일별 스냅샷 생성(${kstDate}) 및 만료 스냅샷 ${prunedDates.length}건 회전 정리`
+    });
+
+    return {
+      repo: targetRepo,
+      branch: targetBranch,
+      kstDate,
+      snapshotPath,
+      retentionDays,
+      prunedDates,
+      counts,
+      exportedAt,
+      commitSha,
+      htmlUrl
+    };
+  };
+
+  const buildPrivateHealthcheckWorkflowYaml = (params: {
+    healthUrl: string;
+    intervalMinutes: number;
+    failureThreshold: number;
+    alertMode: 'issue' | 'webhook' | 'both';
+  }) => {
+    const cleanCron = params.intervalMinutes === 60
+      ? '0 * * * *'
+      : params.intervalMinutes === 30
+        ? '*/30 * * * *'
+        : '*/15 * * * *';
+    const thresh = Math.min(5, Math.max(1, Math.round(params.failureThreshold || 2)));
+    const safeUrl = String(params.healthUrl || '').trim();
+    const useIssue = params.alertMode === 'issue' || params.alertMode === 'both';
+    const useWebhook = params.alertMode === 'webhook' || params.alertMode === 'both';
+
+    return `name: Windows Fix Wizard Private Healthcheck & Alert
+
+on:
+  schedule:
+    - cron: '${cleanCron}'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_HEALTH_URL: '${safeUrl}'
+      FAILURE_THRESHOLD: '${thresh}'
+      ALERT_USE_ISSUE: '${useIssue ? 'true' : 'false'}'
+      ALERT_USE_WEBHOOK: '${useWebhook ? 'true' : 'false'}'
+      WEBHOOK_URL: \${{ secrets.HEALTHCHECK_WEBHOOK_URL }}
+    steps:
+      - name: Check target server health endpoint
+        id: probe
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const targetUrl = process.env.TARGET_HEALTH_URL;
+            const threshold = Math.max(1, Number(process.env.FAILURE_THRESHOLD || '2'));
+            if (!targetUrl || !/^https?:\\/\\//i.test(targetUrl)) {
+              core.setFailed('TARGET_HEALTH_URL is missing or invalid.');
+              return;
+            }
+            let lastStatus = 0;
+            let lastError = '';
+            let ok = false;
+            for (let attempt = 1; attempt <= threshold; attempt++) {
+              try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 12000);
+                const res = await fetch(targetUrl, { signal: controller.signal });
+                clearTimeout(timer);
+                lastStatus = res.status;
+                if (res.ok) {
+                  ok = true;
+                  break;
+                }
+                lastError = \`HTTP \${res.status}\`;
+              } catch (err) {
+                lastError = err && err.message ? err.message : String(err);
+              }
+              if (attempt < threshold) {
+                await new Promise(r => setTimeout(r, 3000));
+              }
+            }
+            core.setOutput('healthy', ok ? 'true' : 'false');
+            core.setOutput('status_code', String(lastStatus));
+            core.setOutput('error_detail', lastError);
+
+            const useIssue = process.env.ALERT_USE_ISSUE === 'true';
+            const useWebhook = process.env.ALERT_USE_WEBHOOK === 'true';
+            const webhookUrl = (process.env.WEBHOOK_URL || '').trim();
+            const nowIso = new Date().toISOString();
+
+            if (!ok) {
+              core.warning(\`Healthcheck failed (\${lastError || lastStatus}) for \${targetUrl}\`);
+              if (useIssue) {
+                const openIssues = await github.rest.issues.listForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  labels: 'healthcheck-alert',
+                  per_page: 5
+                });
+                const bodyText = [
+                  '### 🚨 Windows Fix Wizard Server Healthcheck Failed',
+                  \`- **Target**: \\\`\${targetUrl}\\\`\`,
+                  \`- **Observed At (UTC)**: \${nowIso}\`,
+                  \`- **Attempts**: \${threshold}\`,
+                  \`- **Last Error / Status**: \\\`\${lastError || lastStatus}\\\`\`,
+                  '',
+                  '> Generated automatically inside the private admin repository.'
+                ].join('\\n');
+                if (openIssues.data.length === 0) {
+                  await github.rest.issues.create({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    title: \`[Alert] Server healthcheck failed (\${lastError || lastStatus})\`,
+                    body: bodyText,
+                    labels: ['healthcheck-alert']
+                  });
+                } else {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: openIssues.data[0].number,
+                    body: bodyText
+                  });
+                }
+              }
+              if (useWebhook && webhookUrl && /^https?:\\/\\//i.test(webhookUrl)) {
+                await fetch(webhookUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    text: \`🚨 [Windows Fix Wizard] Healthcheck FAILED (\${lastError || lastStatus}) · \${targetUrl} at \${nowIso}\`
+                  })
+                }).catch(() => {});
+              }
+              core.setFailed(\`Server healthcheck failed after \${threshold} attempts: \${lastError || lastStatus}\`);
+            } else if (useIssue) {
+              const openIssues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'healthcheck-alert',
+                per_page: 5
+              });
+              for (const issue of openIssues.data) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: \`✅ **Recovered**: Server responded with HTTP \${lastStatus} at \${nowIso}. Closing incident automatically.\`
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed'
+                });
+              }
+            }
+`;
+  };
+
+  type PrivateSyncScope = 'members' | 'system' | 'security';
+  let activeVaultSyncPromise: Promise<void> | null = null;
+  const pendingVaultScopes = new Map<PrivateSyncScope, string>();
+
+  function schedulePrivateVaultSync(scope: PrivateSyncScope, reason: string): Promise<void> {
+    const cfg = loadPrivateBackupConfig();
+    const { authToken, passphrase } = resolvePrivateVaultCredentials(cfg);
+    if (!authToken || !passphrase) {
+      return Promise.resolve();
+    }
+    if (scope === 'members' && !cfg.autoSyncOnUserChange) return Promise.resolve();
+    if (scope === 'system' && !cfg.autoSyncSystemOnChange) return Promise.resolve();
+    if (scope === 'security' && !cfg.autoSyncSecurityOnChange) return Promise.resolve();
+
+    pendingVaultScopes.set(scope, reason);
+    if (activeVaultSyncPromise) {
+      return activeVaultSyncPromise;
+    }
+
+    activeVaultSyncPromise = (async () => {
+      try {
+        while (pendingVaultScopes.size > 0) {
+          const nextEntry = pendingVaultScopes.entries().next().value as [PrivateSyncScope, string] | undefined;
+          if (!nextEntry) break;
+          const [nextScope, nextReason] = nextEntry;
+          pendingVaultScopes.delete(nextScope);
+          try {
+            if (nextScope === 'members') {
+              await executePrivateBackupPush({ reason: `auto:${nextReason}` });
+            } else if (nextScope === 'system') {
+              await executePrivateSystemBackupPush({ reason: `auto:${nextReason}` });
+            } else if (nextScope === 'security') {
+              await executePrivateSecurityBackupPush({ reason: `auto:${nextReason}` });
+            }
+          } catch (err: any) {
+            console.warn(`[Private Vault Auto-Sync:${nextScope}] Failed (${nextReason}):`, err?.message || err);
+          }
+        }
+      } finally {
+        activeVaultSyncPromise = null;
+      }
     })();
-    return activeAutoBackupPromise;
+
+    return activeVaultSyncPromise;
   }
+
+  function schedulePrivateAdminBackupSync(reason: string): Promise<void> {
+    return schedulePrivateVaultSync('members', reason);
+  }
+
+  // Hourly KST check for once-daily Private Vault Snapshot Rotation
+  cron.schedule('5 * * * *', async () => {
+    try {
+      const cfg = loadPrivateBackupConfig();
+      if (!cfg.dailySnapshotEnabled) return;
+      const { authToken, passphrase } = resolvePrivateVaultCredentials(cfg);
+      if (!authToken || !passphrase || !isValidGithubRepo(cfg.repo)) return;
+      const kstIso = getKSTISOString();
+      const kstDate = kstIso.slice(0, 10);
+      const kstHour = Number(kstIso.slice(11, 13));
+      if (cfg.lastDailySnapshotDate === kstDate) return;
+      if (Number.isFinite(kstHour) && kstHour < (cfg.dailySnapshotHourKst ?? 3)) return;
+      await executeDailySnapshotRotation({ reason: 'daily-cron' });
+    } catch (err: any) {
+      console.warn('[Private Daily Snapshot Cron] Warning:', err?.message || err);
+    }
+  });
 
   // GET /api/admin/private-backup/config
   app.get("/api/admin/private-backup/config", requireAdmin, (_req, res) => {
@@ -5136,18 +6136,35 @@ async function startServer() {
         repo,
         branch,
         backupPath,
+        systemBackupPath,
+        securityBackupPath,
+        dailySnapshotPrefix,
+        auditArchivePrefix,
         token,
         encryptionKey,
         clearToken,
         clearEncryptionKey,
         autoSyncOnUserChange,
-        includeLogs
+        autoSyncSystemOnChange,
+        autoSyncSecurityOnChange,
+        includeLogs,
+        dailySnapshotEnabled,
+        dailySnapshotRetentionDays,
+        dailySnapshotHourKst,
+        healthcheckTargetUrl,
+        healthcheckIntervalMin,
+        healthcheckFailureThreshold,
+        healthcheckAlertMode
       } = req.body || {};
 
       const current = loadPrivateBackupConfig();
       const nextRepo = repo !== undefined && String(repo).trim() ? String(repo).trim() : current.repo;
       const nextBranch = branch !== undefined && String(branch).trim() ? String(branch).trim() : current.branch;
       const nextPath = backupPath !== undefined && String(backupPath).trim() ? String(backupPath).trim() : current.backupPath;
+      const nextSystemPath = systemBackupPath !== undefined && String(systemBackupPath).trim() ? String(systemBackupPath).trim() : current.systemBackupPath;
+      const nextSecurityPath = securityBackupPath !== undefined && String(securityBackupPath).trim() ? String(securityBackupPath).trim() : current.securityBackupPath;
+      const nextDailyPrefix = dailySnapshotPrefix !== undefined && String(dailySnapshotPrefix).trim() ? String(dailySnapshotPrefix).trim().replace(/\/+$/, '') : current.dailySnapshotPrefix;
+      const nextArchivePrefix = auditArchivePrefix !== undefined && String(auditArchivePrefix).trim() ? String(auditArchivePrefix).trim().replace(/\/+$/, '') : current.auditArchivePrefix;
 
       if (!isValidGithubRepo(nextRepo)) {
         return res.status(400).json({ success: false, error: "유효한 GitHub 저장소 형식('소유자/저장소명')을 입력해주세요." });
@@ -5155,8 +6172,15 @@ async function startServer() {
       if (!isValidGitRef(nextBranch)) {
         return res.status(400).json({ success: false, error: "유효하지 않은 브랜치 이름입니다." });
       }
-      if (!isValidRepoRelativeJsonPath(nextPath)) {
+      if (!isValidRepoRelativeJsonPath(nextPath) || !isValidRepoRelativeJsonPath(nextSystemPath) || !isValidRepoRelativeJsonPath(nextSecurityPath)) {
         return res.status(400).json({ success: false, error: "백업 파일 경로는 .json 확장자의 상대 경로여야 합니다 (예: backups/winfix-admin-vault.enc.json)." });
+      }
+      if (!isValidRepoRelativePrefix(nextDailyPrefix) || !isValidRepoRelativePrefix(nextArchivePrefix)) {
+        return res.status(400).json({ success: false, error: "스냅샷 및 아카이브 폴더 경로는 안전한 상대 경로여야 합니다 (예: backups/daily)." });
+      }
+
+      if (healthcheckTargetUrl !== undefined && String(healthcheckTargetUrl).trim() && !isValidHealthcheckUrl(healthcheckTargetUrl)) {
+        return res.status(400).json({ success: false, error: "헬스체크 대상 URL은 유효한 http(s):// 주소여야 합니다." });
       }
 
       let nextToken = current.token;
@@ -5177,16 +6201,34 @@ async function startServer() {
         nextEncryptionKey = trimmedKey;
       }
 
+      const retParsed = dailySnapshotRetentionDays !== undefined ? Number(dailySnapshotRetentionDays) : current.dailySnapshotRetentionDays;
+      const hourParsed = dailySnapshotHourKst !== undefined ? Number(dailySnapshotHourKst) : current.dailySnapshotHourKst;
+      const hcIntParsed = healthcheckIntervalMin !== undefined ? Number(healthcheckIntervalMin) : current.healthcheckIntervalMin;
+      const hcThreshParsed = healthcheckFailureThreshold !== undefined ? Number(healthcheckFailureThreshold) : current.healthcheckFailureThreshold;
+
       const now = getKSTISOString();
       const updated: PrivateBackupConfigRecord = {
         ...current,
         repo: nextRepo,
         branch: nextBranch,
         backupPath: nextPath,
+        systemBackupPath: nextSystemPath,
+        securityBackupPath: nextSecurityPath,
+        dailySnapshotPrefix: nextDailyPrefix,
+        auditArchivePrefix: nextArchivePrefix,
         token: nextToken,
         encryptionKey: nextEncryptionKey,
         autoSyncOnUserChange: autoSyncOnUserChange !== undefined ? Boolean(autoSyncOnUserChange) : current.autoSyncOnUserChange,
+        autoSyncSystemOnChange: autoSyncSystemOnChange !== undefined ? Boolean(autoSyncSystemOnChange) : current.autoSyncSystemOnChange,
+        autoSyncSecurityOnChange: autoSyncSecurityOnChange !== undefined ? Boolean(autoSyncSecurityOnChange) : current.autoSyncSecurityOnChange,
         includeLogs: includeLogs !== undefined ? Boolean(includeLogs) : current.includeLogs,
+        dailySnapshotEnabled: dailySnapshotEnabled !== undefined ? Boolean(dailySnapshotEnabled) : current.dailySnapshotEnabled,
+        dailySnapshotRetentionDays: Number.isFinite(retParsed) ? Math.min(90, Math.max(1, Math.round(retParsed))) : current.dailySnapshotRetentionDays,
+        dailySnapshotHourKst: Number.isFinite(hourParsed) ? Math.min(23, Math.max(0, Math.round(hourParsed))) : current.dailySnapshotHourKst,
+        healthcheckTargetUrl: healthcheckTargetUrl !== undefined ? String(healthcheckTargetUrl).trim() : current.healthcheckTargetUrl,
+        healthcheckIntervalMin: [15, 30, 60].includes(hcIntParsed) ? hcIntParsed : current.healthcheckIntervalMin,
+        healthcheckFailureThreshold: Number.isFinite(hcThreshParsed) ? Math.min(5, Math.max(1, Math.round(hcThreshParsed))) : current.healthcheckFailureThreshold,
+        healthcheckAlertMode: ['issue', 'webhook', 'both'].includes(healthcheckAlertMode) ? healthcheckAlertMode : current.healthcheckAlertMode,
         updatedAt: now
       };
       savePrivateBackupConfig(updated);
@@ -5194,7 +6236,7 @@ async function startServer() {
       addLocalLog('logs_admin', {
         category: 'AUTH',
         action: 'PRIVATE_VAULT_CONFIG_UPDATE',
-        details: `비공개 백업 저장소 설정 변경: ${updated.repo} (${updated.branch}:${updated.backupPath}, 자동백업: ${updated.autoSyncOnUserChange ? 'ON' : 'OFF'})`
+        details: `비공개 저장소 운영 설정 저장: ${updated.repo} (${updated.branch}, 일별 스냅샷 ${updated.dailySnapshotEnabled ? `${updated.dailySnapshotRetentionDays}일` : 'OFF'})`
       });
 
       res.json({ success: true, config: sanitizePrivateBackupConfigForClient(updated) });
@@ -5203,7 +6245,7 @@ async function startServer() {
     }
   });
 
-  // POST /api/admin/private-backup/push
+  // POST /api/admin/private-backup/push (Members vault)
   app.post("/api/admin/private-backup/push", requireAdmin, async (req, res) => {
     try {
       const { repo, branch, backupPath, passphrase, includeLogs } = req.body || {};
@@ -5215,18 +6257,17 @@ async function startServer() {
         includeLogs,
         reason: 'manual'
       });
-      const updatedCfg = loadPrivateBackupConfig();
       res.json({
         success: true,
         backup: result,
-        config: sanitizePrivateBackupConfigForClient(updatedCfg)
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
       });
     } catch (e: any) {
       res.status(400).json({ success: false, error: e.message || "비공개 저장소 암호화 백업에 실패했습니다." });
     }
   });
 
-  // POST /api/admin/private-backup/restore
+  // POST /api/admin/private-backup/restore (Members vault)
   app.post("/api/admin/private-backup/restore", requireAdmin, async (req, res) => {
     try {
       const { mode = 'merge', passphrase, repo, branch, backupPath } = req.body || {};
@@ -5235,55 +6276,13 @@ async function startServer() {
       const targetRepo = repo && isValidGithubRepo(repo) ? repo.trim() : cfg.repo;
       const targetBranch = branch && isValidGitRef(branch) ? branch.trim() : cfg.branch;
       const targetPath = backupPath && isValidRepoRelativeJsonPath(backupPath) ? backupPath.trim() : cfg.backupPath;
-      const authToken = cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim() || '';
-      const cleanPass = (typeof passphrase === 'string' && passphrase.trim() && !passphrase.includes('••••'))
-        ? passphrase.trim()
-        : (cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '');
+      const { authToken, passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
 
-      if (!isValidGithubRepo(targetRepo)) {
-        return res.status(400).json({ success: false, error: "유효한 비공개 GitHub 저장소 이름이 필요합니다." });
-      }
-      if (!authToken) {
-        return res.status(400).json({ success: false, error: "비공개 저장소 PAT가 설정되어 있지 않습니다." });
-      }
-      if (!cleanPass || cleanPass.length < 8) {
-        return res.status(400).json({ success: false, error: "복호화할 AES-256 암호화 키(8자 이상)가 필요합니다." });
-      }
+      if (!isValidGithubRepo(targetRepo)) return res.status(400).json({ success: false, error: "유효한 비공개 GitHub 저장소 이름이 필요합니다." });
+      if (!authToken) return res.status(400).json({ success: false, error: "비공개 저장소 PAT가 설정되어 있지 않습니다." });
+      if (!cleanPass || cleanPass.length < 8) return res.status(400).json({ success: false, error: "복호화할 AES-256 암호화 키(8자 이상)가 필요합니다." });
 
-      const encodedPath = targetPath.split('/').map(seg => encodeURIComponent(seg)).join('/');
-      const contentsApiUrl = `https://api.github.com/repos/${targetRepo}/contents/${encodedPath}?ref=${encodeURIComponent(targetBranch)}`;
-      const ghRes = await fetch(contentsApiUrl, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'WindowsFixWizard-PrivateVault'
-        },
-        signal: AbortSignal.timeout(15000)
-      });
-
-      if (ghRes.status === 401 || ghRes.status === 403) {
-        return res.status(400).json({ success: false, error: `비공개 저장소 인증 실패 (${ghRes.status}): PAT 권한을 확인하세요.` });
-      }
-      if (ghRes.status === 404) {
-        return res.status(404).json({ success: false, error: `${targetRepo} (${targetBranch})에 '${targetPath}' 백업 파일이 아직 없습니다.` });
-      }
-      if (!ghRes.ok) {
-        return res.status(502).json({ success: false, error: `GitHub 백업 조회 실패 (${ghRes.status})` });
-      }
-
-      const fileInfo: any = await ghRes.json();
-      let vaultJson: any = null;
-      if (fileInfo?.content) {
-        const rawText = Buffer.from(String(fileInfo.content), 'base64').toString('utf8');
-        vaultJson = JSON.parse(rawText);
-      } else if (fileInfo?.download_url && isSafeExternalHttpUrl(fileInfo.download_url)) {
-        const rawRes = await fetch(fileInfo.download_url, {
-          headers: { 'Authorization': `Bearer ${authToken}`, 'User-Agent': 'WindowsFixWizard-PrivateVault' },
-          signal: AbortSignal.timeout(15000)
-        });
-        vaultJson = await rawRes.json();
-      }
-
+      const vaultJson = await fetchJsonFromPrivateRepo({ repo: targetRepo, branch: targetBranch, filePath: targetPath, authToken });
       const decrypted = decryptAdminVault(vaultJson, cleanPass);
       const restoreStats = applyRestoredUsers(decrypted.users, restoreMode);
 
@@ -5299,7 +6298,7 @@ async function startServer() {
       addLocalLog('logs_admin', {
         category: 'AUTH',
         action: 'PRIVATE_VAULT_RESTORE',
-        details: `비공개 저장소(${targetRepo}) 암호화 백업 복원 (${restoreMode}): 신규 ${restoreStats.added}명, 갱신 ${restoreStats.updated}명, 총 ${restoreStats.totalUsersAfter}명`
+        details: `비공개 저장소(${targetRepo}) 회원 금고 복원 (${restoreMode}): 신규 ${restoreStats.added}명, 갱신 ${restoreStats.updated}명, 총 ${restoreStats.totalUsersAfter}명`
       });
 
       res.json({
@@ -5312,21 +6311,21 @@ async function startServer() {
         config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
       });
     } catch (e: any) {
-      res.status(400).json({ success: false, error: e.message || "비공개 저장소 복원에 실패했습니다." });
+      const code = e?.httpStatus === 404 ? 404 : 400;
+      res.status(code).json({ success: false, error: e.message || "비공개 저장소 복원에 실패했습니다." });
     }
   });
 
-  // POST /api/admin/private-backup/export-local
+  // POST /api/admin/private-backup/export-local (Members vault)
   app.post("/api/admin/private-backup/export-local", requireAdmin, (req, res) => {
     try {
       const { passphrase, includeLogs } = req.body || {};
       const cfg = loadPrivateBackupConfig();
-      const cleanPass = (typeof passphrase === 'string' && passphrase.trim() && !passphrase.includes('••••'))
-        ? passphrase.trim()
-        : (cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '');
+      const { passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
       const { vault, usersCount, exportedAt } = buildEncryptedAdminVault(
         includeLogs !== undefined ? Boolean(includeLogs) : cfg.includeLogs,
-        cleanPass
+        cleanPass,
+        cfg.keyGeneration || 1
       );
       addLocalLog('logs_admin', {
         category: 'AUTH',
@@ -5339,15 +6338,13 @@ async function startServer() {
     }
   });
 
-  // POST /api/admin/private-backup/restore-local
+  // POST /api/admin/private-backup/restore-local (Members vault)
   app.post("/api/admin/private-backup/restore-local", requireAdmin, (req, res) => {
     try {
       const { vault, passphrase, mode = 'merge' } = req.body || {};
       const restoreMode: 'merge' | 'replace' = mode === 'replace' ? 'replace' : 'merge';
       const cfg = loadPrivateBackupConfig();
-      const cleanPass = (typeof passphrase === 'string' && passphrase.trim() && !passphrase.includes('••••'))
-        ? passphrase.trim()
-        : (cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '');
+      const { passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
       const decrypted = decryptAdminVault(vault, cleanPass);
       const restoreStats = applyRestoredUsers(decrypted.users, restoreMode);
 
@@ -5377,6 +6374,674 @@ async function startServer() {
       });
     } catch (e: any) {
       res.status(400).json({ success: false, error: e.message || "로컬 암호화 백업 복원에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/system/push
+  app.post("/api/admin/private-backup/system/push", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch, systemBackupPath, passphrase } = req.body || {};
+      const result = await executePrivateSystemBackupPush({ repo, branch, systemBackupPath, passphrase, reason: 'manual' });
+      res.json({
+        success: true,
+        backup: result,
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "전체 시스템·AI 키 암호화 백업에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/system/restore
+  app.post("/api/admin/private-backup/system/restore", requireAdmin, async (req, res) => {
+    try {
+      const { mode = 'merge', passphrase, repo, branch, systemBackupPath } = req.body || {};
+      const restoreMode: 'merge' | 'replace' = mode === 'replace' ? 'replace' : 'merge';
+      const cfg = loadPrivateBackupConfig();
+      const targetRepo = repo && isValidGithubRepo(repo) ? repo.trim() : cfg.repo;
+      const targetBranch = branch && isValidGitRef(branch) ? branch.trim() : cfg.branch;
+      const targetPath = systemBackupPath && isValidRepoRelativeJsonPath(systemBackupPath) ? systemBackupPath.trim() : cfg.systemBackupPath;
+      const { authToken, passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
+
+      if (!isValidGithubRepo(targetRepo)) return res.status(400).json({ success: false, error: "유효한 비공개 GitHub 저장소 이름이 필요합니다." });
+      if (!authToken) return res.status(400).json({ success: false, error: "비공개 저장소 PAT가 설정되어 있지 않습니다." });
+      if (!cleanPass || cleanPass.length < 8) return res.status(400).json({ success: false, error: "복호화할 AES-256 암호화 키(8자 이상)가 필요합니다." });
+
+      const vaultJson = await fetchJsonFromPrivateRepo({ repo: targetRepo, branch: targetBranch, filePath: targetPath, authToken });
+      const { payload } = decryptVaultEnvelope(vaultJson, cleanPass, ['system']);
+      const stats = applyRestoredSystemConfig(payload, restoreMode);
+
+      const now = getKSTISOString();
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        lastRestoreAt: now,
+        lastRestoreStatus: `시스템·AI 키 금고 ${restoreMode === 'replace' ? '전체 교체' : '병합'} 복원 (${stats.restoredSections.length}개 영역)`,
+        updatedAt: now
+      });
+
+      addLocalLog('logs_admin', {
+        category: 'SYSTEM',
+        action: 'PRIVATE_SYSTEM_VAULT_RESTORE',
+        details: `비공개 저장소(${targetRepo}) 시스템·AI 키 금고 복원 (${restoreMode}): ${stats.restoredSections.join(', ')}`
+      });
+
+      res.json({
+        success: true,
+        restore: stats,
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      const code = e?.httpStatus === 404 ? 404 : 400;
+      res.status(code).json({ success: false, error: e.message || "시스템·AI 키 금고 복원에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/system/export-local
+  app.post("/api/admin/private-backup/system/export-local", requireAdmin, (req, res) => {
+    try {
+      const { passphrase } = req.body || {};
+      const cfg = loadPrivateBackupConfig();
+      const { passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
+      const { payload, counts, exportedAt } = buildSystemVaultPayload();
+      const vault = encryptVaultEnvelope('system', payload, cleanPass, cfg.keyGeneration || 1, counts);
+      res.json({ success: true, vault, counts, exportedAt });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "로컬 시스템 암호화 파일 생성에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/system/restore-local
+  app.post("/api/admin/private-backup/system/restore-local", requireAdmin, (req, res) => {
+    try {
+      const { vault, passphrase, mode = 'merge' } = req.body || {};
+      const restoreMode: 'merge' | 'replace' = mode === 'replace' ? 'replace' : 'merge';
+      const cfg = loadPrivateBackupConfig();
+      const { passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
+      const { payload } = decryptVaultEnvelope(vault, cleanPass, ['system']);
+      const stats = applyRestoredSystemConfig(payload, restoreMode);
+      const now = getKSTISOString();
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        lastRestoreAt: now,
+        lastRestoreStatus: `로컬 시스템 금고 ${restoreMode === 'replace' ? '교체' : '병합'} 복원 완료 (${stats.restoredSections.length}개 영역)`,
+        updatedAt: now
+      });
+      res.json({ success: true, restore: stats, config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig()) });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "로컬 시스템 금고 복원에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/security/push
+  app.post("/api/admin/private-backup/security/push", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch, securityBackupPath, passphrase } = req.body || {};
+      const result = await executePrivateSecurityBackupPush({ repo, branch, securityBackupPath, passphrase, reason: 'manual' });
+      res.json({ success: true, backup: result, config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig()) });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "보안 차단 규칙 백업에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/security/restore
+  app.post("/api/admin/private-backup/security/restore", requireAdmin, async (req, res) => {
+    try {
+      const { mode = 'merge', passphrase, repo, branch, securityBackupPath } = req.body || {};
+      const restoreMode: 'merge' | 'replace' = mode === 'replace' ? 'replace' : 'merge';
+      const cfg = loadPrivateBackupConfig();
+      const targetRepo = repo && isValidGithubRepo(repo) ? repo.trim() : cfg.repo;
+      const targetBranch = branch && isValidGitRef(branch) ? branch.trim() : cfg.branch;
+      const targetPath = securityBackupPath && isValidRepoRelativeJsonPath(securityBackupPath) ? securityBackupPath.trim() : cfg.securityBackupPath;
+      const { authToken, passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
+
+      if (!isValidGithubRepo(targetRepo)) return res.status(400).json({ success: false, error: "유효한 비공개 GitHub 저장소 이름이 필요합니다." });
+      if (!authToken) return res.status(400).json({ success: false, error: "비공개 저장소 PAT가 설정되어 있지 않습니다." });
+      if (!cleanPass || cleanPass.length < 8) return res.status(400).json({ success: false, error: "복호화할 AES-256 암호화 키(8자 이상)가 필요합니다." });
+
+      const vaultJson = await fetchJsonFromPrivateRepo({ repo: targetRepo, branch: targetBranch, filePath: targetPath, authToken });
+      const { payload } = decryptVaultEnvelope(vaultJson, cleanPass, ['security']);
+      const stats = applyRestoredSecurityConfig(payload, restoreMode);
+
+      const now = getKSTISOString();
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        lastRestoreAt: now,
+        lastRestoreStatus: `보안 차단 금고 복원 완료 (차단 ${stats.blockedRestored}건)`,
+        updatedAt: now
+      });
+
+      res.json({ success: true, restore: stats, config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig()) });
+    } catch (e: any) {
+      const code = e?.httpStatus === 404 ? 404 : 400;
+      res.status(code).json({ success: false, error: e.message || "보안 차단 금고 복원에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/audit-archive/push
+  app.post("/api/admin/private-backup/audit-archive/push", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch, passphrase } = req.body || {};
+      const result = await executeAuditArchivePush({ repo, branch, passphrase, reason: 'manual' });
+      res.json({ success: true, archive: result, config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig()) });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "감사 로그 암호화 아카이빙에 실패했습니다." });
+    }
+  });
+
+  // GET /api/admin/private-backup/snapshots
+  app.get("/api/admin/private-backup/snapshots", requireAdmin, async (_req, res) => {
+    try {
+      const cfg = loadPrivateBackupConfig();
+      const { authToken } = resolvePrivateVaultCredentials(cfg);
+      if (!authToken || !isValidGithubRepo(cfg.repo)) {
+        return res.json({ success: true, configured: false, snapshots: [] });
+      }
+      const entries = await listPrivateRepoDir(cfg.repo, cfg.branch, cfg.dailySnapshotPrefix, authToken);
+      const snapshots = entries
+        .filter((e: any) => e && e.type === 'dir' && /^\d{4}-\d{2}-\d{2}$/.test(String(e.name || '')))
+        .map((e: any) => ({
+          date: String(e.name),
+          path: `${cfg.dailySnapshotPrefix}/${e.name}/vault-bundle.enc.json`,
+          htmlUrl: e.html_url || `https://github.com/${cfg.repo}/tree/${cfg.branch}/${cfg.dailySnapshotPrefix}/${e.name}`
+        }))
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+      res.json({ success: true, configured: true, snapshots });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "일별 스냅샷 목록 조회 실패", snapshots: [] });
+    }
+  });
+
+  // POST /api/admin/private-backup/snapshots/run
+  app.post("/api/admin/private-backup/snapshots/run", requireAdmin, async (req, res) => {
+    try {
+      const { retentionDays, passphrase } = req.body || {};
+      const result = await executeDailySnapshotRotation({ retentionDays, passphrase, reason: 'manual' });
+      res.json({
+        success: true,
+        snapshot: result,
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "일별 스냅샷 실행에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/snapshots/restore
+  app.post("/api/admin/private-backup/snapshots/restore", requireAdmin, async (req, res) => {
+    try {
+      const { date, mode = 'merge', passphrase, restoreMembers = true, restoreSystem = true, restoreSecurity = true } = req.body || {};
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date).trim())) {
+        return res.status(400).json({ success: false, error: "복원할 날짜(YYYY-MM-DD)가 올바르지 않습니다." });
+      }
+      const restoreMode: 'merge' | 'replace' = mode === 'replace' ? 'replace' : 'merge';
+      const cfg = loadPrivateBackupConfig();
+      const { authToken, passphrase: cleanPass } = resolvePrivateVaultCredentials(cfg, { passphrase });
+      if (!authToken) return res.status(400).json({ success: false, error: "비공개 저장소 PAT가 설정되어 있지 않습니다." });
+      if (!cleanPass || cleanPass.length < 8) return res.status(400).json({ success: false, error: "복호화할 AES-256 암호화 키(8자 이상)가 필요합니다." });
+
+      const targetPath = `${cfg.dailySnapshotPrefix}/${String(date).trim()}/vault-bundle.enc.json`;
+      const vaultJson = await fetchJsonFromPrivateRepo({ repo: cfg.repo, branch: cfg.branch, filePath: targetPath, authToken });
+      const { payload } = decryptVaultEnvelope(vaultJson, cleanPass, ['daily-bundle']);
+
+      const summary: Record<string, any> = { date: String(date).trim(), mode: restoreMode };
+      if (restoreMembers && Array.isArray(payload?.members?.users)) {
+        summary.members = applyRestoredUsers(payload.members.users, restoreMode);
+      }
+      if (restoreSystem && payload?.system) {
+        summary.system = applyRestoredSystemConfig(payload.system, restoreMode);
+      }
+      if (restoreSecurity && payload?.security) {
+        summary.security = applyRestoredSecurityConfig(payload.security, restoreMode);
+      }
+
+      const now = getKSTISOString();
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        lastRestoreAt: now,
+        lastRestoreStatus: `${date} 일별 스냅샷 복원 완료 (${restoreMode})`,
+        updatedAt: now
+      });
+
+      addLocalLog('logs_admin', {
+        category: 'SYSTEM',
+        action: 'PRIVATE_DAILY_SNAPSHOT_RESTORE',
+        details: `비공개 저장소(${cfg.repo}) 일별 스냅샷(${date}) 시점 복원 완료 (${restoreMode})`
+      });
+
+      res.json({ success: true, restore: summary, config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig()) });
+    } catch (e: any) {
+      const code = e?.httpStatus === 404 ? 404 : 400;
+      res.status(code).json({ success: false, error: e.message || "일별 스냅샷 복원에 실패했습니다." });
+    }
+  });
+
+  // GET /api/admin/backup-policy & POST /api/admin/backup-policy (Unified Retention & Key Status Policy)
+  const buildBackupPolicyPayload = () => {
+    const cfg = loadPrivateBackupConfig();
+    const sysCfg = readSystemConfigObject();
+    const maintCfg = readJsonFileSafe(path.join(DATA_DIR, 'maintenance_config.json'), {});
+    let storedLkgSnapshotsCount = 0;
+    try {
+      if (fs.existsSync(LKG_SNAPSHOTS_DIR)) {
+        storedLkgSnapshotsCount = fs.readdirSync(LKG_SNAPSHOTS_DIR)
+          .filter(f => f.startsWith('snapshot_') && f.endsWith('.json')).length;
+      }
+    } catch (_) {}
+
+    const rawLogMonths = maintCfg?.cleanupMonths ?? sysCfg?.cleanupMonths ?? 1;
+    const logRetentionMonths = Number.isFinite(Number(rawLogMonths))
+      ? Math.min(36, Math.max(0, Math.round(Number(rawLogMonths))))
+      : 1;
+
+    return {
+      dailySnapshotEnabled: cfg.dailySnapshotEnabled !== false,
+      dailySnapshotRetentionDays: cfg.dailySnapshotRetentionDays,
+      dailySnapshotHourKst: cfg.dailySnapshotHourKst,
+      dailySnapshotPrefix: cfg.dailySnapshotPrefix,
+      lkgRetentionCount: getLkgRetentionCount(),
+      storedLkgSnapshotsCount,
+      logRetentionMonths,
+      keyGeneration: cfg.keyGeneration || 1,
+      lastKeyRotationAt: cfg.lastKeyRotationAt,
+      lastDailySnapshotDate: cfg.lastDailySnapshotDate,
+      lastDailySnapshotAt: cfg.lastDailySnapshotAt,
+      lastDailySnapshotStatus: cfg.lastDailySnapshotStatus,
+      repo: cfg.repo,
+      branch: cfg.branch,
+      hasToken: Boolean(cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim()),
+      hasEncryptionKey: Boolean(cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim()),
+      autoSyncOnUserChange: cfg.autoSyncOnUserChange === true,
+      autoSyncSystemOnChange: cfg.autoSyncSystemOnChange !== false,
+      autoSyncSecurityOnChange: cfg.autoSyncSecurityOnChange !== false
+    };
+  };
+
+  app.get("/api/admin/backup-policy", requireAdmin, (_req, res) => {
+    try {
+      res.json({
+        success: true,
+        policy: buildBackupPolicyPayload(),
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e?.message || "백업 보존 정책을 불러오지 못했습니다." });
+    }
+  });
+
+  app.post("/api/admin/backup-policy", requireAdmin, (req, res) => {
+    try {
+      const body = req.body || {};
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return res.status(400).json({ success: false, error: "유효한 정책 설정 JSON 객체가 필요합니다." });
+      }
+
+      const cfg = loadPrivateBackupConfig();
+      const sysCfg = readSystemConfigObject();
+      const maintPath = path.join(DATA_DIR, 'maintenance_config.json');
+      const maintCfg = readJsonFileSafe(maintPath, {});
+
+      let nextDailyRetention = cfg.dailySnapshotRetentionDays;
+      if (body.dailySnapshotRetentionDays !== undefined) {
+        const parsed = Number(body.dailySnapshotRetentionDays);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 90) {
+          return res.status(400).json({ success: false, error: "비공개 일별 스냅샷 보존 일수는 1일~90일 사이의 정수여야 합니다." });
+        }
+        nextDailyRetention = parsed;
+      }
+
+      let nextDailyHourKst = cfg.dailySnapshotHourKst;
+      if (body.dailySnapshotHourKst !== undefined) {
+        const parsed = Number(body.dailySnapshotHourKst);
+        if (!Number.isInteger(parsed) || parsed < 0 || parsed > 23) {
+          return res.status(400).json({ success: false, error: "일별 스냅샷 실행 시각(KST)은 0~23시 사이의 정수여야 합니다." });
+        }
+        nextDailyHourKst = parsed;
+      }
+
+      const nextDailyEnabled =
+        typeof body.dailySnapshotEnabled === 'boolean'
+          ? body.dailySnapshotEnabled
+          : cfg.dailySnapshotEnabled !== false;
+
+      let nextLkgRetention = getLkgRetentionCount();
+      if (body.lkgRetentionCount !== undefined) {
+        const parsed = Number(body.lkgRetentionCount);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 50) {
+          return res.status(400).json({ success: false, error: "로컬 LKG 스냅샷 보존 개수는 1개~50개 사이의 정수여야 합니다." });
+        }
+        nextLkgRetention = parsed;
+      }
+
+      const currentPolicy = buildBackupPolicyPayload();
+      let nextLogMonths = currentPolicy.logRetentionMonths;
+      if (body.logRetentionMonths !== undefined) {
+        const parsed = Number(body.logRetentionMonths);
+        if (!Number.isInteger(parsed) || parsed < 0 || parsed > 36) {
+          return res.status(400).json({ success: false, error: "시스템 감사 로그 보존 개월 수는 0개월(무제한)~36개월 사이의 정수여야 합니다." });
+        }
+        nextLogMonths = parsed;
+      }
+
+      const now = getKSTISOString();
+
+      savePrivateBackupConfig({
+        ...cfg,
+        dailySnapshotEnabled: nextDailyEnabled,
+        dailySnapshotRetentionDays: nextDailyRetention,
+        dailySnapshotHourKst: nextDailyHourKst,
+        updatedAt: now
+      });
+
+      const existingMaintSub =
+        sysCfg?.maintenance && typeof sysCfg.maintenance === 'object' && !Array.isArray(sysCfg.maintenance)
+          ? sysCfg.maintenance
+          : {};
+      writeSystemConfigObject({
+        lkgRetentionCount: nextLkgRetention,
+        cleanupMonths: nextLogMonths,
+        maintenance: {
+          ...existingMaintSub,
+          lkgRetentionCount: nextLkgRetention
+        },
+        updatedAt: now
+      });
+
+      const safeMaintBase = maintCfg && typeof maintCfg === 'object' && !Array.isArray(maintCfg) ? maintCfg : {};
+      writeJsonFileAtomic(maintPath, {
+        ...safeMaintBase,
+        cleanupMonths: nextLogMonths,
+        lkgRetentionCount: nextLkgRetention,
+        updatedAt: now
+      });
+
+      let purgeResult: { purgedCount: number; remainingCount: number } | undefined;
+      if (body.purgeLkgNow === true) {
+        purgeResult = purgeOldLastKnownGoodSnapshotsSync(nextLkgRetention);
+      }
+
+      addLocalLog('logs_admin', {
+        category: 'SYSTEM',
+        action: 'ADMIN_BACKUP_POLICY_UPDATE',
+        details: `관리자 백업 보존 정책 변경 (일별 스냅샷 ${nextDailyRetention}일 / ${nextDailyEnabled ? `활성 ${nextDailyHourKst}시` : '비활성'}, 로컬 LKG ${nextLkgRetention}개, 로그 ${nextLogMonths === 0 ? '무제한' : `${nextLogMonths}개월`})`
+      });
+
+      void schedulePrivateVaultSync('system', 'backup-policy-update');
+
+      res.json({
+        success: true,
+        policy: buildBackupPolicyPayload(),
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig()),
+        ...(purgeResult ? { purgeResult } : {})
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e?.message || "백업 보존 정책 저장에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/rotate-key
+  app.post("/api/admin/private-backup/rotate-key", requireAdmin, async (req, res) => {
+    try {
+      const { currentPassphrase, newPassphrase, localOnly, emergencyReason } = req.body || {};
+      const cfg = loadPrivateBackupConfig();
+      const activeCurrentPass = cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '';
+      const suppliedCurrent = typeof currentPassphrase === 'string' && currentPassphrase.trim() && !currentPassphrase.includes('••••')
+        ? currentPassphrase.trim()
+        : activeCurrentPass;
+      const nextPass = typeof newPassphrase === 'string' ? newPassphrase.trim() : '';
+      const isLocalOnly = localOnly === true;
+      const cleanReason = typeof emergencyReason === 'string'
+        ? emergencyReason.trim().replace(/[\r\n]+/g, ' ').slice(0, 160)
+        : '';
+
+      if (!suppliedCurrent || suppliedCurrent.length < 8) {
+        return res.status(400).json({ success: false, error: "기존 AES-256 암호화 키(8자 이상)가 필요합니다." });
+      }
+      if (activeCurrentPass && !timingSafeEqualStrings(suppliedCurrent, activeCurrentPass)) {
+        return res.status(400).json({ success: false, error: "기존 암호화 키가 서버에 저장된 현재 키와 일치하지 않습니다." });
+      }
+      if (nextPass.length < 8 || nextPass.length > 256) {
+        return res.status(400).json({ success: false, error: "새 AES-256 암호화 키는 8자 이상 256자 이하로 입력해주세요." });
+      }
+      if (timingSafeEqualStrings(suppliedCurrent, nextPass)) {
+        return res.status(400).json({ success: false, error: "새 암호화 키는 기존 키와 다르게 지정해야 합니다." });
+      }
+
+      const nextGeneration = (cfg.keyGeneration || 1) + 1;
+      const now = getKSTISOString();
+
+      // Re-encrypt all 3 active vaults with the new key & incremented generation
+      const membersBuilt = buildEncryptedAdminVault(cfg.includeLogs, nextPass, nextGeneration);
+      const sysBuilt = buildSystemVaultPayload();
+      const sysVault = encryptVaultEnvelope('system', sysBuilt.payload, nextPass, nextGeneration, sysBuilt.counts);
+      const secBuilt = buildSecurityVaultPayload();
+      const secVault = encryptVaultEnvelope('security', secBuilt.payload, nextPass, nextGeneration, secBuilt.counts);
+
+      if (isLocalOnly) {
+        const latestCfg = loadPrivateBackupConfig();
+        savePrivateBackupConfig({
+          ...latestCfg,
+          encryptionKey: nextPass,
+          keyGeneration: nextGeneration,
+          lastKeyRotationAt: now,
+          lastBackupStatus: `긴급 로컬 키 순환 #${nextGeneration} 완료 (수동 .enc.json 백업 권장)`,
+          lastSystemBackupStatus: `긴급 로컬 키 순환 #${nextGeneration} 완료`,
+          lastSecurityBackupStatus: `긴급 로컬 키 순환 #${nextGeneration} 완료`,
+          updatedAt: now
+        });
+
+        addLocalLog('logs_admin', {
+          category: 'SECURITY',
+          action: 'PRIVATE_VAULT_EMERGENCY_KEY_ROTATION',
+          details: `긴급 오프라인 AES-256 키 순환 완료 (Key Generation #${nextGeneration}${cleanReason ? ` · 사유: ${cleanReason}` : ''})`
+        });
+
+        return res.json({
+          success: true,
+          mode: 'local-only',
+          keyGeneration: nextGeneration,
+          rotatedAt: now,
+          localRecoveryBundle: {
+            membersVault: membersBuilt.vault,
+            systemVault: sysVault,
+            securityVault: secVault
+          },
+          config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+        });
+      }
+
+      const { authToken } = resolvePrivateVaultCredentials(cfg);
+      if (!authToken || !isValidGithubRepo(cfg.repo)) {
+        return res.status(400).json({ success: false, error: "원격 키 순환 푸시를 위해 비공개 저장소와 PAT 설정이 필요합니다. (PAT 미보유 시 오프라인 긴급 순환 옵션을 선택하세요.)" });
+      }
+
+      // Optional remote integrity verify if member vault already exists on GitHub
+      try {
+        const remoteVault = await fetchJsonFromPrivateRepo({ repo: cfg.repo, branch: cfg.branch, filePath: cfg.backupPath, authToken });
+        decryptAdminVault(remoteVault, suppliedCurrent);
+      } catch (verifyErr: any) {
+        if (verifyErr?.httpStatus !== 404) {
+          return res.status(400).json({ success: false, error: `원격 회원 금고 복호화 검증 실패: ${verifyErr.message}` });
+        }
+      }
+
+      const ghHeaders = await verifyPrivateRepoOrThrow(cfg.repo, authToken);
+
+      await pushTextFileToPrivateRepo({
+        repo: cfg.repo,
+        branch: cfg.branch,
+        filePath: cfg.backupPath,
+        authToken,
+        ghHeaders,
+        contentText: JSON.stringify(membersBuilt.vault, null, 2),
+        commitMessage: `🔑 [Private Key Rotation Gen #${nextGeneration}] Re-encrypt members vault`
+      });
+
+      await pushTextFileToPrivateRepo({
+        repo: cfg.repo,
+        branch: cfg.branch,
+        filePath: cfg.systemBackupPath,
+        authToken,
+        ghHeaders,
+        contentText: JSON.stringify(sysVault, null, 2),
+        commitMessage: `🔑 [Private Key Rotation Gen #${nextGeneration}] Re-encrypt system & AI keys vault`
+      });
+
+      await pushTextFileToPrivateRepo({
+        repo: cfg.repo,
+        branch: cfg.branch,
+        filePath: cfg.securityBackupPath,
+        authToken,
+        ghHeaders,
+        contentText: JSON.stringify(secVault, null, 2),
+        commitMessage: `🔑 [Private Key Rotation Gen #${nextGeneration}] Re-encrypt security blocklist vault`
+      });
+
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        encryptionKey: nextPass,
+        keyGeneration: nextGeneration,
+        lastKeyRotationAt: now,
+        lastBackupAt: now,
+        lastBackupStatus: `키 세대 #${nextGeneration} 순환 재암호화 완료`,
+        lastSystemBackupAt: now,
+        lastSystemBackupStatus: `키 세대 #${nextGeneration} 순환 재암호화 완료`,
+        lastSecurityBackupAt: now,
+        lastSecurityBackupStatus: `키 세대 #${nextGeneration} 순환 재암호화 완료`,
+        updatedAt: now
+      });
+
+      addLocalLog('logs_admin', {
+        category: 'SECURITY',
+        action: 'PRIVATE_VAULT_KEY_ROTATION',
+        details: `비공개 저장소(${cfg.repo}) AES-256 암호화 키 순환 완료 (Key Generation #${nextGeneration} · 3개 활성 금고 재암호화${cleanReason ? ` · 사유: ${cleanReason}` : ''})`
+      });
+
+      res.json({
+        success: true,
+        mode: 'remote-atomic',
+        keyGeneration: nextGeneration,
+        rotatedAt: now,
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "AES-256 암호화 키 순환에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/workflow/preview
+  app.post("/api/admin/private-backup/workflow/preview", requireAdmin, (req, res) => {
+    try {
+      const cfg = loadPrivateBackupConfig();
+      const { healthUrl, intervalMinutes, failureThreshold, alertMode } = req.body || {};
+      const resolvedUrl = String(healthUrl || cfg.healthcheckTargetUrl || `http://localhost:${process.env.PORT || 3000}/api/health`).trim();
+      if (!isValidHealthcheckUrl(resolvedUrl)) {
+        return res.status(400).json({ success: false, error: "헬스체크 URL은 유효한 http(s):// 주소여야 합니다." });
+      }
+      const yaml = buildPrivateHealthcheckWorkflowYaml({
+        healthUrl: resolvedUrl,
+        intervalMinutes: [15, 30, 60].includes(Number(intervalMinutes)) ? Number(intervalMinutes) : cfg.healthcheckIntervalMin,
+        failureThreshold: Number(failureThreshold) || cfg.healthcheckFailureThreshold,
+        alertMode: ['issue', 'webhook', 'both'].includes(alertMode) ? alertMode : cfg.healthcheckAlertMode
+      });
+      res.json({
+        success: true,
+        workflowPath: '.github/workflows/winfix-private-healthcheck.yml',
+        yaml
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "워크플로 미리보기 생성 실패" });
+    }
+  });
+
+  // POST /api/admin/private-backup/workflow/deploy
+  app.post("/api/admin/private-backup/workflow/deploy", requireAdmin, async (req, res) => {
+    const cfg = loadPrivateBackupConfig();
+    const { healthUrl, intervalMinutes, failureThreshold, alertMode } = req.body || {};
+    const resolvedUrl = String(healthUrl || cfg.healthcheckTargetUrl || '').trim();
+    const intMin = [15, 30, 60].includes(Number(intervalMinutes)) ? Number(intervalMinutes) : cfg.healthcheckIntervalMin;
+    const thresh = Math.min(5, Math.max(1, Math.round(Number(failureThreshold) || cfg.healthcheckFailureThreshold || 2)));
+    const resolvedAlertMode: 'issue' | 'webhook' | 'both' = ['issue', 'webhook', 'both'].includes(alertMode) ? alertMode : cfg.healthcheckAlertMode;
+
+    if (!isValidHealthcheckUrl(resolvedUrl)) {
+      return res.status(400).json({ success: false, error: "헬스체크 대상 URL(https://.../api/health)을 올바르게 입력해주세요." });
+    }
+
+    const yaml = buildPrivateHealthcheckWorkflowYaml({
+      healthUrl: resolvedUrl,
+      intervalMinutes: intMin,
+      failureThreshold: thresh,
+      alertMode: resolvedAlertMode
+    });
+    const workflowPath = '.github/workflows/winfix-private-healthcheck.yml';
+
+    try {
+      const { authToken } = resolvePrivateVaultCredentials(cfg);
+      if (!authToken || !isValidGithubRepo(cfg.repo)) {
+        return res.status(400).json({
+          success: false,
+          requiresWorkflowScope: true,
+          workflowPath,
+          yaml,
+          error: "비공개 저장소 PAT가 설정되어 있지 않습니다. YAML을 내려받아 저장소에 직접 추가하거나 PAT를 먼저 저장하세요."
+        });
+      }
+
+      const ghHeaders = await verifyPrivateRepoOrThrow(cfg.repo, authToken);
+      const { commitSha, htmlUrl } = await pushTextFileToPrivateRepo({
+        repo: cfg.repo,
+        branch: cfg.branch,
+        filePath: workflowPath,
+        authToken,
+        ghHeaders,
+        contentText: yaml,
+        commitMessage: `🩺 [Private Monitor] Deploy healthcheck workflow (${intMin}m · ${resolvedAlertMode})`
+      });
+
+      const now = getKSTISOString();
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        healthcheckTargetUrl: resolvedUrl,
+        healthcheckIntervalMin: intMin,
+        healthcheckFailureThreshold: thresh,
+        healthcheckAlertMode: resolvedAlertMode,
+        lastHealthWorkflowDeployAt: now,
+        lastHealthWorkflowStatus: `헬스체크 워크플로 배포 완료 (${intMin}분 주기)`,
+        updatedAt: now
+      });
+
+      addLocalLog('logs_admin', {
+        category: 'SYSTEM',
+        action: 'PRIVATE_HEALTHCHECK_WORKFLOW_DEPLOY',
+        details: `비공개 저장소(${cfg.repo}) 헬스체크 워크플로 배포 완료 (${resolvedUrl}, ${intMin}분 주기)`
+      });
+
+      res.json({
+        success: true,
+        workflowPath,
+        commitSha,
+        htmlUrl,
+        yaml,
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      const status = e?.httpStatus;
+      const requiresScope = status === 403 || status === 404;
+      res.status(400).json({
+        success: false,
+        requiresWorkflowScope: requiresScope,
+        workflowPath,
+        yaml,
+        error: requiresScope
+          ? "PAT에 Workflows 쓰기 권한이 없어 자동 푸시가 차단되었습니다. 아래 YAML 파일을 다운로드해 비공개 저장소에 직접 추가하세요."
+          : (e.message || "비공개 헬스체크 워크플로 배포 실패")
+      });
     }
   });
 
@@ -5425,6 +7090,7 @@ async function startServer() {
           item.autoBlocked = false;
         }
         writeLocalCollection("logs_visitor", logs);
+        void schedulePrivateVaultSync('security', `visitor-block:${visitorId}`);
         res.json({ success: true, isBlocked: item.isBlocked, blockReason: item.blockReason });
       } else {
         res.status(404).json({ success: false, error: "Visitor not found" });
@@ -6584,6 +8250,7 @@ async function startServer() {
       }
 
       const { pattern, description } = getMaintenanceCronPattern(cleanSettings);
+      void schedulePrivateVaultSync('system', 'maintenance-config-update');
       const safeCleanSettings = {
         ...cleanSettings,
         hasSmtpPass: Boolean(cleanSettings.smtpPass),
@@ -6631,6 +8298,7 @@ async function startServer() {
       };
       const localPath = path.join(DATA_DIR, 'api_keys_config.json');
       writeJsonFileAtomic(localPath, cleanConfig);
+      void schedulePrivateVaultSync('system', 'api-keys-update');
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -6680,6 +8348,7 @@ async function startServer() {
         sanitizedUpdates[k] = v;
       }
       const newConfig = writeSystemConfigObject({ ...sanitizedUpdates, updatedAt: getKSTISOString() });
+      void schedulePrivateVaultSync('system', 'system-config-update');
       res.json({
         success: true,
         config: maskSystemConfigSecrets(newConfig)
@@ -7288,6 +8957,8 @@ async function startServer() {
         details: `GitHub 연동 설정 저장: ${updated.repo} (${updated.branch}, 인증: ${updated.authMode}, PAT: ${updated.token ? '설정됨' : '미설정'})`
       });
 
+      void schedulePrivateVaultSync('system', 'public-github-config-update');
+
       res.json({ 
         success: true, 
         config: { 
@@ -7591,6 +9262,8 @@ jobs:
         message: `GitHub 자동수집 옵션 저장 (${cleanOptions.enabled ? '활성' : '일시중지'}, 주기: ${cleanOptions.scheduleCron}, 수량: ${cleanOptions.batchSize}개, 모드: ${cleanOptions.topicMode})`,
         details: cleanOptions
       });
+
+      void schedulePrivateVaultSync('system', 'collector-options-update');
 
       res.json({ success: true, options: cleanOptions });
     } catch (err: any) {
