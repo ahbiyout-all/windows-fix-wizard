@@ -203,7 +203,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.17';
+  return '3.106.18';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {

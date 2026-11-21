@@ -1,6 +1,17 @@
-# Patch Note - System Update (v3.106.17)
+# Patch Note - System Update (v3.106.18)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.18] - 2026-11-21
+
+### 🔧 Bug Fixes & UI/UX Improvements
+- **회원 신규 등록 후 신규 계정만 표시되던 검색 필터 잔존 및 브라우저 자동완성 문제 해결 (`src/components/MemberManagementPanel.tsx`)**:
+  - 검색어가 입력된 상태에서 `'OOO' 계정 바로 등록하기` 또는 `회원 등록`을 통해 신규 계정을 추가하면 기존 검색어(`searchQuery`)와 역할/상태 필터가 초기화되지 않아 기존 계정이 가려지고 방금 등록한 계정만 남던 문제를 수정했습니다.
+  - 신규 등록 성공 즉시 `searchQuery`, `roleFilter`, `statusFilter` 및 폼 입력 상태를 초기화해 전체 등록 회원 목록을 바로 확인할 수 있도록 개선했습니다.
+  - 검색 입력창에 `autoComplete="off"` 및 전용 `name` 속성을 적용해 브라우저 폼 자동완성이 등록 이메일을 검색창에 채워 넣지 않도록 차단하고, 검색어 `×` 지우기 버튼과 **`전체 보기 (필터 초기화)` 안내 배너**를 추가했습니다.
+  - 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.106.18`로 동기화했습니다.
 
 ---
 
