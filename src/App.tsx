@@ -725,7 +725,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.106.15";
+const APP_VERSION = "3.106.16";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1301,15 +1301,22 @@ export default function App() {
   const [backendError, setBackendError] = useState<string | null>(null);
 
   // GitHub Actions & GitOps State
-  const [githubRepo, setGithubRepo] = useState<string>('AhBiYout-all/windows-fix-wizard');
-  const [githubBranch, setGithubBranch] = useState<string>('main');
-  const [githubWorkflowId, setGithubWorkflowId] = useState<string>('windows-fix-collector.yml');
+  const initialLocalGithubConfig = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('winfix_github_config');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return {};
+  }, []);
+  const [githubRepo, setGithubRepo] = useState<string>(() => initialLocalGithubConfig?.repo || 'AhBiYout-all/windows-fix-wizard');
+  const [githubBranch, setGithubBranch] = useState<string>(() => initialLocalGithubConfig?.branch || 'main');
+  const [githubWorkflowId, setGithubWorkflowId] = useState<string>(() => initialLocalGithubConfig?.workflowId || 'windows-fix-collector.yml');
   const [githubToken, setGithubToken] = useState<string>('');
-  const [githubAuthMode, setGithubAuthMode] = useState<'PAT' | 'SSH'>('PAT');
+  const [githubAuthMode, setGithubAuthMode] = useState<'PAT' | 'SSH'>(() => (initialLocalGithubConfig?.authMode === 'SSH' ? 'SSH' : 'PAT'));
   const [sshPrivateKey, setSshPrivateKey] = useState<string>('');
-  const [autoDeployPages, setAutoDeployPages] = useState<boolean>(true);
-  const [hasServerGithubToken, setHasServerGithubToken] = useState<boolean>(false);
-  const [hasServerSshKey, setHasServerSshKey] = useState<boolean>(false);
+  const [autoDeployPages, setAutoDeployPages] = useState<boolean>(() => initialLocalGithubConfig?.autoDeployPages !== false);
+  const [hasServerGithubToken, setHasServerGithubToken] = useState<boolean>(() => Boolean(initialLocalGithubConfig?.hasToken));
+  const [hasServerSshKey, setHasServerSshKey] = useState<boolean>(() => Boolean(initialLocalGithubConfig?.hasSshKey));
   const [githubLastSync, setGithubLastSync] = useState<{ at: string | null; count?: number; status?: string } | null>(null);
   const [isPullingGithub, setIsPullingGithub] = useState<boolean>(false);
   const [isPullingFirestoreBundles, setIsPullingFirestoreBundles] = useState<boolean>(false);
@@ -1319,6 +1326,7 @@ export default function App() {
   const [instantSyncStep, setInstantSyncStep] = useState<number>(0);
   const [instantSyncMsg, setInstantSyncMsg] = useState<string>('');
   const [isSavingGithubConfig, setIsSavingGithubConfig] = useState<boolean>(false);
+  const [githubConfigStatus, setGithubConfigStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [showWorkflowScriptModal, setShowWorkflowScriptModal] = useState<boolean>(false);
   const [copiedWorkflow, setCopiedWorkflow] = useState<boolean>(false);
   const [selectedGithubTopic, setSelectedGithubTopic] = useState<string>('all');
@@ -1342,6 +1350,13 @@ export default function App() {
     } catch (_) {}
     return DEFAULT_COLLECTOR_OPTIONS;
   });
+  const collectorOptionsDirtyRef = useRef<boolean>(false);
+  const githubConfigDirtyRef = useRef<boolean>(false);
+  const updateCollectorOptions = useCallback((updater: (prev: GithubCollectorOptions) => GithubCollectorOptions) => {
+    collectorOptionsDirtyRef.current = true;
+    setCollectorOptionsStatus(null);
+    setCollectorOptions(updater);
+  }, []);
   const [showCollectorOptionsPanel, setShowCollectorOptionsPanel] = useState<boolean>(true);
   const [isSavingCollectorOptions, setIsSavingCollectorOptions] = useState<boolean>(false);
   const [isPushingCollectorOptions, setIsPushingCollectorOptions] = useState<boolean>(false);
@@ -3038,111 +3053,165 @@ export default function App() {
     }
   };
 
-  const fetchGithubConfig = async () => {
+  const fetchGithubConfig = async (forceOverwrite = false) => {
     if (!isAdmin) return;
     let loadedFromApi = false;
-    try {
-      const authHeaders = await getAuthHeaders();
-      const resp = await fetch("/api/github/config", {
-        headers: { ...authHeaders }
-      });
-      const data = await parseJsonResponse(resp);
-      if (data.success && data.config) {
-        setGithubRepo(data.config.repo || 'AhBiYout-all/windows-fix-wizard');
-        setGithubBranch(data.config.branch || 'main');
-        setGithubWorkflowId(data.config.workflowId || 'windows-fix-collector.yml');
-        setGithubAuthMode(data.config.authMode || 'PAT');
-        setAutoDeployPages(data.config.autoDeployPages !== false);
-        setHasServerGithubToken(!!data.config.hasToken);
-        setHasServerSshKey(!!data.config.hasSshKey);
-        if (data.config.lastSyncAt) {
-          setGithubLastSync({
-            at: data.config.lastSyncAt,
-            count: data.config.lastSyncCount,
-            status: data.config.lastSyncStatus
-          });
+    if (!IS_GITHUB_PAGES) {
+      try {
+        const authHeaders = await getAuthHeaders();
+        const resp = await fetch("/api/github/config", {
+          headers: { ...authHeaders }
+        });
+        if (resp.status === 401 || resp.status === 403) {
+          console.warn("GitHub config fetch returned auth error:", resp.status);
+        } else {
+          const data = await parseJsonResponse(resp);
+          if (data.success && data.config) {
+            if (!githubConfigDirtyRef.current || forceOverwrite) {
+              const nextRepo = data.config.repo || 'AhBiYout-all/windows-fix-wizard';
+              const nextBranch = data.config.branch || 'main';
+              const nextWf = data.config.workflowId || 'windows-fix-collector.yml';
+              const nextAuthMode = data.config.authMode === 'SSH' ? 'SSH' : 'PAT';
+              const nextAutoDeploy = data.config.autoDeployPages !== false;
+              const hasTokenFlag = !!data.config.hasToken;
+              const hasSshFlag = !!data.config.hasSshKey;
+
+              setGithubRepo(nextRepo);
+              setGithubBranch(nextBranch);
+              setGithubWorkflowId(nextWf);
+              setGithubAuthMode(nextAuthMode);
+              setAutoDeployPages(nextAutoDeploy);
+              setHasServerGithubToken(hasTokenFlag);
+              setHasServerSshKey(hasSshFlag);
+
+              // Cache only non-secret repository metadata locally (never plaintext PAT in server mode)
+              try {
+                localStorage.setItem('winfix_github_config', JSON.stringify({
+                  repo: nextRepo,
+                  branch: nextBranch,
+                  workflowId: nextWf,
+                  authMode: nextAuthMode,
+                  autoDeployPages: nextAutoDeploy,
+                  hasToken: hasTokenFlag,
+                  hasSshKey: hasSshFlag
+                }));
+              } catch (_) {}
+            }
+            if (data.config.lastSyncAt) {
+              setGithubLastSync({
+                at: data.config.lastSyncAt,
+                count: data.config.lastSyncCount,
+                status: data.config.lastSyncStatus
+              });
+            }
+            loadedFromApi = true;
+          }
         }
-        loadedFromApi = true;
+      } catch (e) {
+        console.warn("GitHub config load from API skipped:", e);
       }
-    } catch (e) {
-      console.warn("GitHub config load from API skipped (static mode):", e);
     }
 
-      if (!loadedFromApi) {
-        try {
-          const savedLocal = localStorage.getItem('winfix_github_config');
-          if (savedLocal) {
-            const cfg = JSON.parse(savedLocal);
-            if (cfg.repo) setGithubRepo(cfg.repo);
-            if (cfg.branch) setGithubBranch(cfg.branch);
-            if (cfg.workflowId) setGithubWorkflowId(cfg.workflowId);
-            if (cfg.authMode) setGithubAuthMode(cfg.authMode);
-            if (cfg.autoDeployPages !== undefined) setAutoDeployPages(cfg.autoDeployPages);
-            if (cfg.token) {
-              setGithubToken(cfg.token);
-              setHasServerGithubToken(true);
-            }
+    if (!loadedFromApi && IS_GITHUB_PAGES && (!githubConfigDirtyRef.current || forceOverwrite)) {
+      try {
+        const savedLocal = localStorage.getItem('winfix_github_config');
+        if (savedLocal) {
+          const cfg = JSON.parse(savedLocal);
+          if (cfg.repo) setGithubRepo(cfg.repo);
+          if (cfg.branch) setGithubBranch(cfg.branch);
+          if (cfg.workflowId) setGithubWorkflowId(cfg.workflowId);
+          if (cfg.authMode) setGithubAuthMode(cfg.authMode);
+          if (cfg.autoDeployPages !== undefined) setAutoDeployPages(cfg.autoDeployPages);
+          if (cfg.token) {
+            setGithubToken(cfg.token);
+            setHasServerGithubToken(true);
           }
-        } catch (err) {}
-      }
+        }
+      } catch (err) {}
+    }
 
-      // Load GitHub Auto-Collection Advanced Options
-      let loadedOpts = false;
+    // Load GitHub Auto-Collection Advanced Options
+    let loadedOpts = false;
+    if (!IS_GITHUB_PAGES) {
       try {
         const authHeaders = await getAuthHeaders();
         const optResp = await fetch("/api/github/collector-options", {
           headers: { ...authHeaders }
         });
-        const optData = await parseJsonResponse(optResp);
-        if (optData.success && optData.options) {
-          const mergedOpts: GithubCollectorOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...optData.options };
-          setCollectorOptions(mergedOpts);
-          setDispatchBatchSize(mergedOpts.batchSize || 2);
-          localStorage.setItem('winfix_github_collector_options', JSON.stringify(mergedOpts));
-          loadedOpts = true;
+        if (optResp.status === 401 || optResp.status === 403) {
+          console.warn("Collector options fetch returned auth error:", optResp.status);
+        } else {
+          const optData = await parseJsonResponse(optResp);
+          if (optData.success && optData.options) {
+            if (!collectorOptionsDirtyRef.current || forceOverwrite) {
+              const mergedOpts: GithubCollectorOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...optData.options };
+              setCollectorOptions(mergedOpts);
+              setDispatchBatchSize(mergedOpts.batchSize || 2);
+              setAutoDeployPages(mergedOpts.autoDeployPages !== false);
+              localStorage.setItem('winfix_github_collector_options', JSON.stringify(mergedOpts));
+            }
+            loadedOpts = true;
+          }
         }
       } catch (optErr) {
-        console.warn("Collector options load from API skipped (static mode):", optErr);
+        console.warn("Collector options load from API skipped:", optErr);
       }
-      if (!loadedOpts) {
-        try {
-          const savedOpts = localStorage.getItem('winfix_github_collector_options');
-          if (savedOpts) {
-            const parsedOpts: GithubCollectorOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...JSON.parse(savedOpts) };
-            setCollectorOptions(parsedOpts);
-            setDispatchBatchSize(parsedOpts.batchSize || 2);
-          }
-        } catch (_) {}
-      }
+    }
+    if (!loadedOpts && (!collectorOptionsDirtyRef.current || forceOverwrite)) {
+      try {
+        const savedOpts = localStorage.getItem('winfix_github_collector_options');
+        if (savedOpts) {
+          const parsedOpts: GithubCollectorOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...JSON.parse(savedOpts) };
+          setCollectorOptions(parsedOpts);
+          setDispatchBatchSize(parsedOpts.batchSize || 2);
+        }
+      } catch (_) {}
+    }
   };
 
   const saveGithubConfig = async () => {
     if (!isAdmin) return;
     setIsSavingGithubConfig(true);
+    setGithubConfigStatus(null);
     const cleanRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
     const cleanBranch = githubBranch.trim() || 'main';
     const cleanWorkflow = githubWorkflowId.trim() || 'windows-fix-collector.yml';
     const cleanToken = githubToken.trim();
+    const cleanSshKey = sshPrivateKey.trim();
 
-    // 1. Always save client-side config to localStorage for static GitHub Pages support
-    try {
-      const existing = localStorage.getItem('winfix_github_config');
-      const parsedExisting = existing ? JSON.parse(existing) : {};
-      const localPayload = {
-        repo: cleanRepo,
-        branch: cleanBranch,
-        workflowId: cleanWorkflow,
-        authMode: githubAuthMode,
-        autoDeployPages,
-        token: cleanToken || parsedExisting.token || ''
-      };
-      localStorage.setItem('winfix_github_config', JSON.stringify(localPayload));
-      if (cleanToken || parsedExisting.token) {
-        setHasServerGithubToken(true);
+    if (IS_GITHUB_PAGES) {
+      try {
+        const existing = localStorage.getItem('winfix_github_config');
+        const parsedExisting = existing ? JSON.parse(existing) : {};
+        const localPayload = {
+          repo: cleanRepo,
+          branch: cleanBranch,
+          workflowId: cleanWorkflow,
+          authMode: githubAuthMode,
+          autoDeployPages,
+          token: cleanToken || parsedExisting.token || ''
+        };
+        localStorage.setItem('winfix_github_config', JSON.stringify(localPayload));
+        githubConfigDirtyRef.current = false;
+        if (cleanToken || parsedExisting.token) {
+          setHasServerGithubToken(true);
+        }
+        const okMsg = language === 'en'
+          ? "GitHub configuration saved in browser storage (Static mode)."
+          : "GitHub 연동 설정이 브라우저 저장소에 저장되었습니다 (정적 웹 모드).";
+        setGithubConfigStatus({ type: 'success', message: okMsg });
+        customAlert(okMsg);
+      } catch (err: any) {
+        const failMsg = err?.message || "브라우저 저장소 기록에 실패했습니다.";
+        setGithubConfigStatus({ type: 'error', message: failMsg });
+        customAlert(failMsg);
+      } finally {
+        setIsSavingGithubConfig(false);
       }
-    } catch (err) {}
+      return;
+    }
 
-    // 2. Try saving to Node server API
+    // Server mode (!IS_GITHUB_PAGES): enforce authoritative server persistence and surface errors truthfully
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/config", {
@@ -3158,21 +3227,108 @@ export default function App() {
           authMode: githubAuthMode,
           autoDeployPages,
           token: cleanToken,
-          sshPrivateKey: sshPrivateKey.trim()
+          sshPrivateKey: cleanSshKey
         })
       });
-      const data = await parseJsonResponse(resp);
-      if (data.success && data.config) {
-        setHasServerGithubToken(!!data.config.hasToken);
-        setHasServerSshKey(!!data.config.hasSshKey);
+      if (resp.status === 401 || resp.status === 403) {
+        const authErrMsg = language === 'en'
+          ? "Admin session expired or invalid. Please re-authenticate and save again."
+          : "관리자 인증 세션이 만료되어 저장할 수 없습니다. 다시 관리자 로그인한 뒤 '연동 설정 저장'을 눌러주세요.";
+        setGithubConfigStatus({ type: 'error', message: authErrMsg });
+        customAlert(authErrMsg);
+        return;
       }
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      if (data.config) {
+        const savedRepo = data.config.repo || cleanRepo;
+        const savedBranch = data.config.branch || cleanBranch;
+        const savedWf = data.config.workflowId || cleanWorkflow;
+        const savedAuthMode = data.config.authMode === 'SSH' ? 'SSH' : 'PAT';
+        const savedAutoDeploy = data.config.autoDeployPages !== false;
+        const hasTokenFlag = !!data.config.hasToken;
+        const hasSshFlag = !!data.config.hasSshKey;
+
+        setGithubRepo(savedRepo);
+        setGithubBranch(savedBranch);
+        setGithubWorkflowId(savedWf);
+        setGithubAuthMode(savedAuthMode);
+        setAutoDeployPages(savedAutoDeploy);
+        setHasServerGithubToken(hasTokenFlag);
+        setHasServerSshKey(hasSshFlag);
+        setCollectorOptions(prev => ({ ...prev, autoDeployPages: savedAutoDeploy }));
+        if (cleanToken && hasTokenFlag) setGithubToken('');
+        if (cleanSshKey && hasSshFlag) setSshPrivateKey('');
+
+        try {
+          localStorage.setItem('winfix_github_config', JSON.stringify({
+            repo: savedRepo,
+            branch: savedBranch,
+            workflowId: savedWf,
+            authMode: savedAuthMode,
+            autoDeployPages: savedAutoDeploy,
+            hasToken: hasTokenFlag,
+            hasSshKey: hasSshFlag
+          }));
+        } catch (_) {}
+      }
+      githubConfigDirtyRef.current = false;
+      const okMsg = language === 'en'
+        ? "GitHub configuration saved to server storage."
+        : "GitHub 연동 저장소·브랜치·인증 설정이 서버에 안전하게 저장되었습니다.";
+      setGithubConfigStatus({ type: 'success', message: okMsg });
+      customAlert(okMsg);
     } catch (err: any) {
-      console.warn("Server API GitHub config save skipped (static client mode):", err);
+      const failMsg = language === 'en'
+        ? `Failed to save GitHub configuration: ${err?.message || err}`
+        : `GitHub 연동 설정 저장 실패: ${err?.message || err}`;
+      setGithubConfigStatus({ type: 'error', message: failMsg });
+      customAlert(failMsg);
     } finally {
       setIsSavingGithubConfig(false);
-      customAlert(language === 'en' 
-        ? "GitHub configuration saved successfully." 
-        : "GitHub 연동 및 GitHub Pages 자동 배포 설정이 성공적으로 저장되었습니다.");
+    }
+  };
+
+  const clearSavedGithubToken = async () => {
+    if (!isAdmin || IS_GITHUB_PAGES) return;
+    setIsSavingGithubConfig(true);
+    setGithubConfigStatus(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch("/api/github/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify({ clearToken: true })
+      });
+      if (resp.status === 401 || resp.status === 403) {
+        const authErrMsg = "관리자 인증 세션이 만료되었습니다. 다시 로그인 후 시도해주세요.";
+        setGithubConfigStatus({ type: 'error', message: authErrMsg });
+        customAlert(authErrMsg);
+        return;
+      }
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      setGithubToken('');
+      setHasServerGithubToken(Boolean(data.config?.hasToken));
+      try {
+        const existing = localStorage.getItem('winfix_github_config');
+        const parsed = existing ? JSON.parse(existing) : {};
+        delete parsed.token;
+        parsed.hasToken = Boolean(data.config?.hasToken);
+        localStorage.setItem('winfix_github_config', JSON.stringify(parsed));
+      } catch (_) {}
+      setGithubConfigStatus({ type: 'info', message: '서버에 저장된 GitHub PAT 토큰을 삭제했습니다.' });
+    } catch (err: any) {
+      setGithubConfigStatus({ type: 'error', message: `PAT 삭제 실패: ${err?.message || err}` });
+    } finally {
+      setIsSavingGithubConfig(false);
     }
   };
 
@@ -3199,15 +3355,29 @@ export default function App() {
       updatedAt: new Date().toISOString()
     };
 
-    try {
-      localStorage.setItem('winfix_github_collector_options', JSON.stringify(normalized));
-      setCollectorOptions(normalized);
-      setDispatchBatchSize(normalized.batchSize);
-      setAutoDeployPages(normalized.autoDeployPages);
-    } catch (_) {}
+    if (IS_GITHUB_PAGES) {
+      try {
+        localStorage.setItem('winfix_github_collector_options', JSON.stringify(normalized));
+        setCollectorOptions(normalized);
+        setDispatchBatchSize(normalized.batchSize);
+        setAutoDeployPages(normalized.autoDeployPages);
+        collectorOptionsDirtyRef.current = false;
+        const staticMsg = language === 'en'
+          ? 'Collector options saved to browser storage (static mode).'
+          : '깃허브 자동수집 옵션이 브라우저에 저장되었습니다 (정적 웹 모드).';
+        setCollectorOptionsStatus({ type: 'success', message: staticMsg });
+        if (!silentAlert) customAlert(staticMsg);
+        return normalized;
+      } catch (err: any) {
+        const failMsg = err?.message || '옵션 저장에 실패했습니다.';
+        setCollectorOptionsStatus({ type: 'error', message: failMsg });
+        if (!silentAlert) customAlert(failMsg);
+        return null;
+      } finally {
+        setIsSavingCollectorOptions(false);
+      }
+    }
 
-    let finalOptions = normalized;
-    let savedToServer = false;
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch("/api/github/collector-options", {
@@ -3218,40 +3388,46 @@ export default function App() {
         },
         body: JSON.stringify(normalized)
       });
+      if (resp.status === 401 || resp.status === 403) {
+        const authErrMsg = language === 'en'
+          ? 'Admin session expired or unauthorized. Please re-login and save options again.'
+          : '관리자 인증 세션이 만료되어 옵션을 저장할 수 없습니다. 다시 관리자 로그인한 뒤 옵션을 저장해 주세요.';
+        setCollectorOptionsStatus({ type: 'error', message: authErrMsg });
+        if (!silentAlert) customAlert(authErrMsg);
+        return null;
+      }
       const data = await parseJsonResponse(resp);
       if (!resp.ok || !data.success) {
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
-      if (data.options) {
-        finalOptions = { ...DEFAULT_COLLECTOR_OPTIONS, ...data.options };
-        setCollectorOptions(finalOptions);
-        setDispatchBatchSize(finalOptions.batchSize);
+      const finalOptions: GithubCollectorOptions = {
+        ...DEFAULT_COLLECTOR_OPTIONS,
+        ...(data.options || normalized)
+      };
+      setCollectorOptions(finalOptions);
+      setDispatchBatchSize(finalOptions.batchSize);
+      setAutoDeployPages(finalOptions.autoDeployPages);
+      try {
         localStorage.setItem('winfix_github_collector_options', JSON.stringify(finalOptions));
-      }
-      savedToServer = true;
+      } catch (_) {}
+      collectorOptionsDirtyRef.current = false;
+
+      const msg = language === 'en'
+        ? 'Collector options saved & synchronized with server engine.'
+        : '깃허브 자동수집 옵션이 서버 파일에 영구 저장되었으며 수집 엔진과 동기화되었습니다.';
+      setCollectorOptionsStatus({ type: 'success', message: msg });
+      if (!silentAlert) customAlert(msg);
+      return finalOptions;
     } catch (err: any) {
-      // If server threw a validation error (e.g., invalid cron expression), surface it
-      if (err.message && (err.message.includes('Cron') || err.message.includes('400'))) {
-        setCollectorOptionsStatus({ type: 'error', message: err.message });
-        setIsSavingCollectorOptions(false);
-        if (!silentAlert) customAlert(err.message);
-        return null;
-      }
-      console.warn("Collector options server save skipped (static client mode):", err);
+      const failMsg = language === 'en'
+        ? `Failed to save collector options: ${err?.message || err}`
+        : `자동수집 옵션 서버 저장 실패: ${err?.message || err}`;
+      setCollectorOptionsStatus({ type: 'error', message: failMsg });
+      if (!silentAlert) customAlert(failMsg);
+      return null;
     } finally {
       setIsSavingCollectorOptions(false);
     }
-
-    const msg = savedToServer
-      ? (language === 'en'
-          ? 'Collector options saved locally & synced to server engine.'
-          : '깃허브 자동수집 옵션이 저장되었으며 서버 수집 엔진과 동기화되었습니다.')
-      : (language === 'en'
-          ? 'Collector options saved to browser storage (static mode).'
-          : '깃허브 자동수집 옵션이 브라우저에 저장되었습니다 (정적 웹 모드).');
-    setCollectorOptionsStatus({ type: 'success', message: msg });
-    if (!silentAlert) customAlert(msg);
-    return finalOptions;
   };
 
   const pushCollectorOptionsToGithub = async () => {
@@ -15533,434 +15709,487 @@ export default function App() {
                               </div>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                              <input
-                                type="checkbox"
-                                checked={collectorOptions.enabled}
-                                onChange={(e) => setCollectorOptions(prev => ({ ...prev, enabled: e.target.checked }))}
-                                className="sr-only peer"
-                              />
-                              <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                            </label>
+                                <input
+                                  type="checkbox"
+                                  checked={collectorOptions.enabled}
+                                  onChange={(e) => updateCollectorOptions(prev => ({ ...prev, enabled: e.target.checked }))}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                              </label>
+                            </div>
+                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-500">1회 수집 수량 (1~10개)</span>
+                              <div className="flex items-center gap-1">
+                                {[1, 2, 3, 5, 8, 10].map((qty) => (
+                                  <button
+                                    key={qty}
+                                    type="button"
+                                    onClick={() => updateCollectorOptions(prev => ({ ...prev, batchSize: qty }))}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
+                                      collectorOptions.batchSize === qty
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                  >
+                                    {qty}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
-                            <span className="text-slate-500">1회 수집 수량 (1~10개)</span>
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 5, 8, 10].map((qty) => (
+
+                          <div className="lg:col-span-8 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                                <span>수집 주기 (Cron 스케줄 · GitHub Actions UTC 기준)</span>
+                              </label>
+                              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                UTC 00:00 = 한국(KST) 09:00
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <select
+                                value={CRON_SCHEDULE_PRESETS.some(p => p.cron === collectorOptions.scheduleCron) ? collectorOptions.scheduleCron : '__custom__'}
+                                onChange={(e) => {
+                                  if (e.target.value !== '__custom__') {
+                                    updateCollectorOptions(prev => ({ ...prev, scheduleCron: e.target.value }));
+                                  }
+                                }}
+                                className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
+                              >
+                                {CRON_SCHEDULE_PRESETS.map((preset) => (
+                                  <option key={preset.cron} value={preset.cron}>
+                                    {language === 'en' ? preset.labelEn : preset.labelKo}
+                                  </option>
+                                ))}
+                                <option value="__custom__">직접 입력 (Custom Cron)</option>
+                              </select>
+                              <input
+                                type="text"
+                                value={collectorOptions.scheduleCron}
+                                onChange={(e) => updateCollectorOptions(prev => ({ ...prev, scheduleCron: e.target.value }))}
+                                placeholder="예: 0 */6 * * *"
+                                className="w-full text-xs font-mono px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Row 2: Topic Mode & Category Chips */}
+                        <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                <Filter className="w-3.5 h-3.5 text-purple-500" />
+                                <span>수집 주제 선정 방식 및 우선 카테고리</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                선택된 카테고리 풀에서 AI가 최신 Windows 오류를 우선 발굴합니다.
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {([
+                                { id: 'all', label: '전체 혼합' },
+                                { id: 'rotate', label: '시간대별 순환(Rotate)' },
+                                { id: 'fixed', label: '특정 카테고리 고정' }
+                              ] as const).map((mode) => (
                                 <button
-                                  key={qty}
+                                  key={mode.id}
                                   type="button"
-                                  onClick={() => setCollectorOptions(prev => ({ ...prev, batchSize: qty }))}
-                                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
-                                    collectorOptions.batchSize === qty
-                                      ? 'bg-indigo-600 text-white'
-                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                  onClick={() => updateCollectorOptions(prev => ({ ...prev, topicMode: mode.id }))}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                                    collectorOptions.topicMode === mode.id
+                                      ? 'bg-purple-600 text-white border-purple-600'
+                                      : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-purple-400'
                                   }`}
                                 >
-                                  {qty}
+                                  {mode.label}
                                 </button>
                               ))}
                             </div>
                           </div>
-                        </div>
 
-                        <div className="lg:col-span-8 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                              <span>수집 주기 (Cron 스케줄 · GitHub Actions UTC 기준)</span>
-                            </label>
-                            <span className="text-[10px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                              UTC 00:00 = 한국(KST) 09:00
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <select
-                              value={CRON_SCHEDULE_PRESETS.some(p => p.cron === collectorOptions.scheduleCron) ? collectorOptions.scheduleCron : '__custom__'}
-                              onChange={(e) => {
-                                if (e.target.value !== '__custom__') {
-                                  setCollectorOptions(prev => ({ ...prev, scheduleCron: e.target.value }));
-                                }
-                              }}
-                              className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
-                            >
-                              {CRON_SCHEDULE_PRESETS.map((preset) => (
-                                <option key={preset.cron} value={preset.cron}>
-                                  {language === 'en' ? preset.labelEn : preset.labelKo}
-                                </option>
-                              ))}
-                              <option value="__custom__">직접 입력 (Custom Cron)</option>
-                            </select>
-                            <input
-                              type="text"
-                              value={collectorOptions.scheduleCron}
-                              onChange={(e) => setCollectorOptions(prev => ({ ...prev, scheduleCron: e.target.value }))}
-                              placeholder="예: 0 */6 * * *"
-                              className="w-full text-xs font-mono px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Row 2: Topic Mode & Category Chips */}
-                      <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div>
-                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                              <Filter className="w-3.5 h-3.5 text-purple-500" />
-                              <span>수집 주제 선정 방식 및 우선 카테고리</span>
+                          {collectorOptions.topicMode === 'fixed' && (
+                            <div className="flex items-center gap-2 bg-purple-50/70 dark:bg-purple-950/30 p-2.5 rounded-lg border border-purple-200 dark:border-purple-800/50">
+                              <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 shrink-0">고정 카테고리:</span>
+                              <select
+                                value={collectorOptions.fixedTopic}
+                                onChange={(e) => updateCollectorOptions(prev => ({ ...prev, fixedTopic: e.target.value }))}
+                                className="text-xs px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg text-slate-900 dark:text-slate-100"
+                              >
+                                <option value="all">전체 (자동 선택)</option>
+                                {ALL_COLLECTOR_TOPICS.map((t) => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
                             </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              선택된 카테고리 풀에서 AI가 최신 Windows 오류를 우선 발굴합니다.
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {([
-                              { id: 'all', label: '전체 혼합' },
-                              { id: 'rotate', label: '시간대별 순환(Rotate)' },
-                              { id: 'fixed', label: '특정 카테고리 고정' }
-                            ] as const).map((mode) => (
-                              <button
-                                key={mode.id}
-                                type="button"
-                                onClick={() => setCollectorOptions(prev => ({ ...prev, topicMode: mode.id }))}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
-                                  collectorOptions.topicMode === mode.id
-                                    ? 'bg-purple-600 text-white border-purple-600'
-                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-purple-400'
-                                }`}
-                              >
-                                {mode.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                          )}
 
-                        {collectorOptions.topicMode === 'fixed' && (
-                          <div className="flex items-center gap-2 bg-purple-50/70 dark:bg-purple-950/30 p-2.5 rounded-lg border border-purple-200 dark:border-purple-800/50">
-                            <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 shrink-0">고정 카테고리:</span>
-                            <select
-                              value={collectorOptions.fixedTopic}
-                              onChange={(e) => setCollectorOptions(prev => ({ ...prev, fixedTopic: e.target.value }))}
-                              className="text-xs px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg text-slate-900 dark:text-slate-100"
-                            >
-                              <option value="all">전체 (자동 선택)</option>
-                              {ALL_COLLECTOR_TOPICS.map((t) => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
-                        <div className="flex flex-wrap gap-1.5">
-                          {ALL_COLLECTOR_TOPICS.map((topic) => {
-                            const active = collectorOptions.preferredTopics.includes(topic);
-                            return (
-                              <button
-                                key={topic}
-                                type="button"
-                                onClick={() => {
-                                  setCollectorOptions(prev => {
-                                    const exists = prev.preferredTopics.includes(topic);
-                                    const next = exists
-                                      ? prev.preferredTopics.filter(x => x !== topic)
-                                      : [...prev.preferredTopics, topic];
-                                    return {
-                                      ...prev,
-                                      preferredTopics: next.length > 0 ? next : [topic]
-                                    };
-                                  });
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border flex items-center gap-1 transition-all cursor-pointer ${
-                                  active
-                                    ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
-                                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-400 border-slate-200 dark:border-slate-700 hover:text-slate-600'
-                                }`}
-                              >
-                                {active ? <CheckSquare className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> : <Square className="w-3 h-3" />}
-                                <span>{topic}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Row 3: Target Windows OS, AI Model, Dedup Strictness */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                            <Monitor className="w-3.5 h-3.5 text-sky-500" />
-                            <span>대상 Windows 버전</span>
-                          </label>
                           <div className="flex flex-wrap gap-1.5">
-                            {COLLECTOR_WINDOWS_TARGETS.map((osVer) => {
-                              const checked = collectorOptions.targetWindowsVersions.includes(osVer);
+                            {ALL_COLLECTOR_TOPICS.map((topic) => {
+                              const active = collectorOptions.preferredTopics.includes(topic);
                               return (
                                 <button
-                                  key={osVer}
+                                  key={topic}
                                   type="button"
                                   onClick={() => {
-                                    setCollectorOptions(prev => {
-                                      const exists = prev.targetWindowsVersions.includes(osVer);
+                                    updateCollectorOptions(prev => {
+                                      const exists = prev.preferredTopics.includes(topic);
                                       const next = exists
-                                        ? prev.targetWindowsVersions.filter(v => v !== osVer)
-                                        : [...prev.targetWindowsVersions, osVer];
+                                        ? prev.preferredTopics.filter(x => x !== topic)
+                                        : [...prev.preferredTopics, topic];
                                       return {
                                         ...prev,
-                                        targetWindowsVersions: next.length > 0 ? next : [osVer]
+                                        preferredTopics: next.length > 0 ? next : [topic]
                                       };
                                     });
                                   }}
-                                  className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
-                                    checked
-                                      ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700'
-                                      : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border flex items-center gap-1 transition-all cursor-pointer ${
+                                    active
+                                      ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-400 border-slate-200 dark:border-slate-700 hover:text-slate-600'
                                   }`}
                                 >
-                                  {osVer}
+                                  {active ? <CheckSquare className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> : <Square className="w-3 h-3" />}
+                                  <span>{topic}</span>
                                 </button>
                               );
                             })}
                           </div>
                         </div>
 
-                        <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                            <Cpu className="w-3.5 h-3.5 text-emerald-500" />
-                            <span>우선 AI 수집 모델</span>
-                          </label>
-                          <select
-                            value={collectorOptions.modelPreference}
-                            onChange={(e) => setCollectorOptions(prev => ({ ...prev, modelPreference: e.target.value }))}
-                            className="w-full text-xs px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
-                          >
-                            {COLLECTOR_MODEL_OPTIONS.map((m) => (
-                              <option key={m.value} value={m.value}>
-                                {language === 'en' ? m.labelEn : m.labelKo}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                            <Shield className="w-3.5 h-3.5 text-amber-500" />
-                            <span>중복 필터링 강도</span>
-                          </label>
-                          <select
-                            value={collectorOptions.dedupStrictness}
-                            onChange={(e) => setCollectorOptions(prev => ({ ...prev, dedupStrictness: e.target.value as 'strict' | 'balanced' }))}
-                            className="w-full text-xs px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
-                          >
-                            <option value="strict">엄격 (오류코드·ID·유사 제목 모두 차단)</option>
-                            <option value="balanced">표준 (동일 ID 및 핵심 오류코드만 차단)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Row 4: Integration toggles & Action buttons */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                          <div>
-                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">수집 후 메인데이터(knownIssues.ts) 자동 통합</div>
-                            <div className="text-[11px] text-slate-500">정적 시드 코드까지 함께 동기화해 빌드 안정성을 유지합니다.</div>
+                        {/* Row 3: Target Windows OS, AI Model, Dedup Strictness */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                            <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <Monitor className="w-3.5 h-3.5 text-sky-500" />
+                              <span>대상 Windows 버전</span>
+                            </label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {COLLECTOR_WINDOWS_TARGETS.map((osVer) => {
+                                const checked = collectorOptions.targetWindowsVersions.includes(osVer);
+                                return (
+                                  <button
+                                    key={osVer}
+                                    type="button"
+                                    onClick={() => {
+                                      updateCollectorOptions(prev => {
+                                        const exists = prev.targetWindowsVersions.includes(osVer);
+                                        const next = exists
+                                          ? prev.targetWindowsVersions.filter(v => v !== osVer)
+                                          : [...prev.targetWindowsVersions, osVer];
+                                        return {
+                                          ...prev,
+                                          targetWindowsVersions: next.length > 0 ? next : [osVer]
+                                        };
+                                      });
+                                    }}
+                                    className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
+                                      checked
+                                        ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700'
+                                        : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                    }`}
+                                  >
+                                    {osVer}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
-                            <input
-                              type="checkbox"
-                              checked={collectorOptions.autoIntegrateSeed}
-                              onChange={(e) => setCollectorOptions(prev => ({ ...prev, autoIntegrateSeed: e.target.checked }))}
-                              className="sr-only peer"
-                            />
-                            <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                          </label>
+
+                          <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                            <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <Cpu className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>우선 AI 수집 모델</span>
+                            </label>
+                            <select
+                              value={collectorOptions.modelPreference}
+                              onChange={(e) => updateCollectorOptions(prev => ({ ...prev, modelPreference: e.target.value }))}
+                              className="w-full text-xs px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
+                            >
+                              {COLLECTOR_MODEL_OPTIONS.map((m) => (
+                                <option key={m.value} value={m.value}>
+                                  {language === 'en' ? m.labelEn : m.labelKo}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                            <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <Shield className="w-3.5 h-3.5 text-amber-500" />
+                              <span>중복 필터링 강도</span>
+                            </label>
+                            <select
+                              value={collectorOptions.dedupStrictness}
+                              onChange={(e) => updateCollectorOptions(prev => ({ ...prev, dedupStrictness: e.target.value as 'strict' | 'balanced' }))}
+                              className="w-full text-xs px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100"
+                            >
+                              <option value="strict">엄격 (오류코드·ID·유사 제목 모두 차단)</option>
+                              <option value="balanced">표준 (동일 ID 및 핵심 오류코드만 차단)</option>
+                            </select>
+                          </div>
                         </div>
 
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                          <div>
-                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200">정기 수집 완료 시 GitHub Pages 자동 재배포</div>
-                            <div className="text-[11px] text-slate-500">신규 데이터 커밋 시 deploy-pages.yml을 자동 실행합니다.</div>
+                        {/* Row 4: Integration toggles & Action buttons */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <div>
+                              <div className="text-xs font-bold text-slate-800 dark:text-slate-200">수집 후 메인데이터(knownIssues.ts) 자동 통합</div>
+                              <div className="text-[11px] text-slate-500">정적 시드 코드까지 함께 동기화해 빌드 안정성을 유지합니다.</div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                              <input
+                                type="checkbox"
+                                checked={collectorOptions.autoIntegrateSeed}
+                                onChange={(e) => updateCollectorOptions(prev => ({ ...prev, autoIntegrateSeed: e.target.checked }))}
+                                className="sr-only peer"
+                              />
+                              <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                            </label>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
-                            <input
-                              type="checkbox"
-                              checked={collectorOptions.autoDeployPages}
-                              onChange={(e) => {
-                                const val = e.target.checked;
-                                setCollectorOptions(prev => ({ ...prev, autoDeployPages: val }));
-                                setAutoDeployPages(val);
+
+                          <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <div>
+                              <div className="text-xs font-bold text-slate-800 dark:text-slate-200">정기 수집 완료 시 GitHub Pages 자동 재배포</div>
+                              <div className="text-[11px] text-slate-500">신규 데이터 커밋 시 deploy-pages.yml을 자동 실행합니다.</div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                              <input
+                                type="checkbox"
+                                checked={collectorOptions.autoDeployPages}
+                                onChange={(e) => {
+                                  const val = e.target.checked;
+                                  updateCollectorOptions(prev => ({ ...prev, autoDeployPages: val }));
+                                  setAutoDeployPages(val);
+                                }}
+                                className="sr-only peer"
+                              />
+                              <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                            </label>
+                          </div>
+                        </div>
+
+                        {collectorOptionsStatus && (
+                          <div className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+                            collectorOptionsStatus.type === 'error'
+                              ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                              : collectorOptionsStatus.type === 'info'
+                                ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                                : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          }`}>
+                            {collectorOptionsStatus.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                            <span>{collectorOptionsStatus.message}</span>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            💡 <strong>옵션 저장</strong>은 로컬/서버 설정에 즉시 반영되며, <strong>GitHub 저장소 반영</strong>을 누르면 원격 워크플로(cron 포함)까지 업데이트됩니다.
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                collectorOptionsDirtyRef.current = true;
+                                setCollectorOptions(DEFAULT_COLLECTOR_OPTIONS);
+                                setDispatchBatchSize(DEFAULT_COLLECTOR_OPTIONS.batchSize);
+                                setAutoDeployPages(DEFAULT_COLLECTOR_OPTIONS.autoDeployPages);
+                                setCollectorOptionsStatus({
+                                  type: 'info',
+                                  message: "기본값이 로드되었습니다. 변경 사항을 영구 적용하려면 '옵션 저장' 버튼을 눌러주세요."
+                                });
                               }}
-                              className="sr-only peer"
-                            />
-                            <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                          </label>
+                              className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            >
+                              기본값 복원
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveCollectorOptions(false)}
+                              disabled={isSavingCollectorOptions}
+                              className="px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              {isSavingCollectorOptions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                              <span>옵션 저장</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={pushCollectorOptionsToGithub}
+                              disabled={isPushingCollectorOptions || isSavingCollectorOptions}
+                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              {isPushingCollectorOptions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                              <span>GitHub 저장소에 옵션 &amp; 워크플로 반영</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
-
-                      {collectorOptionsStatus && (
-                        <div className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
-                          collectorOptionsStatus.type === 'error'
-                            ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                            : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                        }`}>
-                          {collectorOptionsStatus.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
-                          <span>{collectorOptionsStatus.message}</span>
-                        </div>
-                      )}
-
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          💡 <strong>옵션 저장</strong>은 로컬/서버 설정에 즉시 반영되며, <strong>GitHub 저장소 반영</strong>을 누르면 원격 워크플로(cron 포함)까지 업데이트됩니다.
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCollectorOptions(DEFAULT_COLLECTOR_OPTIONS);
-                              setDispatchBatchSize(DEFAULT_COLLECTOR_OPTIONS.batchSize);
-                              setCollectorOptionsStatus(null);
-                            }}
-                            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                          >
-                            기본값 복원
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => saveCollectorOptions(false)}
-                            disabled={isSavingCollectorOptions}
-                            className="px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-                          >
-                            {isSavingCollectorOptions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                            <span>옵션 저장</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={pushCollectorOptionsToGithub}
-                            disabled={isPushingCollectorOptions || isSavingCollectorOptions}
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                          >
-                            {isPushingCollectorOptions ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                            <span>GitHub 저장소에 옵션 &amp; 워크플로 반영</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* GitHub Repository & Token Configuration */}
-                <div id="github-settings-card" className="bg-slate-50 dark:bg-slate-800/40 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <Settings className="w-3.5 h-3.5 text-slate-500" />
-                      {language === 'en' ? 'GitHub Repository Settings' : 'GitHub 연동 저장소 및 토큰 설정'}
-                    </h4>
-                    {hasServerGithubToken && (
-                      <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Check className="w-3 h-3" />
-                        {language === 'en' ? 'Token Active' : 'PAT 토큰 설정됨'}
-                      </span>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        {language === 'en' ? 'Repository (owner/repo)' : '저장소 (사용자명/저장소명)'}
-                      </label>
-                      <input
-                        type="text"
-                        value={githubRepo}
-                        onChange={(e) => setGithubRepo(e.target.value)}
-                        placeholder="예: octocat/windows-fix-wizard"
-                        className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        {language === 'en' ? 'Branch' : '브랜치'}
-                      </label>
-                      <input
-                        type="text"
-                        value={githubBranch}
-                        onChange={(e) => setGithubBranch(e.target.value)}
-                        placeholder="main"
-                        className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        {language === 'en' ? 'Auth Mode' : '인증 방식'}
-                      </label>
-                      <select
-                        value={githubAuthMode}
-                        onChange={(e) => setGithubAuthMode(e.target.value as 'PAT' | 'SSH')}
-                        className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500"
-                      >
-                        <option value="PAT">Personal Access Token (PAT)</option>
-                        <option value="SSH">SSH Private Key</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      {githubAuthMode === 'PAT' ? (
-                        <>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
-                              {language === 'en' ? 'GitHub PAT (Required for Push)' : 'GitHub PAT 토큰 (푸시 필수)'}
-                            </label>
-                            <a
-                              href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=WindowsFixWizard"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                              title="클릭시 repo, workflow 권한이 자동 체크된 발급 페이지로 이동합니다"
+                  {/* GitHub Repository & Token Configuration */}
+                  <div id="github-settings-card" className="bg-slate-50 dark:bg-slate-800/40 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Settings className="w-3.5 h-3.5 text-slate-500" />
+                        {language === 'en' ? 'GitHub Repository Settings' : 'GitHub 연동 저장소 및 토큰 설정'}
+                      </h4>
+                      {hasServerGithubToken && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            {language === 'en' ? 'Token Active' : 'PAT 토큰 설정됨'}
+                          </span>
+                          {!IS_GITHUB_PAGES && (
+                            <button
+                              type="button"
+                              onClick={clearSavedGithubToken}
+                              disabled={isSavingGithubConfig}
+                              className="text-[11px] font-medium text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
                             >
-                              <ExternalLink className="w-3 h-3" />
-                              <span>{language === 'en' ? 'Create Token' : '새 토큰 발급'}</span>
-                            </a>
-                          </div>
-                          <input
-                            id="github-pat-input"
-                            type="password"
-                            value={githubToken}
-                            onChange={(e) => setGithubToken(e.target.value)}
-                            placeholder={hasServerGithubToken ? "•••••••• (저장됨)" : "ghp_..."}
-                            className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            {language === 'en' ? 'SSH Private Key' : 'SSH 개인키'}
-                          </label>
-                          <textarea
-                            value={sshPrivateKey}
-                            onChange={(e) => setSshPrivateKey(e.target.value)}
-                            placeholder={hasServerSshKey ? "•••••••• (SSH Key 저장됨)" : "-----BEGIN OPENSSH PRIVATE KEY-----"}
-                            rows={1}
-                            className="w-full text-xs px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500 resize-none h-8"
-                          />
-                        </>
+                              저장된 PAT 삭제
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </div>
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                    <p className="text-[11px] text-slate-500">
-                      💡 원격 워크플로 실행이나 비공개(Private) 저장소 접근 시에만 PAT(`repo` 또는 `workflow` 권한)이 필요합니다.
-                    </p>
-                    <button
-                      onClick={saveGithubConfig}
-                      disabled={isSavingGithubConfig}
-                      className="py-2 px-4 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 self-end sm:self-auto shrink-0"
-                    >
-                      {isSavingGithubConfig ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                      <span>{language === 'en' ? 'Save Settings' : '연동 설정 저장'}</span>
-                    </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          {language === 'en' ? 'Repository (owner/repo)' : '저장소 (사용자명/저장소명)'}
+                        </label>
+                        <input
+                          type="text"
+                          value={githubRepo}
+                          onChange={(e) => {
+                            githubConfigDirtyRef.current = true;
+                            setGithubConfigStatus(null);
+                            setGithubRepo(e.target.value);
+                          }}
+                          placeholder="예: octocat/windows-fix-wizard"
+                          className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          {language === 'en' ? 'Branch' : '브랜치'}
+                        </label>
+                        <input
+                          type="text"
+                          value={githubBranch}
+                          onChange={(e) => {
+                            githubConfigDirtyRef.current = true;
+                            setGithubConfigStatus(null);
+                            setGithubBranch(e.target.value);
+                          }}
+                          placeholder="main"
+                          className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          {language === 'en' ? 'Auth Mode' : '인증 방식'}
+                        </label>
+                        <select
+                          value={githubAuthMode}
+                          onChange={(e) => {
+                            githubConfigDirtyRef.current = true;
+                            setGithubConfigStatus(null);
+                            setGithubAuthMode(e.target.value as 'PAT' | 'SSH');
+                          }}
+                          className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500"
+                        >
+                          <option value="PAT">Personal Access Token (PAT)</option>
+                          <option value="SSH">SSH Private Key</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        {githubAuthMode === 'PAT' ? (
+                          <>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                                {language === 'en' ? 'GitHub PAT (Required for Push)' : 'GitHub PAT 토큰 (푸시 필수)'}
+                              </label>
+                              <a
+                                href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=WindowsFixWizard"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                                title="클릭시 repo, workflow 권한이 자동 체크된 발급 페이지로 이동합니다"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>{language === 'en' ? 'Create Token' : '새 토큰 발급'}</span>
+                              </a>
+                            </div>
+                            <input
+                              id="github-pat-input"
+                              type="password"
+                              value={githubToken}
+                              onChange={(e) => {
+                                githubConfigDirtyRef.current = true;
+                                setGithubConfigStatus(null);
+                                setGithubToken(e.target.value);
+                              }}
+                              placeholder={hasServerGithubToken ? "•••••••• (저장됨)" : "ghp_..."}
+                              className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                              {language === 'en' ? 'SSH Private Key' : 'SSH 개인키'}
+                            </label>
+                            <textarea
+                              value={sshPrivateKey}
+                              onChange={(e) => {
+                                githubConfigDirtyRef.current = true;
+                                setGithubConfigStatus(null);
+                                setSshPrivateKey(e.target.value);
+                              }}
+                              placeholder={hasServerSshKey ? "•••••••• (SSH Key 저장됨)" : "-----BEGIN OPENSSH PRIVATE KEY-----"}
+                              rows={1}
+                              className="w-full text-xs px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500 resize-none h-8"
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {githubConfigStatus && (
+                      <div className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+                        githubConfigStatus.type === 'error'
+                          ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                          : githubConfigStatus.type === 'info'
+                            ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                            : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      }`}>
+                        {githubConfigStatus.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                        <span>{githubConfigStatus.message}</span>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                      <p className="text-[11px] text-slate-500">
+                        💡 원격 워크플로 실행이나 비공개(Private) 저장소 접근 시에만 PAT(`repo` 또는 `workflow` 권한)이 필요합니다.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={saveGithubConfig}
+                        disabled={isSavingGithubConfig}
+                        className="py-2 px-4 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 self-end sm:self-auto shrink-0 cursor-pointer"
+                      >
+                        {isSavingGithubConfig ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        <span>{language === 'en' ? 'Save Settings' : '연동 설정 저장'}</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
 
                 {/* Workflow Script (.github/workflows/windows-fix-collector.yml) Viewer Toggle */}
                 <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">

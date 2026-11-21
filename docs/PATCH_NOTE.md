@@ -1,6 +1,22 @@
-# Patch Note - System Update (v3.106.15)
+# Patch Note - System Update (v3.106.16)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.16] - 2026-11-21
+
+### 🔧 Bug Fixes & Stability Improvements
+- **깃허브 자동수집 옵션 및 GitHub 저장소 연동 설정 저장 초기화 문제 해결 (`server.ts`, `src/App.tsx`)**:
+  - `saveCollectorOptions()` 및 `saveGithubConfig()`가 서버 저장 실패(예: `401 Unauthorized` 세션 만료)를 무음으로 삼키고 성공 알림을 표시하던 결함을 수정해, 서버 저장 성공이 확인된 경우에만 상태 배너·더티 플래그·캐시를 갱신하고 세션 만료 시 즉시 재인증 안내를 표시하도록 개선했습니다.
+  - 백그라운드 `fetchGithubConfig()`가 사용자가 편집 중인 미저장 상태(`collectorOptionsDirtyRef`, `githubConfigDirtyRef`)를 기본값으로 덮어쓰지 않도록 보호 가드를 추가했습니다.
+  - `POST /api/github/config`와 `data/github-collector-options.json` 간의 `autoDeployPages` 설정 양방향 동기화, 명시적 `저장된 PAT 삭제`(`clearToken`) 지원, 그리고 `syncGithubDatasetIntoMainData()`에서 네트워크 fetch 이후 최신 `github_config`를 재조회해 동시 설정 저장이 덮어쓰이지 않도록 레이스 컨디션을 제거했습니다.
+
+### 🛡️ Security Hardening & Authentication
+- **서버 재시작 후에도 유지되는 해시 기반 관리자 세션 영속화 (`server.ts`, `src/App.tsx`)**:
+  - 기존 인메모리(`Map`) 전용 `issuedAdminSessions`가 서버 재시작마다 초기화되어 관리자 화면에서 `401 Unauthorized`가 발생하던 문제를 해결하기 위해 `data/admin_sessions.json`에 **SHA-256 단방향 해시** 형태로 세션 레코드를 안전하게 영속화했습니다(평문 세션 토큰은 디스크에 기록하지 않으며 24시간 만료 자동 정리).
+  - 서버 모드(`!IS_GITHUB_PAGES`)에서 브라우저 `localStorage('winfix_github_config')`에 평문 PAT/SSH 비밀키가 캐싱되지 않도록 제거하고, 비비밀 저장소 메타데이터(`repo`, `branch`, `authMode`, `autoDeployPages`, `hasServerGithubToken`)만 동기화하도록 강화했습니다.
+  - 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.106.16`으로 동기화했습니다.
 
 ---
 

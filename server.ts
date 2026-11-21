@@ -203,7 +203,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.15';
+  return '3.106.16';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
@@ -2494,10 +2494,11 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
         updated = syncRes.updated;
 
         try {
+          const latestGhConfig = readLocalCollection('github_config')[0] || ghConfig || {};
           const nextConfig = {
-            ...ghConfig,
-            repo: targetRepo,
-            branch: targetBranch,
+            ...latestGhConfig,
+            repo: latestGhConfig.repo || targetRepo,
+            branch: latestGhConfig.branch || targetBranch,
             lastSyncAt: getKSTISOString(),
             lastSyncCount: added + updated,
             lastSyncStatus: `Auto-Integrated (${reason}): +${added} new, ~${updated} updated`
@@ -2606,17 +2607,62 @@ async function startServer() {
   // Seed database on startup (Removed to save quota)
   // await seedDatabase();
 
-  // Admin Auth Helper & Middleware
-  const issuedAdminSessions = new Map<string, { email: string; expiresAt: number }>();
+  // Admin Auth Helper & Middleware (Hash-backed disk persistence so active 24h sessions survive server restarts without storing raw tokens on disk)
+  const ADMIN_SESSIONS_FILE = path.join(DATA_DIR, 'admin_sessions.json');
+  const hashAdminSessionToken = (rawToken: string): string =>
+    crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  const loadPersistedAdminSessions = (): Map<string, { email: string; expiresAt: number }> => {
+    const map = new Map<string, { email: string; expiresAt: number }>();
+    try {
+      if (fs.existsSync(ADMIN_SESSIONS_FILE)) {
+        const parsed = JSON.parse(fs.readFileSync(ADMIN_SESSIONS_FILE, 'utf8'));
+        const now = Date.now();
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          for (const [tokenHash, entry] of Object.entries<any>(parsed)) {
+            if (tokenHash && entry && typeof entry.expiresAt === 'number' && entry.expiresAt > now) {
+              map.set(tokenHash, {
+                email: String(entry.email || 'admin'),
+                expiresAt: entry.expiresAt
+              });
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return map;
+  };
+
+  const issuedAdminSessions = loadPersistedAdminSessions();
+
+  const savePersistedAdminSessions = () => {
+    try {
+      const now = Date.now();
+      const obj: Record<string, { email: string; expiresAt: number }> = {};
+      for (const [k, v] of issuedAdminSessions.entries()) {
+        if (v.expiresAt > now) {
+          obj[k] = v;
+        } else {
+          issuedAdminSessions.delete(k);
+        }
+      }
+      writeJsonFileAtomic(ADMIN_SESSIONS_FILE, obj);
+    } catch (_) {}
+  };
+
   const issueAdminSessionToken = (email: string): string => {
     const now = Date.now();
+    for (const [k, v] of issuedAdminSessions.entries()) {
+      if (v.expiresAt <= now) issuedAdminSessions.delete(k);
+    }
     if (issuedAdminSessions.size > 200) {
-      for (const [k, v] of issuedAdminSessions.entries()) {
-        if (v.expiresAt <= now) issuedAdminSessions.delete(k);
-      }
+      const oldestKey = issuedAdminSessions.keys().next().value;
+      if (oldestKey) issuedAdminSessions.delete(oldestKey);
     }
     const token = `adm_sess_${crypto.randomBytes(24).toString('hex')}`;
-    issuedAdminSessions.set(token, { email, expiresAt: now + 24 * 60 * 60 * 1000 });
+    const tokenHash = hashAdminSessionToken(token);
+    issuedAdminSessions.set(tokenHash, { email, expiresAt: now + 24 * 60 * 60 * 1000 });
+    savePersistedAdminSessions();
     return token;
   };
 
@@ -2633,13 +2679,16 @@ async function startServer() {
       return { ok: false, status: 401, error: 'Unauthorized: Empty token' };
     }
 
-    // 1. Check active server-issued admin session token
-    const session = issuedAdminSessions.get(token);
+    // 1. Check active server-issued admin session token (via one-way SHA-256 hash lookup)
+    const tokenHash = hashAdminSessionToken(token);
+    const session = issuedAdminSessions.get(tokenHash) || issuedAdminSessions.get(token);
     if (session) {
       if (session.expiresAt > Date.now()) {
         return { ok: true, status: 200 };
       }
+      issuedAdminSessions.delete(tokenHash);
       issuedAdminSessions.delete(token);
+      savePersistedAdminSessions();
     }
 
     const configuredPasskey = process.env.ADMIN_PASSKEY?.trim() || "";
@@ -6433,7 +6482,7 @@ async function startServer() {
   // 5. Save GitHub integration configuration
   app.post("/api/github/config", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch, workflowId, token, authMode, sshPrivateKey, autoDeployPages } = req.body || {};
+      const { repo, branch, workflowId, token, authMode, sshPrivateKey, autoDeployPages, clearToken, clearSshKey } = req.body || {};
       const current = readLocalCollection('github_config')[0] || {};
       if (repo !== undefined && String(repo).trim() !== '' && !isValidGithubRepo(String(repo))) {
         return res.status(400).json({ success: false, error: "유효한 GitHub 저장소 형식('소유자/저장소명')이 아닙니다." });
@@ -6444,18 +6493,45 @@ async function startServer() {
       if (workflowId !== undefined && String(workflowId).trim() !== '' && !isValidGitRef(String(workflowId))) {
         return res.status(400).json({ success: false, error: "유효하지 않은 워크플로 ID 형식입니다." });
       }
+      const nextToken = clearToken === true
+        ? ""
+        : ((typeof token === 'string' && token.trim() && !token.includes("••••")) ? token.trim() : (current.token || ""));
+      const nextSshKey = clearSshKey === true
+        ? ""
+        : ((typeof sshPrivateKey === 'string' && sshPrivateKey.trim() && !sshPrivateKey.includes("••••")) ? sshPrivateKey.trim() : (current.sshPrivateKey || ""));
+      const updatedAt = getKSTISOString();
       const updated = {
         ...current,
         repo: repo !== undefined && String(repo).trim() ? String(repo).trim() : current.repo || "AhBiYout-all/windows-fix-wizard",
         branch: branch !== undefined && String(branch).trim() ? String(branch).trim() : current.branch || "main",
         workflowId: workflowId !== undefined && String(workflowId).trim() ? String(workflowId).trim() : current.workflowId || "windows-fix-collector.yml",
-        authMode: authMode || current.authMode || "PAT",
+        authMode: authMode === 'SSH' ? 'SSH' : (authMode === 'PAT' ? 'PAT' : (current.authMode || "PAT")),
         autoDeployPages: autoDeployPages !== undefined ? Boolean(autoDeployPages) : (current.autoDeployPages !== false),
-        token: (token && !token.includes("••••")) ? String(token).trim() : current.token || "",
-        sshPrivateKey: (sshPrivateKey && !sshPrivateKey.includes("••••")) ? String(sshPrivateKey).trim() : current.sshPrivateKey || "",
-        updatedAt: getKSTISOString()
+        token: nextToken,
+        sshPrivateKey: nextSshKey,
+        updatedAt
       };
       writeLocalCollection('github_config', [updated]);
+
+      // Keep autoDeployPages synchronized with data/github-collector-options.json
+      if (autoDeployPages !== undefined) {
+        try {
+          const optPath = getCollectorOptionsPath();
+          const currentOpts = loadCollectorOptions();
+          writeJsonFileAtomic(optPath, {
+            ...currentOpts,
+            autoDeployPages: updated.autoDeployPages,
+            updatedAt
+          });
+        } catch (_) {}
+      }
+
+      addLocalLog('logs_admin', {
+        category: 'GITHUB',
+        action: 'GITHUB_CONFIG_UPDATE',
+        details: `GitHub 연동 설정 저장: ${updated.repo} (${updated.branch}, 인증: ${updated.authMode}, PAT: ${updated.token ? '설정됨' : '미설정'})`
+      });
+
       res.json({ 
         success: true, 
         config: { 
