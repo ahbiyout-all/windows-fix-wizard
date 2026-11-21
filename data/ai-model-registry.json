@@ -1,7 +1,7 @@
 {
-  "version": "3.100.0",
-  "updatedAt": "2026-11-21T05:46:52.863Z",
-  "lastDiscoveryAt": "2026-11-20T05:51:49.840Z",
+  "version": "3.106.15",
+  "updatedAt": "2026-11-21T07:01:31.475Z",
+  "lastDiscoveryAt": "2026-11-21T07:01:30.215Z",
   "routingPolicy": "quota-split",
   "keylessFallbackEnabled": true,
   "providerOrder": [
@@ -11,7 +11,11 @@
     "openrouter",
     "cerebras",
     "cloudflare",
-    "pollinations"
+    "nvidia",
+    "cohere",
+    "huggingface",
+    "pollinations",
+    "ovh"
   ],
   "geminiModels": [
     {
@@ -172,14 +176,24 @@
     "liquid/lfm-3-1.7b:free",
     "particle-ai/particle-1:free",
     "recursive/flint-v1.0:free",
-    "nvidia/nemotron-3.5-super-vl:free",
-    "dots-studio/dots-3-note-preview:free",
     "nvidia/nemotron-3.5-lightning:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
   ],
   "pollinationsModels": [
     "openai-fast"
+  ],
+  "ovhModels": [
+    "Meta-Llama-3_3-70B-Instruct",
+    "Mistral-Small-3.2-24B-Instruct-2506",
+    "gemma-4-26b-a4b",
+    "DeepSeek-V4.1-Flash-1017",
+    "Qwen3.8-27B",
+    "qwen3.6-35b-a3b",
+    "Qwen3.6-27B",
+    "Qwen3.5-397B-A17B",
+    "Qwen3.5-9B",
+    "clef-flash"
   ],
   "providerModels": {
     "groq": [
@@ -191,6 +205,23 @@
       "mistral-small-latest",
       "open-mistral-nemo"
     ],
+    "nvidia": [
+      "google/gemma-4-31b-it",
+      "mistralai/mistral-large-4-1t-a52b",
+      "google/gemma-3-12b-it",
+      "google/gemma-3-4b-it",
+      "minimaxai/minimax-m3.1-flash",
+      "moonshotai/kimi-k3.1-pro",
+      "nvidia/ising-calibration-1.5-31b",
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "nvidia/nemotron-3.5-bolt-e4b"
+    ],
+    "cohere": [
+      "command-a-03-2025",
+      "command-r-plus-08-2024",
+      "command-r-08-2024"
+    ],
     "openrouter": [
       "google/gemma-4-26b-a4b-it:free",
       "google/gemma-4-31b-it:free",
@@ -199,62 +230,47 @@
       "liquid/lfm-3-1.7b:free",
       "particle-ai/particle-1:free",
       "recursive/flint-v1.0:free",
-      "nvidia/nemotron-3.5-super-vl:free",
-      "dots-studio/dots-3-note-preview:free",
       "nvidia/nemotron-3.5-lightning:free",
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-    ],
-    "cerebras": [
-      "gpt-oss-120b",
-      "qwen-3-32b"
     ],
     "cloudflare": [
       "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       "@cf/google/gemma-3-12b-it"
     ],
+    "huggingface": [
+      "google/gemma-4-31B-it",
+      "google/gemma-4-26B-A4B-it",
+      "meta-llama/Llama-3.1-8B-Instruct",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "mistralai/Mistral-Large-4-1T-A52B",
+      "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "deepseek-ai/DeepSeek-V4.1-Flash",
+      "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "deepseek-ai/DeepSeek-R1",
+      "deepseek-ai/DeepSeek-V4-Flash"
+    ],
+    "cerebras": [
+      "gpt-oss-120b",
+      "qwen-3-32b"
+    ],
+    "ovh": [
+      "Meta-Llama-3_3-70B-Instruct",
+      "Mistral-Small-3.2-24B-Instruct-2506",
+      "gemma-4-26b-a4b",
+      "DeepSeek-V4.1-Flash-1017",
+      "Qwen3.8-27B",
+      "qwen3.6-35b-a3b",
+      "Qwen3.6-27B",
+      "Qwen3.5-397B-A17B",
+      "Qwen3.5-9B",
+      "clef-flash"
+    ],
     "pollinations": [
       "openai-fast"
     ]
   },
-  "circuitBreakers": {
-    "gemini-flash-latest": {
-      "modelId": "gemini-flash-latest",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"models/gemini-flash-latest is not found for API version v1, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported me",
-      "trippedAt": "2026-11-20T05:51:49.175Z",
-      "expiresAt": "2026-11-21T05:51:49.175Z",
-      "failureCount": 1
-    },
-    "gemini-2.5-flash-lite": {
-      "modelId": "gemini-2.5-flash-lite",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use models/gemini-3.5-flash-lite for the latest features and improvements. We recomm",
-      "trippedAt": "2026-11-20T05:51:49.243Z",
-      "expiresAt": "2026-11-21T05:51:49.243Z",
-      "failureCount": 1
-    },
-    "gemini-2.5-flash": {
-      "modelId": "gemini-2.5-flash",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to",
-      "trippedAt": "2026-11-20T05:51:49.391Z",
-      "expiresAt": "2026-11-21T05:51:49.391Z",
-      "failureCount": 1
-    },
-    "gemini-2.5-pro": {
-      "modelId": "gemini-2.5-pro",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-pro is no longer available to new users. Please update your code to use models/gemini-3.1-pro-preview for the latest features and improvements. We recommend yo",
-      "trippedAt": "2026-11-20T05:51:49.808Z",
-      "expiresAt": "2026-11-21T05:51:49.808Z",
-      "failureCount": 1
-    }
-  },
+  "circuitBreakers": {},
   "telemetry": {
     "totalRequests": 7,
     "geminiRequests": 3,
@@ -264,14 +280,18 @@
     "circuitTrips404": 16,
     "lastProviderUsed": "pollinations",
     "lastModelUsed": "Pollinations (openai-fast) [Keyless]",
-    "lastUpdatedAt": "2026-11-21T05:46:52.863Z",
+    "lastUpdatedAt": "2026-11-21T07:00:17.203Z",
     "perProviderUsage": {
       "gemini": 3,
       "groq": 0,
       "mistral": 0,
+      "nvidia": 0,
+      "cohere": 0,
       "openrouter": 0,
-      "cerebras": 0,
       "cloudflare": 0,
+      "huggingface": 0,
+      "cerebras": 0,
+      "ovh": 0,
       "pollinations": 4
     }
   }

@@ -6,10 +6,41 @@ export type ProviderId =
   | 'gemini'
   | 'groq'
   | 'mistral'
+  | 'nvidia'
+  | 'cohere'
   | 'openrouter'
-  | 'cerebras'
   | 'cloudflare'
+  | 'huggingface'
+  | 'cerebras'
+  | 'ovh'
   | 'pollinations';
+
+export const KEYLESS_PROVIDER_IDS: ProviderId[] = ['ovh', 'pollinations'];
+
+export const ALL_EXTERNAL_PROVIDER_IDS: Exclude<ProviderId, 'gemini'>[] = [
+  'groq',
+  'mistral',
+  'nvidia',
+  'cohere',
+  'openrouter',
+  'cloudflare',
+  'huggingface',
+  'cerebras',
+  'ovh',
+  'pollinations'
+];
+
+export const SYSTEM_CONFIG_KEY_FIELDS = [
+  'groqApiKey',
+  'mistralApiKey',
+  'nvidiaApiKey',
+  'cohereApiKey',
+  'openrouterApiKey',
+  'cloudflareAccountId',
+  'cloudflareApiToken',
+  'huggingfaceApiKey',
+  'cerebrasApiKey'
+] as const;
 
 export type RoutingPolicy = 'quota-split' | 'gemini-first';
 export type WorkloadType = 'heavy-grounded' | 'fast-diagnostic' | 'classification' | 'stream';
@@ -45,6 +76,7 @@ export interface AiModelRegistry {
   geminiModels: DiscoveredGeminiModel[];
   openrouterFreeModels: string[];
   pollinationsModels: string[];
+  ovhModels?: string[];
   providerModels: Record<Exclude<ProviderId, 'gemini'>, string[]>;
   circuitBreakers: Record<string, CircuitBreakerEntry>;
   telemetry: {
@@ -62,9 +94,15 @@ export interface AiModelRegistry {
 }
 
 export interface ProviderStrategyInfo {
-  id: ProviderId | 'github-models' | 'ovh-anonymous';
+  id: ProviderId | 'github-models';
   name: string;
   status: 'active' | 'keyless' | 'trial' | 'retired';
+  signupRequired: 'none' | 'free-account';
+  cardRequired: boolean;
+  authType: 'keyless' | 'api-key' | 'account-token';
+  koreanJsonRating: 'high' | 'medium' | 'experimental';
+  signupUrl: string;
+  recommendedPriorityRank: number;
   envVars: string[];
   freeTierLimits: string;
   strengths: string;
@@ -133,34 +171,72 @@ export const DEFAULT_GEMINI_MODELS: DiscoveredGeminiModel[] = [
 ];
 
 export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
-  version: '3.106.14',
+  version: '3.106.15',
   updatedAt: new Date().toISOString(),
   lastDiscoveryAt: null,
   routingPolicy: 'quota-split',
   keylessFallbackEnabled: true,
-  providerOrder: ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'],
+  providerOrder: [
+    'gemini',
+    'groq',
+    'mistral',
+    'nvidia',
+    'cohere',
+    'openrouter',
+    'cloudflare',
+    'huggingface',
+    'cerebras',
+    'ovh',
+    'pollinations'
+  ],
   geminiModels: DEFAULT_GEMINI_MODELS,
   openrouterFreeModels: [
+    'google/gemma-4-31b-it:free',
     'deepseek/deepseek-chat-v3-0324:free',
     'meta-llama/llama-3.3-70b-instruct:free',
-    'qwen/qwen-2.5-72b-instruct:free',
-    'mistralai/mistral-small-3.1-24b-instruct:free'
+    'qwen/qwen-2.5-72b-instruct:free'
   ],
   pollinationsModels: [
     'openai',
     'openai-fast',
     'mistral'
   ],
+  ovhModels: [
+    'Meta-Llama-3_3-70B-Instruct',
+    'Mistral-Small-3.2-24B-Instruct-2506',
+    'Qwen3.8-27B',
+    'gemma-4-26b-a4b'
+  ],
   providerModels: {
     groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b'],
     mistral: ['mistral-small-latest', 'open-mistral-nemo'],
+    nvidia: [
+      'google/gemma-4-31b-it',
+      'meta/llama-3.3-70b-instruct',
+      'mistralai/mistral-large-4-1t-a52b',
+      'google/gemma-3-12b-it'
+    ],
+    cohere: ['command-a-03-2025', 'command-r-plus-08-2024', 'command-r-08-2024'],
     openrouter: [
+      'google/gemma-4-31b-it:free',
       'deepseek/deepseek-chat-v3-0324:free',
       'meta-llama/llama-3.3-70b-instruct:free',
       'qwen/qwen-2.5-72b-instruct:free'
     ],
-    cerebras: ['gpt-oss-120b', 'qwen-3-32b'],
     cloudflare: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/google/gemma-3-12b-it'],
+    huggingface: [
+      'Qwen/Qwen3.8-27B',
+      'meta-llama/Llama-3.1-8B-Instruct',
+      'google/gemma-4-31B-it',
+      'deepseek-ai/DeepSeek-V4.1-Flash'
+    ],
+    cerebras: ['gpt-oss-120b', 'qwen-3-32b'],
+    ovh: [
+      'Meta-Llama-3_3-70B-Instruct',
+      'Mistral-Small-3.2-24B-Instruct-2506',
+      'Qwen3.8-27B',
+      'gemma-4-26b-a4b'
+    ],
     pollinations: ['openai', 'openai-fast', 'mistral']
   },
   circuitBreakers: {},
@@ -178,9 +254,13 @@ export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
       gemini: 0,
       groq: 0,
       mistral: 0,
+      nvidia: 0,
+      cohere: 0,
       openrouter: 0,
-      cerebras: 0,
       cloudflare: 0,
+      huggingface: 0,
+      cerebras: 0,
+      ovh: 0,
       pollinations: 0
     }
   }
@@ -188,111 +268,275 @@ export const DEFAULT_AI_MODEL_REGISTRY: AiModelRegistry = {
 
 export const PROVIDER_STRATEGY_CATALOG: ProviderStrategyInfo[] = [
   {
+    id: 'pollinations',
+    name: 'Pollinations.ai Text API (무가입 · 무키)',
+    status: 'keyless',
+    signupRequired: 'none',
+    cardRequired: false,
+    authType: 'keyless',
+    koreanJsonRating: 'medium',
+    signupUrl: 'https://text.pollinations.ai',
+    recommendedPriorityRank: 1,
+    envVars: [],
+    freeTierLimits: '회원가입 불필요 · API 키 불필요 (공용 IP 속도 제한 풀)',
+    strengths: 'OpenAI 호환 규격으로 키 없이 즉시 호출 가능하며 openai / mistral / Qwen 모델 제공',
+    privacyNote: '전송 전 내부 키·세션 토큰 자동 마스킹 및 private:true 적용 · 실행 순서는 최후 폴백 전용',
+    recommendedWorkload: '초기 키 미설정 상태 및 등록된 모든 API 키 소진(429/404) 시 최후 폴백',
+    endpoint: 'https://text.pollinations.ai/openai'
+  },
+  {
+    id: 'ovh',
+    name: 'OVHcloud AI Endpoints (무가입 익명 티어)',
+    status: 'keyless',
+    signupRequired: 'none',
+    cardRequired: false,
+    authType: 'keyless',
+    koreanJsonRating: 'medium',
+    signupUrl: 'https://endpoints.ai.cloud.ovh.net',
+    recommendedPriorityRank: 2,
+    envVars: [],
+    freeTierLimits: '회원가입·키 불필요 (익명 IP당 ~1~2 RPM 엄격 제한 · 33개 모델 공개)',
+    strengths: '유럽 GDPR 준수 공용 추론 엔드포인트 · Llama 3.3 70B · Qwen3.8 · Mistral Small 3.2',
+    privacyNote: 'IP당 분당 호출 상한이 낮아 Pollinations와 함께 2중 키리스 최후 폴백으로 동작',
+    recommendedWorkload: 'Pollinations 한도 제한 시 무가입 2중 키리스 백업(프롬프트 자동 마스킹)',
+    endpoint: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions'
+  },
+  {
     id: 'gemini',
-    name: 'Google Gemini (AI Studio Free Tier)',
+    name: 'Google Gemini (AI Studio 무료 티어)',
     status: 'active',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'high',
+    signupUrl: 'https://aistudio.google.com/apikey',
+    recommendedPriorityRank: 3,
     envVars: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-    freeTierLimits: 'Dynamic RPM/RPD per project (Flash & Lite tiers free; billing unlocks Tier 1)',
-    strengths: 'Google Search Grounding, native JSON schema, highest Korean Windows terminology accuracy',
-    privacyNote: 'Free tier prompts may be used by Google for product improvement',
-    recommendedWorkload: '실시간 웹 검색 그라운딩, 신규 오류 수집(GitOps), 정밀 진단',
+    freeTierLimits: '카드 불필요 · 프로젝트별 동적 무료 RPM/RPD (Flash · Lite 무료 제공)',
+    strengths: 'Google Search 그라운딩, 네이티브 JSON 스키마, 최상위 한국어 Windows 용어 정확도',
+    privacyNote: 'AI Studio 무료 티어 프롬프트는 Google 제품 개선 정책이 적용될 수 있음',
+    recommendedWorkload: '실시간 웹 검색 그라운딩, 신규 오류 수집(GitOps), 정밀 진단 1순위',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta'
   },
   {
     id: 'groq',
-    name: 'Groq LPU Inference (Free Tier)',
+    name: 'Groq LPU Inference (무료 티어 · 카드 불필요)',
     status: 'active',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'high',
+    signupUrl: 'https://console.groq.com/keys',
+    recommendedPriorityRank: 4,
     envVars: ['GROQ_API_KEY'],
-    freeTierLimits: '~30 RPM · 1,000–14,400 RPD (model-dependent) · 6K–8K TPM cap',
-    strengths: 'Sub-second token latency on Llama 3.3 70B & Llama 3.1 8B, standing free tier (no card)',
-    privacyNote: 'Standard API retention; best for stateless short prompts under 4K tokens',
+    freeTierLimits: '카드 불필요 · ~30 RPM · 1,000~14,400 RPD (모델별) · 6K~8K TPM',
+    strengths: 'Llama 3.3 70B 및 Qwen3 32B 1초 미만 초고속 추론, 상시 무료 티어 유지',
+    privacyNote: '4K 토큰 이하 단문 프롬프트 및 JSON 응답에서 최고 속도',
     recommendedWorkload: '초고속 단문 Q&A, 이슈 카테고리 재분류, Gemini 429 1순위 우회',
     endpoint: 'https://api.groq.com/openai/v1/chat/completions'
   },
   {
     id: 'mistral',
-    name: 'Mistral AI (La Plateforme Free Mode)',
+    name: 'Mistral AI (La Plateforme Free Mode · 카드 불필요)',
     status: 'active',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'high',
+    signupUrl: 'https://console.mistral.ai/api-keys',
+    recommendedPriorityRank: 5,
     envVars: ['MISTRAL_API_KEY'],
-    freeTierLimits: 'Dynamic org-level RPS/TPM caps (no credit card required for Free Mode)',
-    strengths: 'Strong structured JSON output (mistral-small-latest), European GDPR-aligned fallback pool',
-    privacyNote: 'Free mode usage tracked dynamically inside Mistral Studio Limits panel',
+    freeTierLimits: '카드 불필요 (Free Mode 활성화) · 조직별 동적 RPS/TPM 상한',
+    strengths: '안정적인 JSON 구조 출력(mistral-small-latest), 유럽 GDPR 기반 백업 풀',
+    privacyNote: 'Mistral Studio Limits 화면에서 실시간 Free Mode 한도 확인 가능',
     recommendedWorkload: 'JSON 무결성 검증, 다국어 번역 보강, Groq/Gemini 병목 시 백업',
     endpoint: 'https://api.mistral.ai/v1/chat/completions'
   },
   {
-    id: 'openrouter',
-    name: 'OpenRouter (:free Catalog Pool)',
+    id: 'nvidia',
+    name: 'NVIDIA NIM (Build 무료 크레딧 · 카드 불필요)',
     status: 'active',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'high',
+    signupUrl: 'https://build.nvidia.com/explore/discover',
+    recommendedPriorityRank: 6,
+    envVars: ['NVIDIA_API_KEY'],
+    freeTierLimits: '카드 불필요 · 가입 즉시 무료 API 크레딧(1,000~5,000 Credits) · OpenAI 호환',
+    strengths: 'Gemma 4 31B, Llama 3.3 70B, Mistral Large 4, DeepSeek 등 대형 무료 카탈로그(33종+)',
+    privacyNote: '키는 nvapi- 접두사 형식이며 서버 전용 환경변수·설정에만 보관',
+    recommendedWorkload: '대형 오픈모델 한국어 Windows 오류 JSON 수집 및 장문 진단 백업',
+    endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions'
+  },
+  {
+    id: 'cohere',
+    name: 'Cohere Command API v2 (Trial 무료 티어 · 카드 불필요)',
+    status: 'trial',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'high',
+    signupUrl: 'https://dashboard.cohere.com/api-keys',
+    recommendedPriorityRank: 7,
+    envVars: ['COHERE_API_KEY'],
+    freeTierLimits: '카드 불필요 · 20 RPM · 월 1,000건(Trial Key · 비상업 평가용)',
+    strengths: 'command-a-03-2025 및 command-r-plus 기반 한국어 문맥·기술 문서 요약 최상급',
+    privacyNote: '월 1,000건 상한 및 Retry-After 429 제한 준수(비상업 평가 용도)',
+    recommendedWorkload: '한국어 Windows 오류 요약, 해결 단계 구조화 및 정확도 보강 폴백',
+    endpoint: 'https://api.cohere.com/v2/chat'
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter (:free 동적 무료 풀 · 카드 불필요)',
+    status: 'active',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'high',
+    signupUrl: 'https://openrouter.ai/keys',
+    recommendedPriorityRank: 8,
     envVars: ['OPENROUTER_API_KEY'],
-    freeTierLimits: '20 RPM global · 50 RPD free (1,000 RPD unlocked permanently with $10 lifetime credit)',
-    strengths: 'Single key accesses rotating :free models (DeepSeek V3, Llama 3.3, Qwen, Mistral)',
-    privacyNote: 'Must filter :free slugs dynamically via /api/v1/models as models rotate frequently',
+    freeTierLimits: '카드 불필요 · 20 RPM · 일 50회 ($10 충전 이력 시 일 1,000회 영구 상향)',
+    strengths: '단일 키로 Gemma 4 31B, DeepSeek V3, Llama 3.3, Qwen 등 :free 모델 자동 순환',
+    privacyNote: '무료 모델 슬러그가 수시 변경되므로 실시간 카탈로그 탐색과 연계해 사용',
     recommendedWorkload: '동적 무료 오픈소스 모델 풀백 및 배치 요약 보조',
     endpoint: 'https://openrouter.ai/api/v1/chat/completions'
   },
   {
     id: 'cloudflare',
-    name: 'Cloudflare Workers AI (Free Daily Neurons)',
+    name: 'Cloudflare Workers AI (일일 무료 Neurons · 카드 불필요)',
     status: 'active',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'account-token',
+    koreanJsonRating: 'medium',
+    signupUrl: 'https://dash.cloudflare.com/?to=/:account/ai/workers-ai',
+    recommendedPriorityRank: 9,
     envVars: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'],
-    freeTierLimits: '10,000 Neurons/day free (resets daily at 00:00 UTC)',
-    strengths: 'Predictable daily resetting quota completely independent of Google/Groq',
-    privacyNote: 'Heavy proprietary models require $5/mo paid plan; use Llama 3.3 / Gemma 3 variants',
-    recommendedWorkload: '일일 리셋 보너스 할당량을 활용한 야간 요약 및 태그 정규화',
+    freeTierLimits: '카드 불필요 · 매일 00:00 UTC 10,000 Neurons 무료 리셋',
+    strengths: 'Google/Groq 장애와 완전히 독립된 일일 리셋형 무료 할당량 풀',
+    privacyNote: 'Account ID와 Workers AI Read/Run Token 두 값이 모두 필요함',
+    recommendedWorkload: '일일 리셋 할당량을 활용한 야간 요약 및 태그 정규화',
     endpoint: 'https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/{model}'
   },
   {
-    id: 'cerebras',
-    name: 'Cerebras Inference (Trial Credit Tier)',
+    id: 'huggingface',
+    name: 'Hugging Face Inference Router (월 무료 소액 크레딧 · 카드 불필요)',
     status: 'trial',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'medium',
+    signupUrl: 'https://huggingface.co/settings/tokens',
+    recommendedPriorityRank: 10,
+    envVars: ['HF_TOKEN'],
+    freeTierLimits: '카드 불필요 · 무료 계정 월 소액 크레딧(~$0.10/월, 소진 시 HTTP 402 반환)',
+    strengths: 'router.huggingface.co/v1 단일 엔드포인트로 Qwen3.8 · Gemma 4 · Llama 3.1 라우팅(160종+)',
+    privacyNote: '무료 월간 크레딧 소진 시 HTTP 402(Payment Required)가 발생하며 다음 달 리셋',
+    recommendedWorkload: '보조 오픈소스 모델 테스트 및 여유 크레딧 소진 전 단문 폴백',
+    endpoint: 'https://router.huggingface.co/v1/chat/completions'
+  },
+  {
+    id: 'cerebras',
+    name: 'Cerebras Inference (프로모션 크레딧 · 카드 필요)',
+    status: 'trial',
+    signupRequired: 'free-account',
+    cardRequired: true,
+    authType: 'api-key',
+    koreanJsonRating: 'medium',
+    signupUrl: 'https://cloud.cerebras.ai/',
+    recommendedPriorityRank: 11,
     envVars: ['CEREBRAS_API_KEY'],
-    freeTierLimits: '$5 promotional credit (30 days, card required) · ~5 RPM / 30K TPM',
-    strengths: 'Wafer-scale ultra-fast inference for Qwen 3 & GPT-OSS 120B',
-    privacyNote: 'Permanent free tier discontinued in 2026; keep as optional burst fallback',
+    freeTierLimits: '결제 카드 등록 필요 · 30일 $5 프로모션 크레딧 · ~5 RPM / 30K TPM',
+    strengths: '웨이퍼 스케일 칩 기반 Qwen 3 및 GPT-OSS 120B 초고속 추론',
+    privacyNote: '2026년 영구 무료 티어 종료로 카드 인증 크레딧 보유 시에만 보조 폴백 활용',
     recommendedWorkload: '프로모션 크레딧 보유 시 초고속 대용량 텍스트 처리 버스트',
     endpoint: 'https://api.cerebras.ai/v1/chat/completions'
   },
   {
-    id: 'pollinations',
-    name: 'Pollinations.ai Text API (Keyless Fallback)',
-    status: 'keyless',
-    envVars: [],
-    freeTierLimits: 'Zero signup · Zero API key (Shared IP rate-limited community pool)',
-    strengths: 'OpenAI-compatible endpoint with rotating openai / mistral / Llama / Qwen models',
-    privacyNote: 'Public community endpoint: prompt credentials scrubbed & private:true enforced; last-resort only',
-    recommendedWorkload: '기존 모든 API 키 미설정 또는 429/404 전면 소진 시 최후 폴백 (로컬 DB fallback 직전)',
-    endpoint: 'https://text.pollinations.ai/openai'
-  },
-  {
-    id: 'ovh-anonymous',
-    name: 'OVHcloud AI Endpoints (Anonymous Tier)',
-    status: 'trial',
-    envVars: [],
-    freeTierLimits: 'No signup for anonymous test (~2 RPM/IP strict rate cap)',
-    strengths: 'European GDPR-compliant public inference endpoints for open-weight models',
-    privacyNote: 'Too strict (~2 RPM) for multi-user primary traffic; documented for reference comparison',
-    recommendedWorkload: '연구 비교 참조용 (2 RPM 제한으로 서버 공용 폴백엔 Pollinations 채택)',
-    endpoint: 'https://endpoints.ai.cloud.ovh.net'
-  },
-  {
     id: 'github-models',
-    name: 'GitHub Models Inference API',
+    name: 'GitHub Models Inference API (2026 서비스 종료)',
     status: 'retired',
+    signupRequired: 'free-account',
+    cardRequired: false,
+    authType: 'api-key',
+    koreanJsonRating: 'experimental',
+    signupUrl: 'https://github.com/marketplace/models',
+    recommendedPriorityRank: 99,
     envVars: [],
-    freeTierLimits: 'Retired in 2026 (endpoint https://models.github.ai/inference decommissioned)',
-    strengths: 'Historical developer prototyping catalog via GitHub PAT',
-    privacyNote: 'Excluded from live HTTP routing to avoid guaranteed 404/timeout waste',
-    recommendedWorkload: '사용 중단됨 — Groq · Mistral · OpenRouter :free · Cloudflare · Pollinations로 대체',
+    freeTierLimits: '2026년 종료됨 (구 https://models.github.ai/inference 엔드포인트 폐기)',
+    strengths: '과거 GitHub PAT 기반 프로토타이핑 카탈로그',
+    privacyNote: '실행 시 확정 404/타임아웃 지연을 유발하므로 라우터에서 완전 제외',
+    recommendedWorkload: '사용 중단 — Pollinations · OVH · Groq · NVIDIA NIM · Cohere 등으로 대체',
     endpoint: 'https://models.github.ai/inference (Retired)'
   }
 ];
+
+let pollinationsCooldownUntil = 0;
+let pollinationsCooldownMessage = '';
+let ovhCooldownUntil = 0;
+let ovhCooldownMessage = '';
+let huggingface402Until = 0;
+
+function readSystemConfigForRouter(): Record<string, any> {
+  try {
+    const sysPath = path.join(DATA_DIR, 'system_config.json');
+    if (fs.existsSync(sysPath)) {
+      const parsed = JSON.parse(fs.readFileSync(sysPath, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (_) {}
+  return {};
+}
+
+export function resolveProviderCredentials(
+  provider: Exclude<ProviderId, 'gemini'>,
+  override?: { customKey?: string; cloudflareAccountId?: string }
+): { key: string; cloudflareAccountId?: string } {
+  const sysCfg = readSystemConfigForRouter();
+  const custom = (override?.customKey || '').trim();
+  const validCustom = custom && !custom.includes('••••') && !custom.includes('PLACEHOLDER') ? custom : '';
+
+  switch (provider) {
+    case 'groq':
+      return { key: (validCustom || process.env.GROQ_API_KEY || String(sysCfg.groqApiKey || '')).trim() };
+    case 'mistral':
+      return { key: (validCustom || process.env.MISTRAL_API_KEY || String(sysCfg.mistralApiKey || '')).trim() };
+    case 'nvidia':
+      return { key: (validCustom || process.env.NVIDIA_API_KEY || String(sysCfg.nvidiaApiKey || '')).trim() };
+    case 'cohere':
+      return { key: (validCustom || process.env.COHERE_API_KEY || String(sysCfg.cohereApiKey || '')).trim() };
+    case 'openrouter':
+      return { key: (validCustom || process.env.OPENROUTER_API_KEY || String(sysCfg.openrouterApiKey || '')).trim() };
+    case 'huggingface':
+      return { key: (validCustom || process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || String(sysCfg.huggingfaceApiKey || '')).trim() };
+    case 'cerebras':
+      return { key: (validCustom || process.env.CEREBRAS_API_KEY || String(sysCfg.cerebrasApiKey || '')).trim() };
+    case 'cloudflare': {
+      const overrideAcc = (override?.cloudflareAccountId || '').trim();
+      const cleanAcc = overrideAcc && !overrideAcc.includes('••••') ? overrideAcc : '';
+      return {
+        key: (validCustom || process.env.CLOUDFLARE_API_TOKEN || String(sysCfg.cloudflareApiToken || '')).trim(),
+        cloudflareAccountId: (cleanAcc || process.env.CLOUDFLARE_ACCOUNT_ID || String(sysCfg.cloudflareAccountId || '')).trim()
+      };
+    }
+    case 'ovh':
+    case 'pollinations':
+    default:
+      return { key: '' };
+  }
+}
 
 export function sanitizePromptForKeylessEndpoint(promptText: string): string {
   const input = String(promptText || '');
   return input
     .replace(/\bAIza[0-9A-Za-z\-_]{20,}\b/g, '[REDACTED_GEMINI_KEY]')
     .replace(/\bgsk_[0-9A-Za-z_]{16,}\b/g, '[REDACTED_GROQ_KEY]')
+    .replace(/\bnvapi-[0-9A-Za-z\-_]{20,}\b/g, '[REDACTED_NVIDIA_KEY]')
+    .replace(/\bhf_[0-9A-Za-z]{20,}\b/g, '[REDACTED_HF_TOKEN]')
     .replace(/\bsk-or-[0-9A-Za-z\-_]{16,}\b/g, '[REDACTED_OPENROUTER_KEY]')
     .replace(/\bsk-[0-9A-Za-z\-_]{20,}\b/g, '[REDACTED_API_KEY]')
     .replace(/\bghp_[0-9A-Za-z]{20,}\b/g, '[REDACTED_GITHUB_TOKEN]')
@@ -335,6 +579,23 @@ export function stripMarkdownJsonFences(rawText: string): string {
   return cleaned.trim();
 }
 
+export function normalizeProviderOrder(rawOrder: unknown): ProviderId[] {
+  const validSet = new Set<ProviderId>(['gemini', ...ALL_EXTERNAL_PROVIDER_IDS]);
+  const defaultOrder = DEFAULT_AI_MODEL_REGISTRY.providerOrder;
+  const incoming: ProviderId[] = Array.isArray(rawOrder)
+    ? Array.from(new Set(rawOrder.filter((p: any): p is ProviderId => validSet.has(p))))
+    : [...defaultOrder];
+
+  const missing = defaultOrder.filter((p) => !incoming.includes(p));
+  const combined = [...incoming, ...missing];
+
+  const keyed = combined.filter((p) => !KEYLESS_PROVIDER_IDS.includes(p));
+  const keylessInOrder = combined.filter((p) => KEYLESS_PROVIDER_IDS.includes(p));
+  const finalKeyless = keylessInOrder.length > 0 ? keylessInOrder : [...KEYLESS_PROVIDER_IDS];
+
+  return [...keyed, ...finalKeyless];
+}
+
 export function loadAiModelRegistry(): AiModelRegistry {
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -343,17 +604,24 @@ export function loadAiModelRegistry(): AiModelRegistry {
     if (fs.existsSync(REGISTRY_PATH)) {
       const raw = fs.readFileSync(REGISTRY_PATH, 'utf8');
       const parsed = JSON.parse(raw);
-      const validProviderSet = new Set<ProviderId>([
-        'gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'
-      ]);
-      const rawOrder: ProviderId[] = Array.isArray(parsed?.providerOrder) && parsed.providerOrder.length > 0
-        ? Array.from(new Set(parsed.providerOrder.filter((p: any): p is ProviderId => validProviderSet.has(p))))
-        : DEFAULT_AI_MODEL_REGISTRY.providerOrder;
-      const keyedInOrder = rawOrder.filter((p) => p !== 'pollinations');
-      const normalizedOrder: ProviderId[] = [...keyedInOrder, 'pollinations'];
+      const normalizedOrder = normalizeProviderOrder(parsed?.providerOrder);
+
+      const mergedProviderModels: Record<Exclude<ProviderId, 'gemini'>, string[]> = {
+        ...DEFAULT_AI_MODEL_REGISTRY.providerModels
+      };
+      if (parsed?.providerModels && typeof parsed.providerModels === 'object') {
+        for (const pid of ALL_EXTERNAL_PROVIDER_IDS) {
+          const list = parsed.providerModels[pid];
+          if (Array.isArray(list) && list.length > 0) {
+            mergedProviderModels[pid] = list.filter((m: any): m is string => typeof m === 'string' && m.trim().length > 0);
+          }
+        }
+      }
+
       const merged: AiModelRegistry = {
         ...DEFAULT_AI_MODEL_REGISTRY,
         ...parsed,
+        version: '3.106.15',
         keylessFallbackEnabled: typeof parsed?.keylessFallbackEnabled === 'boolean'
           ? parsed.keylessFallbackEnabled
           : true,
@@ -367,10 +635,10 @@ export function loadAiModelRegistry(): AiModelRegistry {
         pollinationsModels: Array.isArray(parsed?.pollinationsModels) && parsed.pollinationsModels.length > 0
           ? parsed.pollinationsModels.filter((m: any): m is string => typeof m === 'string' && m.trim().length > 0)
           : DEFAULT_AI_MODEL_REGISTRY.pollinationsModels,
-        providerModels: {
-          ...DEFAULT_AI_MODEL_REGISTRY.providerModels,
-          ...(parsed?.providerModels || {})
-        },
+        ovhModels: Array.isArray(parsed?.ovhModels) && parsed.ovhModels.length > 0
+          ? parsed.ovhModels.filter((m: any): m is string => typeof m === 'string' && m.trim().length > 0)
+          : DEFAULT_AI_MODEL_REGISTRY.ovhModels,
+        providerModels: mergedProviderModels,
         circuitBreakers: parsed?.circuitBreakers || {},
         telemetry: {
           ...DEFAULT_AI_MODEL_REGISTRY.telemetry,
@@ -419,6 +687,63 @@ export function saveAiModelRegistry(registry: AiModelRegistry): void {
 export function isProhibitedGeminiModel(modelId: string): boolean {
   const lower = (modelId || '').toLowerCase();
   return PROHIBITED_GEMINI_PATTERNS.some((p) => lower.includes(p));
+}
+
+function isNonChatCatalogModel(modelId: string): boolean {
+  const lower = (modelId || '').toLowerCase();
+  const banned = [
+    'embed',
+    'rerank',
+    'reward',
+    'parse',
+    'ocr',
+    'guard',
+    'shield',
+    'safety',
+    'whisper',
+    'tts',
+    'audio',
+    'speech',
+    'transcribe',
+    'stable-diffusion',
+    'flux',
+    'cosmos',
+    'trellis',
+    'nvclip',
+    'deplot',
+    'paligemma',
+    'vila',
+    'video',
+    'detector',
+    'pii',
+    'gliner',
+    'starcoder',
+    'glimmer',
+    '-vl-',
+    '-vl:',
+    'qwen3-vl',
+    'super-vl'
+  ];
+  return banned.some((kw) => lower.includes(kw));
+}
+
+function rankModelsByPreferredKeywords(
+  slugs: string[],
+  preferred: string[],
+  maxCount: number,
+  prefixOrExact = false
+): string[] {
+  return slugs
+    .map((id, idx) => {
+      const lower = id.toLowerCase();
+      const prefIdx = preferred.findIndex((kw) =>
+        prefixOrExact ? (lower === kw || lower.startsWith(`${kw}-`)) : lower.includes(kw)
+      );
+      return { id, idx, score: prefIdx >= 0 ? prefIdx : 999 };
+    })
+    .sort((a, b) => (a.score !== b.score ? a.score - b.score : a.idx - b.idx))
+    .slice(0, maxCount)
+    .map((entry) => entry.id);
 }
 
 export function pruneExpiredCircuitBreakers(registry: AiModelRegistry): boolean {
@@ -544,6 +869,10 @@ export async function discoverLiveModels(options?: {
   geminiDiscoveredCount: number;
   openrouterDiscoveredCount: number;
   pollinationsDiscoveredCount: number;
+  ovhDiscoveredCount: number;
+  nvidiaDiscoveredCount: number;
+  huggingfaceDiscoveredCount: number;
+  cohereDiscoveredCount: number;
   errors: string[];
 }> {
   const registry = loadAiModelRegistry();
@@ -552,6 +881,10 @@ export async function discoverLiveModels(options?: {
   let geminiDiscoveredCount = 0;
   let openrouterDiscoveredCount = 0;
   let pollinationsDiscoveredCount = 0;
+  let ovhDiscoveredCount = 0;
+  let nvidiaDiscoveredCount = 0;
+  let huggingfaceDiscoveredCount = 0;
+  let cohereDiscoveredCount = 0;
   const nowIso = new Date().toISOString();
 
   // 1. Discover Gemini models via @google/genai ai.models.list()
@@ -565,7 +898,6 @@ export async function discoverLiveModels(options?: {
       const pager = await ai.models.list({ config: { pageSize: 100 } });
       const discoveredMap = new Map<string, DiscoveredGeminiModel>();
 
-      // Preserve existing enabled flags and defaults
       for (const existing of registry.geminiModels) {
         if (!isProhibitedGeminiModel(existing.id)) {
           discoveredMap.set(existing.id, existing);
@@ -606,26 +938,25 @@ export async function discoverLiveModels(options?: {
     errors.push('Gemini discovery skipped (no valid server AIza key configured).');
   }
 
-  // 2. Discover active OpenRouter :free & Pollinations keyless text models in parallel
+  const cohereCred = resolveProviderCredentials('cohere').key;
+
+  // 2. Discover free & auxiliary catalogs in parallel
   await Promise.all([
     (async () => {
       try {
         const orResp = await fetch('https://openrouter.ai/api/v1/models', {
           signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.14' }
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.15' }
         });
         if (orResp.ok) {
           const json: any = await orResp.json();
           const items: any[] = Array.isArray(json?.data) ? json.data : [];
           const freeSlugs = items
             .map((item) => String(item?.id || '').trim())
-            .filter((id) => id.endsWith(':free') && !id.includes('gemini-2.0') && !id.includes('gemini-1.5'));
+            .filter((id) => id.endsWith(':free') && !id.includes('gemini-2.0') && !id.includes('gemini-1.5') && !isNonChatCatalogModel(id));
           if (freeSlugs.length > 0) {
-            const preferredKeywords = ['deepseek', 'llama-3.3', 'qwen', 'mistral', 'gemma', 'llama-3.1'];
-            const ranked = [
-              ...freeSlugs.filter((id) => preferredKeywords.some((kw) => id.toLowerCase().includes(kw))),
-              ...freeSlugs.filter((id) => !preferredKeywords.some((kw) => id.toLowerCase().includes(kw)))
-            ].slice(0, 12);
+            const preferredKeywords = ['gemma-4-26b', 'gemma-4-31b', 'gemma-4', 'deepseek', 'llama-3.3', 'mistral', 'qwen', 'gemma', 'llama-3.1'];
+            const ranked = rankModelsByPreferredKeywords(freeSlugs, preferredKeywords, 12);
             registry.openrouterFreeModels = ranked;
             registry.providerModels.openrouter = ranked;
             openrouterDiscoveredCount = freeSlugs.length;
@@ -639,7 +970,7 @@ export async function discoverLiveModels(options?: {
       try {
         const pollResp = await fetch('https://text.pollinations.ai/models', {
           signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.14' }
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.15' }
         });
         if (pollResp.ok) {
           const json: any = await pollResp.json();
@@ -655,11 +986,8 @@ export async function discoverLiveModels(options?: {
             .filter((name) => Boolean(name) && name.length <= 64);
           const uniqueNames = Array.from(new Set(textNames));
           if (uniqueNames.length > 0) {
-            const preferredKeywords = ['openai', 'openai-fast', 'mistral', 'llama', 'qwen', 'deepseek'];
-            const ranked = [
-              ...uniqueNames.filter((name) => preferredKeywords.some((kw) => name.toLowerCase() === kw || name.toLowerCase().startsWith(`${kw}-`))),
-              ...uniqueNames.filter((name) => !preferredKeywords.some((kw) => name.toLowerCase() === kw || name.toLowerCase().startsWith(`${kw}-`)))
-            ].slice(0, 8);
+            const preferredKeywords = ['openai-fast', 'openai', 'mistral', 'llama', 'qwen', 'deepseek'];
+            const ranked = rankModelsByPreferredKeywords(uniqueNames, preferredKeywords, 8, true);
             registry.pollinationsModels = ranked;
             registry.providerModels.pollinations = ranked;
             pollinationsDiscoveredCount = uniqueNames.length;
@@ -668,13 +996,121 @@ export async function discoverLiveModels(options?: {
       } catch (err: any) {
         errors.push(`Pollinations keyless catalog sync: ${err?.message || err}`);
       }
+    })(),
+    (async () => {
+      try {
+        const ovhResp = await fetch('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models', {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.15' }
+        });
+        if (ovhResp.ok) {
+          const json: any = await ovhResp.json();
+          const items: any[] = Array.isArray(json?.data) ? json.data : [];
+          const chatSlugs = items
+            .map((item) => String(item?.id || '').trim())
+            .filter((id) => Boolean(id) && !isNonChatCatalogModel(id));
+          const uniqueSlugs = Array.from(new Set(chatSlugs));
+          if (uniqueSlugs.length > 0) {
+            const preferred = ['meta-llama-3_3-70b', 'mistral-small-3.2', 'gemma-4', 'llama-3.1', 'deepseek-v4', 'qwen3'];
+            const ranked = rankModelsByPreferredKeywords(uniqueSlugs, preferred, 10);
+            registry.ovhModels = ranked;
+            registry.providerModels.ovh = ranked;
+            ovhDiscoveredCount = uniqueSlugs.length;
+          }
+        }
+      } catch (err: any) {
+        errors.push(`OVHcloud keyless catalog sync: ${err?.message || err}`);
+      }
+    })(),
+    (async () => {
+      try {
+        const nvResp = await fetch('https://integrate.api.nvidia.com/v1/models', {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.15' }
+        });
+        if (nvResp.ok) {
+          const json: any = await nvResp.json();
+          const items: any[] = Array.isArray(json?.data) ? json.data : [];
+          const chatSlugs = items
+            .map((item) => String(item?.id || '').trim())
+            .filter((id) => Boolean(id) && !isNonChatCatalogModel(id));
+          const uniqueSlugs = Array.from(new Set(chatSlugs));
+          if (uniqueSlugs.length > 0) {
+            const preferred = ['gemma-4', 'llama-3.3-70b', 'mistral-large', 'deepseek', 'qwen', 'gemma-3'];
+            const ranked = rankModelsByPreferredKeywords(uniqueSlugs, preferred, 10);
+            registry.providerModels.nvidia = ranked;
+            nvidiaDiscoveredCount = uniqueSlugs.length;
+          }
+        }
+      } catch (err: any) {
+        errors.push(`NVIDIA NIM catalog sync: ${err?.message || err}`);
+      }
+    })(),
+    (async () => {
+      try {
+        const hfResp = await fetch('https://router.huggingface.co/v1/models', {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'WindowsFixWizard-ModelSync/3.106.15' }
+        });
+        if (hfResp.ok) {
+          const json: any = await hfResp.json();
+          const items: any[] = Array.isArray(json?.data) ? json.data : [];
+          const chatSlugs = items
+            .map((item) => String(item?.id || '').trim())
+            .filter((id) => Boolean(id) && !isNonChatCatalogModel(id));
+          const uniqueSlugs = Array.from(new Set(chatSlugs));
+          if (uniqueSlugs.length > 0) {
+            const preferred = ['gemma-4', 'llama-3.1-8b', 'llama-3.3', 'mistral-large', 'deepseek', 'qwen3'];
+            const ranked = rankModelsByPreferredKeywords(uniqueSlugs, preferred, 10);
+            registry.providerModels.huggingface = ranked;
+            huggingfaceDiscoveredCount = uniqueSlugs.length;
+          }
+        }
+      } catch (err: any) {
+        errors.push(`Hugging Face Router catalog sync: ${err?.message || err}`);
+      }
+    })(),
+    (async () => {
+      if (!cohereCred) return;
+      try {
+        const cohereResp = await fetch('https://api.cohere.com/v1/models?endpoint=chat&page_size=50', {
+          signal: AbortSignal.timeout(8000),
+          headers: {
+            Authorization: `Bearer ${cohereCred}`,
+            'User-Agent': 'WindowsFixWizard-ModelSync/3.106.15'
+          }
+        });
+        if (cohereResp.ok) {
+          const json: any = await cohereResp.json();
+          const items: any[] = Array.isArray(json?.models) ? json.models : [];
+          const names = items
+            .map((item) => String(item?.name || '').trim())
+            .filter((name) => Boolean(name) && name.startsWith('command'));
+          if (names.length > 0) {
+            registry.providerModels.cohere = Array.from(new Set(names)).slice(0, 6);
+            cohereDiscoveredCount = names.length;
+          }
+        }
+      } catch (err: any) {
+        errors.push(`Cohere v2 catalog sync: ${err?.message || err}`);
+      }
     })()
   ]);
 
   registry.lastDiscoveryAt = nowIso;
   saveAiModelRegistry(registry);
 
-  return { registry, geminiDiscoveredCount, openrouterDiscoveredCount, pollinationsDiscoveredCount, errors };
+  return {
+    registry,
+    geminiDiscoveredCount,
+    openrouterDiscoveredCount,
+    pollinationsDiscoveredCount,
+    ovhDiscoveredCount,
+    nvidiaDiscoveredCount,
+    huggingfaceDiscoveredCount,
+    cohereDiscoveredCount,
+    errors
+  };
 }
 
 export function getProviderServerReadiness(
@@ -695,32 +1131,39 @@ export function getProviderServerReadiness(
     }
   } catch (_) {}
 
-  let sysConfig: Record<string, any> = {};
-  try {
-    const sysPath = path.join(DATA_DIR, 'system_config.json');
-    if (fs.existsSync(sysPath)) {
-      const parsed = JSON.parse(fs.readFileSync(sysPath, 'utf8'));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        sysConfig = parsed;
-      }
-    }
-  } catch (_) {}
-
   const hasGemini = Boolean(
     hasConfiguredGeminiKey ||
     (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().startsWith('AIza')) ||
     (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim().startsWith('AIza')) ||
     (process.env.CUSTOM_API_KEY && process.env.CUSTOM_API_KEY.trim().startsWith('AIza'))
   );
+
+  const groq = resolveProviderCredentials('groq');
+  const mistral = resolveProviderCredentials('mistral');
+  const nvidia = resolveProviderCredentials('nvidia');
+  const cohere = resolveProviderCredentials('cohere');
+  const openrouter = resolveProviderCredentials('openrouter');
+  const cloudflare = resolveProviderCredentials('cloudflare');
+  const huggingface = resolveProviderCredentials('huggingface');
+  const cerebras = resolveProviderCredentials('cerebras');
+
   return {
     gemini: { configured: hasGemini, envHint: 'GEMINI_API_KEY / GOOGLE_API_KEY' },
-    groq: { configured: Boolean(process.env.GROQ_API_KEY?.trim() || String(sysConfig.groqApiKey || '').trim()), envHint: 'GROQ_API_KEY' },
-    mistral: { configured: Boolean(process.env.MISTRAL_API_KEY?.trim()), envHint: 'MISTRAL_API_KEY' },
-    openrouter: { configured: Boolean(process.env.OPENROUTER_API_KEY?.trim() || String(sysConfig.openrouterApiKey || '').trim()), envHint: 'OPENROUTER_API_KEY' },
-    cerebras: { configured: Boolean(process.env.CEREBRAS_API_KEY?.trim()), envHint: 'CEREBRAS_API_KEY' },
+    groq: { configured: Boolean(groq.key), envHint: 'GROQ_API_KEY' },
+    mistral: { configured: Boolean(mistral.key), envHint: 'MISTRAL_API_KEY' },
+    nvidia: { configured: Boolean(nvidia.key), envHint: 'NVIDIA_API_KEY' },
+    cohere: { configured: Boolean(cohere.key), envHint: 'COHERE_API_KEY' },
+    openrouter: { configured: Boolean(openrouter.key), envHint: 'OPENROUTER_API_KEY' },
     cloudflare: {
-      configured: Boolean(process.env.CLOUDFLARE_ACCOUNT_ID?.trim() && process.env.CLOUDFLARE_API_TOKEN?.trim()),
+      configured: Boolean(cloudflare.key && cloudflare.cloudflareAccountId),
       envHint: 'CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN'
+    },
+    huggingface: { configured: Boolean(huggingface.key), envHint: 'HF_TOKEN' },
+    cerebras: { configured: Boolean(cerebras.key), envHint: 'CEREBRAS_API_KEY' },
+    ovh: {
+      configured: registry.keylessFallbackEnabled !== false,
+      envHint: 'No API Key Required (Anonymous ~1-2 RPM)',
+      keyless: true
     },
     pollinations: {
       configured: registry.keylessFallbackEnabled !== false,
@@ -766,6 +1209,31 @@ export function contentsToPromptText(contents: any): string {
   return String(contents || '');
 }
 
+function extractCohereV2Text(data: any): string {
+  const content = data?.message?.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part: any) => (typeof part === 'string' ? part : part?.text || ''))
+      .filter(Boolean)
+      .join('');
+  }
+  return data?.text || '';
+}
+
+function parseNonHtmlCompletionBody(rawBody: string, contentType: string): string {
+  try {
+    const parsed: any = JSON.parse(rawBody);
+    return String(parsed?.choices?.[0]?.message?.content || parsed?.text || '');
+  } catch {
+    const looksLikeHtml = contentType.includes('text/html') || /^\s*(?:<!doctype|<html|<head|<body)\b/i.test(rawBody);
+    if (!looksLikeHtml) {
+      return rawBody || '';
+    }
+    return '';
+  }
+}
+
 export async function callExternalFreeProvider(
   provider: Exclude<ProviderId, 'gemini'>,
   promptText: string,
@@ -779,18 +1247,22 @@ export async function callExternalFreeProvider(
   }
 ): Promise<{ text: string; modelUsed: string; keyUsed: string; provider: ProviderId } | null> {
   const registry = options?.registry || loadAiModelRegistry();
+  const timeoutMs = Math.min(Math.max(Number(options?.timeoutMs) || 18000, 6000), 45000);
+  const creds = resolveProviderCredentials(provider, {
+    customKey: options?.customKey,
+    cloudflareAccountId: options?.cloudflareAccountId
+  });
 
   if (provider === 'groq') {
-    const key = (options?.customKey || process.env.GROQ_API_KEY || '').trim();
-    if (!key || key.includes('PLACEHOLDER')) return null;
+    if (!creds.key) return null;
     const models = (registry.providerModels.groq || DEFAULT_AI_MODEL_REGISTRY.providerModels.groq)
       .filter((m) => !isCircuitOpen(registry, m));
     for (const model of models) {
       try {
         const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
-          signal: AbortSignal.timeout(15000),
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: { Authorization: `Bearer ${creds.key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
             messages: [{ role: 'user', content: promptText }],
@@ -810,16 +1282,15 @@ export async function callExternalFreeProvider(
   }
 
   if (provider === 'mistral') {
-    const key = (options?.customKey || process.env.MISTRAL_API_KEY || '').trim();
-    if (!key || key.includes('PLACEHOLDER')) return null;
+    if (!creds.key) return null;
     const models = (registry.providerModels.mistral || DEFAULT_AI_MODEL_REGISTRY.providerModels.mistral)
       .filter((m) => !isCircuitOpen(registry, m));
     for (const model of models) {
       try {
         const resp = await fetch('https://api.mistral.ai/v1/chat/completions', {
           method: 'POST',
-          signal: AbortSignal.timeout(15000),
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: { Authorization: `Bearer ${creds.key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
             messages: [{ role: 'user', content: promptText }],
@@ -838,9 +1309,76 @@ export async function callExternalFreeProvider(
     }
   }
 
+  if (provider === 'nvidia') {
+    if (!creds.key) return null;
+    const models = (registry.providerModels.nvidia || DEFAULT_AI_MODEL_REGISTRY.providerModels.nvidia)
+      .filter((m) => !isCircuitOpen(registry, `nvidia:${m}`));
+    for (const model of models.slice(0, 4)) {
+      try {
+        const resp = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+          method: 'POST',
+          signal: AbortSignal.timeout(Math.max(timeoutMs, 22000)),
+          headers: {
+            Authorization: `Bearer ${creds.key}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: promptText }],
+            temperature: 0.3,
+            max_tokens: options?.maxTokens || 2048
+          })
+        });
+        if (resp.ok) {
+          const data: any = await resp.json();
+          const text = data?.choices?.[0]?.message?.content || '';
+          if (text.trim()) return { text, modelUsed: `NVIDIA NIM (${model})`, keyUsed: 'NVIDIA_API_KEY', provider: 'nvidia' };
+        } else if (resp.status === 404) {
+          tripCircuitBreaker(registry, `nvidia:${model}`, 'nvidia', 404, `NVIDIA NIM HTTP 404`);
+        } else if (resp.status === 401 || resp.status === 403 || resp.status === 402) {
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (provider === 'cohere') {
+    if (!creds.key) return null;
+    const models = (registry.providerModels.cohere || DEFAULT_AI_MODEL_REGISTRY.providerModels.cohere)
+      .filter((m) => !isCircuitOpen(registry, `cohere:${m}`));
+    for (const model of models.slice(0, 3)) {
+      try {
+        const resp = await fetch('https://api.cohere.com/v2/chat', {
+          method: 'POST',
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: {
+            Authorization: `Bearer ${creds.key}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: promptText }],
+            temperature: 0.3,
+            ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {})
+          })
+        });
+        if (resp.ok) {
+          const data: any = await resp.json();
+          const text = extractCohereV2Text(data);
+          if (text.trim()) return { text, modelUsed: `Cohere (${model})`, keyUsed: 'COHERE_API_KEY', provider: 'cohere' };
+        } else if (resp.status === 404) {
+          tripCircuitBreaker(registry, `cohere:${model}`, 'cohere', 404, `Cohere HTTP 404`);
+        } else if (resp.status === 401 || resp.status === 403 || resp.status === 429) {
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+
   if (provider === 'openrouter') {
-    const key = (options?.customKey || process.env.OPENROUTER_API_KEY || '').trim();
-    if (!key || key.includes('PLACEHOLDER')) return null;
+    if (!creds.key) return null;
     const rawModels = registry.openrouterFreeModels?.length
       ? registry.openrouterFreeModels
       : registry.providerModels.openrouter;
@@ -849,9 +1387,9 @@ export async function callExternalFreeProvider(
       try {
         const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(timeoutMs),
           headers: {
-            Authorization: `Bearer ${key}`,
+            Authorization: `Bearer ${creds.key}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://windows-fix-wizard.github.io',
             'X-Title': 'Windows Fix Wizard'
@@ -874,17 +1412,83 @@ export async function callExternalFreeProvider(
     }
   }
 
+  if (provider === 'cloudflare') {
+    const accountId = creds.cloudflareAccountId || '';
+    const token = creds.key;
+    if (!accountId || !token) return null;
+    const models = (registry.providerModels.cloudflare || DEFAULT_AI_MODEL_REGISTRY.providerModels.cloudflare)
+      .filter((m) => typeof m === 'string' && /^[@a-zA-Z0-9._/-]+$/.test(m) && !m.includes('..') && !isCircuitOpen(registry, m));
+    for (const model of models) {
+      try {
+        const resp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: promptText }],
+            ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {})
+          })
+        });
+        if (resp.ok) {
+          const data: any = await resp.json();
+          const text = data?.result?.response || data?.result?.choices?.[0]?.message?.content || '';
+          if (String(text).trim()) {
+            return { text: String(text), modelUsed: `Cloudflare (${model})`, keyUsed: 'CLOUDFLARE_API_TOKEN', provider: 'cloudflare' };
+          }
+        } else if (resp.status === 404) {
+          tripCircuitBreaker(registry, model, 'cloudflare', 404, `Cloudflare HTTP 404`);
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (provider === 'huggingface') {
+    if (!creds.key || Date.now() < huggingface402Until) return null;
+    const models = (registry.providerModels.huggingface || DEFAULT_AI_MODEL_REGISTRY.providerModels.huggingface)
+      .filter((m) => !isCircuitOpen(registry, `hf:${m}`));
+    for (const model of models.slice(0, 4)) {
+      try {
+        const resp = await fetch('https://router.huggingface.co/v1/chat/completions', {
+          method: 'POST',
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: {
+            Authorization: `Bearer ${creds.key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: promptText }],
+            temperature: 0.3,
+            max_tokens: options?.maxTokens || 2048
+          })
+        });
+        if (resp.ok) {
+          const data: any = await resp.json();
+          const text = data?.choices?.[0]?.message?.content || '';
+          if (text.trim()) return { text, modelUsed: `HuggingFace (${model})`, keyUsed: 'HF_TOKEN', provider: 'huggingface' };
+        } else if (resp.status === 402) {
+          // Monthly free credit depleted: pause HF calls for 6h so chain moves instantaneously
+          huggingface402Until = Date.now() + 6 * 3600 * 1000;
+          break;
+        } else if (resp.status === 404) {
+          tripCircuitBreaker(registry, `hf:${model}`, 'huggingface', 404, `Hugging Face Router HTTP 404`);
+        } else if (resp.status === 401 || resp.status === 403) {
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+
   if (provider === 'cerebras') {
-    const key = (options?.customKey || process.env.CEREBRAS_API_KEY || '').trim();
-    if (!key || key.includes('PLACEHOLDER')) return null;
+    if (!creds.key) return null;
     const models = (registry.providerModels.cerebras || DEFAULT_AI_MODEL_REGISTRY.providerModels.cerebras)
       .filter((m) => !isCircuitOpen(registry, m));
     for (const model of models) {
       try {
         const resp = await fetch('https://api.cerebras.ai/v1/chat/completions', {
           method: 'POST',
-          signal: AbortSignal.timeout(15000),
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: { Authorization: `Bearer ${creds.key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
             messages: [{ role: 'user', content: promptText }],
@@ -903,32 +1507,65 @@ export async function callExternalFreeProvider(
     }
   }
 
-  if (provider === 'cloudflare') {
-    const accountId = (options?.cloudflareAccountId || process.env.CLOUDFLARE_ACCOUNT_ID || '').trim();
-    const token = (options?.customKey || process.env.CLOUDFLARE_API_TOKEN || '').trim();
-    if (!accountId || !token) return null;
-    const models = (registry.providerModels.cloudflare || DEFAULT_AI_MODEL_REGISTRY.providerModels.cloudflare)
-      .filter((m) => typeof m === 'string' && /^[@a-zA-Z0-9._/-]+$/.test(m) && !m.includes('..') && !isCircuitOpen(registry, m));
-    for (const model of models) {
+  if (provider === 'ovh') {
+    if (!options?.bypassEnabledCheck && registry.keylessFallbackEnabled === false) {
+      return null;
+    }
+    if (Date.now() < ovhCooldownUntil) {
+      return null;
+    }
+    const sanitizedPrompt = sanitizePromptForKeylessEndpoint(promptText);
+    const rawModels = registry.ovhModels?.length
+      ? registry.ovhModels
+      : (registry.providerModels.ovh || DEFAULT_AI_MODEL_REGISTRY.providerModels.ovh);
+    const models = rawModels.filter((m) => !isCircuitOpen(registry, `ovh:${m}`));
+    const ovhTimeoutMs = Math.min(Math.max(Number(options?.timeoutMs) || 26000, 10000), 40000);
+
+    for (const model of models.slice(0, 3)) {
       try {
-        const resp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`, {
+        const resp = await fetch('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions', {
           method: 'POST',
-          signal: AbortSignal.timeout(15000),
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(ovhTimeoutMs),
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.15'
+          },
           body: JSON.stringify({
-            messages: [{ role: 'user', content: promptText }]
+            model,
+            messages: [{ role: 'user', content: sanitizedPrompt }],
+            temperature: 0.3,
+            ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {})
           })
         });
         if (resp.ok) {
-          const data: any = await resp.json();
-          const text = data?.result?.response || data?.result?.choices?.[0]?.message?.content || '';
-          if (String(text).trim()) {
-            return { text: String(text), modelUsed: `Cloudflare (${model})`, keyUsed: 'CLOUDFLARE_API_TOKEN', provider: 'cloudflare' };
+          ovhCooldownUntil = 0;
+          ovhCooldownMessage = '';
+          const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+          const rawBody = await resp.text();
+          const text = parseNonHtmlCompletionBody(rawBody, contentType);
+          if (text.trim()) {
+            return {
+              text,
+              modelUsed: `OVHcloud (${model}) [Keyless]`,
+              keyUsed: 'KEYLESS_NO_AUTH',
+              provider: 'ovh'
+            };
           }
+        } else if (resp.status === 429) {
+          const headerRetry = parseInt(resp.headers.get('retry-after') || '', 10);
+          const waitSec = Math.min(Math.max(Number.isFinite(headerRetry) ? headerRetry : 45, 5), 90);
+          ovhCooldownUntil = Date.now() + waitSec * 1000;
+          ovhCooldownMessage = `OVHcloud Anonymous limit (${waitSec}s cooldown)`;
+          break;
         } else if (resp.status === 404) {
-          tripCircuitBreaker(registry, model, 'cloudflare', 404, `Cloudflare HTTP 404`);
+          tripCircuitBreaker(registry, `ovh:${model}`, 'ovh', 404, 'OVHcloud HTTP 404', 6);
+        } else {
+          break;
         }
-      } catch (_) {}
+      } catch (err: any) {
+        ovhCooldownMessage = err?.message || 'OVHcloud request timeout';
+        break;
+      }
     }
   }
 
@@ -941,7 +1578,7 @@ export async function callExternalFreeProvider(
       ? registry.pollinationsModels
       : (registry.providerModels.pollinations || DEFAULT_AI_MODEL_REGISTRY.providerModels.pollinations);
     const models = rawModels.filter((m) => !isCircuitOpen(registry, `pollinations:${m}`));
-    const timeoutMs = Math.min(Math.max(Number(options?.timeoutMs) || 32000, 10000), 45000);
+    const pollTimeoutMs = Math.min(Math.max(Number(options?.timeoutMs) || 32000, 10000), 45000);
 
     for (const model of models.slice(0, 3)) {
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -956,10 +1593,10 @@ export async function callExternalFreeProvider(
         try {
           const resp = await fetch('https://text.pollinations.ai/openai', {
             method: 'POST',
-            signal: AbortSignal.timeout(timeoutMs),
+            signal: AbortSignal.timeout(pollTimeoutMs),
             headers: {
               'Content-Type': 'application/json',
-              'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.14'
+              'User-Agent': 'WindowsFixWizard-ResilienceRouter/3.106.15'
             },
             body: JSON.stringify({
               model,
@@ -974,21 +1611,10 @@ export async function callExternalFreeProvider(
             pollinationsCooldownMessage = '';
             const contentType = (resp.headers.get('content-type') || '').toLowerCase();
             const rawBody = await resp.text();
-            let text = '';
-            let parsedJson = false;
-            try {
-              const parsed: any = JSON.parse(rawBody);
-              parsedJson = true;
-              text = parsed?.choices?.[0]?.message?.content || parsed?.text || '';
-            } catch {
-              const looksLikeHtml = contentType.includes('text/html') || /^\s*(?:<!doctype|<html|<head|<body)\b/i.test(rawBody);
-              if (!looksLikeHtml) {
-                text = rawBody || '';
-              }
-            }
-            if ((!parsedJson || String(text).trim()) && String(text).trim()) {
+            const text = parseNonHtmlCompletionBody(rawBody, contentType);
+            if (text.trim()) {
               return {
-                text: String(text),
+                text,
                 modelUsed: `Pollinations (${model}) [Keyless]`,
                 keyUsed: 'KEYLESS_NO_AUTH',
                 provider: 'pollinations'
@@ -1027,8 +1653,231 @@ export async function callExternalFreeProvider(
   return null;
 }
 
-let pollinationsCooldownUntil = 0;
-let pollinationsCooldownMessage = '';
+export async function probeExternalProvider(params: {
+  provider: Exclude<ProviderId, 'gemini'>;
+  customKey?: string;
+  cloudflareAccountId?: string;
+  promptText: string;
+  maxTokens?: number;
+}): Promise<{
+  isValid: boolean;
+  provider: Exclude<ProviderId, 'gemini'>;
+  modelUsed?: string;
+  text?: string;
+  latencyMs: number;
+  httpStatus?: number;
+  reason?: string;
+}> {
+  const started = Date.now();
+  const { provider, promptText, maxTokens = 240 } = params;
+  const registry = loadAiModelRegistry();
+  const isKeyless = KEYLESS_PROVIDER_IDS.includes(provider);
+  const creds = resolveProviderCredentials(provider, {
+    customKey: params.customKey,
+    cloudflareAccountId: params.cloudflareAccountId
+  });
+
+  if (!isKeyless) {
+    if (provider === 'cloudflare' && (!creds.key || !creds.cloudflareAccountId)) {
+      return {
+        isValid: false,
+        provider,
+        latencyMs: Date.now() - started,
+        reason: 'Cloudflare Account ID와 Workers AI API Token을 모두 입력하거나 서버 환경변수에 설정해 주세요.'
+      };
+    }
+    if (provider !== 'cloudflare' && !creds.key) {
+      return {
+        isValid: false,
+        provider,
+        latencyMs: Date.now() - started,
+        reason: `${provider.toUpperCase()} API 키가 입력되지 않았으며 서버 저장소에도 설정되어 있지 않습니다.`
+      };
+    }
+  }
+
+  const models = provider === 'openrouter'
+    ? (registry.openrouterFreeModels?.length ? registry.openrouterFreeModels : registry.providerModels.openrouter)
+    : provider === 'ovh'
+      ? (registry.ovhModels?.length ? registry.ovhModels : registry.providerModels.ovh)
+      : provider === 'pollinations'
+        ? (registry.pollinationsModels?.length ? registry.pollinationsModels : registry.providerModels.pollinations)
+        : (registry.providerModels?.[provider] || DEFAULT_AI_MODEL_REGISTRY.providerModels[provider]);
+  const primaryModel = models[0] || DEFAULT_AI_MODEL_REGISTRY.providerModels[provider][0];
+
+  const sanitizeForKeyless = isKeyless ? sanitizePromptForKeylessEndpoint(promptText) : promptText;
+
+  try {
+    let resp: Response;
+    if (provider === 'cohere') {
+      resp = await fetch('https://api.cohere.com/v2/chat', {
+        method: 'POST',
+        signal: AbortSignal.timeout(20000),
+        headers: {
+          Authorization: `Bearer ${creds.key}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({
+          model: primaryModel,
+          messages: [{ role: 'user', content: sanitizeForKeyless }],
+          temperature: 0.2,
+          max_tokens: maxTokens
+        })
+      });
+    } else if (provider === 'cloudflare') {
+      resp = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(creds.cloudflareAccountId || '')}/ai/run/${primaryModel}`,
+        {
+          method: 'POST',
+          signal: AbortSignal.timeout(20000),
+          headers: { Authorization: `Bearer ${creds.key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: sanitizeForKeyless }],
+            max_tokens: maxTokens
+          })
+        }
+      );
+    } else {
+      const endpointMap: Record<string, { url: string; headers: Record<string, string>; extraBody?: Record<string, any> }> = {
+        groq: {
+          url: 'https://api.groq.com/openai/v1/chat/completions',
+          headers: { Authorization: `Bearer ${creds.key}` }
+        },
+        mistral: {
+          url: 'https://api.mistral.ai/v1/chat/completions',
+          headers: { Authorization: `Bearer ${creds.key}` }
+        },
+        nvidia: {
+          url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+          headers: { Authorization: `Bearer ${creds.key}`, Accept: 'application/json' }
+        },
+        openrouter: {
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          headers: {
+            Authorization: `Bearer ${creds.key}`,
+            'HTTP-Referer': 'https://windows-fix-wizard.github.io',
+            'X-Title': 'Windows Fix Wizard'
+          }
+        },
+        huggingface: {
+          url: 'https://router.huggingface.co/v1/chat/completions',
+          headers: { Authorization: `Bearer ${creds.key}` }
+        },
+        cerebras: {
+          url: 'https://api.cerebras.ai/v1/chat/completions',
+          headers: { Authorization: `Bearer ${creds.key}` }
+        },
+        ovh: {
+          url: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions',
+          headers: { 'User-Agent': 'WindowsFixWizard-Probe/3.106.15' }
+        },
+        pollinations: {
+          url: 'https://text.pollinations.ai/openai',
+          headers: { 'User-Agent': 'WindowsFixWizard-Probe/3.106.15' },
+          extraBody: { private: true }
+        }
+      };
+
+      const targetSpec = endpointMap[provider];
+      resp = await fetch(targetSpec.url, {
+        method: 'POST',
+        signal: AbortSignal.timeout(isKeyless ? 28000 : 20000),
+        headers: {
+          'Content-Type': 'application/json',
+          ...targetSpec.headers
+        },
+        body: JSON.stringify({
+          model: primaryModel,
+          messages: [{ role: 'user', content: sanitizeForKeyless }],
+          temperature: 0.2,
+          max_tokens: maxTokens,
+          ...(targetSpec.extraBody || {})
+        })
+      });
+    }
+
+    const latencyMs = Date.now() - started;
+    const rawBody = await resp.text().catch(() => '');
+
+    if (resp.ok) {
+      let text = '';
+      if (provider === 'cohere') {
+        const parsed = JSON.parse(rawBody);
+        text = extractCohereV2Text(parsed);
+      } else if (provider === 'cloudflare') {
+        const parsed = JSON.parse(rawBody);
+        text = String(parsed?.result?.response || parsed?.result?.choices?.[0]?.message?.content || '');
+      } else {
+        text = parseNonHtmlCompletionBody(rawBody, (resp.headers.get('content-type') || '').toLowerCase());
+      }
+      if (!text.trim()) {
+        return {
+          isValid: false,
+          provider,
+          modelUsed: `${provider} (${primaryModel})`,
+          latencyMs,
+          httpStatus: resp.status,
+          reason: '엔드포인트가 빈 응답을 반환했습니다.'
+        };
+      }
+      return {
+        isValid: true,
+        provider,
+        modelUsed: `${provider} (${primaryModel})`,
+        text,
+        latencyMs,
+        httpStatus: resp.status
+      };
+    }
+
+    if (resp.status === 401 || resp.status === 403) {
+      return {
+        isValid: false,
+        provider,
+        latencyMs,
+        httpStatus: resp.status,
+        reason: `인증 실패 (HTTP ${resp.status}): API 키 또는 권한을 확인해 주세요.`
+      };
+    }
+    if (resp.status === 402) {
+      return {
+        isValid: false,
+        provider,
+        latencyMs,
+        httpStatus: 402,
+        reason: provider === 'huggingface'
+          ? 'Hugging Face 무료 월간 크레딧이 소진되었습니다 (HTTP 402 Payment Required). 다음 달 크레딧 리셋을 기다리거나 다른 무료 키(Groq·NVIDIA·Cohere)를 사용하세요.'
+          : `무료 크레딧 소진 (HTTP 402): ${rawBody.substring(0, 120)}`
+      };
+    }
+    if (resp.status === 429) {
+      const retryAfter = resp.headers.get('retry-after');
+      return {
+        isValid: false,
+        provider,
+        latencyMs,
+        httpStatus: 429,
+        reason: `호출 속도 제한 (HTTP 429${retryAfter ? ` · ${retryAfter}s 후 재시도` : ''}): 잠시 후 다시 시도하세요.`
+      };
+    }
+
+    return {
+      isValid: false,
+      provider,
+      latencyMs,
+      httpStatus: resp.status,
+      reason: `HTTP ${resp.status}: ${rawBody.substring(0, 140) || resp.statusText}`
+    };
+  } catch (err: any) {
+    return {
+      isValid: false,
+      provider,
+      latencyMs: Date.now() - started,
+      reason: `연결 오류 또는 시간 초과: ${err?.message || err}`
+    };
+  }
+}
 
 export function getPollinationsRateLimitStatus(): {
   inCooldown: boolean;
@@ -1046,6 +1895,28 @@ export function getPollinationsRateLimitStatus(): {
   return { inCooldown: false, remainingSeconds: 0, message: '' };
 }
 
+export function getKeylessRateLimitStatus(): {
+  inCooldown: boolean;
+  remainingSeconds: number;
+  message: string;
+  pollinations: { inCooldown: boolean; remainingSeconds: number; message: string };
+  ovh: { inCooldown: boolean; remainingSeconds: number; message: string };
+} {
+  const poll = getPollinationsRateLimitStatus();
+  const ovhRemMs = ovhCooldownUntil - Date.now();
+  const ovh = ovhRemMs > 0
+    ? { inCooldown: true, remainingSeconds: Math.max(1, Math.ceil(ovhRemMs / 1000)), message: ovhCooldownMessage || 'OVHcloud rate limit active' }
+    : { inCooldown: false, remainingSeconds: 0, message: '' };
+  const bothCooling = poll.inCooldown && ovh.inCooldown;
+  return {
+    inCooldown: bothCooling,
+    remainingSeconds: bothCooling ? Math.min(poll.remainingSeconds, ovh.remainingSeconds) : 0,
+    message: bothCooling ? `${ovh.message} / ${poll.message}` : '',
+    pollinations: poll,
+    ovh
+  };
+}
+
 export function recordRegistryUsage(provider: ProviderId, modelUsed: string, wasFailover = false): void {
   try {
     const registry = loadAiModelRegistry();
@@ -1054,7 +1925,7 @@ export function recordRegistryUsage(provider: ProviderId, modelUsed: string, was
       registry.telemetry.geminiRequests = (registry.telemetry.geminiRequests || 0) + 1;
     } else {
       registry.telemetry.freeProviderRequests = (registry.telemetry.freeProviderRequests || 0) + 1;
-      if (provider === 'pollinations') {
+      if (KEYLESS_PROVIDER_IDS.includes(provider)) {
         registry.telemetry.keylessRequests = (registry.telemetry.keylessRequests || 0) + 1;
       }
     }

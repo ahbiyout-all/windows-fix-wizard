@@ -21,6 +21,7 @@ import {
   callExternalFreeProvider,
   buildExternalFallbackPrompt,
   recordRegistryUsage,
+  KEYLESS_PROVIDER_IDS,
   type ProviderId
 } from '../lib/ai-resilience-router';
 import { parseAiJson } from '../src/utils/safeFetch';
@@ -73,7 +74,11 @@ async function runCollector() {
   const hasAnyKeyedExternal = Boolean(
     process.env.GROQ_API_KEY?.trim() ||
     process.env.MISTRAL_API_KEY?.trim() ||
+    process.env.NVIDIA_API_KEY?.trim() ||
+    process.env.COHERE_API_KEY?.trim() ||
     process.env.OPENROUTER_API_KEY?.trim() ||
+    process.env.HF_TOKEN?.trim() ||
+    process.env.HUGGINGFACE_API_KEY?.trim() ||
     process.env.CEREBRAS_API_KEY?.trim() ||
     (process.env.CLOUDFLARE_ACCOUNT_ID?.trim() && process.env.CLOUDFLARE_API_TOKEN?.trim())
   );
@@ -343,8 +348,9 @@ JSON Schema:
   // Multi-provider Keyed Free-Tier Failover across configured external providers
   if (!generatedText) {
     const externalPrompt = buildExternalFallbackPrompt(prompt, { responseMimeType: 'application/json' });
-    const keyedProviders = (registry.providerOrder || ['groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare'])
-      .filter((p): p is Exclude<ProviderId, 'gemini' | 'pollinations'> => p !== 'gemini' && p !== 'pollinations');
+    const orderList = (registry.providerOrder || ['groq', 'mistral', 'nvidia', 'cohere', 'openrouter', 'cloudflare', 'huggingface', 'cerebras', 'ovh', 'pollinations']);
+    const keyedProviders = orderList
+      .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && !KEYLESS_PROVIDER_IDS.includes(p));
     for (const providerId of keyedProviders) {
       console.log(`🔄 Attempting external free-tier failover via ${providerId.toUpperCase()}...`);
       const extRes = await callExternalFreeProvider(providerId, externalPrompt, { registry });
@@ -357,15 +363,19 @@ JSON Schema:
       }
     }
 
-    // Last-resort keyless serverless fallback (Pollinations) ONLY if enabled and all keyed tiers failed
+    // Last-resort keyless serverless fallback (OVHcloud / Pollinations) ONLY if enabled and all keyed tiers failed
     if (!generatedText && registry.keylessFallbackEnabled !== false) {
-      console.log('🔄 Attempting last-resort keyless failover via POLLINATIONS...');
-      const keylessRes = await callExternalFreeProvider('pollinations', externalPrompt, { registry });
-      if (keylessRes && keylessRes.text) {
-        generatedText = keylessRes.text;
-        successfulModel = keylessRes.modelUsed;
-        recordRegistryUsage('pollinations', keylessRes.modelUsed, true);
-        console.log(`✅ Successfully generated response via ${keylessRes.modelUsed}!`);
+      const keylessProviders = orderList.filter((p): p is Exclude<ProviderId, 'gemini'> => KEYLESS_PROVIDER_IDS.includes(p));
+      for (const keylessPid of keylessProviders) {
+        console.log(`🔄 Attempting last-resort keyless failover via ${keylessPid.toUpperCase()}...`);
+        const keylessRes = await callExternalFreeProvider(keylessPid, externalPrompt, { registry });
+        if (keylessRes && keylessRes.text) {
+          generatedText = keylessRes.text;
+          successfulModel = keylessRes.modelUsed;
+          recordRegistryUsage(keylessPid, keylessRes.modelUsed, true);
+          console.log(`✅ Successfully generated response via ${keylessRes.modelUsed}!`);
+          break;
+        }
       }
     }
   }

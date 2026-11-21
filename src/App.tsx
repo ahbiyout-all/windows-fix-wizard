@@ -67,6 +67,12 @@ import { validateKnownIssuesData, ValidationResult } from './utils/validateKnown
 import { idbGet, idbSet, idbRemove } from './utils/idbStorage';
 import { HiddenLogArchiveModal } from './components/HiddenLogArchiveModal';
 import { compressLogsToHiddenZip, getHiddenArchiveList } from './utils/logArchiveManager';
+import {
+  FreeAiExplorerTab,
+  SecondaryFreeAiKeysPanel,
+  type ServerKeyPresence,
+  type ProbeTestResult
+} from './components/FreeAiExplorerAndKeyPanel';
 
 interface AppErrorLog {
   id?: string;
@@ -719,7 +725,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.106.14";
+const APP_VERSION = "3.106.15";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1185,7 +1191,10 @@ jobs:
           GEMINI_API_KEY: \${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: \${{ secrets.GROQ_API_KEY }}
           MISTRAL_API_KEY: \${{ secrets.MISTRAL_API_KEY }}
+          NVIDIA_API_KEY: \${{ secrets.NVIDIA_API_KEY }}
+          COHERE_API_KEY: \${{ secrets.COHERE_API_KEY }}
           OPENROUTER_API_KEY: \${{ secrets.OPENROUTER_API_KEY }}
+          HF_TOKEN: \${{ secrets.HF_TOKEN }}
           CEREBRAS_API_KEY: \${{ secrets.CEREBRAS_API_KEY }}
           CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -1343,8 +1352,19 @@ export default function App() {
 
   const dynamicWorkflowYaml = useMemo(() => buildCollectorWorkflowYaml(collectorOptions), [collectorOptions]);
 
-  // Adaptive AI Model Resilience & Multi-Provider Free-Tier Router Hub (v3.100.0 -> v3.106.0)
-  type ResilienceProviderId = 'gemini' | 'groq' | 'mistral' | 'openrouter' | 'cerebras' | 'cloudflare' | 'pollinations';
+  // Adaptive AI Model Resilience & Multi-Provider Free-Tier Router Hub (v3.100.0 -> v3.106.15)
+  type ResilienceProviderId =
+    | 'gemini'
+    | 'groq'
+    | 'mistral'
+    | 'nvidia'
+    | 'cohere'
+    | 'openrouter'
+    | 'cloudflare'
+    | 'huggingface'
+    | 'cerebras'
+    | 'ovh'
+    | 'pollinations';
   interface ResilienceGeminiModel {
     id: string;
     displayName: string;
@@ -1368,6 +1388,12 @@ export default function App() {
     id: ResilienceProviderId | 'github-models' | 'ovh-anonymous';
     name: string;
     status: 'active' | 'keyless' | 'trial' | 'retired';
+    signupRequired?: 'none' | 'free-account';
+    cardRequired?: boolean;
+    authType?: 'keyless' | 'api-key' | 'account-token';
+    koreanJsonRating?: 'high' | 'medium' | 'experimental';
+    signupUrl?: string;
+    recommendedPriorityRank?: number;
     envVars: string[];
     freeTierLimits: string;
     strengths: string;
@@ -1386,6 +1412,7 @@ export default function App() {
       geminiModels: ResilienceGeminiModel[];
       openrouterFreeModels: string[];
       pollinationsModels?: string[];
+      ovhModels?: string[];
       providerModels: Record<Exclude<ResilienceProviderId, 'gemini'>, string[]>;
       circuitBreakers: Record<string, ResilienceCircuitBreaker>;
       telemetry: {
@@ -1412,14 +1439,7 @@ export default function App() {
   const [isSavingResilience, setIsSavingResilience] = useState<boolean>(false);
   const [isResettingCircuit, setIsResettingCircuit] = useState<string | null>(null);
   const [testingChainProvider, setTestingChainProvider] = useState<string | null>(null);
-  const [chainTestResult, setChainTestResult] = useState<{
-    success: boolean;
-    provider?: string;
-    modelUsed?: string;
-    latencyMs?: number;
-    message?: string;
-    error?: string;
-  } | null>(null);
+  const [chainTestResult, setChainTestResult] = useState<ProbeTestResult | null>(null);
   const [isPushingRegistry, setIsPushingRegistry] = useState<boolean>(false);
   const [resilienceNotice, setResilienceNotice] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
@@ -2172,10 +2192,9 @@ export default function App() {
 
   const [apiKeyConfig, setApiKeyConfigState] = useState<ApiKeyConfig>(getApiKeyConfig());
   const [newKeyInput, setNewKeyInput] = useState('');
-  const [groqKeyInput, setGroqKeyInput] = useState(localStorage.getItem('winfix_groq_api_key') || '');
-  const [openrouterKeyInput, setOpenrouterKeyInput] = useState(localStorage.getItem('winfix_openrouter_api_key') || '');
+  const [serverKeyPresence, setServerKeyPresence] = useState<ServerKeyPresence>({});
   const [testingSecondaryProvider, setTestingSecondaryProvider] = useState<string | null>(null);
-  const [secondaryTestResult, setSecondaryTestResult] = useState<{ provider?: string; isValid?: boolean; message?: string } | null>(null);
+  const [secondaryTestResult, setSecondaryTestResult] = useState<ProbeTestResult | null>(null);
 
   const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatusInfo | null>(null);
   const [isCheckingKeyStatus, setIsCheckingKeyStatus] = useState(false);
@@ -2239,21 +2258,30 @@ export default function App() {
           }
         } catch (_) {}
 
-        // Load secondary keys (Groq & OpenRouter) from server system_config if available
+        // Security hygiene: purge any legacy plaintext auxiliary keys from browser localStorage
+        try {
+          localStorage.removeItem('winfix_groq_api_key');
+          localStorage.removeItem('winfix_openrouter_api_key');
+        } catch (_) {}
+
+        // Load masked auxiliary key presence flags from server system_config (keys stay server-side only)
         try {
           const authHeaders = await getAuthHeaders();
           const resp = await fetch('/api/system_config', { headers: { ...authHeaders } });
           if (resp.ok) {
             const data = await resp.json();
             if (data.success && data.config) {
-              if (data.config.groqApiKey && !localStorage.getItem('winfix_groq_api_key')) {
-                setGroqKeyInput(data.config.groqApiKey);
-                localStorage.setItem('winfix_groq_api_key', data.config.groqApiKey);
-              }
-              if (data.config.openrouterApiKey && !localStorage.getItem('winfix_openrouter_api_key')) {
-                setOpenrouterKeyInput(data.config.openrouterApiKey);
-                localStorage.setItem('winfix_openrouter_api_key', data.config.openrouterApiKey);
-              }
+              setServerKeyPresence({
+                hasGroqKey: Boolean(data.config.hasGroqKey),
+                hasMistralKey: Boolean(data.config.hasMistralKey),
+                hasNvidiaKey: Boolean(data.config.hasNvidiaKey),
+                hasCohereKey: Boolean(data.config.hasCohereKey),
+                hasOpenrouterKey: Boolean(data.config.hasOpenrouterKey),
+                hasCloudflareAccountId: Boolean(data.config.hasCloudflareAccountId),
+                hasCloudflareToken: Boolean(data.config.hasCloudflareToken),
+                hasHuggingfaceKey: Boolean(data.config.hasHuggingfaceKey),
+                hasCerebrasKey: Boolean(data.config.hasCerebrasKey)
+              });
               if (data.config.stagingAutomationConfig && typeof data.config.stagingAutomationConfig === 'object') {
                 const rawCfg = data.config.stagingAutomationConfig;
                 const syncedCfg: StagingAutomationConfig = {
@@ -2624,69 +2652,69 @@ export default function App() {
     }
   };
 
-  const handleSaveGroqKey = async () => {
-    const trimmed = groqKeyInput.trim();
-    localStorage.setItem('winfix_groq_api_key', trimmed);
-    if (!IS_GITHUB_PAGES) {
-      try {
-        const authHeaders = await getAuthHeaders();
-        await fetch('/api/system_config/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ groqApiKey: trimmed })
+  const handleSaveSecondaryProviderKey = async (payload: Record<string, string>, label: string) => {
+    if (IS_GITHUB_PAGES) return;
+    try {
+      const authHeaders = await getAuthHeaders();
+      const resp = await fetch('/api/system_config/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(payload)
+      });
+      const data = await parseJsonResponse(resp);
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      if (data.config) {
+        setServerKeyPresence({
+          hasGroqKey: Boolean(data.config.hasGroqKey),
+          hasMistralKey: Boolean(data.config.hasMistralKey),
+          hasNvidiaKey: Boolean(data.config.hasNvidiaKey),
+          hasCohereKey: Boolean(data.config.hasCohereKey),
+          hasOpenrouterKey: Boolean(data.config.hasOpenrouterKey),
+          hasCloudflareAccountId: Boolean(data.config.hasCloudflareAccountId),
+          hasCloudflareToken: Boolean(data.config.hasCloudflareToken),
+          hasHuggingfaceKey: Boolean(data.config.hasHuggingfaceKey),
+          hasCerebrasKey: Boolean(data.config.hasCerebrasKey)
         });
-      } catch (_) {}
+      }
+      fetchResilienceStatus();
+      customAlert(`${label} 설정이 서버 보안 저장소에 안전하게 반영되었습니다.`);
+    } catch (err: any) {
+      customAlert(`키 저장 실패: ${err.message || '서버 통신 오류'}`);
     }
-    customAlert(language === 'en' ? "Groq API Key saved successfully!" : "Groq API 키가 성공적으로 저장되었습니다!");
   };
 
-  const handleSaveOpenRouterKey = async () => {
-    const trimmed = openrouterKeyInput.trim();
-    localStorage.setItem('winfix_openrouter_api_key', trimmed);
-    if (!IS_GITHUB_PAGES) {
-      try {
-        const authHeaders = await getAuthHeaders();
-        await fetch('/api/system_config/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ openrouterApiKey: trimmed })
-        });
-      } catch (_) {}
-    }
-    customAlert(language === 'en' ? "OpenRouter API Key saved successfully!" : "OpenRouter API 키가 성공적으로 저장되었습니다!");
-  };
-
-  const handleTestSecondaryKey = async (provider: 'groq' | 'openrouter', keyToTest: string) => {
-    if (!keyToTest.trim()) {
-      customAlert(language === 'en' ? "Please enter an API Key to test." : "검증할 API 키를 입력해 주세요.");
-      return;
-    }
-    setTestingSecondaryProvider(provider);
+  const handleTestSecondaryKey = async (params: {
+    provider: Exclude<ResilienceProviderId, 'gemini'>;
+    key?: string;
+    cloudflareAccountId?: string;
+    mode: 'ping' | 'korean-json';
+  }) => {
+    const jobKey = `${params.provider}:${params.mode}`;
+    setTestingSecondaryProvider(jobKey);
     setSecondaryTestResult(null);
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch('/api/keys/test-secondary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ provider, key: keyToTest.trim() })
+        body: JSON.stringify(params)
       });
+      const data = await parseJsonResponse(resp);
       if (resp.ok) {
-        const data = await resp.json();
-        setSecondaryTestResult({
-          provider,
-          isValid: data.isValid,
-          message: data.message || data.reason
-        });
+        setSecondaryTestResult(data);
+        fetchResilienceStatus();
       } else {
         setSecondaryTestResult({
-          provider,
+          provider: params.provider,
           isValid: false,
-          message: `HTTP error ${resp.status}`
+          message: data.error || `HTTP error ${resp.status}`
         });
       }
     } catch (err: any) {
       setSecondaryTestResult({
-        provider,
+        provider: params.provider,
         isValid: false,
         message: err.message || "Network request failed"
       });
@@ -3399,7 +3427,7 @@ export default function App() {
       }));
       setResilienceNotice({
         type: 'success',
-        message: `실시간 모델 탐색 완료: Gemini ${data.geminiDiscoveredCount || 0}종 · OpenRouter :free ${data.openrouterDiscoveredCount || 0}종 · Pollinations 키리스 ${data.pollinationsDiscoveredCount || 0}종 동기화됨`
+        message: `실시간 모델 탐색 완료: Gemini ${data.geminiDiscoveredCount || 0} · OpenRouter :free ${data.openrouterDiscoveredCount || 0} · NVIDIA ${data.nvidiaDiscoveredCount || 0} · HF ${data.huggingfaceDiscoveredCount || 0} · OVH ${data.ovhDiscoveredCount || 0} · Pollinations ${data.pollinationsDiscoveredCount || 0}`
       });
     } catch (err: any) {
       setResilienceNotice({ type: 'error', message: `실시간 모델 탐색 실패: ${err.message}` });
@@ -3495,8 +3523,9 @@ export default function App() {
     const order = [...resilienceStatus.registry.providerOrder];
     const targetIdx = index + delta;
     if (targetIdx < 0 || targetIdx >= order.length) return;
-    // Prevent moving keyed providers past or moving 'pollinations' out of fixed last-resort slot
-    if (order[index] === 'pollinations' || order[targetIdx] === 'pollinations') return;
+    const isKeylessSlot = (pid: ResilienceProviderId) => pid === 'pollinations' || pid === 'ovh';
+    // Keep keyless providers grouped strictly in Last-Resort positions at the bottom
+    if (isKeylessSlot(order[index]) !== isKeylessSlot(order[targetIdx])) return;
     const temp = order[index];
     order[index] = order[targetIdx];
     order[targetIdx] = temp;
@@ -3515,8 +3544,8 @@ export default function App() {
       resilienceStatus.registry.providerOrder,
       resilienceStatus.registry.geminiModels,
       nextVal
-        ? '키리스 최후 폴백(Pollinations · 무가입/무키)을 활성화했습니다.'
-        : '키리스 최후 폴백(Pollinations)을 비활성화했습니다. 이제 키 미설정·소진 시 로컬 DB로만 폴백합니다.',
+        ? '키리스 최후 폴백(OVHcloud · Pollinations · 무가입/무키)을 활성화했습니다.'
+        : '키리스 최후 폴백(OVHcloud · Pollinations)을 비활성화했습니다. 이제 키 미설정·소진 시 로컬 DB로만 폴백합니다.',
       nextVal
     );
   };
@@ -3548,16 +3577,17 @@ export default function App() {
     }
   };
 
-  const handleTestProviderChain = async (provider?: ResilienceProviderId) => {
+  const handleTestProviderChain = async (provider?: ResilienceProviderId, mode: 'ping' | 'korean-json' = 'ping') => {
     if (!isAdmin || IS_GITHUB_PAGES) return;
-    setTestingChainProvider(provider || 'chain');
+    const jobKey = provider ? `${provider}:${mode}` : `chain:${mode}`;
+    setTestingChainProvider(jobKey);
     setChainTestResult(null);
     try {
       const authHeaders = await getAuthHeaders();
       const resp = await fetch('/api/ai/test-chain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify(provider ? { provider } : {})
+        body: JSON.stringify(provider ? { provider, mode } : { mode })
       });
       const data = await parseJsonResponse(resp);
       setChainTestResult(data);
@@ -16030,8 +16060,8 @@ export default function App() {
                       </h2>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
                         {language === 'en'
-                          ? `Live Discovery · 404 Circuit Breaker (24h TTL) · 6 Free-Tier Providers · Last sync: ${resilienceStatus?.registry.lastDiscoveryAt ? formatKSTDateTime(resilienceStatus.registry.lastDiscoveryAt) : 'Standby'}`
-                          : `실시간 모델 탐색 · 404 서킷 브레이커(24시간 격리) · 6대 무료 프로바이더 분배 · 최근 탐색: ${resilienceStatus?.registry.lastDiscoveryAt ? formatKSTDateTime(resilienceStatus.registry.lastDiscoveryAt) : '대기중'}`}
+                          ? `Live Discovery · 404 Circuit Breaker (24h TTL) · 10 Free/Keyless Tiers · Last sync: ${resilienceStatus?.registry.lastDiscoveryAt ? formatKSTDateTime(resilienceStatus.registry.lastDiscoveryAt) : 'Standby'}`
+                          : `실시간 모델 탐색 · 404 서킷 브레이커(24시간 격리) · 10대 무료/키리스 프로바이더 · 최근 탐색: ${resilienceStatus?.registry.lastDiscoveryAt ? formatKSTDateTime(resilienceStatus.registry.lastDiscoveryAt) : '대기중'}`}
                       </p>
                     </div>
                   </div>
@@ -16109,12 +16139,12 @@ export default function App() {
                           {language === 'en' ? 'Server Free Providers' : '서버 무료 AI 프로바이더'}
                         </div>
                         <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                          {configuredCount} / {Object.keys(resilienceStatus?.readiness || {}).length || 7} Ready
+                          {configuredCount} / {Object.keys(resilienceStatus?.readiness || {}).length || 11} Ready
                         </div>
                         <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
                           {language === 'en'
-                            ? `OpenRouter :free: ${reg?.openrouterFreeModels?.length || 4} · Keyless: ${reg?.keylessFallbackEnabled !== false ? 'ON' : 'OFF'}`
-                            : `OpenRouter :free ${reg?.openrouterFreeModels?.length || 4}종 · 키리스 폴백 ${reg?.keylessFallbackEnabled !== false ? 'ON' : 'OFF'}`}
+                            ? `OpenRouter :free: ${reg?.openrouterFreeModels?.length || 4} · Keyless: ${reg?.keylessFallbackEnabled !== false ? 'ON (2x)' : 'OFF'}`
+                            : `OpenRouter :free ${reg?.openrouterFreeModels?.length || 4}종 · 키리스 ${reg?.keylessFallbackEnabled !== false ? 'ON (OVH·Poll)' : 'OFF'}`}
                         </div>
                       </div>
 
@@ -16153,22 +16183,29 @@ export default function App() {
                 )}
 
                 {chainTestResult && (
-                  <div className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                  <div className={`p-3 rounded-xl border text-xs flex flex-col gap-2 ${
                     chainTestResult.success
                       ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
                       : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
                   }`}>
-                    <div className="flex items-center gap-2 font-mono">
-                      {chainTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
-                      <span>
-                        {chainTestResult.success
-                          ? `[PROBE OK] ${chainTestResult.provider} · ${chainTestResult.message || chainTestResult.modelUsed}`
-                          : `[PROBE STANDBY] ${chainTestResult.provider || 'chain'} · ${chainTestResult.error}`}
-                      </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 font-mono">
+                        {chainTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                        <span>
+                          {chainTestResult.success
+                            ? `[PROBE OK] ${chainTestResult.provider} · ${chainTestResult.message || chainTestResult.modelUsed}`
+                            : `[PROBE STANDBY] ${chainTestResult.provider || 'chain'} · ${chainTestResult.error || chainTestResult.reason}`}
+                        </span>
+                      </div>
+                      <button type="button" onClick={() => setChainTestResult(null)} className="text-current opacity-60 hover:opacity-100 text-[11px] cursor-pointer">
+                        닫기
+                      </button>
                     </div>
-                    <button type="button" onClick={() => setChainTestResult(null)} className="text-current opacity-60 hover:opacity-100 text-[11px] cursor-pointer">
-                      닫기
-                    </button>
+                    {chainTestResult.preview && (
+                      <pre className="font-mono text-[11px] bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 text-slate-700 dark:text-slate-300 overflow-x-auto">
+                        {chainTestResult.preview}
+                      </pre>
+                    )}
                   </div>
                 )}
 
@@ -16177,7 +16214,7 @@ export default function App() {
                   {[
                     { id: 'discovery' as const, icon: Layers, labelKo: '1. 실시간 모델 탐색 & 404 서킷 브레이커', labelEn: '1. Live Discovery & 404 Breaker' },
                     { id: 'routing' as const, icon: Sliders, labelKo: '2. 멀티 프로바이더 무료 티어 라우터', labelEn: '2. Multi-Provider Free Router' },
-                    { id: 'strategy' as const, icon: BookOpen, labelKo: '3. 2026 모델 변경 대응 & 무료 티어 전략 연구', labelEn: '3. 2026 Strategy Matrix' }
+                    { id: 'strategy' as const, icon: BookOpen, labelKo: '3. 보조 무료 AI 모델·키 탐색 & 발급 가이드', labelEn: '3. Free AI Model & Key Explorer' }
                   ].map((tab) => {
                     const TabIcon = tab.icon;
                     const active = aiHubTab === tab.id;
@@ -16410,15 +16447,15 @@ export default function App() {
                     {/* Keyless Last-Resort Safety & Privacy Guard */}
                     {(() => {
                       const keylessEnabled = resilienceStatus.registry.keylessFallbackEnabled !== false;
-                      const keylessCount = resilienceStatus.registry.telemetry?.keylessRequests ?? resilienceStatus.registry.telemetry?.perProviderUsage?.pollinations ?? 0;
+                      const keylessCount = resilienceStatus.registry.telemetry?.keylessRequests ?? ((resilienceStatus.registry.telemetry?.perProviderUsage?.pollinations || 0) + (resilienceStatus.registry.telemetry?.perProviderUsage?.ovh || 0));
                       return (
                         <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="space-y-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-2 text-xs">
                               <span className="font-bold text-slate-900 dark:text-slate-100">
                                 {language === 'en'
-                                  ? 'Keyless Last-Resort Fallback (Pollinations · Zero-Signup)'
-                                  : '무가입·무키 최후 폴백 계층 (Pollinations.ai 서버리스)'}
+                                  ? 'Keyless Last-Resort Fallback (OVHcloud · Pollinations · Zero-Signup)'
+                                  : '무가입·무키 2중 최후 폴백 계층 (OVHcloud 익명 · Pollinations.ai)'}
                               </span>
                               <span className={`font-mono text-[11px] font-bold ${keylessEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                                 · {keylessEnabled ? 'ENABLED (Last-Resort Only)' : 'DISABLED'}
@@ -16426,11 +16463,11 @@ export default function App() {
                             </div>
                             <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
                               {language === 'en'
-                                ? 'Executed only when Gemini and all configured API keys are unset or exhausted. Outbound prompts automatically mask API keys/Bearer tokens and enforce private: true.'
-                                : 'Gemini 및 등록된 모든 API 키(Groq/Mistral/OpenRouter/Cerebras/Cloudflare)가 미설정되었거나 소진된 경우에만 마지막으로 호출됩니다. 전송 전 프롬프트 내 키·토큰 문자열은 자동 마스킹됩니다.'}
+                                ? 'Executed only when Gemini and all configured API keys are unset or exhausted. Outbound prompts automatically mask API keys/Bearer tokens.'
+                                : 'Gemini 및 등록된 모든 무료 API 키(Groq · Mistral · NVIDIA · Cohere · OpenRouter · Cloudflare · HF)가 미설정되었거나 소진된 경우에만 마지막으로 호출됩니다. 전송 전 키·토큰 문자열은 자동 마스킹됩니다.'}
                             </p>
                             <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
-                              Endpoint: text.pollinations.ai/openai · Mode: private=true · Keyless Calls: {keylessCount}
+                              Endpoints: Kepler OVH Anonymous + Pollinations (private=true) · Keyless Calls: {keylessCount}
                             </div>
                           </div>
 
@@ -16457,10 +16494,10 @@ export default function App() {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
                           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                            {language === 'en' ? 'Failover Execution Order & Server Readiness' : '프로바이더 페일오버 체인 및 서버 환경변수 연동 상태'}
+                            {language === 'en' ? 'Failover Execution Order & Server Readiness' : '프로바이더 페일오버 체인 및 서버 환경변수·키 연동 상태'}
                           </h3>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            모든 외부 AI 키는 브라우저에 저장하지 않고 서버 환경변수(.env) 및 GitHub Secrets로만 안전하게 주입됩니다. (키리스 계층은 최후 폴백 전용)
+                            모든 외부 AI 키는 브라우저에 저장하지 않고 서버 환경변수(.env), 마스킹된 서버 설정 및 GitHub Secrets로만 주입됩니다.
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -16470,7 +16507,7 @@ export default function App() {
                             disabled={testingChainProvider !== null}
                             className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
                           >
-                            {testingChainProvider === 'chain' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                            {testingChainProvider?.startsWith('chain:') ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                             <span>전체 체인 연결 테스트</span>
                           </button>
                           <button
@@ -16494,15 +16531,21 @@ export default function App() {
                         {resilienceStatus.registry.providerOrder.map((pid, idx) => {
                           const info = resilienceStatus.readiness?.[pid];
                           const usage = resilienceStatus.registry.telemetry?.perProviderUsage?.[pid] || 0;
-                          const isKeylessProvider = pid === 'pollinations';
+                          const isKeylessProvider = pid === 'pollinations' || pid === 'ovh';
                           const keylessActive = resilienceStatus.registry.keylessFallbackEnabled !== false;
+                          const prevPid = idx > 0 ? resilienceStatus.registry.providerOrder[idx - 1] : null;
+                          const nextPid = idx < resilienceStatus.registry.providerOrder.length - 1 ? resilienceStatus.registry.providerOrder[idx + 1] : null;
+                          const isPrevDifferentGroup = prevPid ? (prevPid === 'pollinations' || prevPid === 'ovh') !== isKeylessProvider : true;
+                          const isNextDifferentGroup = nextPid ? (nextPid === 'pollinations' || nextPid === 'ovh') !== isKeylessProvider : true;
                           const models = pid === 'gemini'
                             ? resilienceStatus.registry.geminiModels.filter((m) => m.enabled).slice(0, 2).map((m) => m.id)
                             : pid === 'openrouter'
                               ? (resilienceStatus.registry.openrouterFreeModels || []).slice(0, 2)
-                              : isKeylessProvider
+                              : pid === 'pollinations'
                                 ? (resilienceStatus.registry.pollinationsModels || resilienceStatus.registry.providerModels?.[pid] || []).slice(0, 3)
-                                : (resilienceStatus.registry.providerModels?.[pid] || []);
+                                : pid === 'ovh'
+                                  ? (resilienceStatus.registry.ovhModels || resilienceStatus.registry.providerModels?.[pid] || []).slice(0, 3)
+                                  : (resilienceStatus.registry.providerModels?.[pid] || []).slice(0, 3);
                           return (
                             <div key={pid} className="p-3.5 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                               <div className="flex items-start gap-3 min-w-0">
@@ -16520,7 +16563,7 @@ export default function App() {
                                       </span>
                                     ) : (
                                       <span className={`text-[11px] font-semibold ${info?.configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                                        · {info?.configured ? 'Configured (Server Env)' : `Not Set (${info?.envHint || 'ENV'})`}
+                                        · {info?.configured ? 'Configured (Server Ready)' : `Not Set (${info?.envHint || 'ENV'})`}
                                       </span>
                                     )}
                                     <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
@@ -16536,38 +16579,43 @@ export default function App() {
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                   type="button"
-                                  onClick={() => handleTestProviderChain(pid)}
+                                  onClick={() => handleTestProviderChain(pid, 'ping')}
                                   disabled={testingChainProvider !== null}
                                   className="px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-50"
                                 >
-                                  {testingChainProvider === pid ? '테스트 중...' : '연결 테스트'}
+                                  {testingChainProvider === `${pid}:ping` ? '테스트 중...' : '연결 테스트'}
                                 </button>
-                                {isKeylessProvider ? (
-                                  <span className="px-2 py-1 text-[11px] font-mono text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                                    Last-Resort Fixed
+                                <button
+                                  type="button"
+                                  onClick={() => handleTestProviderChain(pid, 'korean-json')}
+                                  disabled={testingChainProvider !== null}
+                                  className="px-2.5 py-1 rounded-md border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-[11px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-50"
+                                >
+                                  {testingChainProvider === `${pid}:korean-json` ? '검증중...' : 'JSON 검증'}
+                                </button>
+                                {isKeylessProvider && (
+                                  <span className="px-1.5 py-1 text-[10px] font-mono text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                                    Last-Resort
                                   </span>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      disabled={idx === 0}
-                                      onClick={() => handleMoveProviderOrder(idx, -1)}
-                                      className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                                      title="우선순위 상향"
-                                    >
-                                      <ChevronUp className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={idx >= resilienceStatus.registry.providerOrder.length - 1 || resilienceStatus.registry.providerOrder[idx + 1] === 'pollinations'}
-                                      onClick={() => handleMoveProviderOrder(idx, 1)}
-                                      className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                                      title="우선순위 하향"
-                                    >
-                                      <ChevronDown className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
                                 )}
+                                <button
+                                  type="button"
+                                  disabled={idx === 0 || isPrevDifferentGroup}
+                                  onClick={() => handleMoveProviderOrder(idx, -1)}
+                                  className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                  title="우선순위 상향"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx >= resilienceStatus.registry.providerOrder.length - 1 || isNextDifferentGroup}
+                                  onClick={() => handleMoveProviderOrder(idx, 1)}
+                                  className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                                  title="우선순위 하향"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           );
@@ -16575,15 +16623,18 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* OpenRouter :free & Pollinations Keyless Dynamic Pools */}
+                    {/* Dynamic Discovered Pools (OpenRouter :free, NVIDIA NIM, OVHcloud Keyless, Pollinations Keyless) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
                         <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                          OpenRouter 동적 <code className="font-mono">:free</code> 모델 풀 (키 필요)
+                          OpenRouter <code className="font-mono">:free</code> &amp; NVIDIA NIM 실시간 모델 풀
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(resilienceStatus.registry.openrouterFreeModels || []).map((slug) => (
-                            <code key={slug} className="text-[11px] font-mono px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            ...(resilienceStatus.registry.openrouterFreeModels || []).slice(0, 4),
+                            ...(resilienceStatus.registry.providerModels?.nvidia || []).slice(0, 4)
+                          ].map((slug) => (
+                            <code key={slug} className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                               {slug}
                             </code>
                           ))}
@@ -16592,11 +16643,14 @@ export default function App() {
 
                       <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
                         <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                          Pollinations 동적 키리스 텍스트 풀 (가입·키 불필요)
+                          OVHcloud &amp; Pollinations 무가입 키리스 풀 (가입·키 불필요)
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(resilienceStatus.registry.pollinationsModels || resilienceStatus.registry.providerModels?.pollinations || ['openai', 'openai-fast', 'mistral']).map((slug) => (
-                            <code key={slug} className="text-[11px] font-mono px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            ...(resilienceStatus.registry.ovhModels || resilienceStatus.registry.providerModels?.ovh || ['Meta-Llama-3_3-70B-Instruct']).slice(0, 4),
+                            ...(resilienceStatus.registry.pollinationsModels || resilienceStatus.registry.providerModels?.pollinations || ['openai', 'openai-fast']).slice(0, 3)
+                          ].map((slug) => (
+                            <code key={slug} className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                               {slug}
                             </code>
                           ))}
@@ -16606,81 +16660,25 @@ export default function App() {
                   </div>
                 )}
 
-                {/* TAB 3: 2026 Model Change Resilience & Free-Tier Strategy Research Matrix */}
+                {/* TAB 3: Free AI Key Explorer, Guides & Live Korean JSON Probe */}
                 {aiHubTab === 'strategy' && (
-                  <div className="space-y-5">
-                    <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            <th className="py-2.5 px-3 font-semibold">프로바이더</th>
-                            <th className="py-2.5 px-3 font-semibold">상태 (2026)</th>
-                            <th className="py-2.5 px-3 font-semibold">무료 한도 &amp; 특징</th>
-                            <th className="py-2.5 px-3 font-semibold">권장 워크로드 &amp; 주의사항</th>
-                            <th className="py-2.5 px-3 font-semibold">필수 Env / Secret</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                          {(resilienceStatus?.strategyCatalog || []).map((item) => (
-                            <tr key={item.id} className="bg-white dark:bg-slate-900">
-                              <td className="py-3 px-3 align-top font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                                {item.name}
-                              </td>
-                              <td className="py-3 px-3 align-top whitespace-nowrap font-mono text-[11px]">
-                                <span className={
-                                  item.status === 'active'
-                                    ? 'text-emerald-600 dark:text-emerald-400 font-bold'
-                                    : item.status === 'keyless'
-                                      ? 'text-indigo-600 dark:text-indigo-400 font-bold'
-                                      : item.status === 'trial'
-                                        ? 'text-amber-600 dark:text-amber-400 font-bold'
-                                        : 'text-rose-600 dark:text-rose-400 font-bold'
-                                }>
-                                  {item.status === 'active'
-                                    ? 'ACTIVE FREE'
-                                    : item.status === 'keyless'
-                                      ? 'KEYLESS (NO AUTH)'
-                                      : item.status === 'trial'
-                                        ? 'TRIAL / CAPPED'
-                                        : 'RETIRED (2026)'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 align-top text-slate-600 dark:text-slate-300 leading-relaxed min-w-[200px]">
-                                <div className="font-medium text-slate-800 dark:text-slate-200">{item.freeTierLimits}</div>
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{item.strengths}</div>
-                              </td>
-                              <td className="py-3 px-3 align-top text-slate-600 dark:text-slate-300 leading-relaxed min-w-[220px]">
-                                <div>{item.recommendedWorkload}</div>
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{item.privacyNote}</div>
-                              </td>
-                              <td className="py-3 px-3 align-top font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                {item.envVars.length > 0
-                                  ? item.envVars.join(', ')
-                                  : (item.status === 'keyless' ? 'None (Keyless Toggle)' : 'N/A (Excluded)')}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-2">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                        2026 회원가입·API 키 없는 무료 AI 모델 조사 요약 및 제외 기준
-                      </h4>
-                      <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed list-disc pl-4">
-                        <li>
-                          <strong>채택 — Pollinations.ai (<code className="font-mono">text.pollinations.ai/openai</code>)</strong>: 별도 회원가입이나 API 키 발급 없이 표준 OpenAI Chat Completions 형식으로 호출 가능해, 기존 API 키 전체 미설정·소진 시 최후 폴백으로 연동했습니다.
-                        </li>
-                        <li>
-                          <strong>비교 참조 — OVHcloud AI Endpoints 익명 티어</strong>: 무가입 호출이 가능하나 IP당 약 2 RPM 제한이 엄격해 다중 사용자 서버리스 백업용으로는 제한적입니다.
-                        </li>
-                        <li>
-                          <strong>제외 — Hack Club AI · Duck.ai/g4f · WebLLM</strong>: Hack Club은 계정·키(<code className="font-mono">sk-hc-</code>) 발급이 필요하고, Duck.ai/g4f 비공식 프록시는 캡차·차단 위험으로 안정성이 낮으며, WebLLM은 브라우저 1GB+ 모델 다운로드가 필요해 제외했습니다.
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
+                  <FreeAiExplorerTab
+                    language={language}
+                    isStaticHost={IS_GITHUB_PAGES}
+                    strategyCatalog={resilienceStatus?.strategyCatalog || []}
+                    readiness={resilienceStatus?.readiness}
+                    providerModels={resilienceStatus?.registry?.providerModels}
+                    openrouterFreeModels={resilienceStatus?.registry?.openrouterFreeModels}
+                    pollinationsModels={resilienceStatus?.registry?.pollinationsModels}
+                    ovhModels={resilienceStatus?.registry?.ovhModels}
+                    testingProviderKey={testingChainProvider}
+                    probeResult={chainTestResult}
+                    onProbeProvider={(pid, mode) => handleTestProviderChain(pid, mode)}
+                    onJumpToKeyPanel={() => {
+                      document.getElementById('secondary-free-ai-keys-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    onClearProbeResult={() => setChainTestResult(null)}
+                  />
                 )}
               </div>
 
@@ -17507,131 +17505,17 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Secondary Free AI Providers Failover Setup (Groq & OpenRouter) */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
-                <div className="flex items-center justify-between gap-3 mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg">
-                      <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <span>{language === 'en' ? 'Secondary Free AI Providers (Groq / OpenRouter)' : '보조 무료 AI API 키 설정 (Groq / OpenRouter 자동 우회)'}</span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                          {language === 'en' ? 'Failover Ready' : '자동 우회 폴백'}
-                        </span>
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        {language === 'en'
-                          ? 'Gemini API free tier quota exhausted (429)? Failover automatically to Groq or OpenRouter.'
-                          : 'Gemini API 429 쿨다운 시 자동으로 Groq / OpenRouter 무료 API로 즉시 전환되어 무중단 수집합니다.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Secondary Key Status Notification */}
-                {secondaryTestResult && (
-                  <div className={`p-3 rounded-lg text-xs mb-4 border flex items-center gap-2 ${
-                    secondaryTestResult.isValid
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                  }`}>
-                    {secondaryTestResult.isValid ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
-                    )}
-                    <span>[{secondaryTestResult.provider?.toUpperCase()}] {secondaryTestResult.message}</span>
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  {/* Groq API Key Input */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100">Groq API Key (Free Tier)</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-mono">
-                          Llama-3.3-70B
-                        </span>
-                      </div>
-                      <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-[11px] text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 font-medium">
-                        <span>{language === 'en' ? 'Get Free Groq Key' : 'Groq 무료 키 발급'}</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="password"
-                        value={groqKeyInput}
-                        onChange={(e) => setGroqKeyInput(e.target.value)}
-                        placeholder="gsk_..."
-                        className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3.5 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleTestSecondaryKey('groq', groqKeyInput)}
-                        disabled={testingSecondaryProvider === 'groq'}
-                        className="px-3 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <Activity className={`w-3.5 h-3.5 ${testingSecondaryProvider === 'groq' ? 'animate-spin text-purple-500' : ''}`} />
-                        <span>{testingSecondaryProvider === 'groq' ? '검증...' : '검증'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveGroqKey}
-                        className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? 'Save Groq Key' : 'Groq 키 저장'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* OpenRouter API Key Input */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100">OpenRouter Free API Key</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono">
-                          DeepSeek / Llama Free
-                        </span>
-                      </div>
-                      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium">
-                        <span>{language === 'en' ? 'Get Free OpenRouter Key' : 'OpenRouter 무료 키 발급'}</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="password"
-                        value={openrouterKeyInput}
-                        onChange={(e) => setOpenrouterKeyInput(e.target.value)}
-                        placeholder="sk-or-v1-..."
-                        className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3.5 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleTestSecondaryKey('openrouter', openrouterKeyInput)}
-                        disabled={testingSecondaryProvider === 'openrouter'}
-                        className="px-3 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <Activity className={`w-3.5 h-3.5 ${testingSecondaryProvider === 'openrouter' ? 'animate-spin text-blue-500' : ''}`} />
-                        <span>{testingSecondaryProvider === 'openrouter' ? '검증...' : '검증'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveOpenRouterKey}
-                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? 'Save OpenRouter Key' : 'OpenRouter 키 저장'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {/* Secondary Free AI Providers Management & Live Probe (Server-Only Storage) */}
+              <SecondaryFreeAiKeysPanel
+                language={language}
+                isStaticHost={IS_GITHUB_PAGES}
+                readiness={resilienceStatus?.readiness}
+                serverKeyPresence={serverKeyPresence}
+                onSaveProviderKey={handleSaveSecondaryProviderKey}
+                onTestProvider={handleTestSecondaryKey}
+                testingKeyId={testingSecondaryProvider}
+                testResult={secondaryTestResult}
+              />
 
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-xl p-6 mb-8">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">

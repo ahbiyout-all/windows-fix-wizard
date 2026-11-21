@@ -20,14 +20,20 @@ import {
   pruneExpiredCircuitBreakers,
   discoverLiveModels,
   callExternalFreeProvider,
+  probeExternalProvider,
   getPollinationsRateLimitStatus,
+  getKeylessRateLimitStatus,
   contentsToPromptText,
   buildExternalFallbackPrompt,
   stripMarkdownJsonFences,
   recordRegistryUsage,
   getProviderServerReadiness,
   isProhibitedGeminiModel,
+  normalizeProviderOrder,
   PROVIDER_STRATEGY_CATALOG,
+  KEYLESS_PROVIDER_IDS,
+  ALL_EXTERNAL_PROVIDER_IDS,
+  SYSTEM_CONFIG_KEY_FIELDS,
   type ProviderId,
   type WorkloadType
 } from "./lib/ai-resilience-router";
@@ -197,7 +203,28 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.14';
+  return '3.106.15';
+}
+
+function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
+  const masked: Record<string, any> = {
+    ...cfg,
+    hasSmtpPass: Boolean(cfg.smtpPass),
+    smtpPass: cfg.smtpPass ? '••••••••' : '',
+    hasGroqKey: Boolean(String(cfg.groqApiKey || '').trim()),
+    hasMistralKey: Boolean(String(cfg.mistralApiKey || '').trim()),
+    hasNvidiaKey: Boolean(String(cfg.nvidiaApiKey || '').trim()),
+    hasCohereKey: Boolean(String(cfg.cohereApiKey || '').trim()),
+    hasOpenrouterKey: Boolean(String(cfg.openrouterApiKey || '').trim()),
+    hasCloudflareAccountId: Boolean(String(cfg.cloudflareAccountId || '').trim()),
+    hasCloudflareToken: Boolean(String(cfg.cloudflareApiToken || '').trim()),
+    hasHuggingfaceKey: Boolean(String(cfg.huggingfaceApiKey || '').trim()),
+    hasCerebrasKey: Boolean(String(cfg.cerebrasApiKey || '').trim())
+  };
+  for (const field of SYSTEM_CONFIG_KEY_FIELDS) {
+    masked[field] = String(cfg[field] || '').trim() ? '••••••••' : '';
+  }
+  return masked;
 }
 
 const BACKUP_SENSITIVE_KEY_EXACT = new Set([
@@ -1087,13 +1114,12 @@ async function executeServerGeminiCall(
     !options.enableSearch &&
     (options.workloadType === 'classification' || options.workloadType === 'fast-diagnostic')
   ) {
-    const sysCfg = readSystemConfigObject();
+    const splitWhitelist = new Set<ProviderId>(['groq', 'mistral', 'nvidia', 'cohere', 'cloudflare']);
     const splitProviders = (registry.providerOrder || []).filter(
-      (p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && (p === 'groq' || p === 'mistral' || p === 'cloudflare')
+      (p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && splitWhitelist.has(p)
     );
     for (const p of splitProviders) {
       const splitRes = await callExternalFreeProvider(p, externalPromptString, {
-        customKey: p === 'groq' ? (sysCfg.groqApiKey || undefined) : undefined,
         registry,
         maxTokens: desiredMaxTokens
       });
@@ -1261,11 +1287,13 @@ async function executeServerGeminiCall(
     }
   }
 
-  // Secondary multi-provider keyed free-tier AI failover (Groq / Mistral / OpenRouter :free / Cerebras / Cloudflare)
+  // Secondary multi-provider keyed free-tier AI failover (Groq / Mistral / NVIDIA / Cohere / OpenRouter :free / Cloudflare / HuggingFace / Cerebras)
   const customKeyStr = (options.customApiKey || '').trim();
   const secondaryRes = await callSecondaryFreeAiApi(externalPromptString, {
     groqKey: customKeyStr.startsWith('gsk_') ? customKeyStr : undefined,
     openrouterKey: customKeyStr.startsWith('sk-or-') ? customKeyStr : undefined,
+    nvidiaKey: customKeyStr.startsWith('nvapi-') ? customKeyStr : undefined,
+    huggingfaceKey: customKeyStr.startsWith('hf_') ? customKeyStr : undefined,
     maxTokens: desiredMaxTokens
   });
 
@@ -1278,27 +1306,32 @@ async function executeServerGeminiCall(
     return { text: normalizedText, modelUsed: secondaryRes.modelUsed, keyUsed: secondaryRes.keyUsed };
   }
 
-  // Last-resort keyless serverless AI fallback (Pollinations.ai — only when ALL keyed providers are unset or exhausted)
+  // Last-resort keyless serverless AI fallback (OVHcloud Anonymous / Pollinations.ai — only when ALL keyed providers are unset or exhausted)
   const latestRegistry = loadAiModelRegistry();
   if (latestRegistry.keylessFallbackEnabled !== false) {
-    const keylessRes = await callExternalFreeProvider('pollinations', externalPromptString, {
-      registry: latestRegistry,
-      timeoutMs: wantsJsonOutput ? 32000 : 24000,
-      maxTokens: desiredMaxTokens
-    });
-    if (keylessRes && keylessRes.text) {
-      const normalizedText = wantsJsonOutput ? stripMarkdownJsonFences(keylessRes.text) : keylessRes.text;
-      if (options.stream && options.onChunk) {
-        options.onChunk(normalizedText);
+    const keylessOrder = (latestRegistry.providerOrder || KEYLESS_PROVIDER_IDS).filter(
+      (p): p is Exclude<ProviderId, 'gemini'> => KEYLESS_PROVIDER_IDS.includes(p)
+    );
+    for (const keylessProvider of keylessOrder) {
+      const keylessRes = await callExternalFreeProvider(keylessProvider, externalPromptString, {
+        registry: latestRegistry,
+        timeoutMs: wantsJsonOutput ? 32000 : 24000,
+        maxTokens: desiredMaxTokens
+      });
+      if (keylessRes && keylessRes.text) {
+        const normalizedText = wantsJsonOutput ? stripMarkdownJsonFences(keylessRes.text) : keylessRes.text;
+        if (options.stream && options.onChunk) {
+          options.onChunk(normalizedText);
+        }
+        recordRegistryUsage(keylessProvider, keylessRes.modelUsed, true);
+        return { text: normalizedText, modelUsed: keylessRes.modelUsed, keyUsed: keylessRes.keyUsed };
       }
-      recordRegistryUsage('pollinations', keylessRes.modelUsed, true);
-      return { text: normalizedText, modelUsed: keylessRes.modelUsed, keyUsed: keylessRes.keyUsed };
     }
   }
 
-  const pollStatus = getPollinationsRateLimitStatus();
-  if (pollStatus.inCooldown) {
-    throw new Error(`Google AI 키 할당량 소진 및 무료 폴백 호출 간격 제한(FREE_LIMIT): 약 ${pollStatus.remainingSeconds}초 후 다시 시도해 주세요.`);
+  const keylessLimitStatus = getKeylessRateLimitStatus();
+  if (keylessLimitStatus.inCooldown) {
+    throw new Error(`Google AI 키 할당량 소진 및 무료 키리스 폴백 호출 간격 제한: 약 ${keylessLimitStatus.remainingSeconds}초 후 다시 시도해 주세요.`);
   }
 
   if (validKeys.length === 0) {
@@ -1318,25 +1351,38 @@ async function executeServerGeminiCall(
   throw new Error("Gemini API 키가 설정되지 않았거나 이용할 수 없습니다. AI Studio의 Settings > Secrets 메뉴에서 GEMINI_API_KEY를 등록해 주세요.");
 }
 
-async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey?: string; openrouterKey?: string; maxTokens?: number }) {
+async function callSecondaryFreeAiApi(
+  promptText: string,
+  customKeys?: {
+    groqKey?: string;
+    openrouterKey?: string;
+    nvidiaKey?: string;
+    huggingfaceKey?: string;
+    maxTokens?: number;
+  }
+) {
   try {
     const registry = loadAiModelRegistry();
     const config = readSystemConfigObject();
 
-    const providerKeyMap: Partial<Record<Exclude<ProviderId, 'gemini' | 'pollinations'>, string>> = {
+    const providerKeyMap: Partial<Record<Exclude<ProviderId, 'gemini'>, string>> = {
       groq: customKeys?.groqKey || process.env.GROQ_API_KEY || config.groqApiKey || "",
-      mistral: process.env.MISTRAL_API_KEY || "",
+      mistral: process.env.MISTRAL_API_KEY || config.mistralApiKey || "",
+      nvidia: customKeys?.nvidiaKey || process.env.NVIDIA_API_KEY || config.nvidiaApiKey || "",
+      cohere: process.env.COHERE_API_KEY || config.cohereApiKey || "",
       openrouter: customKeys?.openrouterKey || process.env.OPENROUTER_API_KEY || config.openrouterApiKey || "",
-      cerebras: process.env.CEREBRAS_API_KEY || "",
-      cloudflare: process.env.CLOUDFLARE_API_TOKEN || ""
+      cloudflare: process.env.CLOUDFLARE_API_TOKEN || config.cloudflareApiToken || "",
+      huggingface: customKeys?.huggingfaceKey || process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || config.huggingfaceApiKey || "",
+      cerebras: process.env.CEREBRAS_API_KEY || config.cerebrasApiKey || ""
     };
 
-    const externalOrder = (registry.providerOrder || ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'])
-      .filter((p): p is Exclude<ProviderId, 'gemini' | 'pollinations'> => p !== 'gemini' && p !== 'pollinations');
+    const externalOrder = (registry.providerOrder || ['gemini', ...ALL_EXTERNAL_PROVIDER_IDS])
+      .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && !KEYLESS_PROVIDER_IDS.includes(p));
 
     for (const providerId of externalOrder) {
       const res = await callExternalFreeProvider(providerId, promptText, {
         customKey: providerKeyMap[providerId],
+        cloudflareAccountId: providerId === 'cloudflare' ? (process.env.CLOUDFLARE_ACCOUNT_ID || config.cloudflareAccountId || "") : undefined,
         registry,
         maxTokens: customKeys?.maxTokens
       });
@@ -1790,8 +1836,14 @@ async function runAiSyncInternal(): Promise<any> {
     if (!secResult) {
       const latestSyncRegistry = loadAiModelRegistry();
       if (latestSyncRegistry.keylessFallbackEnabled !== false) {
-        console.log('[Engine Sync] All keyed providers unavailable; trying last-resort keyless Pollinations fallback...');
-        secResult = await callExternalFreeProvider('pollinations', externalSyncPrompt, { registry: latestSyncRegistry, maxTokens: 4096, timeoutMs: 32000 });
+        const keylessList = (latestSyncRegistry.providerOrder || KEYLESS_PROVIDER_IDS).filter(
+          (p): p is Exclude<ProviderId, 'gemini'> => KEYLESS_PROVIDER_IDS.includes(p)
+        );
+        for (const keylessPid of keylessList) {
+          console.log(`[Engine Sync] All keyed providers unavailable; trying last-resort keyless ${keylessPid.toUpperCase()} fallback...`);
+          secResult = await callExternalFreeProvider(keylessPid, externalSyncPrompt, { registry: latestSyncRegistry, maxTokens: 4096, timeoutMs: 32000 });
+          if (secResult) break;
+        }
       }
     }
     if (secResult && secResult.text) {
@@ -3287,55 +3339,67 @@ async function startServer() {
 
   app.post("/api/keys/test-secondary", requireAdmin, async (req, res) => {
     try {
-      const { provider, key } = req.body;
-      if (!key || typeof key !== 'string' || !key.trim()) {
-        return res.json({ success: true, isValid: false, reason: "키가 입력되지 않았습니다." });
+      const { provider, key, cloudflareAccountId, mode = 'ping' } = req.body || {};
+      if (typeof provider !== 'string' || !ALL_EXTERNAL_PROVIDER_IDS.includes(provider as Exclude<ProviderId, 'gemini'>)) {
+        return res.status(400).json({ success: false, error: "지원하지 않는 AI 프로바이더입니다." });
       }
-      const trimmed = key.trim();
-      if (provider === 'groq') {
-        const testRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          signal: AbortSignal.timeout(15000),
-          headers: {
-            "Authorization": `Bearer ${trimmed}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
-            messages: [{ role: "user", content: "ping" }],
-            max_tokens: 2
-          })
+      const target = provider as Exclude<ProviderId, 'gemini'>;
+      const testMode = mode === 'korean-json' ? 'korean-json' : 'ping';
+      const promptText = testMode === 'korean-json'
+        ? 'Return ONLY a raw JSON object for Windows update error 0x80070002 with exact keys {"code":"0x80070002","category":"업데이트","title":"한국어 제목","symptoms":"한국어 증상","script":"sfc /scannow"}. Do not include markdown fences.'
+        : 'Reply cleanly with OK.';
+
+      const probe = await probeExternalProvider({
+        provider: target,
+        customKey: typeof key === 'string' ? key.trim() : undefined,
+        cloudflareAccountId: typeof cloudflareAccountId === 'string' ? cloudflareAccountId.trim() : undefined,
+        promptText,
+        maxTokens: testMode === 'korean-json' ? 640 : 32
+      });
+
+      if (!probe.isValid) {
+        return res.json({
+          success: true,
+          isValid: false,
+          provider: target,
+          mode: testMode,
+          latencyMs: probe.latencyMs,
+          httpStatus: probe.httpStatus,
+          reason: probe.reason || `${target.toUpperCase()} 검증에 실패했습니다.`
         });
-        if (testRes.ok) {
-          return res.json({ success: true, isValid: true, provider: 'groq', message: 'Groq API 키가 성공적으로 검증되었습니다.' });
-        } else {
-          const errText = await testRes.text();
-          return res.json({ success: true, isValid: false, provider: 'groq', reason: `Groq HTTP ${testRes.status}: ${errText.substring(0, 100)}` });
-        }
-      } else if (provider === 'openrouter') {
-        const testRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          signal: AbortSignal.timeout(15000),
-          headers: {
-            "Authorization": `Bearer ${trimmed}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://windows-fix-wizard.github.io",
-            "X-Title": "Windows Fix Wizard"
-          },
-          body: JSON.stringify({
-            model: "deepseek/deepseek-chat",
-            messages: [{ role: "user", content: "ping" }],
-            max_tokens: 2
-          })
-        });
-        if (testRes.ok) {
-          return res.json({ success: true, isValid: true, provider: 'openrouter', message: 'OpenRouter API 키가 성공적으로 검증되었습니다.' });
-        } else {
-          const errText = await testRes.text();
-          return res.json({ success: true, isValid: false, provider: 'openrouter', reason: `OpenRouter HTTP ${testRes.status}: ${errText.substring(0, 100)}` });
-        }
       }
-      return res.status(400).json({ success: false, error: "알 수 없는 제공자입니다." });
+
+      if (testMode === 'korean-json') {
+        let jsonValid = false;
+        let parsedObj: any = null;
+        try {
+          parsedObj = parseAiJson(probe.text || '');
+          jsonValid = Boolean(parsedObj && typeof parsedObj === 'object' && (parsedObj.code || parsedObj.title));
+        } catch (_) {}
+        return res.json({
+          success: true,
+          isValid: true,
+          jsonValid,
+          provider: target,
+          mode: testMode,
+          modelUsed: probe.modelUsed,
+          latencyMs: probe.latencyMs,
+          preview: jsonValid ? JSON.stringify(parsedObj).substring(0, 180) : (probe.text || '').substring(0, 140),
+          message: jsonValid
+            ? `${probe.modelUsed} 한국어 Windows JSON 생성 검증 완료 (${probe.latencyMs}ms)`
+            : `${probe.modelUsed} 응답 수신됨 (${probe.latencyMs}ms) · 단, JSON 형식 보완 필요`
+        });
+      }
+
+      return res.json({
+        success: true,
+        isValid: true,
+        provider: target,
+        mode: testMode,
+        modelUsed: probe.modelUsed,
+        latencyMs: probe.latencyMs,
+        message: `${probe.modelUsed} 연결 검증 완료 (${probe.latencyMs}ms)`
+      });
     } catch (e: any) {
       return res.status(500).json({ success: false, error: e.message });
     }
@@ -3371,7 +3435,7 @@ async function startServer() {
       await logSyncEvent({
         type: 'info',
         source: 'ai-model-discovery',
-        message: `AI 카탈로그 실시간 탐색 완료 (Gemini ${discovery.geminiDiscoveredCount}종 · OpenRouter :free ${discovery.openrouterDiscoveredCount}종 · Pollinations 키리스 ${discovery.pollinationsDiscoveredCount}종)`
+        message: `AI 카탈로그 실시간 탐색 완료 (Gemini ${discovery.geminiDiscoveredCount} · OpenRouter :free ${discovery.openrouterDiscoveredCount} · NVIDIA ${discovery.nvidiaDiscoveredCount} · HF ${discovery.huggingfaceDiscoveredCount} · OVH ${discovery.ovhDiscoveredCount} · Pollinations ${discovery.pollinationsDiscoveredCount})`
       });
       res.json({
         success: true,
@@ -3396,13 +3460,8 @@ async function startServer() {
         registry.keylessFallbackEnabled = keylessFallbackEnabled;
       }
 
-      const validProviders: ProviderId[] = ['gemini', 'groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'];
       if (Array.isArray(providerOrder) && providerOrder.length > 0) {
-        const filtered = Array.from(new Set(providerOrder.filter((p: any): p is ProviderId => validProviders.includes(p))));
-        const missing = validProviders.filter((p) => !filtered.includes(p));
-        const combined = [...filtered, ...missing];
-        // Strictly pin keyless Pollinations at the very end as last-resort only
-        registry.providerOrder = [...combined.filter((p) => p !== 'pollinations'), 'pollinations'];
+        registry.providerOrder = normalizeProviderOrder(providerOrder);
       }
 
       if (Array.isArray(geminiModels) && geminiModels.length > 0) {
@@ -3450,50 +3509,63 @@ async function startServer() {
 
   app.post("/api/ai/test-chain", requireAdmin, async (req, res) => {
     try {
-      const { provider } = req.body || {};
+      const { provider, mode = 'ping' } = req.body || {};
       const started = Date.now();
-      const probePrompt = 'Reply cleanly with OK.';
+      const testMode = mode === 'korean-json' ? 'korean-json' : 'ping';
+      const probePrompt = testMode === 'korean-json'
+        ? 'Return ONLY a raw JSON object for Windows error 0x80070002 with exact keys {"code":"0x80070002","category":"업데이트","title":"한국어 제목","symptoms":"한국어 증상","script":"sfc /scannow"}. Do not include markdown fences.'
+        : 'Reply cleanly with OK.';
 
       if (provider && provider !== 'gemini') {
-        const validExternalProviders: Exclude<ProviderId, 'gemini'>[] = ['groq', 'mistral', 'openrouter', 'cerebras', 'cloudflare', 'pollinations'];
-        if (typeof provider !== 'string' || !validExternalProviders.includes(provider as Exclude<ProviderId, 'gemini'>)) {
+        if (typeof provider !== 'string' || !ALL_EXTERNAL_PROVIDER_IDS.includes(provider as Exclude<ProviderId, 'gemini'>)) {
           return res.status(400).json({ success: false, error: "Invalid AI provider specified." });
         }
         const target = provider as Exclude<ProviderId, 'gemini'>;
-        const sysCfg = readSystemConfigObject();
-        const savedKey = target === 'groq'
-          ? (typeof sysCfg.groqApiKey === 'string' ? sysCfg.groqApiKey : undefined)
-          : target === 'openrouter'
-            ? (typeof sysCfg.openrouterApiKey === 'string' ? sysCfg.openrouterApiKey : undefined)
-            : undefined;
-        const result = await callExternalFreeProvider(target, probePrompt, {
-          customKey: savedKey,
-          maxTokens: 8,
-          bypassEnabledCheck: target === 'pollinations'
+        const probe = await probeExternalProvider({
+          provider: target,
+          promptText: probePrompt,
+          maxTokens: testMode === 'korean-json' ? 640 : 32
         });
-        if (result && result.text) {
-          recordRegistryUsage(target, result.modelUsed, false);
+        if (probe.isValid) {
+          recordRegistryUsage(target, probe.modelUsed || target, false);
+          let jsonValid: boolean | undefined;
+          let preview: string | undefined;
+          if (testMode === 'korean-json') {
+            try {
+              const parsed = parseAiJson(probe.text || '');
+              jsonValid = Boolean(parsed && typeof parsed === 'object' && (parsed.code || parsed.title));
+              preview = jsonValid ? JSON.stringify(parsed).substring(0, 180) : (probe.text || '').substring(0, 120);
+            } catch {
+              jsonValid = false;
+              preview = (probe.text || '').substring(0, 120);
+            }
+          }
           return res.json({
             success: true,
             provider: target,
-            modelUsed: result.modelUsed,
-            latencyMs: Date.now() - started,
-            message: `${result.modelUsed} 응답 정상 (${Date.now() - started}ms)`
+            mode: testMode,
+            modelUsed: probe.modelUsed,
+            latencyMs: probe.latencyMs,
+            jsonValid,
+            preview,
+            message: testMode === 'korean-json'
+              ? `${probe.modelUsed} 한국어 JSON 검증 ${jsonValid ? '통과' : '보완 필요'} (${probe.latencyMs}ms)`
+              : `${probe.modelUsed} 응답 정상 (${probe.latencyMs}ms)`
           });
         }
         return res.json({
           success: false,
           provider: target,
-          latencyMs: Date.now() - started,
-          error: target === 'pollinations'
-            ? 'Pollinations 키리스 공용 엔드포인트 호출이 일시 실패했거나 응답 시간이 초과되었습니다.'
-            : `${target.toUpperCase()} 서버 환경변수(Secret) 또는 저장된 API 키가 미설정되었거나 호출에 실패했습니다.`
+          mode: testMode,
+          latencyMs: probe.latencyMs,
+          httpStatus: probe.httpStatus,
+          error: probe.reason || `${target.toUpperCase()} 호출에 실패했습니다.`
         });
       }
 
       const result = await executeServerGeminiCall(probePrompt, {
         workloadType: 'heavy-grounded',
-        config: { maxOutputTokens: 8 }
+        config: { maxOutputTokens: testMode === 'korean-json' ? 320 : 16 }
       });
       res.json({
         success: true,
@@ -5778,11 +5850,7 @@ async function startServer() {
       const cfg = readSystemConfigObject();
       res.json({
         success: true,
-        config: {
-          ...cfg,
-          hasSmtpPass: Boolean(cfg.smtpPass),
-          smtpPass: cfg.smtpPass ? "••••••••" : ""
-        }
+        config: maskSystemConfigSecrets(cfg)
       });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -5795,20 +5863,21 @@ async function startServer() {
       if (!rawUpdates || typeof rawUpdates !== 'object' || Array.isArray(rawUpdates)) {
         return res.status(400).json({ success: false, error: "Invalid config payload: must be a JSON object." });
       }
+      const protectedSecretKeys = new Set<string>(['smtpPass', ...SYSTEM_CONFIG_KEY_FIELDS]);
       const sanitizedUpdates: Record<string, any> = {};
       for (const [k, v] of Object.entries(rawUpdates)) {
         if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-        if (k === 'smtpPass' && typeof v === 'string' && v.includes('••••')) continue;
+        if (protectedSecretKeys.has(k) && typeof v === 'string') {
+          if (v.includes('••••')) continue;
+          sanitizedUpdates[k] = v.trim();
+          continue;
+        }
         sanitizedUpdates[k] = v;
       }
       const newConfig = writeSystemConfigObject({ ...sanitizedUpdates, updatedAt: getKSTISOString() });
       res.json({
         success: true,
-        config: {
-          ...newConfig,
-          hasSmtpPass: Boolean(newConfig.smtpPass),
-          smtpPass: newConfig.smtpPass ? "••••••••" : ""
-        }
+        config: maskSystemConfigSecrets(newConfig)
       });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -6598,7 +6667,10 @@ jobs:
           GEMINI_API_KEY: \${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: \${{ secrets.GROQ_API_KEY }}
           MISTRAL_API_KEY: \${{ secrets.MISTRAL_API_KEY }}
+          NVIDIA_API_KEY: \${{ secrets.NVIDIA_API_KEY }}
+          COHERE_API_KEY: \${{ secrets.COHERE_API_KEY }}
           OPENROUTER_API_KEY: \${{ secrets.OPENROUTER_API_KEY }}
+          HF_TOKEN: \${{ secrets.HF_TOKEN }}
           CEREBRAS_API_KEY: \${{ secrets.CEREBRAS_API_KEY }}
           CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}

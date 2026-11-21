@@ -1,6 +1,26 @@
-# Patch Note - System Update (v3.106.14)
+# Patch Note - System Update (v3.106.15)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.15] - 2026-11-21
+
+### 🚀 Major New Features & Integrations
+- **보조 무료 AI 프로바이더 4종 추가 연동 (`lib/ai-resilience-router.ts`, `server.ts`, `scripts/github-collector.ts`, `.env.example`)**:
+  - 기존 Groq · Mistral · OpenRouter(:free) · Cloudflare · Cerebras · Pollinations 외에 **NVIDIA NIM**(`integrate.api.nvidia.com`, 카드 불필요 무료 크레딧), **Cohere Command API v2 Trial**(`api.cohere.com/v2/chat`, 카드 불필요 · 월 1,000건/20 RPM · 한국어 우수), **Hugging Face Inference Router**(`router.huggingface.co/v1`, 월 소액 무료 크레딧 · 소진 시 HTTP 402 안내), 그리고 무가입·무키 2중 백업용 **OVHcloud AI Endpoints 익명 티어**(`oai.endpoints.kepler.ai.cloud.ovh.net/v1`)를 정식 연동했습니다.
+  - 실시간 모델 탐색(`discoverLiveModels`)이 OpenRouter(`:free`), Pollinations뿐 아니라 OVHcloud(33종+), NVIDIA NIM(33종+), Hugging Face Router(160종+), Cohere v2 카탈로그를 병렬 동기화하도록 확장했습니다.
+- **무가입·카드 불필요 우선 AI 탐색기 및 통합 키 관리·검증 UI 신설 (`src/components/FreeAiExplorerAndKeyPanel.tsx`, `src/App.tsx`)**:
+  - 관리자 AI 허브에 티어 세그먼트 필터(`전체 · 무가입·무키(Keyless) · 카드 불필요 무료 · 체험/종료`), `한국어 JSON 우수` 필터, 모델·환경변수 검색, 공식 무료 키 발급 링크, 실사용 모델 슬러그 미리보기를 갖춘 **보조 무료 AI 모델·키 탐색기**를 추가했습니다.
+  - 기존 Groq/OpenRouter 전용 입력란을 **8종 키 기반 + 2종 키리스 통합 관리 패널**로 확장해 `Mistral`, `NVIDIA NIM`, `Cohere`, `Cloudflare(Account ID+Token)`, `Hugging Face`, `Cerebras`까지 UI에서 직접 서버 저장·삭제할 수 있습니다.
+  - 모든 보조 프로바이더 및 키리스 엔드포인트(`OVHcloud`, `Pollinations`)에 **단순 Ping 테스트**와 **실제 Windows 오류 한국어 JSON 생성 검증(`mode: 'korean-json'`)** 및 응답 지연시간(ms) 측정(`/api/keys/test-secondary`, `/api/ai/test-chain`)을 연동했습니다.
+  - GitHub Actions 자동 수집 워크플로(`.github/workflows/windows-fix-collector.yml`) 및 시크릿 템플릿에 `NVIDIA_API_KEY`, `COHERE_API_KEY`, `HF_TOKEN`을 동기화했습니다.
+
+### 🛡️ Security Hardening & Authentication
+- **보조 AI API 키 브라우저 저장 중단 및 서버 전용 마스킹 보관 (`server.ts`, `src/App.tsx`)**:
+  - 브라우저 `localStorage`에 평문으로 복제 보관하던 기존 `winfix_groq_api_key`·`winfix_openrouter_api_key` 저장 경로를 제거하고 자동 정리(purge)하도록 개선했습니다.
+  - `GET /api/system_config` 및 `POST /api/system_config/update`가 모든 보조 AI 키 필드를 `••••`로 마스킹하고 등록 여부 플래그(`has*Key`)만 반환하도록 강화했으며, `••••` 마스킹 문자열 재전송으로 서버 키가 손상되는 것을 방지했습니다.
+  - `OVHcloud`·`Pollinations` 등 무가입 키리스 엔드포인트 호출 시 프롬프트 내 `nvapi-`, `hf_` 등 추가 시크릿 패턴까지 자동 마스킹하도록 정제 규칙을 확장했습니다.
 
 ---
 
