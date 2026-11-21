@@ -1,9 +1,9 @@
 name: Windows Fix Autonomous Collector & GitOps Sync
 
 on:
-  # Automated scheduled run (every 6 hours)
+  # Automated scheduled run (Configured via Admin GitOps Options: 0 */3 * * * UTC)
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */3 * * *'
 
   # Manual execution trigger from GitHub Web UI or API dispatch
   workflow_dispatch:
@@ -32,11 +32,10 @@ on:
         required: false
         default: 'auto'
       target_windows:
-        description: 'Comma-separated Windows versions (e.g., Windows 11,Windows 10)'
+        description: 'Comma-separated Windows versions'
         required: false
-        default: ''
+        default: 'Windows 11,Windows 10,Windows Server'
 
-# Ensure the workflow has write permissions to commit changes back and trigger Pages deployment
 permissions:
   contents: write
   actions: write
@@ -91,8 +90,7 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # Check if data files changed
+
           if [ -n "$(git status --porcelain data/issues.json data/github-feed.json data/ai-model-registry.json src/data/knownIssues.ts)" ]; then
             git add data/issues.json data/github-feed.json
             if [ -f data/ai-model-registry.json ]; then
@@ -103,8 +101,7 @@ jobs:
             fi
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
             git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
-            
-            # Retry push in case of concurrent commits
+
             for i in {1..3}; do
               git pull --rebase origin ${{ github.ref_name }} || true
               git push origin HEAD:${{ github.ref_name }} && break || sleep 5
