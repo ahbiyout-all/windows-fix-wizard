@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "scheduleCron": "0 */6 * * *",
-  "batchSize": 2,
+  "scheduleCron": "0 */3 * * *",
+  "batchSize": 3,
   "topicMode": "all",
   "fixedTopic": "all",
   "preferredTopics": [
@@ -16,11 +16,12 @@
   ],
   "targetWindowsVersions": [
     "Windows 11",
-    "Windows 10"
+    "Windows 10",
+    "Windows Server"
   ],
   "modelPreference": "auto",
   "dedupStrictness": "strict",
   "autoDeployPages": true,
   "autoIntegrateSeed": true,
-  "updatedAt": "2026-11-14T22:00:00+09:00"
+  "updatedAt": "2026-11-21T17:01:09.378+09:00"
 }
