@@ -17,8 +17,34 @@ import {
   Key,
   Save,
   Eye,
-  EyeOff
+  EyeOff,
+  Lock,
+  Upload,
+  RotateCcw,
+  Github,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+
+interface PrivateBackupConfigState {
+  repo: string;
+  branch: string;
+  backupPath: string;
+  hasSavedToken: boolean;
+  hasServerEnvToken: boolean;
+  hasToken: boolean;
+  hasSavedEncryptionKey: boolean;
+  hasServerEnvKey: boolean;
+  hasEncryptionKey: boolean;
+  autoSyncOnUserChange: boolean;
+  includeLogs: boolean;
+  lastBackupAt: string | null;
+  lastBackupStatus: string | null;
+  lastBackupCount: number;
+  lastBackupCommitSha: string | null;
+  lastRestoreAt: string | null;
+  lastRestoreStatus: string | null;
+}
 
 export interface MemberUser {
   id: string;
@@ -129,7 +155,277 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
 
   useEffect(() => {
     fetchUsers();
+    fetchPrivateBackupConfig();
   }, []);
+
+  // Private Admin Repository AES-256-GCM Backup & Restore State
+  const [showVaultConfig, setShowVaultConfig] = useState<boolean>(false);
+  const [vaultConfig, setVaultConfig] = useState<PrivateBackupConfigState>({
+    repo: 'AhBiYout-all/windows-fix-wizard-admin',
+    branch: 'main',
+    backupPath: 'backups/winfix-admin-vault.enc.json',
+    hasSavedToken: false,
+    hasServerEnvToken: false,
+    hasToken: false,
+    hasSavedEncryptionKey: false,
+    hasServerEnvKey: false,
+    hasEncryptionKey: false,
+    autoSyncOnUserChange: false,
+    includeLogs: true,
+    lastBackupAt: null,
+    lastBackupStatus: null,
+    lastBackupCount: 0,
+    lastBackupCommitSha: null,
+    lastRestoreAt: null,
+    lastRestoreStatus: null
+  });
+  const [vaultTokenInput, setVaultTokenInput] = useState<string>('');
+  const [vaultKeyInput, setVaultKeyInput] = useState<string>('');
+  const [showVaultKey, setShowVaultKey] = useState<boolean>(false);
+  const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
+  const [isSavingVaultConfig, setIsSavingVaultConfig] = useState<boolean>(false);
+  const [isPushingVault, setIsPushingVault] = useState<boolean>(false);
+  const [isRestoringVault, setIsRestoringVault] = useState<boolean>(false);
+  const [vaultMessage, setVaultMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const localVaultFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const fetchPrivateBackupConfig = async () => {
+    try {
+      const res = await fetch('/api/admin/private-backup/config', {
+        headers: getAuthHeader()
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
+      if (res.ok && data.success && data.config) {
+        setVaultConfig(data.config);
+      }
+    } catch (_) {}
+  };
+
+  const handleSaveVaultConfig = async (overrides?: { clearToken?: boolean; clearEncryptionKey?: boolean }) => {
+    setIsSavingVaultConfig(true);
+    setVaultMessage(null);
+    try {
+      const payload: Record<string, any> = {
+        repo: vaultConfig.repo.trim(),
+        branch: vaultConfig.branch.trim() || 'main',
+        backupPath: vaultConfig.backupPath.trim() || 'backups/winfix-admin-vault.enc.json',
+        autoSyncOnUserChange: vaultConfig.autoSyncOnUserChange,
+        includeLogs: vaultConfig.includeLogs
+      };
+      if (overrides?.clearToken) {
+        payload.clearToken = true;
+      } else if (vaultTokenInput.trim()) {
+        payload.token = vaultTokenInput.trim();
+      }
+      if (overrides?.clearEncryptionKey) {
+        payload.clearEncryptionKey = true;
+      } else if (vaultKeyInput.trim()) {
+        payload.encryptionKey = vaultKeyInput.trim();
+      }
+
+      const res = await fetch('/api/admin/private-backup/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
+      if (!res.ok || !data.success || !data.config) {
+        setVaultMessage({
+          text: data?.error || (isEn ? `Failed to save config (HTTP ${res.status})` : `설정 저장 실패 (HTTP ${res.status})`),
+          type: 'error'
+        });
+        return;
+      }
+      setVaultConfig(data.config);
+      if (overrides?.clearToken || vaultTokenInput.trim()) setVaultTokenInput('');
+      if (overrides?.clearEncryptionKey || vaultKeyInput.trim()) setVaultKeyInput('');
+      setVaultMessage({
+        text: overrides?.clearToken
+          ? (isEn ? 'Saved Private Repo PAT cleared.' : '저장된 비공개 저장소 PAT가 삭제되었습니다.')
+          : overrides?.clearEncryptionKey
+            ? (isEn ? 'Saved AES-256 encryption key cleared.' : '저장된 AES-256 암호화 키가 삭제되었습니다.')
+            : (isEn ? 'Private encrypted vault settings saved on server.' : '비공개 저장소 AES-256 백업 설정이 서버에 안전하게 저장되었습니다.'),
+        type: 'success'
+      });
+    } catch (e: any) {
+      if (!isMountedRef.current) return;
+      setVaultMessage({ text: e?.message || '설정 저장 요청 중 오류가 발생했습니다.', type: 'error' });
+    } finally {
+      if (isMountedRef.current) setIsSavingVaultConfig(false);
+    }
+  };
+
+  const handlePushEncryptedBackup = async () => {
+    setIsPushingVault(true);
+    setVaultMessage(null);
+    try {
+      const res = await fetch('/api/admin/private-backup/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        },
+        body: JSON.stringify({
+          repo: vaultConfig.repo.trim(),
+          branch: vaultConfig.branch.trim() || 'main',
+          backupPath: vaultConfig.backupPath.trim() || 'backups/winfix-admin-vault.enc.json',
+          includeLogs: vaultConfig.includeLogs,
+          ...(vaultKeyInput.trim() ? { passphrase: vaultKeyInput.trim() } : {})
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
+      if (!res.ok || !data.success) {
+        setVaultMessage({
+          text: data?.error || (isEn ? `Backup failed (HTTP ${res.status})` : `암호화 백업 실패 (HTTP ${res.status})`),
+          type: 'error'
+        });
+        return;
+      }
+      if (data.config) setVaultConfig(data.config);
+      setVaultMessage({
+        text: isEn
+          ? `Encrypted backup committed to ${data.backup?.repo} (${data.backup?.usersCount} users).`
+          : `비공개 저장소(${data.backup?.repo})에 회원 ${data.backup?.usersCount}명 AES-256-GCM 암호화 백업을 완료했습니다.`,
+        type: 'success'
+      });
+    } catch (e: any) {
+      if (!isMountedRef.current) return;
+      setVaultMessage({ text: e?.message || '비공개 저장소 백업 요청 중 오류가 발생했습니다.', type: 'error' });
+    } finally {
+      if (isMountedRef.current) setIsPushingVault(false);
+    }
+  };
+
+  const handleRestoreEncryptedBackup = async () => {
+    setIsRestoringVault(true);
+    setVaultMessage(null);
+    try {
+      const res = await fetch('/api/admin/private-backup/restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        },
+        body: JSON.stringify({
+          mode: restoreMode,
+          repo: vaultConfig.repo.trim(),
+          branch: vaultConfig.branch.trim() || 'main',
+          backupPath: vaultConfig.backupPath.trim() || 'backups/winfix-admin-vault.enc.json',
+          ...(vaultKeyInput.trim() ? { passphrase: vaultKeyInput.trim() } : {})
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
+      if (!res.ok || !data.success) {
+        setVaultMessage({
+          text: data?.error || (isEn ? `Restore failed (HTTP ${res.status})` : `복원 실패 (HTTP ${res.status})`),
+          type: 'error'
+        });
+        return;
+      }
+      if (data.config) setVaultConfig(data.config);
+      await fetchUsers();
+      setVaultMessage({
+        text: isEn
+          ? `Restored ${data.restore?.totalUsersAfter} users (+${data.restore?.added} added, ~${data.restore?.updated} updated).`
+          : `암호화 복원 완료: 총 ${data.restore?.totalUsersAfter}명 (신규 +${data.restore?.added}명, 갱신 ${data.restore?.updated}명).`,
+        type: 'success'
+      });
+    } catch (e: any) {
+      if (!isMountedRef.current) return;
+      setVaultMessage({ text: e?.message || '비공개 저장소 복원 중 오류가 발생했습니다.', type: 'error' });
+    } finally {
+      if (isMountedRef.current) setIsRestoringVault(false);
+    }
+  };
+
+  const handleDownloadLocalEncryptedVault = async () => {
+    setVaultMessage(null);
+    try {
+      const res = await fetch('/api/admin/private-backup/export-local', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        },
+        body: JSON.stringify({
+          includeLogs: vaultConfig.includeLogs,
+          ...(vaultKeyInput.trim() ? { passphrase: vaultKeyInput.trim() } : {})
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
+      if (!res.ok || !data.success || !data.vault) {
+        setVaultMessage({ text: data?.error || '암호화 파일 생성에 실패했습니다.', type: 'error' });
+        return;
+      }
+      const blob = new Blob([JSON.stringify(data.vault, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `winfix-admin-vault-${new Date().toISOString().slice(0, 10)}.enc.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setVaultMessage({
+        text: isEn
+          ? `Downloaded AES-256-GCM encrypted vault (${data.usersCount} users).`
+          : `AES-256-GCM 암호화 백업 파일(${data.usersCount}명)을 다운로드했습니다.`,
+        type: 'success'
+      });
+    } catch (e: any) {
+      if (!isMountedRef.current) return;
+      setVaultMessage({ text: e?.message || '로컬 암호화 내보내기 중 오류가 발생했습니다.', type: 'error' });
+    }
+  };
+
+  const handleUploadLocalEncryptedVault = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsRestoringVault(true);
+    setVaultMessage(null);
+    try {
+      const text = await file.text();
+      const parsedVault = JSON.parse(text);
+      const res = await fetch('/api/admin/private-backup/restore-local', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        },
+        body: JSON.stringify({
+          vault: parsedVault,
+          mode: restoreMode,
+          ...(vaultKeyInput.trim() ? { passphrase: vaultKeyInput.trim() } : {})
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!isMountedRef.current) return;
+      if (!res.ok || !data.success) {
+        setVaultMessage({ text: data?.error || '암호화 파일 복원에 실패했습니다.', type: 'error' });
+        return;
+      }
+      if (data.config) setVaultConfig(data.config);
+      await fetchUsers();
+      setVaultMessage({
+        text: isEn
+          ? `Restored from local encrypted vault (${data.restore?.totalUsersAfter} users).`
+          : `로컬 암호화 파일 복원 완료: 총 ${data.restore?.totalUsersAfter}명 (신규 +${data.restore?.added}명, 갱신 ${data.restore?.updated}명).`,
+        type: 'success'
+      });
+    } catch (err: any) {
+      if (!isMountedRef.current) return;
+      setVaultMessage({ text: err?.message || '유효한 .enc.json 암호화 백업 파일이 아닙니다.', type: 'error' });
+    } finally {
+      if (isMountedRef.current) setIsRestoringVault(false);
+    }
+  };
 
   const openCreateModal = (prefillEmail = '') => {
     const clean = prefillEmail.trim().toLowerCase();
@@ -854,6 +1150,306 @@ export const MemberManagementPanel: React.FC<MemberManagementPanelProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Private Admin Repository AES-256-GCM Encrypted Backup & Restore */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 shrink-0">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  {isEn ? 'Private Repository AES-256-GCM Encrypted Vault' : '비공개 저장소 전용 AES-256 암호화 백업 · 복원'}
+                </h4>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  vaultConfig.hasToken && vaultConfig.hasEncryptionKey
+                    ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                }`}>
+                  {vaultConfig.hasToken && vaultConfig.hasEncryptionKey
+                    ? (isEn ? 'Vault Ready' : '연동 준비 완료')
+                    : (isEn ? 'Setup Required' : 'PAT · 암호화 키 설정 필요')}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {isEn
+                  ? `Encrypts member credentials (including password hashes) with AES-256-GCM before pushing to private GitHub repo (${vaultConfig.repo}).`
+                  : `회원 DB(비밀번호 해시 포함)와 감사 로그를 AES-256-GCM으로 암호화해 비공개 저장소(${vaultConfig.repo})에 영구 백업하고 즉시 복원합니다.`}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowVaultConfig(p => !p)}
+            className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 cursor-pointer self-end sm:self-center shrink-0"
+          >
+            <Github className="w-3.5 h-3.5" />
+            <span>{showVaultConfig ? (isEn ? 'Hide Setup' : '백업 설정 접기') : (isEn ? 'Vault Setup' : '비공개 저장소 설정')}</span>
+            {showVaultConfig ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Action Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePushEncryptedBackup}
+              disabled={isPushingVault || isRestoringVault}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              {isPushingVault ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              <span>{isEn ? 'Push Encrypted Backup' : '비공개 저장소에 암호화 백업'}</span>
+            </button>
+
+            <div className="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden">
+              <select
+                value={restoreMode}
+                onChange={(e) => setRestoreMode(e.target.value as 'merge' | 'replace')}
+                className="px-2.5 py-2 bg-transparent text-[11px] font-semibold text-slate-700 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700 outline-none"
+                aria-label={isEn ? 'Restore mode' : '복원 방식'}
+              >
+                <option value="merge">{isEn ? 'Merge (Safe)' : '병합 복원 (안전)'}</option>
+                <option value="replace">{isEn ? 'Replace All' : '전체 교체'}</option>
+              </select>
+              <button
+                type="button"
+                onClick={handleRestoreEncryptedBackup}
+                disabled={isRestoringVault || isPushingVault}
+                className="px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 disabled:opacity-50 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                {isRestoringVault ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                <span>{isEn ? 'Restore from Vault' : '비공개 저장소에서 복원'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadLocalEncryptedVault}
+              className="px-2.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer"
+              title={isEn ? 'Download encrypted vault file locally' : 'AES-256 암호화 백업 파일(.enc.json) 로컬 저장'}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{isEn ? 'Save .enc.json' : '암호화 파일 저장'}</span>
+            </button>
+
+            <input
+              ref={localVaultFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleUploadLocalEncryptedVault}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => localVaultFileInputRef.current?.click()}
+              disabled={isRestoringVault}
+              className="px-2.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>{isEn ? 'Restore .enc.json' : '암호화 파일 복원'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Vault Status Notice */}
+        {vaultMessage && (
+          <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+            vaultMessage.type === 'success'
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+              : vaultMessage.type === 'error'
+                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+          }`}>
+            {vaultMessage.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+            <span>{vaultMessage.text}</span>
+          </div>
+        )}
+
+        {/* Last Sync Summary */}
+        {(vaultConfig.lastBackupStatus || vaultConfig.lastRestoreStatus) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/70 dark:border-slate-800">
+            {vaultConfig.lastBackupStatus && (
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">{isEn ? 'Last Backup:' : '최근 백업:'}</strong> {vaultConfig.lastBackupStatus}
+                {vaultConfig.lastBackupAt ? ` (${new Date(vaultConfig.lastBackupAt).toLocaleString()})` : ''}
+              </span>
+            )}
+            {vaultConfig.lastRestoreStatus && (
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">{isEn ? 'Last Restore:' : '최근 복원:'}</strong> {vaultConfig.lastRestoreStatus}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Collapsible Configuration Panel */}
+        {showVaultConfig && (
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {isEn ? 'Private GitHub Repo (owner/repo)' : '비공개 GitHub 저장소 (소유자/저장소명)'}
+                </label>
+                <input
+                  type="text"
+                  value={vaultConfig.repo}
+                  onChange={(e) => setVaultConfig(prev => ({ ...prev, repo: e.target.value }))}
+                  placeholder="AhBiYout-all/windows-fix-wizard-admin"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {isEn ? 'Branch' : '브랜치'}
+                </label>
+                <input
+                  type="text"
+                  value={vaultConfig.branch}
+                  onChange={(e) => setVaultConfig(prev => ({ ...prev, branch: e.target.value }))}
+                  placeholder="main"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {isEn ? 'Encrypted Vault Path (.json)' : '암호화 백업 파일 경로 (.json)'}
+                </label>
+                <input
+                  type="text"
+                  value={vaultConfig.backupPath}
+                  onChange={(e) => setVaultConfig(prev => ({ ...prev, backupPath: e.target.value }))}
+                  placeholder="backups/winfix-admin-vault.enc.json"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    {isEn ? 'Private Repo PAT (Fine-grained Contents R/W)' : '비공개 저장소 전용 PAT (Contents 읽기/쓰기)'}
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {vaultConfig.hasToken && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                        {vaultConfig.hasServerEnvToken && !vaultConfig.hasSavedToken ? '서버 환경변수 활성' : '서버에 저장됨'}
+                      </span>
+                    )}
+                    {vaultConfig.hasSavedToken && (
+                      <button
+                        type="button"
+                        onClick={() => handleSaveVaultConfig({ clearToken: true })}
+                        className="text-[10px] font-semibold text-rose-600 hover:underline cursor-pointer"
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={vaultTokenInput}
+                  onChange={(e) => setVaultTokenInput(e.target.value)}
+                  placeholder={vaultConfig.hasToken ? '새 토큰을 입력할 때만 덮어씁니다 (••••••••)' : 'github_pat_... 또는 ghp_...'}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    {isEn ? 'AES-256-GCM Encryption Key (min 8 chars)' : 'AES-256-GCM 암호화 키 (8자 이상)'}
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {vaultConfig.hasEncryptionKey && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                        {vaultConfig.hasServerEnvKey && !vaultConfig.hasSavedEncryptionKey ? '서버 환경변수 활성' : '서버에 저장됨'}
+                      </span>
+                    )}
+                    {vaultConfig.hasSavedEncryptionKey && (
+                      <button
+                        type="button"
+                        onClick={() => handleSaveVaultConfig({ clearEncryptionKey: true })}
+                        className="text-[10px] font-semibold text-rose-600 hover:underline cursor-pointer"
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showVaultKey ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={vaultKeyInput}
+                    onChange={(e) => setVaultKeyInput(e.target.value)}
+                    placeholder={vaultConfig.hasEncryptionKey ? '새 암호화 키 입력 시 교체 (••••••••)' : '강력한 복구 비밀번호 입력 (8자 이상)'}
+                    className="w-full pl-3 pr-9 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowVaultKey(p => !p)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    aria-label="Toggle encryption key visibility"
+                  >
+                    {showVaultKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-700 dark:text-slate-300">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vaultConfig.autoSyncOnUserChange}
+                    onChange={(e) => setVaultConfig(prev => ({ ...prev, autoSyncOnUserChange: e.target.checked }))}
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>{isEn ? 'Auto-backup on member create/edit/delete' : '회원 등록·수정·삭제 시 자동 암호화 백업'}</span>
+                </label>
+
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vaultConfig.includeLogs}
+                    onChange={(e) => setVaultConfig(prev => ({ ...prev, includeLogs: e.target.checked }))}
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>{isEn ? 'Include recent admin audit logs' : '최근 관리자 감사 로그(200건) 함께 암호화'}</span>
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSaveVaultConfig()}
+                disabled={isSavingVaultConfig}
+                className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:opacity-90 disabled:opacity-50 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 self-end sm:self-auto"
+              >
+                {isSavingVaultConfig ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <span>{isEn ? 'Save Vault Settings' : '비공개 백업 설정 저장'}</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
+              {isEn
+                ? 'Note: Backup fails safely if the target repository is Public. Keep your AES-256 encryption key safe—without it, vaulted backups cannot be decrypted.'
+                : '※ 대상 저장소가 Public이면 보안상 업로드를 차단합니다. 설정한 AES-256 암호화 키를 분실하면 저장소의 백업 파일을 복호화할 수 없으니 별도로 안전하게 보관하세요.'}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

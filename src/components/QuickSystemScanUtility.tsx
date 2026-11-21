@@ -136,7 +136,7 @@ export const QuickSystemScanUtility: React.FC<QuickSystemScanUtilityProps> = ({
   const generatedPowerShellScript = useMemo(() => {
     return `# ==============================================================================
 # Windows Fix Wizard - Quick System Health & Diagnostics Script
-# Version: 3.106.18 | Author: AhBiYout & (주)청운정보시스템 (cisnet.co.kr)
+# Version: 3.107.0 | Author: AhBiYout & (주)청운정보시스템 (cisnet.co.kr)
 # Target OS: Windows 10 / Windows 11 (Architecture: x64/ARM64)
 # ==============================================================================
 #Requires -RunAsAdministrator
@@ -228,7 +228,7 @@ Write-Host "====================================================================
 
     const now = () => new Date().toLocaleTimeString();
     setTerminalLogs([
-      { type: 'info', text: `[+] Initializing Windows Quick System Scan Engine v3.106.18...`, timestamp: now() },
+      { type: 'info', text: `[+] Initializing Windows Quick System Scan Engine v3.107.0...`, timestamp: now() },
       { type: 'cmd', text: `PS C:\\WINDOWS\\system32> .\\Quick_System_Health_Scan.ps1`, timestamp: now() }
     ]);
 

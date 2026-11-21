@@ -168,6 +168,16 @@ function isValidGitRef(ref: unknown): ref is string {
   return /^[a-zA-Z0-9_.\-/]+$/.test(trimmed);
 }
 
+function isValidRepoRelativeJsonPath(filePath: unknown): filePath is string {
+  if (typeof filePath !== 'string') return false;
+  const trimmed = filePath.trim();
+  if (!trimmed || trimmed.length < 5 || trimmed.length > 180) return false;
+  if (trimmed.includes('..') || trimmed.startsWith('/') || trimmed.endsWith('/') || /[\s\\?:*"<>|]/.test(trimmed)) {
+    return false;
+  }
+  return /^[a-zA-Z0-9._-]+(\/[a-zA-Z0-9._-]+)*\.json$/.test(trimmed);
+}
+
 function isSafeExternalHttpUrl(rawUrl: unknown): boolean {
   if (typeof rawUrl !== 'string') return false;
   try {
@@ -203,7 +213,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.18';
+  return '3.107.0';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
@@ -240,7 +250,10 @@ const BACKUP_SENSITIVE_KEY_EXACT = new Set([
   'privatekey',
   'accesstoken',
   'refreshtoken',
-  'clientsecret'
+  'clientsecret',
+  'encryptionkey',
+  'backupkey',
+  'passphrase'
 ]);
 
 const BACKUP_SAFE_TOKEN_FIELDS = new Set([
@@ -266,7 +279,8 @@ function isSensitiveBackupFieldName(key: string): boolean {
     lower.endsWith('privatekey') ||
     lower.endsWith('clientsecret') ||
     lower.endsWith('smtppass') ||
-    lower.endsWith('passwordhash')
+    lower.endsWith('passwordhash') ||
+    lower.endsWith('encryptionkey')
   );
 }
 
@@ -4183,6 +4197,7 @@ async function startServer() {
 
       users.unshift(newUser);
       writeLocalCollection('users', users);
+      void schedulePrivateAdminBackupSync(`user-register:${cleanEmail}`);
 
       const token = `usr_token_${userId}_${crypto.randomBytes(8).toString('hex')}`;
 
@@ -4311,6 +4326,7 @@ async function startServer() {
         });
       }
       writeLocalCollection('users', users);
+      void schedulePrivateAdminBackupSync(`admin-set-password:${cleanEmail}`);
 
       addLocalLog('logs_admin', {
         category: 'AUTH',
@@ -4360,6 +4376,7 @@ async function startServer() {
         };
         users.unshift(user);
         writeLocalCollection('users', users);
+        void schedulePrivateAdminBackupSync(`google-register:${cleanEmail}`);
 
         addLocalLog('logs_admin', {
           category: 'AUTH',
@@ -4371,6 +4388,9 @@ async function startServer() {
         if (user.status === 'blocked') {
           return res.status(403).json({ success: false, error: "이용이 제한된 계정입니다. 관리자에게 문의하세요." });
         }
+        const hadChanges =
+          (isVerifiedAdminCaller && getAdminEmailList().includes(cleanEmail) && user.role !== 'admin') ||
+          Boolean(safeDisplayName && (!user.displayName || user.displayName === cleanEmail.split('@')[0]) && user.displayName !== safeDisplayName);
         user.lastLoginAt = now;
         if (isVerifiedAdminCaller && getAdminEmailList().includes(cleanEmail)) {
           user.role = 'admin';
@@ -4379,6 +4399,9 @@ async function startServer() {
           user.displayName = safeDisplayName;
         }
         writeLocalCollection('users', users);
+        if (hadChanges) {
+          void schedulePrivateAdminBackupSync(`google-sync-update:${cleanEmail}`);
+        }
       }
 
       res.json({
@@ -4490,6 +4513,7 @@ async function startServer() {
 
       users.unshift(newUser);
       writeLocalCollection('users', users);
+      void schedulePrivateAdminBackupSync(`admin-create-user:${cleanEmail}`);
 
       addLocalLog('logs_admin', {
         category: 'AUTH',
@@ -4588,6 +4612,7 @@ async function startServer() {
       target.updatedAt = getKSTISOString();
       users[userIndex] = target;
       writeLocalCollection('users', users);
+      void schedulePrivateAdminBackupSync(`admin-update-user:${target.email}`);
 
       addLocalLog('logs_admin', {
         category: 'AUTH',
@@ -4633,6 +4658,7 @@ async function startServer() {
 
       const filtered = users.filter((u: any) => u.id !== userId);
       writeLocalCollection('users', filtered);
+      void schedulePrivateAdminBackupSync(`admin-delete-user:${targetUser.email}`);
 
       addLocalLog('logs_admin', {
         category: 'AUTH',
@@ -4643,6 +4669,714 @@ async function startServer() {
       res.json({ success: true, deletedId: userId });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // --- Private Admin Repository AES-256-GCM Encrypted Backup & Restore ---
+  const PRIVATE_BACKUP_CONFIG_FILE = path.join(DATA_DIR, 'private_backup_config.json');
+  const PRIVATE_VAULT_FORMAT = 'winfix-admin-vault-v1';
+  const PRIVATE_VAULT_AAD = Buffer.from(PRIVATE_VAULT_FORMAT, 'utf8');
+
+  interface PrivateBackupConfigRecord {
+    repo: string;
+    branch: string;
+    backupPath: string;
+    token: string;
+    encryptionKey: string;
+    autoSyncOnUserChange: boolean;
+    includeLogs: boolean;
+    lastBackupAt: string | null;
+    lastBackupStatus: string | null;
+    lastBackupCount: number;
+    lastBackupCommitSha: string | null;
+    lastRestoreAt: string | null;
+    lastRestoreStatus: string | null;
+    updatedAt: string | null;
+  }
+
+  const loadPrivateBackupConfig = (): PrivateBackupConfigRecord => {
+    const defaults: PrivateBackupConfigRecord = {
+      repo: 'AhBiYout-all/windows-fix-wizard-admin',
+      branch: 'main',
+      backupPath: 'backups/winfix-admin-vault.enc.json',
+      token: '',
+      encryptionKey: '',
+      autoSyncOnUserChange: false,
+      includeLogs: true,
+      lastBackupAt: null,
+      lastBackupStatus: null,
+      lastBackupCount: 0,
+      lastBackupCommitSha: null,
+      lastRestoreAt: null,
+      lastRestoreStatus: null,
+      updatedAt: null
+    };
+    try {
+      if (fs.existsSync(PRIVATE_BACKUP_CONFIG_FILE)) {
+        const parsed = JSON.parse(fs.readFileSync(PRIVATE_BACKUP_CONFIG_FILE, 'utf8'));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return {
+            ...defaults,
+            repo: isValidGithubRepo(parsed.repo) ? parsed.repo.trim() : defaults.repo,
+            branch: isValidGitRef(parsed.branch) ? parsed.branch.trim() : defaults.branch,
+            backupPath: isValidRepoRelativeJsonPath(parsed.backupPath) ? parsed.backupPath.trim() : defaults.backupPath,
+            token: typeof parsed.token === 'string' ? parsed.token.trim() : '',
+            encryptionKey: typeof parsed.encryptionKey === 'string' ? parsed.encryptionKey : '',
+            autoSyncOnUserChange: parsed.autoSyncOnUserChange === true,
+            includeLogs: parsed.includeLogs !== false,
+            lastBackupAt: typeof parsed.lastBackupAt === 'string' ? parsed.lastBackupAt : null,
+            lastBackupStatus: typeof parsed.lastBackupStatus === 'string' ? parsed.lastBackupStatus : null,
+            lastBackupCount: Number.isFinite(Number(parsed.lastBackupCount)) ? Number(parsed.lastBackupCount) : 0,
+            lastBackupCommitSha: typeof parsed.lastBackupCommitSha === 'string' ? parsed.lastBackupCommitSha : null,
+            lastRestoreAt: typeof parsed.lastRestoreAt === 'string' ? parsed.lastRestoreAt : null,
+            lastRestoreStatus: typeof parsed.lastRestoreStatus === 'string' ? parsed.lastRestoreStatus : null,
+            updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null
+          };
+        }
+      }
+    } catch (_) {}
+    return defaults;
+  };
+
+  const savePrivateBackupConfig = (cfg: PrivateBackupConfigRecord) => {
+    writeJsonFileAtomic(PRIVATE_BACKUP_CONFIG_FILE, cfg);
+  };
+
+  const sanitizePrivateBackupConfigForClient = (cfg: PrivateBackupConfigRecord) => {
+    const hasEnvToken = Boolean(process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim());
+    const hasEnvKey = Boolean(process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim());
+    const hasToken = Boolean(cfg.token || hasEnvToken);
+    const hasEncryptionKey = Boolean(cfg.encryptionKey || hasEnvKey);
+    return {
+      repo: cfg.repo,
+      branch: cfg.branch,
+      backupPath: cfg.backupPath,
+      hasSavedToken: Boolean(cfg.token),
+      hasServerEnvToken: hasEnvToken,
+      hasToken,
+      token: cfg.token ? '••••••••' : '',
+      hasSavedEncryptionKey: Boolean(cfg.encryptionKey),
+      hasServerEnvKey: hasEnvKey,
+      hasEncryptionKey,
+      encryptionKey: cfg.encryptionKey ? '••••••••' : '',
+      autoSyncOnUserChange: cfg.autoSyncOnUserChange === true,
+      includeLogs: cfg.includeLogs !== false,
+      lastBackupAt: cfg.lastBackupAt,
+      lastBackupStatus: cfg.lastBackupStatus,
+      lastBackupCount: cfg.lastBackupCount,
+      lastBackupCommitSha: cfg.lastBackupCommitSha,
+      lastRestoreAt: cfg.lastRestoreAt,
+      lastRestoreStatus: cfg.lastRestoreStatus,
+      updatedAt: cfg.updatedAt
+    };
+  };
+
+  const encryptAdminVault = (payloadObj: Record<string, any>, passphrase: string) => {
+    const cleanPass = String(passphrase || '');
+    if (cleanPass.length < 8 || cleanPass.length > 256) {
+      throw new Error("AES-256 암호화 키는 8자 이상 256자 이하로 입력해주세요.");
+    }
+    const plaintext = JSON.stringify(payloadObj);
+    const checksumSha256 = crypto.createHash('sha256').update(plaintext, 'utf8').digest('hex');
+    const salt = crypto.randomBytes(16);
+    const iv = crypto.randomBytes(12);
+    const key = crypto.scryptSync(cleanPass, salt, 32, { N: 16384, r: 8, p: 1 });
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    cipher.setAAD(PRIVATE_VAULT_AAD);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    return {
+      format: PRIVATE_VAULT_FORMAT,
+      version: getAppVersion(),
+      cipher: 'aes-256-gcm',
+      kdf: 'scrypt',
+      kdfParams: { N: 16384, r: 8, p: 1 },
+      salt: salt.toString('hex'),
+      iv: iv.toString('hex'),
+      authTag: authTag.toString('hex'),
+      checksumSha256,
+      exportedAt: payloadObj.exportedAt,
+      counts: {
+        users: Array.isArray(payloadObj.users) ? payloadObj.users.length : 0,
+        adminLogs: Array.isArray(payloadObj.adminLogs) ? payloadObj.adminLogs.length : 0
+      },
+      ciphertext: encrypted.toString('base64')
+    };
+  };
+
+  const decryptAdminVault = (vaultRaw: any, passphrase: string) => {
+    const cleanPass = String(passphrase || '');
+    if (cleanPass.length < 8 || cleanPass.length > 256) {
+      throw new Error("복호화할 AES-256 암호화 키(8자 이상)를 입력해주세요.");
+    }
+    if (!vaultRaw || typeof vaultRaw !== 'object' || vaultRaw.format !== PRIVATE_VAULT_FORMAT || vaultRaw.cipher !== 'aes-256-gcm') {
+      throw new Error("지원되지 않는 암호화 백업 파일 형식입니다.");
+    }
+    const saltHex = String(vaultRaw.salt || '');
+    const ivHex = String(vaultRaw.iv || '');
+    const authTagHex = String(vaultRaw.authTag || '');
+    const ciphertextB64 = String(vaultRaw.ciphertext || '');
+    if (!/^[0-9a-f]{32}$/i.test(saltHex) || !/^[0-9a-f]{24}$/i.test(ivHex) || !/^[0-9a-f]{32}$/i.test(authTagHex) || !ciphertextB64) {
+      throw new Error("암호화 금고 메타데이터(salt/iv/authTag)가 손상되었습니다.");
+    }
+
+    const salt = Buffer.from(saltHex, 'hex');
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+    const encrypted = Buffer.from(ciphertextB64, 'base64');
+    const kdfN = Number(vaultRaw.kdfParams?.N) === 16384 ? 16384 : 16384;
+    const kdfR = Number(vaultRaw.kdfParams?.r) === 8 ? 8 : 8;
+    const kdfP = Number(vaultRaw.kdfParams?.p) === 1 ? 1 : 1;
+
+    try {
+      const key = crypto.scryptSync(cleanPass, salt, 32, { N: kdfN, r: kdfR, p: kdfP });
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAAD(PRIVATE_VAULT_AAD);
+      decipher.setAuthTag(authTag);
+      const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+      if (vaultRaw.checksumSha256) {
+        const actualSha = crypto.createHash('sha256').update(decrypted, 'utf8').digest('hex');
+        if (!timingSafeEqualStrings(actualSha, String(vaultRaw.checksumSha256))) {
+          throw new Error("무결성 해시 검증에 실패했습니다.");
+        }
+      }
+      const parsed = JSON.parse(decrypted);
+      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.users)) {
+        throw new Error("복호화된 데이터에 유효한 회원 목록이 없습니다.");
+      }
+      return parsed;
+    } catch (err: any) {
+      if (String(err?.message || '').includes('Unsupported state or unable to authenticate data')) {
+        throw new Error("복호화 실패: 암호화 키가 일치하지 않거나 백업 파일이 변조되었습니다.");
+      }
+      throw new Error(err?.message || "복호화 실패: 암호화 키가 일치하지 않거나 손상된 백업 파일입니다.");
+    }
+  };
+
+  const buildEncryptedAdminVault = (includeLogs: boolean, passphrase: string) => {
+    const users = readLocalCollection('users');
+    const adminLogs = includeLogs ? readLocalCollection('logs_admin').slice(0, 200) : [];
+    const exportedAt = getKSTISOString();
+    const vault = encryptAdminVault(
+      {
+        schema: PRIVATE_VAULT_FORMAT,
+        exportedAt,
+        users,
+        adminLogs
+      },
+      passphrase
+    );
+    return { vault, usersCount: users.length, adminLogsCount: adminLogs.length, exportedAt };
+  };
+
+  const applyRestoredUsers = (restoredUsersRaw: any[], mode: 'merge' | 'replace') => {
+    const sanitizedIncoming: any[] = [];
+    const seenEmails = new Set<string>();
+    const adminEmailList = getAdminEmailList();
+    const now = getKSTISOString();
+
+    for (const item of restoredUsersRaw) {
+      if (!item || typeof item !== 'object') continue;
+      const cleanEmail = typeof item.email === 'string' ? item.email.toLowerCase().trim() : '';
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || seenEmails.has(cleanEmail)) continue;
+      seenEmails.add(cleanEmail);
+
+      const isRootAdmin = adminEmailList.includes(cleanEmail);
+      const role: 'admin' | 'member' = isRootAdmin || item.role === 'admin' ? 'admin' : 'member';
+      const status: 'active' | 'blocked' = isRootAdmin ? 'active' : (item.status === 'blocked' ? 'blocked' : 'active');
+      sanitizedIncoming.push({
+        id: typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 80) : `usr-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+        email: cleanEmail,
+        displayName: typeof item.displayName === 'string' && item.displayName.trim() ? item.displayName.trim().slice(0, 80) : cleanEmail.split('@')[0],
+        role,
+        authProvider: item.authProvider === 'google' ? 'google' : 'email',
+        ...(typeof item.salt === 'string' && item.salt && typeof item.passwordHash === 'string' && item.passwordHash
+          ? { salt: item.salt, passwordHash: item.passwordHash }
+          : {}),
+        status,
+        createdAt: typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : now,
+        lastLoginAt: typeof item.lastLoginAt === 'string' && item.lastLoginAt ? item.lastLoginAt : now,
+        ...(typeof item.updatedAt === 'string' && item.updatedAt ? { updatedAt: item.updatedAt } : {})
+      });
+    }
+
+    if (sanitizedIncoming.length === 0) {
+      throw new Error("백업 파일에서 복원할 수 있는 유효한 회원 계정을 찾지 못했습니다.");
+    }
+
+    // Create safety LKG snapshot before mutating users.json
+    createLastKnownGoodBackupSync();
+
+    const currentUsers = readLocalCollection('users');
+    let nextUsers: any[] = [];
+    let added = 0;
+    let updated = 0;
+
+    if (mode === 'replace') {
+      const incomingByEmail = new Map(sanitizedIncoming.map(u => [u.email, u]));
+      nextUsers = [...sanitizedIncoming];
+      // Ensure protected local root admins are never locked out even if missing from older backup
+      for (const localU of currentUsers) {
+        const localEmail = String(localU?.email || '').toLowerCase().trim();
+        if (localEmail && adminEmailList.includes(localEmail) && !incomingByEmail.has(localEmail)) {
+          nextUsers.push(localU);
+        }
+      }
+      added = sanitizedIncoming.filter(u => !currentUsers.some(cu => String(cu?.email || '').toLowerCase().trim() === u.email)).length;
+      updated = sanitizedIncoming.length - added;
+    } else {
+      const mergedMap = new Map<string, any>();
+      for (const cur of currentUsers) {
+        const email = String(cur?.email || '').toLowerCase().trim();
+        if (email) mergedMap.set(email, cur);
+      }
+      for (const inc of sanitizedIncoming) {
+        const existing = mergedMap.get(inc.email);
+        if (!existing) {
+          mergedMap.set(inc.email, inc);
+          added++;
+        } else {
+          const existingTs = Date.parse(existing.updatedAt || existing.lastLoginAt || existing.createdAt || '') || 0;
+          const incTs = Date.parse(inc.updatedAt || inc.lastLoginAt || inc.createdAt || '') || 0;
+          const needsPasswordHydration = (!existing.passwordHash || !existing.salt) && Boolean(inc.passwordHash && inc.salt);
+          if (incTs > existingTs || needsPasswordHydration) {
+            mergedMap.set(inc.email, {
+              ...existing,
+              ...inc,
+              id: existing.id || inc.id,
+              role: adminEmailList.includes(inc.email) ? 'admin' : inc.role,
+              status: adminEmailList.includes(inc.email) ? 'active' : inc.status
+            });
+            updated++;
+          }
+        }
+      }
+      nextUsers = Array.from(mergedMap.values());
+    }
+
+    writeLocalCollection('users', nextUsers);
+    return {
+      restoredTotal: sanitizedIncoming.length,
+      added,
+      updated,
+      totalUsersAfter: nextUsers.length
+    };
+  };
+
+  const executePrivateBackupPush = async (options?: {
+    repo?: string;
+    branch?: string;
+    backupPath?: string;
+    token?: string;
+    passphrase?: string;
+    includeLogs?: boolean;
+    reason?: string;
+  }) => {
+    const cfg = loadPrivateBackupConfig();
+    const targetRepo = options?.repo && isValidGithubRepo(options.repo) ? options.repo.trim() : cfg.repo;
+    const targetBranch = options?.branch && isValidGitRef(options.branch) ? options.branch.trim() : cfg.branch;
+    const targetPath = options?.backupPath && isValidRepoRelativeJsonPath(options.backupPath) ? options.backupPath.trim() : cfg.backupPath;
+    const includeLogs = options?.includeLogs !== undefined ? Boolean(options.includeLogs) : cfg.includeLogs;
+    const cleanTokenOverride = (typeof options?.token === 'string' && options.token.trim() && !options.token.includes('••••')) ? options.token.trim() : '';
+    const authToken = cleanTokenOverride || cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim() || '';
+    const cleanPassOverride = (typeof options?.passphrase === 'string' && options.passphrase.trim() && !options.passphrase.includes('••••')) ? options.passphrase.trim() : '';
+    const passphrase = cleanPassOverride || cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '';
+
+    if (!isValidGithubRepo(targetRepo)) {
+      throw new Error("유효한 비공개 GitHub 저장소('소유자/저장소명')가 필요합니다.");
+    }
+    if (!authToken) {
+      throw new Error("비공개 저장소 접근용 Personal Access Token(PAT)이 설정되어 있지 않습니다.");
+    }
+    if (!passphrase || passphrase.length < 8) {
+      throw new Error("AES-256 암호화 키(8자 이상)가 설정되어 있지 않습니다.");
+    }
+
+    const { vault, usersCount, adminLogsCount, exportedAt } = buildEncryptedAdminVault(includeLogs, passphrase);
+    const encodedPath = targetPath.split('/').map(seg => encodeURIComponent(seg)).join('/');
+    const contentsApiUrl = `https://api.github.com/repos/${targetRepo}/contents/${encodedPath}`;
+    const ghHeaders: Record<string, string> = {
+      'Authorization': `Bearer ${authToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'WindowsFixWizard-PrivateVault'
+    };
+
+    // Check repository privacy so admin doesn't accidentally push encrypted member vault to a public repo
+    const repoMetaRes = await fetch(`https://api.github.com/repos/${targetRepo}`, {
+      headers: ghHeaders,
+      signal: AbortSignal.timeout(12000)
+    });
+    if (repoMetaRes.status === 401 || repoMetaRes.status === 403) {
+      throw new Error(`비공개 저장소 인증 실패 (${repoMetaRes.status}): 전용 PAT의 Contents Read/Write 권한을 확인하세요.`);
+    }
+    if (repoMetaRes.status === 404) {
+      throw new Error(`저장소(${targetRepo})를 찾을 수 없습니다. GitHub에서 Private 저장소가 생성되었는지 확인하세요.`);
+    }
+    if (repoMetaRes.ok) {
+      const repoMeta: any = await repoMetaRes.json();
+      if (repoMeta && repoMeta.private === false) {
+        throw new Error(`보안 차단: '${targetRepo}' 저장소는 공개(Public) 상태입니다. 비공개(Private) 저장소로 설정 후 다시 시도하세요.`);
+      }
+    }
+
+    // Read existing SHA if file already exists
+    let fileSha: string | undefined;
+    const getFileRes = await fetch(`${contentsApiUrl}?ref=${encodeURIComponent(targetBranch)}`, {
+      headers: ghHeaders,
+      signal: AbortSignal.timeout(12000)
+    });
+    if (getFileRes.ok) {
+      const existingInfo: any = await getFileRes.json();
+      if (existingInfo?.sha) fileSha = existingInfo.sha;
+    }
+
+    const contentBase64 = Buffer.from(JSON.stringify(vault, null, 2), 'utf8').toString('base64');
+    const commitMsg = `🔐 [Private Vault] AES-256-GCM encrypted backup (${usersCount} users · ${options?.reason || 'manual'})`;
+
+    const putRes = await fetch(contentsApiUrl, {
+      method: 'PUT',
+      headers: {
+        ...ghHeaders,
+        'Content-Type': 'application/json'
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        message: commitMsg,
+        content: contentBase64,
+        branch: targetBranch,
+        ...(fileSha ? { sha: fileSha } : {})
+      })
+    });
+
+    if (!putRes.ok) {
+      const errTxt = await putRes.text().catch(() => '');
+      throw new Error(`비공개 저장소 암호화 백업 푸시 실패 (${putRes.status}): ${errTxt || putRes.statusText}`);
+    }
+
+    const putJson: any = await putRes.json();
+    const commitSha = putJson?.commit?.sha || null;
+    const latestCfg = loadPrivateBackupConfig();
+    savePrivateBackupConfig({
+      ...latestCfg,
+      lastBackupAt: exportedAt,
+      lastBackupStatus: `AES-256-GCM 백업 완료 (${usersCount}명 · ${options?.reason || 'manual'})`,
+      lastBackupCount: usersCount,
+      lastBackupCommitSha: commitSha,
+      updatedAt: exportedAt
+    });
+
+    addLocalLog('logs_admin', {
+      category: 'AUTH',
+      action: 'PRIVATE_VAULT_BACKUP',
+      details: `비공개 저장소(${targetRepo}) AES-256-GCM 암호화 백업 완료: 회원 ${usersCount}명, 로그 ${adminLogsCount}건 (${options?.reason || 'manual'})`
+    });
+
+    return {
+      repo: targetRepo,
+      branch: targetBranch,
+      backupPath: targetPath,
+      usersCount,
+      adminLogsCount,
+      exportedAt,
+      commitSha,
+      htmlUrl: putJson?.content?.html_url || `https://github.com/${targetRepo}/blob/${targetBranch}/${targetPath}`
+    };
+  };
+
+  let activeAutoBackupPromise: Promise<void> | null = null;
+  let queuedAutoBackupReason: string | null = null;
+  function schedulePrivateAdminBackupSync(reason: string): Promise<void> {
+    const cfg = loadPrivateBackupConfig();
+    const hasToken = Boolean(cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim());
+    const hasKey = Boolean(cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim());
+    if (!cfg.autoSyncOnUserChange || !hasToken || !hasKey) {
+      return Promise.resolve();
+    }
+    if (activeAutoBackupPromise) {
+      queuedAutoBackupReason = reason;
+      return activeAutoBackupPromise;
+    }
+    activeAutoBackupPromise = (async () => {
+      try {
+        await executePrivateBackupPush({ reason: `auto:${reason}` });
+      } catch (err: any) {
+        console.warn(`[Private Vault Auto-Sync] Failed (${reason}):`, err?.message || err);
+        const latestCfg = loadPrivateBackupConfig();
+        savePrivateBackupConfig({
+          ...latestCfg,
+          lastBackupStatus: `자동 백업 실패: ${String(err?.message || 'Unknown error').slice(0, 120)}`,
+          updatedAt: getKSTISOString()
+        });
+      } finally {
+        activeAutoBackupPromise = null;
+        if (queuedAutoBackupReason) {
+          const nextReason = queuedAutoBackupReason;
+          queuedAutoBackupReason = null;
+          void schedulePrivateAdminBackupSync(nextReason);
+        }
+      }
+    })();
+    return activeAutoBackupPromise;
+  }
+
+  // GET /api/admin/private-backup/config
+  app.get("/api/admin/private-backup/config", requireAdmin, (_req, res) => {
+    try {
+      const cfg = loadPrivateBackupConfig();
+      res.json({ success: true, config: sanitizePrivateBackupConfigForClient(cfg) });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message || "비공개 백업 설정 조회 실패" });
+    }
+  });
+
+  // POST /api/admin/private-backup/config
+  app.post("/api/admin/private-backup/config", requireAdmin, (req, res) => {
+    try {
+      const {
+        repo,
+        branch,
+        backupPath,
+        token,
+        encryptionKey,
+        clearToken,
+        clearEncryptionKey,
+        autoSyncOnUserChange,
+        includeLogs
+      } = req.body || {};
+
+      const current = loadPrivateBackupConfig();
+      const nextRepo = repo !== undefined && String(repo).trim() ? String(repo).trim() : current.repo;
+      const nextBranch = branch !== undefined && String(branch).trim() ? String(branch).trim() : current.branch;
+      const nextPath = backupPath !== undefined && String(backupPath).trim() ? String(backupPath).trim() : current.backupPath;
+
+      if (!isValidGithubRepo(nextRepo)) {
+        return res.status(400).json({ success: false, error: "유효한 GitHub 저장소 형식('소유자/저장소명')을 입력해주세요." });
+      }
+      if (!isValidGitRef(nextBranch)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 브랜치 이름입니다." });
+      }
+      if (!isValidRepoRelativeJsonPath(nextPath)) {
+        return res.status(400).json({ success: false, error: "백업 파일 경로는 .json 확장자의 상대 경로여야 합니다 (예: backups/winfix-admin-vault.enc.json)." });
+      }
+
+      let nextToken = current.token;
+      if (clearToken === true) {
+        nextToken = '';
+      } else if (typeof token === 'string' && token.trim() && !token.includes('••••')) {
+        nextToken = token.trim();
+      }
+
+      let nextEncryptionKey = current.encryptionKey;
+      if (clearEncryptionKey === true) {
+        nextEncryptionKey = '';
+      } else if (typeof encryptionKey === 'string' && encryptionKey.trim() && !encryptionKey.includes('••••')) {
+        const trimmedKey = encryptionKey.trim();
+        if (trimmedKey.length < 8 || trimmedKey.length > 256) {
+          return res.status(400).json({ success: false, error: "AES-256 암호화 키는 8자 이상 256자 이하로 입력해주세요." });
+        }
+        nextEncryptionKey = trimmedKey;
+      }
+
+      const now = getKSTISOString();
+      const updated: PrivateBackupConfigRecord = {
+        ...current,
+        repo: nextRepo,
+        branch: nextBranch,
+        backupPath: nextPath,
+        token: nextToken,
+        encryptionKey: nextEncryptionKey,
+        autoSyncOnUserChange: autoSyncOnUserChange !== undefined ? Boolean(autoSyncOnUserChange) : current.autoSyncOnUserChange,
+        includeLogs: includeLogs !== undefined ? Boolean(includeLogs) : current.includeLogs,
+        updatedAt: now
+      };
+      savePrivateBackupConfig(updated);
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'PRIVATE_VAULT_CONFIG_UPDATE',
+        details: `비공개 백업 저장소 설정 변경: ${updated.repo} (${updated.branch}:${updated.backupPath}, 자동백업: ${updated.autoSyncOnUserChange ? 'ON' : 'OFF'})`
+      });
+
+      res.json({ success: true, config: sanitizePrivateBackupConfigForClient(updated) });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message || "비공개 백업 설정 저장 실패" });
+    }
+  });
+
+  // POST /api/admin/private-backup/push
+  app.post("/api/admin/private-backup/push", requireAdmin, async (req, res) => {
+    try {
+      const { repo, branch, backupPath, passphrase, includeLogs } = req.body || {};
+      const result = await executePrivateBackupPush({
+        repo,
+        branch,
+        backupPath,
+        passphrase,
+        includeLogs,
+        reason: 'manual'
+      });
+      const updatedCfg = loadPrivateBackupConfig();
+      res.json({
+        success: true,
+        backup: result,
+        config: sanitizePrivateBackupConfigForClient(updatedCfg)
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "비공개 저장소 암호화 백업에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/restore
+  app.post("/api/admin/private-backup/restore", requireAdmin, async (req, res) => {
+    try {
+      const { mode = 'merge', passphrase, repo, branch, backupPath } = req.body || {};
+      const restoreMode: 'merge' | 'replace' = mode === 'replace' ? 'replace' : 'merge';
+      const cfg = loadPrivateBackupConfig();
+      const targetRepo = repo && isValidGithubRepo(repo) ? repo.trim() : cfg.repo;
+      const targetBranch = branch && isValidGitRef(branch) ? branch.trim() : cfg.branch;
+      const targetPath = backupPath && isValidRepoRelativeJsonPath(backupPath) ? backupPath.trim() : cfg.backupPath;
+      const authToken = cfg.token || process.env.ADMIN_BACKUP_GITHUB_TOKEN?.trim() || '';
+      const cleanPass = (typeof passphrase === 'string' && passphrase.trim() && !passphrase.includes('••••'))
+        ? passphrase.trim()
+        : (cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '');
+
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효한 비공개 GitHub 저장소 이름이 필요합니다." });
+      }
+      if (!authToken) {
+        return res.status(400).json({ success: false, error: "비공개 저장소 PAT가 설정되어 있지 않습니다." });
+      }
+      if (!cleanPass || cleanPass.length < 8) {
+        return res.status(400).json({ success: false, error: "복호화할 AES-256 암호화 키(8자 이상)가 필요합니다." });
+      }
+
+      const encodedPath = targetPath.split('/').map(seg => encodeURIComponent(seg)).join('/');
+      const contentsApiUrl = `https://api.github.com/repos/${targetRepo}/contents/${encodedPath}?ref=${encodeURIComponent(targetBranch)}`;
+      const ghRes = await fetch(contentsApiUrl, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'WindowsFixWizard-PrivateVault'
+        },
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (ghRes.status === 401 || ghRes.status === 403) {
+        return res.status(400).json({ success: false, error: `비공개 저장소 인증 실패 (${ghRes.status}): PAT 권한을 확인하세요.` });
+      }
+      if (ghRes.status === 404) {
+        return res.status(404).json({ success: false, error: `${targetRepo} (${targetBranch})에 '${targetPath}' 백업 파일이 아직 없습니다.` });
+      }
+      if (!ghRes.ok) {
+        return res.status(502).json({ success: false, error: `GitHub 백업 조회 실패 (${ghRes.status})` });
+      }
+
+      const fileInfo: any = await ghRes.json();
+      let vaultJson: any = null;
+      if (fileInfo?.content) {
+        const rawText = Buffer.from(String(fileInfo.content), 'base64').toString('utf8');
+        vaultJson = JSON.parse(rawText);
+      } else if (fileInfo?.download_url && isSafeExternalHttpUrl(fileInfo.download_url)) {
+        const rawRes = await fetch(fileInfo.download_url, {
+          headers: { 'Authorization': `Bearer ${authToken}`, 'User-Agent': 'WindowsFixWizard-PrivateVault' },
+          signal: AbortSignal.timeout(15000)
+        });
+        vaultJson = await rawRes.json();
+      }
+
+      const decrypted = decryptAdminVault(vaultJson, cleanPass);
+      const restoreStats = applyRestoredUsers(decrypted.users, restoreMode);
+
+      const now = getKSTISOString();
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        lastRestoreAt: now,
+        lastRestoreStatus: `${restoreMode === 'replace' ? '전체 교체' : '병합'} 복원 완료 (+신규 ${restoreStats.added}, ~갱신 ${restoreStats.updated}, 총 ${restoreStats.totalUsersAfter}명)`,
+        updatedAt: now
+      });
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'PRIVATE_VAULT_RESTORE',
+        details: `비공개 저장소(${targetRepo}) 암호화 백업 복원 (${restoreMode}): 신규 ${restoreStats.added}명, 갱신 ${restoreStats.updated}명, 총 ${restoreStats.totalUsersAfter}명`
+      });
+
+      res.json({
+        success: true,
+        restore: {
+          mode: restoreMode,
+          ...restoreStats,
+          vaultExportedAt: decrypted.exportedAt || vaultJson?.exportedAt || null
+        },
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "비공개 저장소 복원에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/export-local
+  app.post("/api/admin/private-backup/export-local", requireAdmin, (req, res) => {
+    try {
+      const { passphrase, includeLogs } = req.body || {};
+      const cfg = loadPrivateBackupConfig();
+      const cleanPass = (typeof passphrase === 'string' && passphrase.trim() && !passphrase.includes('••••'))
+        ? passphrase.trim()
+        : (cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '');
+      const { vault, usersCount, exportedAt } = buildEncryptedAdminVault(
+        includeLogs !== undefined ? Boolean(includeLogs) : cfg.includeLogs,
+        cleanPass
+      );
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'PRIVATE_VAULT_LOCAL_EXPORT',
+        details: `로컬 AES-256-GCM 암호화 회원 백업 내보내기 (${usersCount}명)`
+      });
+      res.json({ success: true, vault, usersCount, exportedAt });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "로컬 암호화 파일 생성에 실패했습니다." });
+    }
+  });
+
+  // POST /api/admin/private-backup/restore-local
+  app.post("/api/admin/private-backup/restore-local", requireAdmin, (req, res) => {
+    try {
+      const { vault, passphrase, mode = 'merge' } = req.body || {};
+      const restoreMode: 'merge' | 'replace' = mode === 'replace' ? 'replace' : 'merge';
+      const cfg = loadPrivateBackupConfig();
+      const cleanPass = (typeof passphrase === 'string' && passphrase.trim() && !passphrase.includes('••••'))
+        ? passphrase.trim()
+        : (cfg.encryptionKey || process.env.ADMIN_BACKUP_ENCRYPTION_KEY?.trim() || '');
+      const decrypted = decryptAdminVault(vault, cleanPass);
+      const restoreStats = applyRestoredUsers(decrypted.users, restoreMode);
+
+      const now = getKSTISOString();
+      const latestCfg = loadPrivateBackupConfig();
+      savePrivateBackupConfig({
+        ...latestCfg,
+        lastRestoreAt: now,
+        lastRestoreStatus: `로컬 파일 ${restoreMode === 'replace' ? '교체' : '병합'} 복원 완료 (+신규 ${restoreStats.added}, ~갱신 ${restoreStats.updated})`,
+        updatedAt: now
+      });
+
+      addLocalLog('logs_admin', {
+        category: 'AUTH',
+        action: 'PRIVATE_VAULT_LOCAL_RESTORE',
+        details: `로컬 AES-256-GCM 암호화 백업 복원 (${restoreMode}): 신규 ${restoreStats.added}명, 갱신 ${restoreStats.updated}명, 총 ${restoreStats.totalUsersAfter}명`
+      });
+
+      res.json({
+        success: true,
+        restore: {
+          mode: restoreMode,
+          ...restoreStats,
+          vaultExportedAt: decrypted.exportedAt || vault?.exportedAt || null
+        },
+        config: sanitizePrivateBackupConfigForClient(loadPrivateBackupConfig())
+      });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "로컬 암호화 백업 복원에 실패했습니다." });
     }
   });
 

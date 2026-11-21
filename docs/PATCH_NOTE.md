@@ -1,6 +1,25 @@
-# Patch Note - System Update (v3.106.18)
+# Patch Note - System Update (v3.107.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.107.0] - 2026-11-21
+
+### 🚀 Major New Features & Integrations
+- **비공개 저장소 전용 AES-256-GCM 암호화 회원 백업 · 복원 연동 (`server.ts`, `src/components/MemberManagementPanel.tsx`)**:
+  - 공개 저장소(`AhBiYout-all/windows-fix-wizard`)와 완전히 분리된 비공개 저장소(권장: `AhBiYout-all/windows-fix-wizard-admin`)에 회원 계정 데이터(`data/users.json`, 비밀번호 솔트/해시 포함) 및 선택적 최근 관리자 감사 로그(`logs_admin`)를 암호화 백업/복원하는 **Private Admin Vault(`winfix-admin-vault-v1`)** 시스템을 구축했습니다.
+  - **로컬 오프라인 암호화 금고 내보내기/복원**: 네트워크/PAT 연동 전에도 `.enc.json` 확장자의 AES-256-GCM 암호화 백업 파일을 즉시 다운로드하거나 업로드해 복구할 수 있습니다.
+  - **병합(Merge) / 전체 교체(Replace) 복원 모드**: 컨테이너 초기화나 이전 시 신규/갱신 계정을 최신 타임스탬프 기준으로 병합하거나 백업 시점 상태로 복원하며, 복원 직전 자동 LKG 스냅샷 생성 및 보호된 루트 최고 관리자 계정 유지 가드를 적용했습니다.
+  - **계정 변경 시 자동 백업(Auto-Sync)**: 회원 가입·수정·비밀번호 설정·Google 동기화·삭제 발생 시 비차단 직렬화 큐를 통해 비공개 저장소로 자동 암호화 백업하는 옵션을 지원합니다.
+
+### 🛡️ Security Hardening & Authentication
+- **공개 Git 추적에서 회원/세션 파일 완전 제외 (`.gitignore`, `.env.example`, `server.ts`)**:
+  - `.gitignore`에서 `!data/users.json` 예외 규칙을 제거하고 `data/users.json`, `data/admin_sessions.json`, `data/*_config.json`이 공개 저장소에 커밋되지 않도록 차단했습니다.
+  - `executePrivateBackupPush()` 실행 시 대상 GitHub 저장소 메타데이터를 사전 검증하여 **공개(Public) 저장소로 설정된 경우 암호화 백업 업로드를 즉시 차단**합니다.
+  - `scrypt` (`N=16384, r=8, p=1`, 16바이트 랜덤 솔트) 키 유도 + AES-256-GCM(12바이트 랜덤 IV, AAD 바인딩, 16바이트 인증 태그) + SHA-256 무결성 검증을 적용해 키 불일치나 파일 변조 시 복호를 차단합니다.
+  - 비공개 저장소 PAT 및 AES-256 암호화 키는 서버(`data/private_backup_config.json` 또는 `.env`의 `ADMIN_BACKUP_GITHUB_TOKEN`, `ADMIN_BACKUP_ENCRYPTION_KEY`)에만 보관하며 클라이언트 응답에는 `'••••••••'`로 마스킹하고 관리자 ZIP 백업에서도 자동 마스킹 처리합니다.
+  - 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.107.0`으로 동기화했습니다.
 
 ---
 
