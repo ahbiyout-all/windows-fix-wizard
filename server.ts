@@ -197,7 +197,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.12';
+  return '3.106.14';
 }
 
 const BACKUP_SENSITIVE_KEY_EXACT = new Set([
@@ -1075,6 +1075,7 @@ async function executeServerGeminiCall(
 
   const promptString = contentsToPromptText(contents);
   const wantsJsonOutput = options.config?.responseMimeType === 'application/json';
+  const desiredMaxTokens = options.config?.maxOutputTokens || (wantsJsonOutput ? 4096 : undefined);
   const externalPromptString = buildExternalFallbackPrompt(promptString, options.config);
 
   // Workload-aware Quota Splitting:
@@ -1093,7 +1094,8 @@ async function executeServerGeminiCall(
     for (const p of splitProviders) {
       const splitRes = await callExternalFreeProvider(p, externalPromptString, {
         customKey: p === 'groq' ? (sysCfg.groqApiKey || undefined) : undefined,
-        registry
+        registry,
+        maxTokens: desiredMaxTokens
       });
       if (splitRes && splitRes.text) {
         recordRegistryUsage(p, splitRes.modelUsed, false);
@@ -1263,7 +1265,8 @@ async function executeServerGeminiCall(
   const customKeyStr = (options.customApiKey || '').trim();
   const secondaryRes = await callSecondaryFreeAiApi(externalPromptString, {
     groqKey: customKeyStr.startsWith('gsk_') ? customKeyStr : undefined,
-    openrouterKey: customKeyStr.startsWith('sk-or-') ? customKeyStr : undefined
+    openrouterKey: customKeyStr.startsWith('sk-or-') ? customKeyStr : undefined,
+    maxTokens: desiredMaxTokens
   });
 
   if (secondaryRes) {
@@ -1280,7 +1283,8 @@ async function executeServerGeminiCall(
   if (latestRegistry.keylessFallbackEnabled !== false) {
     const keylessRes = await callExternalFreeProvider('pollinations', externalPromptString, {
       registry: latestRegistry,
-      timeoutMs: wantsJsonOutput ? 32000 : 24000
+      timeoutMs: wantsJsonOutput ? 32000 : 24000,
+      maxTokens: desiredMaxTokens
     });
     if (keylessRes && keylessRes.text) {
       const normalizedText = wantsJsonOutput ? stripMarkdownJsonFences(keylessRes.text) : keylessRes.text;
@@ -1314,7 +1318,7 @@ async function executeServerGeminiCall(
   throw new Error("Gemini API 키가 설정되지 않았거나 이용할 수 없습니다. AI Studio의 Settings > Secrets 메뉴에서 GEMINI_API_KEY를 등록해 주세요.");
 }
 
-async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey?: string; openrouterKey?: string }) {
+async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey?: string; openrouterKey?: string; maxTokens?: number }) {
   try {
     const registry = loadAiModelRegistry();
     const config = readSystemConfigObject();
@@ -1333,7 +1337,8 @@ async function callSecondaryFreeAiApi(promptText: string, customKeys?: { groqKey
     for (const providerId of externalOrder) {
       const res = await callExternalFreeProvider(providerId, promptText, {
         customKey: providerKeyMap[providerId],
-        registry
+        registry,
+        maxTokens: customKeys?.maxTokens
       });
       if (res && res.text) {
         return res;
@@ -1781,12 +1786,12 @@ async function runAiSyncInternal(): Promise<any> {
   if (!success || !syncDetails) {
     console.log(`[Engine Sync] Primary Gemini attempt standby (${lastFailureReason || 'All models busy'}). Attempting Multi-Provider Free-Tier Failover...`);
     const externalSyncPrompt = buildExternalFallbackPrompt(fullPrompt, { responseMimeType: 'application/json' });
-    let secResult = await callSecondaryFreeAiApi(externalSyncPrompt);
+    let secResult = await callSecondaryFreeAiApi(externalSyncPrompt, { maxTokens: 4096 });
     if (!secResult) {
       const latestSyncRegistry = loadAiModelRegistry();
       if (latestSyncRegistry.keylessFallbackEnabled !== false) {
         console.log('[Engine Sync] All keyed providers unavailable; trying last-resort keyless Pollinations fallback...');
-        secResult = await callExternalFreeProvider('pollinations', externalSyncPrompt, { registry: latestSyncRegistry });
+        secResult = await callExternalFreeProvider('pollinations', externalSyncPrompt, { registry: latestSyncRegistry, maxTokens: 4096, timeoutMs: 32000 });
       }
     }
     if (secResult && secResult.text) {
@@ -2957,7 +2962,7 @@ async function startServer() {
     try {
       const sanitizedConfig = sanitizePublicAiConfig(config);
       const effectiveConfig = isCollectionPrompt
-        ? { responseMimeType: 'application/json', ...(sanitizedConfig || {}) }
+        ? { responseMimeType: 'application/json', maxOutputTokens: 4096, ...(sanitizedConfig || {}) }
         : sanitizedConfig;
       const result = await executeServerGeminiCall(payload, { 
         model: typeof model === 'string' ? model : undefined, 

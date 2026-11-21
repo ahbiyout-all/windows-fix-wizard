@@ -719,7 +719,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.106.12";
+const APP_VERSION = "3.106.14";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -8033,7 +8033,7 @@ export default function App() {
       const randomFocus = focusAreas[Math.floor(Math.random() * focusAreas.length)];
 
       const safeRequestedCount = Math.max(1, Math.min(20, Math.round(Number(count) || 3)));
-      const effectiveCount = (!isAuto && apiKeyStatus && apiKeyStatus.status !== 'active')
+      const effectiveCount = (apiKeyStatus && apiKeyStatus.status !== 'active')
         ? Math.min(safeRequestedCount, 2)
         : safeRequestedCount;
 
@@ -8123,7 +8123,7 @@ export default function App() {
           throw new Error("Parsed AI result is neither an array nor an object");
         }
       } catch (parseErr: any) {
-        console.error("AI JSON Parse & Recovery Error:", parseErr);
+        console.warn("AI JSON Parse & Recovery Warning:", parseErr?.message || parseErr);
         throw parseErr;
       }
 

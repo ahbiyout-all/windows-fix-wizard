@@ -28,6 +28,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 concurrency:
@@ -35,11 +36,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    environment:
-      name: github-pages
-      url: \${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -73,18 +71,34 @@ jobs:
           mkdir -p dist/data
           cp data/issues.json dist/data/issues.json 2>/dev/null || true
           cp data/github-feed.json dist/data/github-feed.json 2>/dev/null || true
+          
+          # 5. Verify built index.html exists before artifact upload
+          test -f dist/index.html
+          ls -la ./dist
 
       - name: 🌐 Configure GitHub Pages runtime
         uses: actions/configure-pages@v5
 
       - name: 📤 Upload GitHub Pages artifact bundle
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
+          name: github-pages
           path: './dist'
+          include-hidden-files: 'true'
 
+  deploy:
+    needs: build
+    if: success()
+    environment:
+      name: github-pages
+      url: \${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: 🚀 Deploy to GitHub Pages CDN
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
 `;
 
 interface VerificationCheck {
@@ -739,7 +753,16 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
                 Q. GitHub Actions 실행 중 "Resource not accessible by integration" 오류가 발생합니다.
               </strong>
               <p className="text-[11px] leading-relaxed">
-                A. 저장소의 <strong>Settings &gt; Actions &gt; General &gt; Workflow permissions</strong>에서 <strong>"Read and write permissions"</strong>를 선택하고 저장하세요. 또한 <code>deploy-pages.yml</code> 상단의 <code>permissions: pages: write, id-token: write</code> 설정이 정확히 기재되어 있어야 합니다.
+                A. 저장소의 <strong>Settings &gt; Actions &gt; General &gt; Workflow permissions</strong>에서 <strong>"Read and write permissions"</strong>를 선택하고 저장하세요. 또한 <code>deploy-pages.yml</code> 상단의 <code>permissions: pages: write, id-token: write, actions: read</code> 설정이 정확히 기재되어 있어야 합니다.
+              </p>
+            </div>
+
+            <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <strong className="text-slate-800 dark:text-slate-200 font-semibold block">
+                Q. <code>deploy-pages@v4</code>에서 &quot;No artifacts named &apos;github-pages&apos; were found&quot; / &quot;Found 0 artifact(s)&quot; 오류가 발생합니다.
+              </strong>
+              <p className="text-[11px] leading-relaxed">
+                A. 단일 잡(Job) 안에서 <code>upload-pages-artifact</code> 직후 같은 초에 <code>deploy-pages@v4</code>가 실행될 때 아티팩트 메타데이터 색인 지연(레이스 컨디션)이 발생하거나, 1일 보관 주기가 지난 과거 실행을 Re-run할 경우 발생합니다. 위 템플릿처럼 <code>build</code>와 <code>deploy</code>(<code>needs: build</code>)를 별도 잡으로 분리하고 <code>actions/upload-pages-artifact@v4</code>를 적용한 뒤 새 워크플로(<strong>Run workflow</strong>)를 실행하세요.
               </p>
             </div>
           </div>

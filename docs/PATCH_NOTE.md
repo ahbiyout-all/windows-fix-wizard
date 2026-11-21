@@ -1,6 +1,28 @@
-# Patch Note - System Update (v3.106.12)
+# Patch Note - System Update (v3.106.14)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.14] - 2026-11-20
+
+### 🔧 Bug Fixes & GitHub Pages CI/CD Pipeline Hardening
+- **`actions/deploy-pages@v4` `Found 0 artifact(s)` (`github-pages` 아티팩트 미인식) 오류 해결 (`.github/workflows/deploy-pages.yml`, `src/components/GitHubPagesDeployDoc.tsx`)**:
+  - 단일 잡(`build-and-deploy`) 내에서 `actions/upload-pages-artifact@v3` 완료 직후 `actions/deploy-pages@v4`가 같은 초에 실행되며 발생하던 GitHub 아티팩트 메타데이터 색인 레이스 컨디션을 제거하기 위해 **`build`와 `deploy`(`needs: build`) 2단계 잡 구조**로 분리했습니다.
+  - 워크플로 권한에 `actions: read`를 명시하고, `actions/upload-pages-artifact@v4`(명시적 `name: github-pages`, `include-hidden-files: 'true'`) 및 `artifact_name: github-pages`, 빌드 산출물(`dist/index.html`) 사전 검증, 공개 데이터셋(`issues.json`, `github-feed.json`) 선택 복사 가드를 적용했습니다.
+  - 배포 가이드 템플릿(`GITHUB_PAGES_DEPLOY_YAML`) 및 FAQ 트러블슈팅 안내를 최신 구조로 동기화하고, 패치 노트 및 전 모듈 버전을 `v3.106.14`로 통일했습니다.
+
+---
+
+## [v3.106.13] - 2026-11-20
+
+### 🔧 Bug Fixes & AI JSON Recovery Hardening
+- **AI 응답 JSON 절단·내부 따옴표 복구 및 `parseAiJson` 파이프라인 고도화 (`src/utils/safeFetch.ts`)**:
+  - `lastIndexOf('}')` 기반 슬라이싱이 미완성 JSON 응답 내부 PowerShell `{ ... }` 중괄호에서 잘려 외곽 객체 구조를 파괴하던 결함을 수정하고, 최상위 중괄호/대괄호 균형을 추적해 완전한 영역만 추출하거나 잘린 꼬리(열린 문자열, 미완성 키/쉼표, 미닫힌 `{`/`[`)를 자동 봉합하는 `sliceBalancedOrRepairTruncatedJson()`을 도입했습니다.
+  - 한국어 문구·PowerShell 스크립트 내 이스케이프되지 않은 내부 큰따옴표(`"`)가 후행 구조 구분자(`,`, `}`, `]`, `:`, EOF) 없이 등장할 때 자동 이스케이프(`\"`)하는 `escapeSuspiciousInnerQuotes()`를 추가해 4단계(직접/이스케이프 파싱 ➔ 배열 우측 중괄호 절단 복구 ➔ 개별 객체 추출 ➔ 미완성 꼬리 복구)로 복구 성공률을 높였습니다.
+- **수집 배치/폴백 프로바이더 출력 토큰 상한 확대 및 일시 파싱 경고 등급 조정 (`server.ts`, `src/App.tsx`)**:
+  - `executeServerGeminiCall`, `callSecondaryFreeAiApi`, `callExternalFreeProvider('pollinations', ...)` 및 `/api/ai/generate` 수집 요청에 `maxOutputTokens: 4096` / `maxTokens: 4096`을 전달해 다건 한·영 이슈 JSON 응답이 중간에 잘리는 현상을 줄였습니다.
+  - `handleTriggerAiSearch()`가 키 비활성·폴백 상태의 자동 수집(`isAuto`)에서도 요청 건수를 안전하게 최대 2건으로 제한하고, 일시적 JSON 파싱 실패 시 `console.error` 대신 `console.warn`으로 기록해 `runBatchCollection()`의 백오프/재시도 흐름과 일관되게 동작하도록 개선했으며, 패치 노트 및 전 모듈 버전을 `v3.106.13`으로 동기화했습니다.
 
 ---
 
