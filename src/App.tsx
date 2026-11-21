@@ -725,7 +725,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.106.16";
+const APP_VERSION = "3.106.17";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -2130,6 +2130,7 @@ export default function App() {
     maintenanceRunHour: 0,
     maintenanceIntervalHours: 24,
     linkVerifyBatchLimit: 30,
+    engineEnabled: false,
     engineIntervalMin: 60,
     engineBatchSize: 4,
     alertEmail: "admin@cisnet.co.kr",
@@ -2166,6 +2167,7 @@ export default function App() {
   });
   const [maintenanceSchedulerStatus, setMaintenanceSchedulerStatus] = useState<{
     schedulerActive: boolean;
+    engineCronActive?: boolean;
     isMaintenanceRunning: boolean;
     cronPattern: string | null;
     scheduleDescription: string;
@@ -2882,6 +2884,7 @@ export default function App() {
             maintenanceRunHour: data.maintenanceRunHour ?? 0,
             maintenanceIntervalHours: data.maintenanceIntervalHours ?? 24,
             linkVerifyBatchLimit: data.linkVerifyBatchLimit ?? 30,
+            engineEnabled: data.engineEnabled === true,
             engineIntervalMin: data.engineIntervalMin || 60,
             engineBatchSize: data.engineBatchSize || 4,
             lastMaintenanceAt: data.lastMaintenanceAt || null,
@@ -2940,7 +2943,7 @@ export default function App() {
       await logAdminAction(
         'update',
         'system_config',
-        `유지보수 설정 업데이트: 스케줄=${finalSettings.maintenanceEnabled === false ? '중지' : `${finalSettings.maintenanceScheduleMode}(${finalSettings.maintenanceScheduleMode === 'interval' ? `${finalSettings.maintenanceIntervalHours}h` : `${String(finalSettings.maintenanceRunHour).padStart(2, '0')}:00 KST`})`}, 정리 ${finalSettings.cleanupMonths}개월, 검증 ${finalSettings.linkVerifyFrequencyDays}일(배치 ${finalSettings.linkVerifyBatchLimit}건), 수집주기 ${finalSettings.engineIntervalMin}분`,
+        `유지보수 설정 업데이트: 스케줄=${finalSettings.maintenanceEnabled === false ? '중지' : `${finalSettings.maintenanceScheduleMode}(${finalSettings.maintenanceScheduleMode === 'interval' ? `${finalSettings.maintenanceIntervalHours}h` : `${String(finalSettings.maintenanceRunHour).padStart(2, '0')}:00 KST`})`}, 정리 ${finalSettings.cleanupMonths}개월, 검증 ${finalSettings.linkVerifyFrequencyDays}일(배치 ${finalSettings.linkVerifyBatchLimit}건), 로컬엔진=${finalSettings.engineEnabled ? `${finalSettings.engineIntervalMin}분` : 'GitHub 일원화'}`,
         'success',
         'SYSTEM'
       );
@@ -15205,21 +15208,87 @@ export default function App() {
                           ) :
                           <span className="text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> {language === 'en' ? 'Normal (Static JSON / IndexedDB)' : '정상 (Static JSON / IndexedDB)'}</span>
                         }</li>
-                        <li>• {language === 'en' ? 'Backend Autonomous Engine (Cron):' : '백엔드 자율 엔진 (Cron):'} {
+                        <li>• {language === 'en' ? 'Local Fallback Cron (Optional):' : '로컬 백엔드 보조 크론 (선택):'} {
                           backendStatus === 'checking' ? (
                             <span className="text-yellow-500 inline-flex items-center gap-1.5">
                               <RefreshCw className="w-3 h-3 animate-spin" />
                               {language === 'en' ? 'Monitoring...' : '모니터링 중...'}
                             </span>
-                          ) :
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            {language === 'en' ? 'GitOps & Local Engine Active (24/7)' : 'GitOps & 로컬 자율 수집 활성 상태 (24/7)'}
-                          </span>
+                          ) : maintenanceSettings.engineEnabled === true ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {language === 'en'
+                                ? `Active (Every ${maintenanceSettings.engineIntervalMin || 60}m)`
+                                : `보조 크론 가동 중 (${maintenanceSettings.engineIntervalMin || 60}분 주기)`}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 dark:text-slate-300 font-medium inline-flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
+                              {language === 'en'
+                                ? 'Standby (Unified under GitHub Actions)'
+                                : '대기 (GitHub Actions 자동수집으로 일원화)'}
+                            </span>
+                          )
                         }</li>
-                        <li>• {language === 'en' ? 'Last auto-sync:' : '마지막 자동 수집:'} <span className="font-mono text-xs font-medium text-slate-900 dark:text-slate-100 tabular-nums">{lastSyncAt ? lastSyncAt.toLocaleString() : (language === 'en' ? 'No record' : '기록 없음')}</span></li>
-                        <li>• {language === 'en' ? 'Next scheduled sync:' : '다음 자동 수집 예정:'} <span className="font-mono text-xs font-medium text-slate-900 dark:text-slate-100 tabular-nums">{lastSyncAt ? new Date(lastSyncAt.getTime() + (maintenanceSettings.engineIntervalMin || 60) * 60 * 1000).toLocaleString() : (language === 'en' ? 'Immediately' : `${maintenanceSettings.engineIntervalMin || 60}분 이내 예정`)}</span></li>
+                        <li>• {language === 'en' ? 'Last local sync:' : '마지막 로컬 수집:'} <span className="font-mono text-xs font-medium text-slate-900 dark:text-slate-100 tabular-nums">{lastSyncAt ? lastSyncAt.toLocaleString() : (language === 'en' ? 'No record' : '기록 없음')}</span></li>
+                        <li>• {language === 'en' ? 'Scheduled status:' : '정기 실행 상태:'} <span className="font-mono text-xs font-medium text-slate-900 dark:text-slate-100 tabular-nums">{maintenanceSettings.engineEnabled === true ? (lastSyncAt ? new Date(lastSyncAt.getTime() + (maintenanceSettings.engineIntervalMin || 60) * 60 * 1000).toLocaleString() : (language === 'en' ? 'Within interval' : `${maintenanceSettings.engineIntervalMin || 60}분 이내 예정`)) : (language === 'en' ? 'GitHub Actions Cron' : 'GitHub Actions 스케줄러 전담')}</span></li>
                       </ul>
+                      {isAdmin && !IS_GITHUB_PAGES && (
+                        <div className="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                          <label className="inline-flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={maintenanceSettings.engineEnabled === true}
+                              onChange={async (e) => {
+                                const nextEnabled = e.target.checked;
+                                const nextSettings = { ...maintenanceSettings, engineEnabled: nextEnabled, updatedAt: getKSTISOString() };
+                                setMaintenanceSettings(nextSettings);
+                                try {
+                                  const authHeaders = await getAuthHeaders();
+                                  const resp = await fetch('/api/settings/maintenance', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', ...authHeaders },
+                                    body: JSON.stringify({ engineEnabled: nextEnabled, engineIntervalMin: nextSettings.engineIntervalMin })
+                                  });
+                                  const resJson = await parseJsonResponse(resp);
+                                  if (resJson.success && resJson.settings) {
+                                    setMaintenanceSettings({ ...defaultMaintenanceSettings, ...resJson.settings });
+                                    localStorage.setItem('winfix_maintenance_settings', JSON.stringify({ ...defaultMaintenanceSettings, ...resJson.settings }));
+                                    if (resJson.schedulerStatus) setMaintenanceSchedulerStatus(resJson.schedulerStatus);
+                                  }
+                                } catch (_) {}
+                              }}
+                              className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="font-semibold">
+                              {language === 'en'
+                                ? 'Also run local server AI fallback cron (off by default to prevent duplicate collection)'
+                                : '로컬 서버 보조 AI 수집 크론도 함께 실행 (중복 수집 방지를 위해 기본 꺼짐)'}
+                            </span>
+                          </label>
+                          {maintenanceSettings.engineEnabled === true && (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min={10}
+                                max={10080}
+                                value={maintenanceSettings.engineIntervalMin || 60}
+                                onChange={(e) => setMaintenanceSettings(prev => ({ ...prev, engineIntervalMin: Math.max(10, parseInt(e.target.value, 10) || 60) }))}
+                                className="w-16 px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono"
+                              />
+                              <span className="text-slate-500">{language === 'en' ? 'min' : '분'}</span>
+                              <button
+                                type="button"
+                                onClick={handleSaveMaintenanceSettings}
+                                disabled={isSavingSettings}
+                                className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[11px] font-semibold"
+                              >
+                                {language === 'en' ? 'Apply' : '적용'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -15271,13 +15340,17 @@ export default function App() {
                   <div className="bg-slate-900 dark:bg-black rounded-xl overflow-hidden border border-slate-800 shadow-inner">
                     <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-800 flex items-center justify-between">
                       <div className="flex items-center gap-4 text-[9px] font-bold tracking-wider uppercase">
-                        <span className="flex items-center gap-1.5 text-emerald-400">
+                        <span className={`flex items-center gap-1.5 ${maintenanceSettings.engineEnabled === true ? 'text-emerald-400' : 'text-slate-400'}`}>
                           <Activity className="w-3 h-3" />
-                          {language === 'en' ? 'Active' : '엔진 가동중'}
+                          {maintenanceSettings.engineEnabled === true
+                            ? (language === 'en' ? 'Fallback Cron On' : '보조 크론 가동중')
+                            : (language === 'en' ? 'GitHub Actions Primary' : '수동/GitHub 일원화')}
                         </span>
                         <span className="flex items-center gap-1.5 text-blue-400">
                           <Clock className="w-3 h-3" />
-                          {language === 'en' ? `${maintenanceSettings.engineIntervalMin || 60}m Interval` : `${maintenanceSettings.engineIntervalMin || 60}분 주기`}
+                          {maintenanceSettings.engineEnabled === true
+                            ? (language === 'en' ? `${maintenanceSettings.engineIntervalMin || 60}m Interval` : `${maintenanceSettings.engineIntervalMin || 60}분 주기`)
+                            : (language === 'en' ? 'Local Cron Off' : '로컬 크론 대기')}
                         </span>
                         {backendLogs.length > 0 && (
                           <span className={`flex items-center gap-1.5 ${backendLogs[0].type === 'failure' ? 'text-rose-400' : 'text-emerald-400'}`}>
@@ -17980,59 +18053,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* AI Engine Auto-Collect Scheduler */}
-                  <div className="bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Clock className="w-4 h-4 text-emerald-500" />
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{language === 'en' ? 'AI Engine Sync Interval' : '백엔드 자율 수집 엔진 주기 설정'}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <input 
-                        type="number"
-                        min={1}
-                        max={10080}
-                        value={maintenanceSettings.engineIntervalMin || 60}
-                        onChange={(e) => setMaintenanceSettings(prev => ({ ...prev, engineIntervalMin: Math.max(1, parseInt(e.target.value) || 60) }))}
-                        className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                      />
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        {language === 'en' ? 'minutes' : '분 주기'}
-                      </span>
-                      <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                        {language === 'en' ? 
-                          `Local server runs every ${maintenanceSettings.engineIntervalMin || 60} min(s) & GitHub Actions scheduled runs.` : 
-                          `로컬 개발 서버 ${maintenanceSettings.engineIntervalMin || 60}분 주기 및 GitHub Actions 스케줄러와 연동 반영됩니다.`
-                        }
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* AI Engine Auto-Collect Batch Size */}
-                  <div className="bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Layers className="w-4 h-4 text-purple-500" />
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{language === 'en' ? 'AI Engine Collection Count' : 'GitOps 수집 이슈 모집 개수 설정'}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <input 
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={maintenanceSettings.engineBatchSize || 4}
-                        onChange={(e) => setMaintenanceSettings(prev => ({ ...prev, engineBatchSize: Math.max(1, Math.min(10, parseInt(e.target.value) || 4)) }))}
-                        className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                      />
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        {language === 'en' ? 'issues' : '개 이슈'}
-                      </span>
-                      <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
-                        {language === 'en' ? 
-                          `GitHub Actions & local server will collect ${maintenanceSettings.engineBatchSize || 4} issue(s) per run into Git repository.` : 
-                          `GitHub Actions GitOps 수집 스크립트 가동 시 1회당 약 ${maintenanceSettings.engineBatchSize || 4}개 이슈를 자동 생성합니다.`
-                        }
-                      </span>
-                    </div>
-                  </div>
+                </div>
+                <div className="mt-4 px-3.5 py-2.5 bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-800/40 rounded-xl flex items-center justify-between gap-2 text-xs text-indigo-800 dark:text-indigo-200">
+                  <span>
+                    {language === 'en'
+                      ? 'Scheduled AI issue collection (cron, batch size, model & category) has been unified under "GitHub Auto-Collection Options" above to eliminate duplicate schedulers.'
+                      : '※ 중복 스케줄러 방지를 위해 정기 AI 자동 수집 주기·수량·모델 설정은 상단 "깃허브 자동수집 옵션 설정"으로 일원화되었습니다. 이 영역은 로그 정리와 깨진 링크 검증만 전담합니다.'}
+                  </span>
                 </div>
 
                 {maintenanceSettings.lastMaintenanceResult && (
@@ -18718,7 +18745,9 @@ export default function App() {
                       {language === 'en' ? 'Bulk Data Collection Mode' : '대량 데이터 수집 모드'}
                     </h4>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      {language === 'en' ? 'Customize collection interval, duration, and batch size.' : '사용할 수집 간격, 수집 시간, 수집 개수를 설정하여 자동 수집을 진행합니다.'}
+                      {language === 'en'
+                        ? 'On-demand browser collection: repeatedly collects N items every X seconds while this tab is open (for hands-off cron, use GitHub Auto-Collection).'
+                        : '화면 열람 중 즉시 반복 수집하는 수동 집중 모드입니다. (무인 정기 수집은 상단 깃허브 자동수집 사용)'}
                     </p>
                   </div>
                   {isBatchCollecting && (
@@ -18833,8 +18862,8 @@ export default function App() {
                       </h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         {language === 'en'
-                          ? 'Auto-merges queued items into server DB (skipping duplicates) and commits data/issues.json to GitHub when threshold or interval triggers.'
-                          : '대기열 수량 도달 또는 설정 주기마다 중복을 자동 스킵하여 서버 DB에 병합하고, GitHub 저장소(data/issues.json)까지 자동 커밋합니다.'}
+                          ? 'Post-collection pipeline: buffers items from Bulk/Single AI search, skips duplicates on threshold or timer, merges into Server DB, and commits data/issues.json to GitHub.'
+                          : '위 대량 수집·단건 검색 결과를 임시 대기열에 모았다가, 수량 도달 또는 주기마다 중복 제거 후 서버 DB 병합 ➔ GitHub(data/issues.json) 커밋까지 일괄 처리합니다.'}
                       </p>
                     </div>
 

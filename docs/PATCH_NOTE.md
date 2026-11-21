@@ -1,6 +1,17 @@
-# Patch Note - System Update (v3.106.16)
+# Patch Note - System Update (v3.106.17)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.106.17] - 2026-11-21
+
+### 📈 UI/UX & Architecture Deduplication
+- **자동수집·서버 유지보수·대량 수집·스테이징 GitOps 역할 분리 및 중복 제거 (`server.ts`, `src/App.tsx`)**:
+  - **정기 무인 수집 일원화**: 서버 유지보수 설정 카드 내부에 중복 노출되어 있던 `백엔드 자율 수집 엔진 주기 설정`과 `GitOps 수집 이슈 모집 개수 설정` 입력란을 제거하고, 정기 AI 수집 스케줄·수량·모델·카테고리 설정을 **깃허브 자동수집 옵션 설정** 단일 제어판으로 일원화했습니다.
+  - **로컬 백엔드 보조 크론 기본 비활성(선택 Opt-in) 전환**: `maintenance_config.json`에 `engineEnabled: false` 기본값을 도입해 GitHub Actions 자동수집과 백엔드 자체 AI 수집 루프가 동시에 돌며 API 할당량을 이중 소모하던 구조를 해소했습니다. 필요한 경우 AI 허브 상태 카드에서 로컬 보조 크론을 명시적으로 켜고 주기를 조정할 수 있습니다.
+  - **대량 데이터 수집 모드 ↔ 로컬 대기열 GitOps 역할 안내 명확화**: 수동 집중 수집기(③)와 후처리 커밋 파이프라인(④)의 부제를 재정비해 정기 크론(①)·서버 유지보수(②)·수동 수집(③)·대기열 동기화(④) 간 역할 경계를 명확히 했습니다.
+  - 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.106.17`로 동기화했습니다.
 
 ---
 

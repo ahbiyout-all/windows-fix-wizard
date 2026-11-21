@@ -203,7 +203,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.106.16';
+  return '3.106.17';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
@@ -1587,6 +1587,7 @@ async function getMaintenanceSettings(): Promise<any> {
     maintenanceRunHour: 0,
     maintenanceIntervalHours: 24,
     linkVerifyBatchLimit: 30,
+    engineEnabled: false,
     engineIntervalMin: 60,
     engineBatchSize: 4,
     alertEmail: process.env.ALERT_EMAIL || "admin@cisnet.co.kr",
@@ -1624,7 +1625,17 @@ async function runAiSyncInternal(): Promise<any> {
   console.log(`[${getKSTISOString(now)}] [ENGINE] runAiSync triggered.`);
   
   const engineSettings = await getMaintenanceSettings();
-  const batchSize = engineSettings.engineBatchSize || 1;
+  let collectorBatchSize: number | undefined;
+  try {
+    const colOptPath = path.join(process.cwd(), 'data', 'github-collector-options.json');
+    if (fs.existsSync(colOptPath)) {
+      const parsedColOpt = JSON.parse(fs.readFileSync(colOptPath, 'utf8'));
+      if (parsedColOpt && typeof parsedColOpt.batchSize === 'number') {
+        collectorBatchSize = parsedColOpt.batchSize;
+      }
+    }
+  } catch (_) {}
+  const batchSize = Math.min(10, Math.max(1, Number(collectorBatchSize || engineSettings.engineBatchSize) || 2));
   
   const allKeys = getAllAvailableKeys();
   
@@ -1899,15 +1910,21 @@ function getCronPattern(minutes: number): string {
 
 let activeSyncCronTask: any = null;
 
-function setupEngineScheduler(intervalMin: number) {
+function setupEngineScheduler(intervalMin: number, enabled: boolean = false) {
   if (activeSyncCronTask) {
     console.log("[ENGINE] Stopping existing scheduler...");
     activeSyncCronTask.stop();
+    activeSyncCronTask = null;
   }
-  
+
+  if (!enabled) {
+    console.log("[ENGINE] Backend autonomous AI cron is disabled (unified under GitHub Actions collector).");
+    return;
+  }
+
   const pattern = getCronPattern(intervalMin);
   console.log(`[ENGINE] Scheduling autonomous sync pattern: "${pattern}" (Every ${intervalMin} minutes)`);
-  
+
   activeSyncCronTask = cron.schedule(pattern, async () => {
     console.log(`Triggering scheduled ${intervalMin}m AI sync...`);
     await runAiSync();
@@ -2314,7 +2331,7 @@ function initializeBackgroundSchedulers() {
 
   getMaintenanceSettings().then(settings => {
     const intervalMin = settings.engineIntervalMin || 60;
-    setupEngineScheduler(intervalMin);
+    setupEngineScheduler(intervalMin, settings.engineEnabled === true);
     setupMaintenanceScheduler(settings);
 
     // Non-blocking startup overdue check: re-read latest settings inside timer so manual runs during warmup are respected
@@ -2339,7 +2356,7 @@ function initializeBackgroundSchedulers() {
     }
   }).catch(err => {
     console.error("Failed to load initial scheduling settings on startup:", err);
-    setupEngineScheduler(60); // fallback to 60 mins
+    setupEngineScheduler(60, false); // keep unified under GitHub Actions by default
     setupMaintenanceScheduler({ maintenanceEnabled: true, maintenanceScheduleMode: 'daily', maintenanceRunHour: 0 });
   });
 }
@@ -5692,6 +5709,8 @@ async function startServer() {
       res.json({
         success: true,
         schedulerActive: Boolean(activeMaintenanceCronTask && settings.maintenanceEnabled !== false),
+        engineCronActive: Boolean(activeSyncCronTask && settings.engineEnabled === true),
+        engineEnabled: settings.engineEnabled === true,
         isMaintenanceRunning,
         maintenanceEnabled: settings.maintenanceEnabled !== false,
         cronPattern: settings.maintenanceEnabled !== false ? pattern : null,
@@ -5741,6 +5760,7 @@ async function startServer() {
         settings: safeSettings,
         schedulerStatus: {
           schedulerActive: Boolean(activeMaintenanceCronTask && settings.maintenanceEnabled !== false),
+          engineCronActive: Boolean(activeSyncCronTask && settings.engineEnabled === true),
           isMaintenanceRunning,
           cronPattern: settings.maintenanceEnabled !== false ? pattern : null,
           scheduleDescription: settings.maintenanceEnabled !== false ? description : 'Disabled by admin',
@@ -5789,6 +5809,7 @@ async function startServer() {
         maintenanceRunHour,
         maintenanceIntervalHours,
         linkVerifyBatchLimit,
+        engineEnabled: settings.engineEnabled !== undefined ? Boolean(settings.engineEnabled) : (existingMaint.engineEnabled === true),
         engineIntervalMin: Number.isFinite(parsedEngineInterval) ? Math.min(10080, Math.max(1, parsedEngineInterval)) : 60,
         engineBatchSize: Number.isFinite(parsedEngineBatch) ? Math.min(10, Math.max(1, parsedEngineBatch)) : 4,
         alertEmail: settings.alertEmail !== undefined ? String(settings.alertEmail).trim() : (existingMaint.alertEmail || process.env.ALERT_EMAIL || "admin@cisnet.co.kr"),
@@ -5822,7 +5843,7 @@ async function startServer() {
 
       // 3. Reschedule active background AI sync & maintenance schedulers in real-time
       try {
-        setupEngineScheduler(cleanSettings.engineIntervalMin);
+        setupEngineScheduler(cleanSettings.engineIntervalMin, cleanSettings.engineEnabled);
         setupMaintenanceScheduler(cleanSettings);
       } catch (schedErr: any) {
         console.error("Failed to reschedule background crons dynamically:", schedErr);
@@ -5839,6 +5860,7 @@ async function startServer() {
         settings: safeCleanSettings,
         schedulerStatus: {
           schedulerActive: Boolean(activeMaintenanceCronTask && cleanSettings.maintenanceEnabled !== false),
+          engineCronActive: Boolean(activeSyncCronTask && cleanSettings.engineEnabled === true),
           isMaintenanceRunning,
           cronPattern: cleanSettings.maintenanceEnabled !== false ? pattern : null,
           scheduleDescription: cleanSettings.maintenanceEnabled !== false ? description : 'Disabled by admin',
@@ -6817,19 +6839,12 @@ jobs:
       const cleanOptions = sanitizeCollectorOptions(req.body || {});
       writeJsonFileAtomic(getCollectorOptionsPath(), cleanOptions);
 
-      // Synchronize engineBatchSize to system_config.json & maintenance_config.json, and autoDeployPages to github_config
+      // Synchronize engineBatchSize to system_config.json (legacy script fallback) and autoDeployPages to github_config
       try {
         writeSystemConfigObject({
           engineBatchSize: cleanOptions.batchSize,
           updatedAt: cleanOptions.updatedAt
         });
-        const maintPath = path.join(DATA_DIR, 'maintenance_config.json');
-        if (fs.existsSync(maintPath)) {
-          const parsedMaint = JSON.parse(fs.readFileSync(maintPath, 'utf8'));
-          parsedMaint.engineBatchSize = cleanOptions.batchSize;
-          parsedMaint.updatedAt = cleanOptions.updatedAt;
-          writeJsonFileAtomic(maintPath, parsedMaint);
-        }
         const ghConfig = readLocalCollection('github_config')[0] || {};
         ghConfig.autoDeployPages = cleanOptions.autoDeployPages;
         ghConfig.updatedAt = cleanOptions.updatedAt;
