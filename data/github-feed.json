@@ -1,21 +1,15 @@
 {
-  "lastCollectedAt": "2026-11-21T16:42:20.712Z",
+  "lastCollectedAt": "2026-11-21T22:58:18.320Z",
   "modelUsed": "Pollinations (openai-fast) [Keyless]",
-  "targetCategory": "네트워크",
-  "newlyAddedCount": 2,
-  "totalIssuesCount": 154,
+  "targetCategory": "보안/백신",
+  "newlyAddedCount": 1,
+  "totalIssuesCount": 155,
   "newIssues": [
     {
-      "id": "gh-0x8024402e-mwqmysvd",
-      "code": "0x8024402e",
-      "title": "Windows 업데이트 중 네트워크 연결 오류 0x8024402e",
-      "category": "네트워크"
-    },
-    {
-      "id": "gh-0x8024402d-mwqmysvd",
-      "code": "0x8024402d",
-      "title": "Windows 업데이트 중 네트워크 타임아웃 오류 0x8024402d",
-      "category": "네트워크"
+      "id": "gh-0x8007000d-mwr0eafl",
+      "code": "0x8007000d",
+      "title": "Windows Defender 서명 파일이 손상되어 '잘못된 데이터' 오류 발생",
+      "category": "보안/백신"
     }
   ]
 }

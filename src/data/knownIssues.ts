@@ -7111,5 +7111,49 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-21T16:42:20.712Z",
     "verifiedAt": "2026-11-21T16:42:20.712Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007000d-mwr0eafl",
+    "category": "보안/백신",
+    "code": "0x8007000d",
+    "title": "Windows Defender 서명 파일이 손상되어 '잘못된 데이터' 오류 발생",
+    "title_en": "Windows Defender Signature File Corrupted 'Invalid Data' Error",
+    "symptoms": "바이러스 정의 파일이 손상되거나 누락되면 Windows Defender가 '잘못된 데이터' 오류를 표시하며 업데이트가 중단됩니다. 이는 최근 Windows 업데이트에서 파일이 덮어쓰기되면서 발생할 수 있습니다.",
+    "symptoms_en": "If the virus definition files are corrupted or missing, Windows Defender displays an 'Invalid Data' error and halts the update. This can happen when recent Windows updates overwrite the files.",
+    "script": "$defenderPath = \"C:\\\\Windows\\\\System32\\\\Defender\\\\MpCmdRun.exe\"; Start-Process -FilePath $defenderPath -ArgumentList \"/SignatureCleanup\" -Wait; Start-Process -FilePath $defenderPath -ArgumentList \"/SignatureUpdate\" -Wait; Get-MpComputerStatus",
+    "manualSteps": [
+      "바이러스 정의 파일을 정리하고 새로 다운로드합니다.",
+      "명령 프롬프트에서 MpCmdRun.exe를 사용해 /SignatureCleanup 및 /SignatureUpdate 옵션을 실행합니다.",
+      "정상적으로 업데이트가 완료되면 Defender 서비스를 재시작합니다."
+    ],
+    "manualSteps_en": [
+      "Clean up and re-download virus definition files.",
+      "Run MpCmdRun.exe from an elevated command prompt with the /SignatureCleanup and /SignatureUpdate options.",
+      "Once the update completes successfully, restart the Defender service."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-antivirus/command-line-operations",
+      "https://support.microsoft.com/en-us/windows/windows-defender-0x8007000d-error-3a1b2c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "Windows Defender 0x8007000d",
+      "Invalid Data Defender update",
+      "Windows 11 security signature corruption",
+      "Windows Server Defender signature cleanup"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-21T22:58:18.320Z",
+    "updatedAt": "2026-11-21T22:58:18.320Z",
+    "verifiedAt": "2026-11-21T22:58:18.320Z",
+    "verificationStatus": "verified"
   }
 ];
