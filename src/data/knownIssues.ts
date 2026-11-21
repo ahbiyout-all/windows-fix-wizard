@@ -7021,5 +7021,95 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-20T14:56:58.168Z",
     "verifiedAt": "2026-11-20T14:56:58.168Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8024402e-mwqmysvd",
+    "category": "네트워크",
+    "code": "0x8024402e",
+    "title": "Windows 업데이트 중 네트워크 연결 오류 0x8024402e",
+    "title_en": "Windows Update Network Connection Error 0x8024402e",
+    "symptoms": "Windows 업데이트를 시도할 때 ‘네트워크 연결이 끊어졌습니다’라는 메시지가 표시되고 업데이트가 진행되지 않습니다. 최신 Windows 11/10/Server 업데이트에서 TLS 1.3 지원 강화와 함께 일부 기업 방화벽 설정이 충돌할 수 있습니다.",
+    "symptoms_en": "When attempting a Windows update, a message appears stating ‘Network connection was lost’ and the update does not proceed. In recent Windows 11/10/Server updates, TLS 1.3 enhancements can conflict with certain corporate firewall settings.",
+    "script": "$ErrorActionPreference='Stop'; netsh winsock reset; netsh int ip reset; ipconfig /flushdns; Restart-Service wuauserv; Restart-Service bits; Write-Host 'Network stack reset and Windows Update services restarted.'",
+    "manualSteps": [
+      "네트워크 스택을 초기화하려면 관리자 권한으로 PowerShell을 열고 위 스크립트를 실행합니다.",
+      "스크립트 실행 후 컴퓨터를 재부팅합니다.",
+      "재부팅 후 Windows 업데이트를 다시 실행해 오류가 해결되었는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open PowerShell with administrator privileges and run the provided script to reset the network stack.",
+      "Reboot the computer after the script completes.",
+      "After reboot, run Windows Update again to verify the error has been resolved."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-error-codes",
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x8024402e-5c4e2b4d-1f2d-4d4b-9e1f-1f0e8b5d5e3a"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "0x8024402e",
+      "Windows Update network error",
+      "네트워크 연결 끊김",
+      "Winsock reset",
+      "TLS 1.3 update issue"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-21T16:42:20.712Z",
+    "updatedAt": "2026-11-21T16:42:20.712Z",
+    "verifiedAt": "2026-11-21T16:42:20.712Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8024402d-mwqmysvd",
+    "category": "네트워크",
+    "code": "0x8024402d",
+    "title": "Windows 업데이트 중 네트워크 타임아웃 오류 0x8024402d",
+    "title_en": "Windows Update Network Timeout Error 0x8024402d",
+    "symptoms": "업데이트 다운로드가 일정 시간 이후에 중단되고 ‘네트워크 타임아웃’ 메시지가 표시됩니다. 최신 Windows 11/10/Server에서는 대용량 업데이트 파일이 TLS 1.3 연결을 통해 전송되면서 방화벽이 연결을 끊는 경우가 있습니다.",
+    "symptoms_en": "Update downloads are aborted after a timeout period, displaying a ‘Network timeout’ message. In recent Windows 11/10/Server, large update files transmitted over TLS 1.3 may be dropped by firewalls.",
+    "script": "$ErrorActionPreference='Stop'; netsh int ip reset; ipconfig /flushdns; Restart-Service wuauserv; Restart-Service bits; Write-Host 'IP stack reset, DNS cleared, and update services restarted.'",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell을 열고 스크립트를 실행해 IP 스택을 재설정하고 DNS 캐시를 비웁니다.",
+      "스크립트가 완료되면 컴퓨터를 재시작합니다.",
+      "재시작 후 Windows 업데이트를 다시 시도해 타임아웃이 사라졌는지 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Open PowerShell as administrator and run the script to reset the IP stack and flush DNS.",
+      "Restart the computer after the script finishes.",
+      "After reboot, attempt Windows Update again to see if the timeout issue is resolved."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-error-codes",
+      "https://support.microsoft.com/en-us/topic/windows-update-error-0x8024402d-2f7a1e3b-8c1d-4e2b-9f3a-4b6d9c1e0a7b"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "0x8024402d",
+      "Windows Update timeout",
+      "네트워크 타임아웃",
+      "TLS 1.3 firewall issue",
+      "IP stack reset"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-21T16:42:20.712Z",
+    "updatedAt": "2026-11-21T16:42:20.712Z",
+    "verifiedAt": "2026-11-21T16:42:20.712Z",
+    "verificationStatus": "verified"
   }
 ];
