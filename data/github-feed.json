@@ -1,15 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-21T22:58:18.320Z",
+  "lastCollectedAt": "2026-11-23T21:06:17.530Z",
   "modelUsed": "Pollinations (openai-fast) [Keyless]",
-  "targetCategory": "보안/백신",
-  "newlyAddedCount": 1,
-  "totalIssuesCount": 155,
+  "targetCategory": "네트워크",
+  "newlyAddedCount": 2,
+  "totalIssuesCount": 157,
   "newIssues": [
     {
-      "id": "gh-0x8007000d-mwr0eafl",
-      "code": "0x8007000d",
-      "title": "Windows Defender 서명 파일이 손상되어 '잘못된 데이터' 오류 발생",
-      "category": "보안/백신"
+      "id": "gh-0x80070032-mwtr9xyz",
+      "code": "0x80070032",
+      "title": "네트워크 연결이 끊어졌습니다 (0x80070032)",
+      "category": "네트워크"
+    },
+    {
+      "id": "gh-0x8024403e-mwtr9xyz",
+      "code": "0x8024403e",
+      "title": "네트워크 연결이 불안정합니다 (0x8024403e)",
+      "category": "네트워크"
     }
   ]
 }

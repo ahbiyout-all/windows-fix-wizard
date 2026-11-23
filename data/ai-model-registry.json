@@ -1,7 +1,7 @@
 {
   "version": "3.106.15",
-  "updatedAt": "2026-11-23T08:55:30.117Z",
-  "lastDiscoveryAt": "2026-11-23T08:55:29.038Z",
+  "updatedAt": "2026-11-23T21:06:17.522Z",
+  "lastDiscoveryAt": "2026-11-23T21:06:04.974Z",
   "routingPolicy": "quota-split",
   "keylessFallbackEnabled": true,
   "providerOrder": [
@@ -26,7 +26,7 @@
       "enabled": true,
       "priority": 1,
       "source": "default",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-3.1-flash-lite",
@@ -36,7 +36,7 @@
       "enabled": true,
       "priority": 2,
       "source": "default",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-3.8-flash",
@@ -46,7 +46,7 @@
       "enabled": true,
       "priority": 3,
       "source": "default",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-flash-latest",
@@ -65,7 +65,7 @@
       "enabled": true,
       "priority": 7,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-3.5-flash-lite",
@@ -75,7 +75,7 @@
       "enabled": true,
       "priority": 7,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-2.5-flash",
@@ -85,7 +85,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-3.5-flash",
@@ -95,7 +95,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-omni-flash-preview",
@@ -105,7 +105,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-3.6-flash",
@@ -115,7 +115,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-3.7-flash",
@@ -125,7 +125,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-4-argon",
@@ -135,7 +135,7 @@
       "enabled": true,
       "priority": 9,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-2.5-pro",
@@ -145,7 +145,7 @@
       "enabled": true,
       "priority": 12,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-4-carbon",
@@ -155,7 +155,7 @@
       "enabled": false,
       "priority": 20,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     },
     {
       "id": "gemini-4-neon",
@@ -165,7 +165,7 @@
       "enabled": false,
       "priority": 20,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
+      "lastVerifiedAt": "2026-11-23T21:06:04.974Z"
     }
   ],
   "openrouterFreeModels": [
@@ -189,11 +189,11 @@
     "Mistral-Small-3.2-24B-Instruct-2506",
     "gemma-4-26b-a4b",
     "DeepSeek-V4.1-Flash-1017",
-    "qwen3.6-35b-a3b",
-    "Qwen3.8-27B",
-    "Qwen3.5-397B-A17B",
-    "Qwen3.5-9B",
     "Qwen3.6-27B",
+    "Qwen3.5-397B-A17B",
+    "qwen3.6-35b-a3b",
+    "Qwen3.5-9B",
+    "Qwen3.8-27B",
     "solaria-3"
   ],
   "providerModels": {
@@ -250,7 +250,7 @@
       "deepseek-ai/DeepSeek-V4.1-Flash",
       "deepseek-ai/DeepSeek-V4-Flash-0731",
       "deepseek-ai/DeepSeek-R1",
-      "deepseek-ai/DeepSeek-V4-Flash"
+      "deepseek-ai/DeepSeek-V4-Pro"
     ],
     "cerebras": [
       "gpt-oss-120b",
@@ -261,11 +261,11 @@
       "Mistral-Small-3.2-24B-Instruct-2506",
       "gemma-4-26b-a4b",
       "DeepSeek-V4.1-Flash-1017",
-      "qwen3.6-35b-a3b",
-      "Qwen3.8-27B",
-      "Qwen3.5-397B-A17B",
-      "Qwen3.5-9B",
       "Qwen3.6-27B",
+      "Qwen3.5-397B-A17B",
+      "qwen3.6-35b-a3b",
+      "Qwen3.5-9B",
+      "Qwen3.8-27B",
       "solaria-3"
     ],
     "pollinations": [
@@ -278,8 +278,8 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"models/gemini-flash-latest is not found for API version v1, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported me",
-      "trippedAt": "2026-11-22T17:00:30.930Z",
-      "expiresAt": "2026-11-23T17:00:30.930Z",
+      "trippedAt": "2026-11-23T21:06:04.075Z",
+      "expiresAt": "2026-11-24T21:06:04.075Z",
       "failureCount": 1
     },
     "gemini-2.5-flash-lite": {
@@ -287,8 +287,8 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use models/gemini-3.5-flash-lite for the latest features and improvements. We recomm",
-      "trippedAt": "2026-11-22T17:00:31.020Z",
-      "expiresAt": "2026-11-23T17:00:31.020Z",
+      "trippedAt": "2026-11-23T21:06:04.155Z",
+      "expiresAt": "2026-11-24T21:06:04.155Z",
       "failureCount": 1
     },
     "gemini-2.5-flash": {
@@ -296,8 +296,8 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to",
-      "trippedAt": "2026-11-22T17:00:31.190Z",
-      "expiresAt": "2026-11-23T17:00:31.190Z",
+      "trippedAt": "2026-11-23T21:06:04.310Z",
+      "expiresAt": "2026-11-24T21:06:04.310Z",
       "failureCount": 1
     },
     "gemini-2.5-pro": {
@@ -305,21 +305,21 @@
       "provider": "gemini",
       "statusCode": 404,
       "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-pro is no longer available to new users. Please update your code to use models/gemini-3.1-pro-preview for the latest features and improvements. We recommend yo",
-      "trippedAt": "2026-11-22T17:00:31.607Z",
-      "expiresAt": "2026-11-23T17:00:31.607Z",
+      "trippedAt": "2026-11-23T21:06:04.973Z",
+      "expiresAt": "2026-11-24T21:06:04.973Z",
       "failureCount": 1
     }
   },
   "telemetry": {
-    "totalRequests": 12,
+    "totalRequests": 13,
     "geminiRequests": 3,
-    "freeProviderRequests": 9,
-    "keylessRequests": 9,
-    "failoverSaves": 9,
-    "circuitTrips404": 24,
+    "freeProviderRequests": 10,
+    "keylessRequests": 10,
+    "failoverSaves": 10,
+    "circuitTrips404": 28,
     "lastProviderUsed": "pollinations",
     "lastModelUsed": "Pollinations (openai-fast) [Keyless]",
-    "lastUpdatedAt": "2026-11-23T07:01:51.350Z",
+    "lastUpdatedAt": "2026-11-23T21:06:17.522Z",
     "perProviderUsage": {
       "gemini": 3,
       "groq": 0,
@@ -331,7 +331,7 @@
       "huggingface": 0,
       "cerebras": 0,
       "ovh": 0,
-      "pollinations": 9
+      "pollinations": 10
     }
   }
 }

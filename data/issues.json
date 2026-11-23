@@ -7153,5 +7153,95 @@
     "updatedAt": "2026-11-21T22:58:18.320Z",
     "verifiedAt": "2026-11-21T22:58:18.320Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x80070032-mwtr9xyz",
+    "category": "네트워크",
+    "code": "0x80070032",
+    "title": "네트워크 연결이 끊어졌습니다 (0x80070032)",
+    "title_en": "Network Connection Lost (0x80070032)",
+    "symptoms": "Windows 11/10/Server에서 최신 업데이트 후 Wi‑Fi 또는 Ethernet 연결이 갑자기 끊기고, ‘네트워크 연결이 끊어졌습니다’ 메시지가 표시됩니다. 이는 TCP/IP 스택이 손상되거나 Winsock 카탈로그가 손상된 경우가 많습니다.",
+    "symptoms_en": "After the latest update on Windows 11/10/Server, Wi‑Fi or Ethernet connection suddenly drops and the message ‘Network connection lost’ appears. This often occurs when the TCP/IP stack or Winsock catalog is corrupted.",
+    "script": "$ErrorActionPreference='Stop';\\n# Reset Winsock and TCP/IP stack\\nnetsh winsock reset catalog\\nnetsh int ip reset resetlog.txt\\n# Restart networking services\\nRestart-Service -Name \"DhcpClient\" -Force\\nRestart-Service -Name \"Dnscache\" -Force\\n# Flush DNS\\nClear-DnsClientCache\\n# Verify connectivity\\nTest-Connection -ComputerName 8.8.8.8 -Count 4",
+    "manualSteps": [
+      "1. 관리자 권한으로 PowerShell을 실행합니다.",
+      "2. 위 스크립트를 복사해 붙여넣고 실행합니다.",
+      "3. 컴퓨터를 재부팅한 뒤 인터넷에 연결을 시도합니다."
+    ],
+    "manualSteps_en": [
+      "1. Open PowerShell with administrator privileges.",
+      "2. Copy and paste the script above, then run it.",
+      "3. Reboot the computer and attempt to connect to the internet."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/reset-winsock-and-tcp-ip-stack-0x80070032-6e5b1c3e-7d2a-4f1c-8f6a-9c1b4d2a3f4e",
+      "https://learn.microsoft.com/en-us/windows-server/networking/diagnostics/netsh-winsock-reset"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "0x80070032 네트워크 끊김",
+      "Winsock reset",
+      "TCP/IP stack corruption",
+      "네트워크 연결 복구",
+      "network connection lost 0x80070032"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-23T21:06:17.530Z",
+    "updatedAt": "2026-11-23T21:06:17.530Z",
+    "verifiedAt": "2026-11-23T21:06:17.530Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8024403e-mwtr9xyz",
+    "category": "네트워크",
+    "code": "0x8024403e",
+    "title": "네트워크 연결이 불안정합니다 (0x8024403e)",
+    "title_en": "Network Connection Unstable (0x8024403e)",
+    "symptoms": "Windows 11/10/Server에서 최신 업데이트 후 VPN, Wi‑Fi, 또는 LAN 연결이 자주 끊기고 재연결이 지연됩니다. 이는 DNS 캐시와 DHCP 설정이 업데이트 중에 손상된 경우가 많습니다.",
+    "symptoms_en": "After the latest update on Windows 11/10/Server, VPN, Wi‑Fi, or LAN connections frequently drop and reconnection is delayed. This often occurs when DNS cache and DHCP settings are corrupted during the update.",
+    "script": "$ErrorActionPreference='Stop';\\n# Release and renew IP address\\nipconfig /release\\nipconfig /renew\\n# Flush DNS cache\\nClear-DnsClientCache\\n# Reset DHCP client\\nRestart-Service -Name \"DhcpClient\" -Force\\n# Verify connectivity\\nTest-Connection -ComputerName www.microsoft.com -Count 4",
+    "manualSteps": [
+      "1. 관리자 권한으로 PowerShell을 엽니다.",
+      "2. 스크립트를 실행해 IP를 재할당하고 DNS를 초기화합니다.",
+      "3. VPN 또는 Wi‑Fi에 다시 연결해 정상 동작을 확인합니다."
+    ],
+    "manualSteps_en": [
+      "1. Open PowerShell as administrator.",
+      "2. Run the script to release/renew IP and flush DNS.",
+      "3. Reconnect to VPN or Wi‑Fi and verify normal operation."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/fix-network-connection-issues-0x8024403e-4d2f9a1b-3c7e-4f8d-9a1e-2b3c4d5e6f7g",
+      "https://learn.microsoft.com/en-us/windows-server/networking/diagnostics/dhcp-client-restart"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "0x8024403e 네트워크 불안정",
+      "VPN 연결 끊김",
+      "DHCP 재할당",
+      "network connection unstable 0x8024403e",
+      "DNS 캐시 초기화"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-23T21:06:17.530Z",
+    "updatedAt": "2026-11-23T21:06:17.530Z",
+    "verifiedAt": "2026-11-23T21:06:17.530Z",
+    "verificationStatus": "verified"
   }
 ]
