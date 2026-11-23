@@ -28,10 +28,27 @@ interface DashboardWidgetProps {
   engineStatus: any;
   language: 'ko' | 'en';
   defaultTab?: 'engine' | 'deployment';
+  githubRepo?: string;
+  githubBranch?: string;
+  githubToken?: string;
+  hasServerGithubToken?: boolean;
+  isServerMode?: boolean;
+  getAuthHeaders?: () => Promise<Record<string, string>>;
 }
 
-export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, language = 'ko', defaultTab = 'engine' }) => {
+export const DashboardWidget: React.FC<DashboardWidgetProps> = ({
+  engineStatus,
+  language = 'ko',
+  defaultTab = 'engine',
+  githubRepo = 'AhBiYout-all/windows-fix-wizard',
+  githubBranch = 'main',
+  githubToken,
+  hasServerGithubToken = false,
+  isServerMode = true,
+  getAuthHeaders
+}) => {
   const [activeView, setActiveView] = useState<'engine' | 'deployment'>(defaultTab);
+  const [parsedOwner, parsedRepo] = (githubRepo || 'AhBiYout-all/windows-fix-wizard').split('/');
 
   const fallbackStartRef = useRef<string>(new Date().toISOString());
   // Extract and shield data
@@ -244,7 +261,17 @@ export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ engineStatus, 
       </div>
 
       {activeView === 'deployment' ? (
-        <DeploymentDashboardWidget language={language} showStatusBadges={true} />
+        <DeploymentDashboardWidget
+          owner={parsedOwner || 'AhBiYout-all'}
+          repo={parsedRepo || 'windows-fix-wizard'}
+          branch={githubBranch || 'main'}
+          token={githubToken}
+          hasServerToken={hasServerGithubToken}
+          isServerMode={isServerMode}
+          getAuthHeaders={getAuthHeaders}
+          language={language}
+          showStatusBadges={true}
+        />
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-8">
       {/* Dashboard Section Title */}

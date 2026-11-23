@@ -16,7 +16,18 @@ export default defineConfig(({mode}) => {
         includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
         workbox: {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+          cleanupOutdatedCaches: true,
           navigateFallbackDenylist: [/^\/api\//, /\/data\//],
+          runtimeCaching: [
+            {
+              urlPattern: /\/data\/.*\.json/i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^\/api\//i,
+              handler: 'NetworkOnly',
+            },
+          ],
         },
         manifest: {
           id: './',

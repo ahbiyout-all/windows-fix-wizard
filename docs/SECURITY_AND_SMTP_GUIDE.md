@@ -38,10 +38,10 @@ When an IP exceeds the allowed threshold within the time window, the server retu
 
 ## 3. Administrative Route Access Controls
 
-All administrative endpoints are guarded by the `requireAdmin` Express middleware:
-1. Extracts the HTTP `Authorization: Bearer <ID_TOKEN>` header sent from the client.
-2. Verifies the token authenticity using Firebase Admin Authentication SDK.
-3. Checks if the decoded user UID matches the designated admin user or contains admin claims.
+All administrative endpoints are guarded by the `requireAdmin` Express middleware (`Zero Cloud DB` architecture):
+1. Extracts the HTTP `Authorization: Bearer <SESSION_TOKEN>` header sent from the client.
+2. Verifies the token against persisted server-side session records (`data/admin_sessions.json`), expiration timestamps, and verified admin user roles (`data/users.json` / `ADMIN_EMAILS`).
+3. Enforces secret isolation: plaintext GitHub PATs, Private Vault encryption keys, SMTP passwords, and AI API keys remain server-side only (masked as `'••••••••'` in client API responses).
 4. Rejects unauthorized or missing token requests with HTTP `401 Unauthorized` or `403 Forbidden`.
 
 ---

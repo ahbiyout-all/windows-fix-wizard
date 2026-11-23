@@ -18,10 +18,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Windows Fix Autonomous Collector & GitOps Sync"]
-    types:
-      - completed
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
@@ -37,7 +33,6 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -71,6 +66,8 @@ jobs:
           mkdir -p dist/data
           cp data/issues.json dist/data/issues.json 2>/dev/null || true
           cp data/github-feed.json dist/data/github-feed.json 2>/dev/null || true
+          cp data/ai-model-registry.json dist/data/ai-model-registry.json 2>/dev/null || true
+          cp data/github-collector-options.json dist/data/github-collector-options.json 2>/dev/null || true
           
           # 5. Verify built index.html exists before artifact upload
           test -f dist/index.html
@@ -126,6 +123,14 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
   const [lastVerifiedAt, setLastVerifiedAt] = useState<Date | null>(null);
   const isMountedRef = useRef(true);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    if (repo) setCustomRepo(repo);
+  }, [repo]);
+
+  useEffect(() => {
+    if (branch) setSelectedBranch(branch);
+  }, [branch]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -288,22 +293,35 @@ export const GitHubPagesDeployDoc: React.FC<GitHubPagesDeployDocProps> = ({
     if (spaIdx !== -1) {
       updatedChecks[spaIdx].status = 'checking';
       if (isMountedRef.current) setChecks([...updatedChecks]);
+      const isStaticHost = typeof window !== 'undefined' && (
+        window.location.hostname.endsWith('github.io') ||
+        window.location.hostname.includes('pages.dev')
+      );
       try {
-        const res = await fetch('./404.html?t=' + Date.now());
-        if (res.ok) {
+        if (!isStaticHost) {
           updatedChecks[spaIdx] = {
             ...updatedChecks[spaIdx],
             status: 'pass',
-            messageEn: '404.html SPA fallback entry detected in build output.',
-            messageKo: '404.html SPA 새로고침 리다이렉트 파일 배치 완료.'
+            messageEn: 'Express + Vite server handles SPA routes; deploy-pages.yml builds dist/404.html automatically.',
+            messageKo: 'AI Studio 서버가 SPA 라우팅을 직접 처리 중이며, deploy-pages.yml 빌드 시 dist/404.html이 자동 생성됩니다.'
           };
         } else {
-          updatedChecks[spaIdx] = {
-            ...updatedChecks[spaIdx],
-            status: 'warn',
-            messageEn: '404.html missing. Run `cp dist/index.html dist/404.html` during deployment workflow.',
-            messageKo: '404.html 미검출. deploy.yml의 cp dist/index.html dist/404.html 단계를 활성화하세요.'
-          };
+          const res = await fetch('./404.html?t=' + Date.now());
+          if (res.ok) {
+            updatedChecks[spaIdx] = {
+              ...updatedChecks[spaIdx],
+              status: 'pass',
+              messageEn: '404.html SPA fallback entry detected in build output.',
+              messageKo: '404.html SPA 새로고침 리다이렉트 파일 배치 완료.'
+            };
+          } else {
+            updatedChecks[spaIdx] = {
+              ...updatedChecks[spaIdx],
+              status: 'warn',
+              messageEn: '404.html missing. Run `cp dist/index.html dist/404.html` during deployment workflow.',
+              messageKo: '404.html 미검출. deploy-pages.yml의 cp dist/index.html dist/404.html 단계를 활성화하세요.'
+            };
+          }
         }
       } catch (err) {
         updatedChecks[spaIdx] = {

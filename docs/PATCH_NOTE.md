@@ -1,6 +1,29 @@
-# Patch Note - System Update (v3.109.0)
+# Patch Note - System Update (v3.110.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.110.0] - 2026-11-23
+
+### 🔧 Bug Fixes & Auto-Sync Pipeline Improvements
+- **GitHub 저장소 · GitHub Pages · AI Studio 프리뷰 3각 자동 연동 파이프라인 전면 복구**:
+  - **AI Studio 서버 프리뷰 ↔ GitHub 자동 통합 격리 및 고도화 (`src/App.tsx`, `server.ts`)**: 서버 모드(`!IS_GITHUB_PAGES`)에서 `/api/github/auto-integrate` 실행 후 정적 Pages용 CDN/`localStorage` 병합 폴백으로 잘못 진입해 빈 배열 기준으로 캐시가 덮이던 버그를 제거하고, `visibilitychange` 탭 복귀 자동 동기화 및 `winfix_github_pages_merged_issues` 서버 모드 잔존 배너를 차단했습니다.
+  - **GitHub Contents API 기반 CDN 캐시 우회 & 피드/옵션 양방향 병합 (`server.ts`)**: `syncGithubDatasetIntoMainData` 및 `/api/github/pull-from-repo`에서 PAT 보유 또는 강제 갱신 시 Fastly 캐시가 남는 `raw.githubusercontent.com` 대신 GitHub Contents API(`Accept: application/vnd.github.v3.raw`, `Cache-Control: no-cache`)를 우선 조회하고, `data/issues.json`뿐 아니라 `data/github-feed.json`·`data/github-collector-options.json`까지 최신 타임스탬프 기준으로 함께 동기화합니다.
+  - **웹훅 피드 영속화 및 `ais-dev-*` 인증 리다이렉트 감지 (`server.ts`, `scripts/github-collector.ts`, `src/App.tsx`)**: `/api/github/sync` 웹훅 수신 시 `feed` 페이로드를 정제해 `data/github-feed.json`에 원자적으로 저장하고, GitHub Actions 수집 스크립트가 비공개 개발 프리뷰(`ais-dev-*`)의 로그인 HTML 리다이렉트를 받을 경우 즉시 원인 및 공개 앱 URL(`ais-pre-*`) 전환 안내를 출력하며, 관리자 UI의 `APP_WEBHOOK_URL` 가이드도 `ais-pre-*` 주소를 자동 안내하도록 개선했습니다.
+  - **GitHub Pages 배포 파이프라인 중복 실행 및 입력 스키마 오류(HTTP 422) 해소 (`.github/workflows/deploy-pages.yml`, `src/components/GitHubPagesDeployDoc.tsx`, `src/components/GitHubWorkflowStatus.tsx`, `server.ts`)**: `deploy-pages.yml`의 중복 `workflow_run` 트리거를 제거해 `autoDeployPages` 옵션을 존중하고, `fetch-depth: 0` 및 `ai-model-registry.json`·`github-collector-options.json` 정적 배포 복사를 추가했습니다. 또한 비수집 워크플로(`deploy-pages.yml`) 수동 실행 시 collector 전용 `inputs` 전달로 발생하던 GitHub API 422 오류를 수정했습니다.
+  - **Workbox PWA 정적 JSON 캐시 무효화 및 정적 호스트 동적 저장소 반영 (`vite.config.ts`, `src/App.tsx`)**: VitePWA 서비스 워커에 `/data/*.json`·`/api/*` `NetworkOnly` 규칙과 `cleanupOutdatedCaches: true`를 적용하고, GitHub Pages 정적 모드에서도 사용자 지정 저장소·브랜치(`winfix_github_config`) 및 `github-feed.json` 타임스탬프를 반영하도록 수정했습니다.
+  - **서버 PAT 프록시 원격 상태 텔레메트리 및 수동 실행 복구 (`server.ts`, `src/components/DashboardWidget.tsx`, `src/components/DeploymentDashboardWidget.tsx`, `src/components/GitHubWorkflowStatus.tsx`)**: AI Studio 서버 프리뷰 환경에서도 클라이언트 평문 PAT 노출 없이 `/api/github/workflow-status`·`/api/github/workflow-runs` 서버 프록시를 통해 실시간 워크플로 상태와 `Run` 수동 실행 버튼이 정상 동작하도록 연결했습니다.
+
+### 🛡️ Security Hardening & Version Synchronization
+- **서버 PAT 격리 유지 및 입력 검증 (`server.ts`, `src/App.tsx`, `src/types.ts`)**:
+  - 클라이언트 상태 및 `localStorage`에서 마스킹된 토큰(`••••`) 오인식을 차단하고, `/api/github/deploy-pages`·`/api/github/push-collector-options` 엔드포인트에서도 마스킹 토큰 전달 시 서버 PAT 덮어쓰기를 차단했습니다.
+  - `POST /api/github/push-to-repo`에 SHA 기반 중복 커밋 생략(Smart Diff)과 `data/github-feed.json` 동기화를 추가해 원격 푸시 시 피드 메타데이터가 누락되지 않도록 개선했습니다.
+  - `GitHubWorkflowStatus.tsx`·`DeploymentDashboardWidget.tsx`에서 API 한도 초과·오류 시 가짜 실행 타임스탬프("1.5시간 전 성공")를 합성하지 않고 실제 `localStorage` 캐시 또는 정직한 상태 배지(`API 한도 대기`)를 표시하도록 수정했습니다.
+  - `KnownIssue` 타입(`src/types.ts`)에 `hasBrokenLinks?: boolean`, `brokenLinks?: string[]`, `lastLinkCheckAt?: string`을 반영해 전체 `tsc --noEmit` 타입 검사가 오류 없이 통과하도록 복구했습니다.
+- **문서 일괄 동기화 (`README.md`, `docs/AUTOMATED_SYNC.md`, `docs/GITHUB_ACTIONS_GUIDE.md`, `docs/GITHUB_README.md`, `docs/SYSTEM_OVERVIEW.md`, `docs/PATCHNOTES.md`)**:
+  - Zero Cloud DB 아키텍처, 3시간 수집 스케줄, 비공개 저장소 AES-256-GCM 금고, `ais-pre-*` 웹훅 권장 규칙 및 `v3.110.0` 연동 사양을 전 문서에 반영했습니다.
+- 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.110.0`으로 동기화했습니다.
 
 ---
 

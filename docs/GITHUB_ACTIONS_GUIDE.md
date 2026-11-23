@@ -71,9 +71,9 @@ sequenceDiagram
 name: Windows Fix Autonomous Collector & GitOps Sync
 
 on:
-  # 1. 자동 스케줄링 (매 6시간마다 정기 실행)
+  # 1. 자동 스케줄링 (매 3시간마다 정기 실행)
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */3 * * *'
 
   # 2. GitHub 웹 UI, 앱 관리자 센터, 또는 REST API를 통한 수동 실행
   workflow_dispatch:
@@ -162,11 +162,11 @@ GitHub Actions의 스케줄 크론은 **UTC 기준**으로 동작합니다. 한�
 
 | UTC 설정값 | KST (한국 시간) | 주기 설명 |
 | :--- | :--- | :--- |
-| `0 */6 * * *` | **09:00, 15:00, 21:00, 03:00** | 6시간 간격 하루 4회 실행 (권장) |
-| `0 */4 * * *` | **09:00, 13:00, 17:00, 21:00, 01:00, 05:00** | 4시간 간격 하루 6회 실행 |
+| `0 */3 * * *` | **매 3시간 정각 (하루 8회)** | 기본 권장 주기 (`data/github-collector-options.json` 연동) |
+| `0 */6 * * *` | **09:00, 15:00, 21:00, 03:00** | 6시간 간격 하루 4회 실행 |
 | `0 0,12 * * *` | **09:00, 21:00** | 출근 및 퇴근 시간 하루 2회 집중 수집 |
 
-> 💡 **참고**: GitHub Actions 무료 러너의 부하 상황에 따라 스케줄 실행은 지정 시간으로부터 수 분에서 최대 15분 정도의 지연이 발생할 수 있으며 이는 정상 동작입니다.
+> 💡 **참고**: GitHub Actions 무료 러너의 부하 상황에 따라 스케줄 실행은 지정 시간으로부터 수 분에서 최대 15분 정도의 지연이 발생할 수 있으며 이는 정상 동작입니다. 또한 수집 완료 후 `data/github-collector-options.json`의 `autoDeployPages` 설정에 따라 `deploy-pages.yml`을 단일 트리거로 실행하므로 이중 배포가 발생하지 않습니다.
 
 ---
 
@@ -192,9 +192,11 @@ GitHub Actions가 문제 없이 자동 커밋하고 AI API를 호출하려면 **
 | Secret 이름 | 설명 | 필수 여부 | 예시 값 |
 | :--- | :--- | :---: | :--- |
 | **`GEMINI_API_KEY`** | Google AI Studio에서 발급받은 Gemini API 키 | **필수** | `AIzaSy...` |
-| **`APP_WEBHOOK_URL`** | 운영 중인 Windows Fix Wizard 웹사이트 주소 | 선택 (실시간 앱 동기화용) | `https://ais-pre-...run.app` |
+| **`APP_WEBHOOK_URL`** | AI Studio에서 Share/Publish된 공개 **Shared App URL** (`ais-dev-*` 개발 URL 사용 금지) | 선택 (실시간 앱 동기화용) | `https://ais-pre-...run.app` |
 | **`CRON_SECRET`** | 웹훅 인증용 비밀 문자열 (앱 환경변수의 `CRON_SECRET`과 일치) | 선택 | 임의의 강력한 난수 문자열 |
 
+> ⚠️ **웹훅 URL 주의사항**: AI Studio 개발 프리뷰 URL(`https://ais-dev-...`)은 Google 로그인 인증으로 보호되어 GitHub Actions의 외부 POST 요청 시 HTML 로그인 페이지를 반환합니다. 반드시 Share/Publish 활성화 후 공개 공유 URL(`https://ais-pre-...`)을 `APP_WEBHOOK_URL`로 등록하세요 (`scripts/github-collector.ts`가 HTML 리다이렉트 수신 시 즉시 경고를 출력합니다).
+>
 > 🔒 **보안 안내**: GitHub Secrets에 등록된 값은 실행 로그에서 자동으로 `***`로 마스킹되며, 커밋이나 코드 외부로 노출되지 않습니다.
 
 ---
@@ -258,30 +260,29 @@ INPUT_TOPIC="네트워크" BATCH_SIZE=2 npm run collect:github
 
 ---
 
-## 🎛️ 7. 앱 관리자(Admin) UI 연동 및 원격 제어 매뉴얼 (v3.50.0 최신)
+## 🎛️ 7. 앱 관리자(Admin) UI 연동 및 원격 제어 매뉴얼 (v3.110.0 최신)
 
 Windows Fix Wizard 웹 애플리케이션의 **관리자 대시보드 (Admin Dashboard)** > **`GitHub Actions & GitOps 자율 데이터 수집 센터`**에서 모든 기능을 브라우저 클릭만으로 원격 제어할 수 있습니다:
 
-### 1) 듀얼 인증 모드 지원 (PAT 및 SSH 기반 인증)
+### 1) 듀얼 인증 모드 지원 & 서버 PAT 프록시
 - **Personal Access Token (PAT)**:
-  - GitHub 계정의 Fine-grained 토큰 또는 Classic PAT(`workflow`, `repo` 권한)을 입력하여 REST API 및 디스패치를 수행합니다.
-- **SSH Private Key (신규 추가)**:
-  - 보다 강력한 엔터프라이즈급 보안 요구사항을 위해 SSH 개인키(`id_ed25519` 또는 `id_rsa`)를 등록하여 인증할 수 있습니다.
-  - 서버 측에서 안전하게 마스킹(`•••••••• (SSH Private Key)`) 처리되며 유출 없이 안전하게 보관됩니다.
+  - GitHub 계정의 Fine-grained 토큰 또는 Classic PAT(`workflow`, `repo` 권한)을 입력하여 REST API 및 디스패치를 수행합니다. 서버 모드(AI Studio 프리뷰)에서는 서버 `GITHUB_TOKEN` 또는 저장된 서버 PAT를 브라우저에 평문 노출하지 않고 프록시(`/api/github/workflow-status`, `/api/github/workflow-runs`)를 통해 안전하게 상태 조회 및 원클릭 실행을 수행합니다.
+- **SSH Private Key**:
+  - SSH 개인키(`id_ed25519` 또는 `id_rsa`)를 등록해 서버 측에서 마스킹(`•••••••• (SSH Private Key)`) 보관할 수 있습니다.
 
 ### 2) 원격 워크플로 가동 (Dispatch Workflow via API)
-- GitHub 웹사이트에 로그인하지 않고도, 앱 화면에서 원하는 카테고리(`업데이트`, `블루스크린`, `네트워크` 등)를 선택하고 **`워크플로 가동`** 버튼을 누르면 GitHub REST API를 통해 클라우드 러너가 즉시 시작됩니다.
-- *요구사항*: 저장소 접근 권한이 있는 Personal Access Token(PAT, `workflow` 또는 `repo` 권한) 또는 SSH 키가 등록되어 있어야 합니다.
+- 앱 화면에서 원하는 카테고리(`업데이트`, `블루스크린`, `네트워크` 등)를 선택하고 **`워크플로 가동`** 또는 각 상태 카드의 **`실행(Run)`** 버튼을 누르면 GitHub REST API를 통해 클라우드 러너가 즉시 시작됩니다 (`deploy-pages.yml`처럼 입력 파라미터가 없는 워크플로는 `inputs` 없이 안전하게 디스패치됩니다).
+- *요구사항*: 서버 환경변수(`GITHUB_TOKEN`) 또는 저장소 접근 권한이 있는 PAT(`workflow` + `repo` 권한)가 등록되어 있어야 합니다.
 
-### 3) 지금 데이터 불러와 동기화 (Pull Data Now)
-- GitHub Actions가 커밋해 둔 최신 `data/issues.json` 파일을 원클릭으로 가져옵니다.
-- 브라우저나 로컬 서버에서 실행 중인 경우, AI API 호출 비용을 단 1원도 쓰지 않고 GitHub 저장소의 정제된 데이터를 즉시 앱 데이터베이스 및 IndexedDB 브라우저 캐시에 병합합니다.
+### 3) 지금 데이터 불러와 동기화 & 백그라운드 자동 통합
+- **서버 모드(AI Studio 프리뷰)**: 부팅 및 브라우저 탭 복귀(`visibilitychange`) 시 `/api/github/auto-integrate`가 GitHub Contents API(`no-cache`)로 `data/issues.json`, `data/github-feed.json`, `data/github-collector-options.json`을 CDN 지연 없이 자동 병합합니다.
+- **GitHub Pages 정적 모드**: Workbox PWA 서비스 워커가 `/data/*.json`을 `NetworkOnly`로 조회하며, 사용자 지정 저장소·브랜치 기준으로 `data/issues.json`과 `data/github-feed.json`을 IndexedDB 캐시에 병합합니다.
 
 ### 4) 실시간 GitHub Actions 상태 배지 모니터링
-- 관리자 패널에서 **자율 수집 엔진 (`windows-fix-collector.yml`)** 및 **웹 배포 워크플로 (`deploy-pages.yml`)**의 최근 실행 상태(성공, 실패, 진행 중)를 실시간 배지로 바로 확인할 수 있습니다.
+- 관리자 패널에서 **자율 수집 엔진 (`windows-fix-collector.yml`)** 및 **웹 배포 워크플로 (`deploy-pages.yml`)**의 최근 실행 상태, 소요 시간, 25건 히스토리 차트를 실시간으로 확인할 수 있습니다.
 
 ### 5) GitHub Pages 정적 웹사이트와의 연동
-- 본 앱이 GitHub Pages 정적 웹사이트(`https://AhBiYout-all.github.io/windows-fix-wizard/`)로 배포되어 있어도, 수집된 GitOps 데이터(`data/issues.json`)는 GitHub CDN을 통해 전 세계 어디서든 실시간으로 조회 가능합니다.
+- `deploy-pages.yml`은 `dist/data/`에 `issues.json`, `github-feed.json`, `ai-model-registry.json`, `github-collector-options.json` 4종을 함께 배포하여 정적 웹사이트(`https://ahbiyout-all.github.io/windows-fix-wizard/`)가 서버리스 환경에서도 100% 최신 데이터를 표시하도록 보장합니다.
 
 ---
 
@@ -310,7 +311,9 @@ export interface KnownIssue {
   createdAt?: string;             // 생성 일시 (ISO 8601)
   updatedAt?: string;             // 갱신 일시 (ISO 8601)
   verifiedAt?: string;            // 검증 일시 (ISO 8601)
-  verificationStatus?: 'verified' | 'needs_update' | 'obsolete'; // AI 검증 상태
+  verificationStatus?: 'pending' | 'verified' | 'needs_update' | 'obsolete'; // AI 검증 상태
+  aiFeedback?: string;            // AI 검증 피드백
+  hasBrokenLinks?: boolean;       // 참고 링크 자동 점검 깨짐 여부 플래그
 }
 ```
 

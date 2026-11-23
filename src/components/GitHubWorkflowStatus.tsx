@@ -23,6 +23,10 @@ interface GitHubWorkflowStatusProps {
   language: 'ko' | 'en';
   title?: string;
   token?: string;
+  branch?: string;
+  isServerMode?: boolean;
+  hasServerToken?: boolean;
+  getAuthHeaders?: () => Promise<Record<string, string>>;
   className?: string;
   showBadgeImage?: boolean;
   onTriggerSuccess?: () => void;
@@ -87,29 +91,15 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
   language,
   title,
   token,
+  branch = 'main',
+  isServerMode = typeof window !== 'undefined' && !window.location.hostname.endsWith('github.io') && !window.location.hostname.includes('pages.dev'),
+  hasServerToken = false,
+  getAuthHeaders,
   className = '',
   showBadgeImage = true,
   onTriggerSuccess
 }) => {
   const cacheKey = `winfix_wf_cache_${owner}_${repo}_${workflowFile}`;
-
-  const getFallbackRun = useCallback((): WorkflowRun => {
-    const isPages = workflowFile.includes('deploy') || workflowFile.includes('pages');
-    return {
-      id: isPages ? 41553912450 : 41553891002,
-      name: isPages ? 'Deploy Windows Fix Wizard to GitHub Pages' : 'Autonomous AI Collector Engine',
-      path: `.github/workflows/${workflowFile}`,
-      run_number: isPages ? 148 : 230,
-      event: isPages ? 'workflow_run' : 'schedule',
-      status: 'completed',
-      conclusion: 'success',
-      created_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-      updated_at: new Date(Date.now() - 3600000 * 1.5 + 84000).toISOString(),
-      run_started_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-      html_url: `https://github.com/${owner}/${repo}/actions/workflows/${workflowFile}`,
-      head_branch: 'main'
-    };
-  }, [owner, repo, workflowFile]);
 
   const [lastRun, setLastRun] = useState<WorkflowRun | null>(() => {
     try {
@@ -125,29 +115,59 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
+  const [serverTokenDetected, setServerTokenDetected] = useState(false);
   const [dispatchToast, setDispatchToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dispatchRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeToken = useMemo(() => {
-    if (token) return token;
+    if (token && !token.includes('••••')) return token;
     try {
       const savedCfg = localStorage.getItem('winfix_github_config');
       if (savedCfg) {
         const parsed = JSON.parse(savedCfg);
-        return parsed.token || parsed.pat || '';
+        const raw = parsed.token || parsed.pat || '';
+        if (raw && !String(raw).includes('••••')) return String(raw);
       }
     } catch {}
     return '';
   }, [token]);
 
-  const fetchStatus = useCallback(async () => {
+  const canDispatch = Boolean(activeToken || hasServerToken || serverTokenDetected);
+
+  const fetchStatus = useCallback(async (isManual = false) => {
     if (!owner || !repo || !workflowFile) return;
-    
+
     setIsLoading(true);
     setError(null);
     try {
+      if (isServerMode) {
+        try {
+          const authHdrs = getAuthHeaders ? await getAuthHeaders() : {};
+          const proxyUrl = `/api/github/workflow-status?repo=${encodeURIComponent(`${owner}/${repo}`)}&workflowFile=${encodeURIComponent(workflowFile)}${isManual ? '&refresh=1' : ''}`;
+          const proxyRes = await fetch(proxyUrl, { headers: { ...authHdrs } });
+          if (proxyRes.ok) {
+            const proxyData = await proxyRes.json();
+            if (typeof proxyData.hasServerToken === 'boolean') {
+              setServerTokenDetected(proxyData.hasServerToken);
+            }
+            if (proxyData.success && proxyData.run) {
+              setLastRun(proxyData.run);
+              setIsRateLimited(false);
+              try {
+                localStorage.setItem(cacheKey, JSON.stringify({ run: proxyData.run, timestamp: Date.now() }));
+              } catch {}
+              return;
+            }
+            if (proxyData.rateLimited) {
+              setIsRateLimited(true);
+            }
+            return;
+          }
+        } catch {}
+      }
+
       const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?per_page=1`;
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
@@ -160,7 +180,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
 
       if (!res.ok) {
         if (res.status === 403 || res.status === 429) {
-          console.warn(`[GitHubWorkflowStatus] API rate limit reached for ${workflowFile}. Retaining cached or fallback telemetry.`);
+          console.warn(`[GitHubWorkflowStatus] API rate limit reached for ${workflowFile}. Retaining cached telemetry if available.`);
           setIsRateLimited(true);
           try {
             const cached = localStorage.getItem(cacheKey);
@@ -172,13 +192,11 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
               }
             }
           } catch {}
-          setLastRun(prev => prev || getFallbackRun());
           return;
         }
 
         if (res.status === 404) {
           console.warn(`[GitHubWorkflowStatus] Workflow ${workflowFile} not found on ${owner}/${repo}`);
-          setLastRun(prev => prev || getFallbackRun());
           return;
         }
 
@@ -193,8 +211,6 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
         try {
           localStorage.setItem(cacheKey, JSON.stringify({ run, timestamp: Date.now() }));
         } catch {}
-      } else {
-        setLastRun(prev => prev || getFallbackRun());
       }
     } catch (err: any) {
       console.warn('[GitHubWorkflowStatus] Non-fatal workflow status check note:', err?.message || err);
@@ -208,51 +224,93 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
           }
         }
       } catch {}
-      setLastRun(prev => prev || getFallbackRun());
     } finally {
       setIsLoading(false);
     }
-  }, [owner, repo, workflowFile, activeToken, cacheKey, getFallbackRun]);
+  }, [owner, repo, workflowFile, activeToken, isServerMode, getAuthHeaders, cacheKey]);
 
-  // Dispatch workflow run manually via GitHub REST API
+  // Dispatch workflow run manually via Server Proxy or GitHub REST API
   const handleTriggerDispatch = async () => {
     const scheduleToastClear = (ms: number) => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       toastTimerRef.current = setTimeout(() => setDispatchToast(null), ms);
     };
 
-    if (!activeToken) {
+    if (!canDispatch) {
       setDispatchToast(language === 'en' ? 'PAT Token required' : 'GitHub PAT 토큰 필요');
       scheduleToastClear(3000);
       return;
     }
 
+    const targetRef = branch || lastRun?.head_branch || 'main';
+    const isPagesWorkflow = workflowFile.includes('deploy') || workflowFile.includes('pages');
+    const isCollectorWorkflow = workflowFile.includes('collector');
+
     setIsDispatching(true);
     setDispatchToast(null);
     try {
-      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'Authorization': `Bearer ${activeToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ref: lastRun?.head_branch || 'main',
-          inputs: { topic: 'all' }
-        })
-      });
+      let dispatchedViaServer = false;
+      if (isServerMode) {
+        try {
+          const authHdrs = getAuthHeaders ? await getAuthHeaders() : {};
+          const endpoint = isPagesWorkflow ? '/api/github/deploy-pages' : '/api/github/dispatch-workflow';
+          const payload = isPagesWorkflow
+            ? { repo: `${owner}/${repo}`, branch: targetRef, token: activeToken || undefined }
+            : { repo: `${owner}/${repo}`, workflowId: workflowFile, branch: targetRef, token: activeToken || undefined, topic: 'all' };
+          const serverRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHdrs },
+            body: JSON.stringify(payload)
+          });
+          if (serverRes.ok) {
+            const serverData = await serverRes.json();
+            if (serverData.success) {
+              dispatchedViaServer = true;
+              setDispatchToast(language === 'en' ? 'Workflow triggered successfully!' : '워크플로 가동 요청 성공!');
+              if (onTriggerSuccess) onTriggerSuccess();
+              if (dispatchRefreshTimerRef.current) clearTimeout(dispatchRefreshTimerRef.current);
+              dispatchRefreshTimerRef.current = setTimeout(() => {
+                void fetchStatus(true);
+              }, 2500);
+            }
+          } else if (serverRes.status !== 404 && !activeToken) {
+            const errData = await serverRes.json().catch(() => ({}));
+            setDispatchToast(errData.error || (language === 'en' ? `Dispatch failed: ${serverRes.status}` : `실행 실패: ${serverRes.status}`));
+            return;
+          }
+        } catch {}
+      }
 
-      if (res.ok || res.status === 204) {
-        setDispatchToast(language === 'en' ? 'Workflow triggered successfully!' : '워크플로 가동 요청 성공!');
-        if (onTriggerSuccess) onTriggerSuccess();
-        if (dispatchRefreshTimerRef.current) clearTimeout(dispatchRefreshTimerRef.current);
-        dispatchRefreshTimerRef.current = setTimeout(() => {
-          fetchStatus();
-        }, 2500);
-      } else {
-        setDispatchToast(language === 'en' ? `Dispatch failed: ${res.status}` : `실행 실패: ${res.status}`);
+      if (!dispatchedViaServer) {
+        if (!activeToken) {
+          setDispatchToast(language === 'en' ? 'PAT Token required' : 'GitHub PAT 토큰 필요');
+          return;
+        }
+        const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+        const dispatchPayload: Record<string, any> = { ref: targetRef };
+        if (isCollectorWorkflow) {
+          dispatchPayload.inputs = { topic: 'all' };
+        }
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `Bearer ${activeToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(dispatchPayload)
+        });
+
+        if (res.ok || res.status === 204) {
+          setDispatchToast(language === 'en' ? 'Workflow triggered successfully!' : '워크플로 가동 요청 성공!');
+          if (onTriggerSuccess) onTriggerSuccess();
+          if (dispatchRefreshTimerRef.current) clearTimeout(dispatchRefreshTimerRef.current);
+          dispatchRefreshTimerRef.current = setTimeout(() => {
+            void fetchStatus(true);
+          }, 2500);
+        } else {
+          setDispatchToast(language === 'en' ? `Dispatch failed: ${res.status}` : `실행 실패: ${res.status}`);
+        }
       }
     } catch (err: any) {
       setDispatchToast(err?.message || 'Trigger failed');
@@ -348,7 +406,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
         <div className="flex items-center gap-1 shrink-0">
           <button 
             type="button"
-            onClick={fetchStatus} 
+            onClick={() => void fetchStatus(true)} 
             disabled={isLoading}
             className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-black/20 rounded-lg transition-colors cursor-pointer"
             title={language === 'en' ? 'Refresh Real-time Telemetry' : '실시간 워크플로 상태 갱신'}
@@ -356,7 +414,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
 
-          {activeToken && (
+          {canDispatch && (
             <button
               type="button"
               onClick={handleTriggerDispatch}
@@ -387,7 +445,7 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
               <span className={`text-xs font-bold uppercase tracking-wider ${getStatusColor()}`}>
                 {isLoading && !lastRun ? (language === 'en' ? 'Connecting...' : '연결 중...') : 
                  error ? (language === 'en' ? 'Error' : '오류') :
-                 !lastRun ? (language === 'en' ? 'No Runs' : '실행 내역 없음') :
+                 !lastRun ? (isRateLimited ? (language === 'en' ? 'Rate Limited' : 'API 한도 대기') : (language === 'en' ? 'No Runs' : '실행 내역 없음')) :
                  lastRun.status === 'completed' ? (lastRun.conclusion === 'success' ? 'Passed' : 'Failed') :
                  lastRun.status.replace('_', ' ')}
               </span>

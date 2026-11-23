@@ -568,13 +568,24 @@ JSON Schema:
         });
 
         const rawWebhookText = await webhookRes.text();
-        let webhookData: any = rawWebhookText;
-        try {
-          webhookData = JSON.parse(rawWebhookText);
-        } catch {
-          // keep raw text preview if webhook returned HTML or plain text
+        const trimmedPreview = rawWebhookText.trim().slice(0, 200);
+        const isHtmlResponse = /^\s*<(?:!doctype|html)/i.test(rawWebhookText);
+        let webhookData: any = trimmedPreview;
+        if (!isHtmlResponse) {
+          try {
+            webhookData = JSON.parse(rawWebhookText);
+          } catch {
+            // keep text preview
+          }
         }
-        console.log(`✅ Live Webhook Response (${webhookRes.status}):`, webhookData);
+        if (!webhookRes.ok || isHtmlResponse) {
+          console.warn(
+            `⚠️ Live Webhook returned HTTP ${webhookRes.status}${isHtmlResponse ? ' (HTML auth/login redirect detected — ensure APP_WEBHOOK_URL uses the Shared App URL https://ais-pre-... instead of https://ais-dev-...)' : ''}:`,
+            webhookData
+          );
+        } else {
+          console.log(`✅ Live Webhook Response (${webhookRes.status}):`, webhookData);
+        }
       } catch (webhookErr: any) {
         console.warn(`⚠️ Failed to ping web application webhook:`, webhookErr.message);
       }

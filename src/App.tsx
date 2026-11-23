@@ -727,7 +727,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.109.0";
+const APP_VERSION = "3.110.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1354,6 +1354,37 @@ export default function App() {
   });
   const collectorOptionsDirtyRef = useRef<boolean>(false);
   const githubConfigDirtyRef = useRef<boolean>(false);
+  const githubRepoRef = useRef<string>(githubRepo);
+  githubRepoRef.current = githubRepo;
+  const githubBranchRef = useRef<string>(githubBranch);
+  githubBranchRef.current = githubBranch;
+
+  const sanitizeClientGithubToken = (raw?: string | null): string => {
+    const val = (raw || '').trim();
+    if (!val || val.includes('•') || val === '****') return '';
+    return val;
+  };
+
+  const getEffectiveGithubRepoAndBranch = () => {
+    let repo = (githubRepoRef.current || '').trim();
+    let branch = (githubBranchRef.current || '').trim();
+    try {
+      const saved = localStorage.getItem('winfix_github_config');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.repo && typeof parsed.repo === 'string' && parsed.repo.includes('/')) {
+          repo = repo || parsed.repo.trim();
+        }
+        if (parsed?.branch && typeof parsed.branch === 'string') {
+          branch = branch || parsed.branch.trim();
+        }
+      }
+    } catch (_) {}
+    return {
+      repo: repo.includes('/') ? repo : `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`,
+      branch: branch || 'main',
+    };
+  };
   const updateCollectorOptions = useCallback((updater: (prev: GithubCollectorOptions) => GithubCollectorOptions) => {
     collectorOptionsDirtyRef.current = true;
     setCollectorOptionsStatus(null);
@@ -2113,6 +2144,7 @@ export default function App() {
   const stagedIssuesRef = useRef<KnownIssue[]>(stagedIssues);
   const useStagingRef = useRef<boolean>(useStaging);
   const dbIssuesRef = useRef<KnownIssue[]>(dbIssues);
+  dbIssuesRef.current = dbIssues;
   const fullIssuesPoolRef = useRef<KnownIssue[]>(fullIssuesPool);
   const pendingGitOpsRef = useRef<boolean>(pendingGitOpsCommit);
   const handleSyncStagedIssuesRef = useRef<(triggerType?: 'threshold' | 'interval' | 'manual' | 'retry') => Promise<void>>(async () => {});
@@ -3785,10 +3817,11 @@ export default function App() {
     const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
     const targetBranch = githubBranch.trim() || 'main';
     const storedToken = (() => {
-      if (githubToken.trim()) return githubToken.trim();
+      const direct = sanitizeClientGithubToken(githubToken);
+      if (direct) return direct;
       try {
         const local = localStorage.getItem('winfix_github_config');
-        return local ? JSON.parse(local).token : '';
+        return sanitizeClientGithubToken(local ? JSON.parse(local).token : '');
       } catch {
         return '';
       }
@@ -3830,10 +3863,11 @@ export default function App() {
     const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
     const targetBranch = githubBranch.trim() || 'main';
     const storedToken = (() => {
-      if (githubToken.trim()) return githubToken.trim();
+      const direct = sanitizeClientGithubToken(githubToken);
+      if (direct) return direct;
       try {
         const local = localStorage.getItem('winfix_github_config');
-        return local ? JSON.parse(local).token : '';
+        return sanitizeClientGithubToken(local ? JSON.parse(local).token : '');
       } catch (e) { return ''; }
     })();
 
@@ -3958,10 +3992,11 @@ export default function App() {
       ? collectorOptions.targetWindowsVersions.join(',')
       : 'Windows 11,Windows 10';
     const storedToken = (() => {
-      if (githubToken.trim()) return githubToken.trim();
+      const direct = sanitizeClientGithubToken(githubToken);
+      if (direct) return direct;
       try {
         const local = localStorage.getItem('winfix_github_config');
-        return local ? JSON.parse(local).token : '';
+        return sanitizeClientGithubToken(local ? JSON.parse(local).token : '');
       } catch (e) { return ''; }
     })();
 
@@ -4020,15 +4055,19 @@ export default function App() {
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            ref: targetBranch,
-            inputs: {
-              topic,
-              batch_size: String(effectiveBatchSize),
-              model_preference: effectiveModelPref,
-              target_windows: effectiveTargetWindows
-            }
-          })
+          body: JSON.stringify(
+            workflowFile.includes('collector')
+              ? {
+                  ref: targetBranch,
+                  inputs: {
+                    topic,
+                    batch_size: String(effectiveBatchSize),
+                    model_preference: effectiveModelPref,
+                    target_windows: effectiveTargetWindows
+                  }
+                }
+              : { ref: targetBranch }
+          )
         });
 
         if (res.ok || res.status === 204) {
@@ -4064,10 +4103,11 @@ export default function App() {
     const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
     const targetBranch = githubBranch.trim() || 'main';
     const storedToken = (() => {
-      if (githubToken.trim()) return githubToken.trim();
+      const direct = sanitizeClientGithubToken(githubToken);
+      if (direct) return direct;
       try {
         const local = localStorage.getItem('winfix_github_config');
-        return local ? JSON.parse(local).token : '';
+        return sanitizeClientGithubToken(local ? JSON.parse(local).token : '');
       } catch (e) { return ''; }
     })();
 
@@ -4159,10 +4199,11 @@ export default function App() {
     const targetRepo = githubRepo.trim() || 'AhBiYout-all/windows-fix-wizard';
     const targetBranch = githubBranch.trim() || 'main';
     const storedToken = (() => {
-      if (githubToken.trim()) return githubToken.trim();
+      const direct = sanitizeClientGithubToken(githubToken);
+      if (direct) return direct;
       try {
         const local = localStorage.getItem('winfix_github_config');
-        return local ? JSON.parse(local).token : '';
+        return sanitizeClientGithubToken(local ? JSON.parse(local).token : '');
       } catch (e) { return ''; }
     })();
 
@@ -4511,8 +4552,11 @@ export default function App() {
               }
             }
           } catch(e) {}
+          const { repo: targetRepo, branch: targetBranch } = getEffectiveGithubRepoAndBranch();
+          let effectiveSyncAt: string | null = githubLastSync?.at || null;
+          let latestFeedCount: number | undefined = undefined;
           try {
-            const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
+            const cdnResp = await fetch(`https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
             if (cdnResp.ok) {
               const cdnParsed = await cdnResp.json();
               const arr = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
@@ -4522,12 +4566,44 @@ export default function App() {
             }
           } catch(e) {}
 
+          try {
+            const feedResp = await fetch(`https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/github-feed.json?t=${Date.now()}`, { cache: 'no-cache' });
+            if (feedResp.ok) {
+              const feedParsed = await feedResp.json();
+              if (feedParsed?.lastSyncAt) {
+                effectiveSyncAt = feedParsed.lastSyncAt;
+                latestFeedCount = feedParsed.totalIssuesCount || feedParsed.totalCollected;
+              }
+            } else {
+              const localFeedResp = await fetch(`./data/github-feed.json?t=${Date.now()}`, { cache: 'no-cache' });
+              if (localFeedResp.ok) {
+                const localFeed = await localFeedResp.json();
+                if (localFeed?.lastSyncAt) {
+                  effectiveSyncAt = localFeed.lastSyncAt;
+                  latestFeedCount = localFeed.totalIssuesCount || localFeed.totalCollected;
+                }
+              }
+            }
+          } catch (_) {}
+
+          if (effectiveSyncAt && effectiveSyncAt !== githubLastSync?.at) {
+            setGithubLastSync({
+              at: effectiveSyncAt,
+              count: latestFeedCount || mergedIssues.length,
+              status: 'GitHub Pages Sync'
+            });
+          }
+
           if (mergedIssues.length > 0) {
             await idbSet('winfix_merged_issues', mergedIssues);
             try {
               localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(mergedIssues));
               localStorage.setItem('winfix_db_issues_cache', JSON.stringify(mergedIssues.slice(0, 200)));
-            } catch (_) {}
+            } catch (_) {
+              try {
+                localStorage.setItem('winfix_db_issues_cache', JSON.stringify(mergedIssues.slice(0, 100)));
+              } catch (_) {}
+            }
 
             const counts: Record<string, number> = { '전체': mergedIssues.length };
             officialNames.forEach(c => { counts[c] = 0; });
@@ -4542,7 +4618,7 @@ export default function App() {
               }
             });
             if (uncategorized > 0) counts['기타/미분류'] = uncategorized;
-            const pagesBreakdown = computeFullDatasetBreakdown(mergedIssues, githubLastSync?.at);
+            const pagesBreakdown = computeFullDatasetBreakdown(mergedIssues, effectiveSyncAt);
             setCategoryCounts(counts);
             setFullDatasetBreakdown(pagesBreakdown);
             setFullIssuesPool(mergedIssues);
@@ -4882,11 +4958,21 @@ export default function App() {
   // Automatic Background Integration: Automatically sync GitHub-collected issues into main data
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
+
+    if (!IS_GITHUB_PAGES) {
+      try {
+        localStorage.removeItem('winfix_github_pages_merged_issues');
+      } catch (_) {}
+    }
+
     const autoIntegrateFromGithub = async () => {
+      if (inFlight || cancelled) return;
       const COOLDOWN_MS = 5 * 60 * 1000;
       const lastCheck = Number(localStorage.getItem('winfix_github_auto_integrated_at') || 0);
       if (Date.now() - lastCheck < COOLDOWN_MS) return;
 
+      inFlight = true;
       try {
         localStorage.setItem('winfix_github_auto_integrated_at', Date.now().toString());
 
@@ -4898,55 +4984,106 @@ export default function App() {
           });
           if (resp.ok) {
             const data = await resp.json();
-            if (!cancelled && data.success && (data.added > 0 || data.updated > 0 || (data.totalIssuesCount && data.totalIssuesCount > dbIssues.length))) {
-              console.log(`[Auto-Integrate] Synced +${data.added} new, ~${data.updated} updated from GitHub into main data.`);
-              setSearchCache({});
-              await Promise.all([fetchCategoryCounts(true), fetchIssues(false, true)]);
+            if (!cancelled && data.success) {
+              const currentLen = dbIssuesRef.current.length;
+              const needsUiRefresh = Boolean(
+                data.added > 0 ||
+                data.updated > 0 ||
+                data.feedUpdated ||
+                (data.totalIssuesCount && data.totalIssuesCount > currentLen)
+              );
+              if (needsUiRefresh) {
+                console.log(`[Auto-Integrate] Synced +${data.added} new, ~${data.updated} updated (feedUpdated=${Boolean(data.feedUpdated)}) from GitHub into main data.`);
+                setSearchCache({});
+                await Promise.all([
+                  fetchCategoryCounts(true),
+                  fetchIssues(false, true),
+                  fetchGithubConfig()
+                ]);
+              }
               if (data.lastSyncAt) {
                 setGithubLastSync({
                   at: data.lastSyncAt,
                   count: data.totalIssuesCount,
-                  status: `Auto-Integrated (+${data.added})`
+                  status: data.added > 0 ? `Auto-Integrated (+${data.added})` : 'Synced'
                 });
               }
-              return;
             }
           }
+          return; // Strictly do not fall through to static Pages localStorage merge on server mode
         }
 
-        // Static / GitHub Pages / Fallback direct merge from GitHub main data/issues.json
-        const targetRepo = githubRepo.trim() || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`;
-        const targetBranch = githubBranch.trim() || 'main';
+        // Static / GitHub Pages direct merge from configured GitHub repo/branch data/issues.json + data/github-feed.json
+        const { repo: targetRepo, branch: targetBranch } = getEffectiveGithubRepoAndBranch();
         const cdnResp = await fetch(`https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
         if (cdnResp.ok) {
           const parsed = await cdnResp.json();
           const remoteList: KnownIssue[] = Array.isArray(parsed) ? parsed : (parsed?.issues || []);
           if (remoteList.length > 0 && !cancelled) {
-            const { merged, addedCount, updatedCount } = mergeIssuesDeduplicated(dbIssues, remoteList);
+            let baseList: KnownIssue[] = [...KNOWN_ISSUES];
+            try {
+              const idbMerged = await idbGet<KnownIssue[]>('winfix_merged_issues');
+              if (Array.isArray(idbMerged) && idbMerged.length > 0) {
+                baseList = mergeIssuesDeduplicated(baseList, idbMerged).merged;
+              }
+            } catch (_) {}
+            if (dbIssuesRef.current.length > 0) {
+              baseList = mergeIssuesDeduplicated(baseList, dbIssuesRef.current).merged;
+            }
+            const { merged, addedCount, updatedCount } = mergeIssuesDeduplicated(baseList, remoteList);
             if (addedCount > 0 || updatedCount > 0) {
               await idbSet('winfix_merged_issues', merged);
               try {
                 localStorage.setItem('winfix_github_pages_merged_issues', JSON.stringify(merged));
                 localStorage.setItem('winfix_db_issues_cache', JSON.stringify(merged.slice(0, 200)));
-              } catch (_) {}
+              } catch (_) {
+                try {
+                  localStorage.setItem('winfix_db_issues_cache', JSON.stringify(merged.slice(0, 100)));
+                } catch (_) {}
+              }
               setDbIssues(merged);
+              setFullIssuesPool(merged);
               setSearchCache({});
               await fetchCategoryCounts(true);
             }
           }
         }
+
+        try {
+          const feedResp = await fetch(`https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/github-feed.json?t=${Date.now()}`, { cache: 'no-cache' });
+          if (feedResp.ok && !cancelled) {
+            const feedParsed = await feedResp.json();
+            if (feedParsed?.lastSyncAt) {
+              setGithubLastSync({
+                at: feedParsed.lastSyncAt,
+                count: feedParsed.totalIssuesCount || feedParsed.totalCollected,
+                status: 'GitHub Pages Sync'
+              });
+            }
+          }
+        } catch (_) {}
       } catch (err) {
         console.warn('[Auto-Integrate] Background GitHub integration check skipped:', err);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void autoIntegrateFromGithub();
       }
     };
 
     const timer = setTimeout(() => {
-      autoIntegrateFromGithub();
+      void autoIntegrateFromGithub();
     }, 1500);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -7806,7 +7943,8 @@ export default function App() {
           } catch(e) {}
 
           try {
-            const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
+            const { repo: targetRepo, branch: targetBranch } = getEffectiveGithubRepoAndBranch();
+            const cdnResp = await fetch(`https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
             if (cdnResp.ok) {
               const cdnParsed = await cdnResp.json();
               const arr = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
@@ -10009,9 +10147,10 @@ export default function App() {
       }
     } catch (_) {}
 
-    // 4. Try fetching from GitHub raw CDN
+    // 4. Try fetching from configured GitHub raw CDN
     try {
-      const cdnResp = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO_NAME}/main/data/issues.json?t=${Date.now()}`);
+      const { repo: targetRepo, branch: targetBranch } = getEffectiveGithubRepoAndBranch();
+      const cdnResp = await fetch(`https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`, { cache: 'no-cache' });
       if (cdnResp.ok) {
         const cdnParsed = await cdnResp.json();
         const list = Array.isArray(cdnParsed) ? cdnParsed : (cdnParsed.issues || []);
@@ -14948,7 +15087,16 @@ export default function App() {
                     className="p-5 sm:p-6 space-y-6 overflow-hidden"
                   >
 
-            <DashboardWidget engineStatus={engineStatus} language={language} />
+            <DashboardWidget
+              engineStatus={engineStatus}
+              language={language}
+              githubRepo={githubRepo}
+              githubBranch={githubBranch}
+              githubToken={githubToken}
+              hasServerGithubToken={hasServerGithubToken}
+              isServerMode={!IS_GITHUB_PAGES}
+              getAuthHeaders={getAuthHeaders}
+            />
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 sm:p-8">
               <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-6">
@@ -15486,24 +15634,42 @@ export default function App() {
                 </div>
 
                 {/* Compact Live Workflow Status Badges */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <GitHubWorkflowStatus
-                    owner={GITHUB_USERNAME}
-                    repo={GITHUB_REPO_NAME}
-                    workflowFile="deploy-pages.yml"
-                    language={language}
-                    token={githubToken}
-                    title={language === 'en' ? 'GitHub Pages Deployment Pipeline' : 'GitHub Pages 웹 서비스 배포 파이프라인'}
-                  />
-                  <GitHubWorkflowStatus
-                    owner={GITHUB_USERNAME}
-                    repo={GITHUB_REPO_NAME}
-                    workflowFile="windows-fix-collector.yml"
-                    language={language}
-                    token={githubToken}
-                    title={language === 'en' ? 'Autonomous AI Collector Engine' : 'AI 자율 수집 및 GitOps 동기화 엔진'}
-                  />
-                </div>
+                {(() => {
+                  const repoParts = (githubRepo || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`).trim().split('/');
+                  const wfOwner = repoParts[0]?.trim() || GITHUB_USERNAME;
+                  const wfRepo = repoParts[1]?.trim() || GITHUB_REPO_NAME;
+                  const wfBranch = githubBranch.trim() || 'main';
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <GitHubWorkflowStatus
+                        owner={wfOwner}
+                        repo={wfRepo}
+                        branch={wfBranch}
+                        workflowFile="deploy-pages.yml"
+                        language={language}
+                        token={githubToken}
+                        hasServerToken={hasServerGithubToken}
+                        isServerMode={!IS_GITHUB_PAGES}
+                        getAuthHeaders={getAuthHeaders}
+                        onTriggerSuccess={() => { void fetchGithubConfig(); }}
+                        title={language === 'en' ? 'GitHub Pages Deployment Pipeline' : 'GitHub Pages 웹 서비스 배포 파이프라인'}
+                      />
+                      <GitHubWorkflowStatus
+                        owner={wfOwner}
+                        repo={wfRepo}
+                        branch={wfBranch}
+                        workflowFile="windows-fix-collector.yml"
+                        language={language}
+                        token={githubToken}
+                        hasServerToken={hasServerGithubToken}
+                        isServerMode={!IS_GITHUB_PAGES}
+                        getAuthHeaders={getAuthHeaders}
+                        onTriggerSuccess={() => { void fetchGithubConfig(); }}
+                        title={language === 'en' ? 'Autonomous AI Collector Engine' : 'AI 자율 수집 및 GitOps 동기화 엔진'}
+                      />
+                    </div>
+                  );
+                })()}
 
 
                 {/* Featured Hero Action: One-Click Instant Dataset Sync & Pages Deploy */}
@@ -15551,15 +15717,25 @@ export default function App() {
                     </div>
                     <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
                       <div className="text-[10px] text-slate-400 uppercase font-semibold">Pages 웹사이트</div>
-                      <a 
-                        href="https://ahbiyout-all.github.io/windows-fix-wizard/"
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-xs font-bold text-cyan-300 hover:underline flex items-center gap-1 truncate mt-0.5"
-                      >
-                        <span>Pages 바로가기</span>
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                      </a>
+                      {(() => {
+                        const parts = (githubRepo || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`).trim().split('/');
+                        const pgOwner = (parts[0] || GITHUB_USERNAME).trim().toLowerCase();
+                        const pgRepo = (parts[1] || GITHUB_REPO_NAME).trim();
+                        const pagesHref = pgRepo.toLowerCase() === `${pgOwner}.github.io`
+                          ? `https://${pgOwner}.github.io/`
+                          : `https://${pgOwner}.github.io/${pgRepo}/`;
+                        return (
+                          <a
+                            href={pagesHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-bold text-cyan-300 hover:underline flex items-center gap-1 truncate mt-0.5"
+                          >
+                            <span>Pages 바로가기</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -16342,7 +16518,24 @@ export default function App() {
                             <strong className="text-white font-mono">GEMINI_API_KEY</strong>: Google AI Studio에서 발급받은 Gemini API 키
                           </li>
                           <li>
-                            <strong className="text-white font-mono">APP_WEBHOOK_URL</strong>: 본 앱의 웹훅 주소 (예: <span className="font-mono text-indigo-300">{window.location.origin}</span>)
+                            {(() => {
+                              const origin = window.location.origin;
+                              const isPrivateDev = /^https?:\/\/ais-dev-/i.test(origin);
+                              const webhookSuggestion = isPrivateDev
+                                ? origin.replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-')
+                                : origin;
+                              return (
+                                <>
+                                  <strong className="text-white font-mono">APP_WEBHOOK_URL</strong>: 본 앱의 웹훅 주소 (권장:{' '}
+                                  <span className="font-mono text-indigo-300 select-all">{webhookSuggestion}</span>)
+                                  {isPrivateDev && (
+                                    <span className="block mt-1 text-[10px] text-amber-300 leading-relaxed">
+                                      ⚠️ 현재 AI Studio 개발 프리뷰(<code className="font-mono">ais-dev-*</code>)는 구글 인증으로 차단되므로, GitHub Secret <code className="font-mono">APP_WEBHOOK_URL</code>에는 반드시 공개 공유 앱 주소(<code className="font-mono">ais-pre-*</code>)를 등록하세요.
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </li>
                           <li>
                             <strong className="text-white font-mono">CRON_SECRET</strong>: 본 앱 서버의 환경변수 <span className="font-mono text-indigo-300">CRON_SECRET</span>과 일치하는 비밀값
@@ -18678,7 +18871,7 @@ export default function App() {
                     </div>
 
                     {/* GitHub Pages Active Merged Data Banner */}
-                    {(githubMergedInfo || (typeof window !== 'undefined' && localStorage.getItem('winfix_github_pages_merged_issues'))) && (
+                    {IS_GITHUB_PAGES && (githubMergedInfo || (typeof window !== 'undefined' && localStorage.getItem('winfix_github_pages_merged_issues'))) && (
                       <div className="text-[11px] bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 text-purple-900 dark:text-purple-200 flex flex-col gap-2">
                         <div className="flex items-center justify-between font-bold">
                           <span className="flex items-center gap-1.5">
@@ -23431,7 +23624,25 @@ export default function App() {
                             <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">APP_WEBHOOK_URL</td>
                             <td className="p-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">권장 (실시간 앱 동기화)</span></td>
                             <td className="p-3 text-slate-600 dark:text-slate-400">
-                              운영 중인 웹 앱 도메인 주소 (<span className="font-mono">{window.location.origin}</span>)
+                              {(() => {
+                                const origin = window.location.origin;
+                                const isPrivateDev = /^https?:\/\/ais-dev-/i.test(origin);
+                                const webhookSuggestion = isPrivateDev
+                                  ? origin.replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-')
+                                  : origin;
+                                return (
+                                  <div className="space-y-1">
+                                    <div>
+                                      운영 중인 공개 웹 앱 도메인 주소 (권장: <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 select-all">{webhookSuggestion}</span>)
+                                    </div>
+                                    {isPrivateDev && (
+                                      <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                                        ⚠️ <code className="font-mono">ais-dev-*</code> 프리뷰 주소는 로그인 리다이렉트로 웹훅이 차단되므로 반드시 <code className="font-mono">ais-pre-*</code> 공유 앱 URL을 사용하세요.
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                           </tr>
                           <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">

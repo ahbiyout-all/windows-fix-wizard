@@ -235,7 +235,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.109.0';
+  return '3.110.0';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
@@ -2450,37 +2450,62 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
     const authToken = ghConfig.token || process.env.GITHUB_TOKEN;
 
     const headers: Record<string, string> = {
-      'User-Agent': 'WindowsFixWizard-AutoIntegrator'
+      'User-Agent': 'WindowsFixWizard-AutoIntegrator',
+      'Cache-Control': 'no-cache'
     };
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    const rawUrl = `https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/issues.json?t=${Date.now()}`;
-    let remoteIssues: any[] = [];
-    const resp = await fetch(rawUrl, { headers, signal: (AbortSignal as any).timeout(8000) });
+    const fetchGithubRepoJson = async (filePath: string, timeoutMs = 8000): Promise<any | null> => {
+      const preferContentsApi = Boolean(authToken) || force;
+      const apiUrl = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${encodeURIComponent(targetBranch)}`;
+      const rawUrl = `https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/${filePath}?t=${Date.now()}`;
 
-    if (resp.ok) {
-      const parsed = await resp.json();
-      remoteIssues = Array.isArray(parsed) ? parsed : (parsed?.issues || []);
-    } else if (authToken) {
-      const apiUrl = `https://api.github.com/repos/${targetRepo}/contents/data/issues.json?ref=${encodeURIComponent(targetBranch)}`;
-      const apiRes = await fetch(apiUrl, {
-        headers: { ...headers, 'Accept': 'application/vnd.github.v3.raw' },
-        signal: (AbortSignal as any).timeout(8000)
-      });
-      if (apiRes.ok) {
-        const parsed = await apiRes.json();
-        remoteIssues = Array.isArray(parsed) ? parsed : (parsed?.issues || []);
+      if (preferContentsApi) {
+        try {
+          const apiRes = await fetch(apiUrl, {
+            headers: { ...headers, 'Accept': 'application/vnd.github.v3.raw' },
+            signal: (AbortSignal as any).timeout(timeoutMs)
+          });
+          if (apiRes.ok) {
+            return await apiRes.json();
+          }
+        } catch {}
       }
+
+      try {
+        const rawRes = await fetch(rawUrl, { headers, signal: (AbortSignal as any).timeout(timeoutMs) });
+        if (rawRes.ok) {
+          return await rawRes.json();
+        }
+      } catch {}
+
+      if (!preferContentsApi && authToken) {
+        try {
+          const apiRes = await fetch(apiUrl, {
+            headers: { ...headers, 'Accept': 'application/vnd.github.v3.raw' },
+            signal: (AbortSignal as any).timeout(timeoutMs)
+          });
+          if (apiRes.ok) {
+            return await apiRes.json();
+          }
+        } catch {}
+      }
+      return null;
+    };
+
+    let remoteIssues: any[] = [];
+    const parsedIssuesPayload = await fetchGithubRepoJson('data/issues.json', 8000);
+    if (parsedIssuesPayload) {
+      remoteIssues = Array.isArray(parsedIssuesPayload) ? parsedIssuesPayload : (parsedIssuesPayload?.issues || []);
     }
 
     // Best-effort sync of github-feed.json metadata if remote is newer
+    let feedUpdated = false;
     try {
-      const feedUrl = `https://raw.githubusercontent.com/${targetRepo}/${encodeURIComponent(targetBranch)}/data/github-feed.json?t=${Date.now()}`;
-      const feedResp = await fetch(feedUrl, { headers, signal: (AbortSignal as any).timeout(5000) });
-      if (feedResp.ok) {
-        const remoteFeed = await feedResp.json();
+      const remoteFeed = await fetchGithubRepoJson('data/github-feed.json', 5000);
+      if (remoteFeed && typeof remoteFeed === 'object' && !Array.isArray(remoteFeed)) {
         const feedPath = path.join(DATA_DIR, 'github-feed.json');
         let localFeed: any = null;
         if (fs.existsSync(feedPath)) {
@@ -2488,8 +2513,32 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
         }
         const remoteAt = remoteFeed?.lastCollectedAt ? new Date(remoteFeed.lastCollectedAt).getTime() : 0;
         const localAt = localFeed?.lastCollectedAt ? new Date(localFeed.lastCollectedAt).getTime() : 0;
-        if (remoteFeed && remoteAt > localAt) {
-          writeJsonFileAtomic(feedPath, remoteFeed);
+        if (remoteAt > localAt || !localFeed) {
+          const cleanFeed = sanitizePlainObject(remoteFeed);
+          if (cleanFeed) {
+            writeJsonFileAtomic(feedPath, cleanFeed);
+            feedUpdated = true;
+          }
+        }
+      }
+    } catch {}
+
+    // Best-effort sync of github-collector-options.json if remote is newer
+    try {
+      const remoteOpts = await fetchGithubRepoJson('data/github-collector-options.json', 5000);
+      if (remoteOpts && typeof remoteOpts === 'object' && !Array.isArray(remoteOpts)) {
+        const optPath = path.join(DATA_DIR, 'github-collector-options.json');
+        let localOpts: any = null;
+        if (fs.existsSync(optPath)) {
+          try { localOpts = JSON.parse(fs.readFileSync(optPath, 'utf8')); } catch {}
+        }
+        const remoteOptAt = remoteOpts?.updatedAt ? new Date(remoteOpts.updatedAt).getTime() : 0;
+        const localOptAt = localOpts?.updatedAt ? new Date(localOpts.updatedAt).getTime() : 0;
+        if (remoteOptAt > localOptAt && typeof remoteOpts.scheduleCron === 'string') {
+          const cleanOpts = sanitizePlainObject(remoteOpts);
+          if (cleanOpts) {
+            writeJsonFileAtomic(optPath, { ...(localOpts || {}), ...cleanOpts });
+          }
         }
       }
     } catch {}
@@ -2573,6 +2622,7 @@ async function syncGithubDatasetIntoMainData(options: { force?: boolean; reason?
       skipped: false,
       added,
       updated,
+      feedUpdated,
       totalIssuesCount: readLocalCollection('issues').length,
       lastSyncAt: getKSTISOString()
     };
@@ -3785,7 +3835,7 @@ async function startServer() {
       const list = readLocalCollection('issues');
       const idx = list.findIndex((i: any) => i.id === id);
       if (idx !== -1) {
-        list[idx] = { ...list[idx], ...sanitizedPatch, id };
+        list[idx] = { ...list[idx], ...sanitizedPatch, id, updatedAt: getKSTISOString() };
         writeLocalCollection('issues', list);
         res.json({ success: true, issue: list[idx] });
       } else {
@@ -8403,13 +8453,51 @@ jobs:
       console.log(`[GitHub Webhook] Received ${issuesWithSource.length} issues from GitHub Actions`);
 
       const syncResult = await saveIssuesToServer(issuesWithSource);
-      
+      lastGithubAutoIntegrateTime = Date.now();
+
+      // Persist incoming feed metadata to data/github-feed.json so /api/github/feed stays synchronized
+      try {
+        const feedPath = path.join(DATA_DIR, 'github-feed.json');
+        const sanitizedFeed = req.body?.feed && typeof req.body.feed === 'object' && !Array.isArray(req.body.feed)
+          ? sanitizePlainObject(req.body.feed)
+          : null;
+        if (sanitizedFeed) {
+          const nextFeed = {
+            lastCollectedAt: typeof sanitizedFeed.lastCollectedAt === 'string' && sanitizedFeed.lastCollectedAt
+              ? sanitizedFeed.lastCollectedAt
+              : new Date().toISOString(),
+            modelUsed: typeof sanitizedFeed.modelUsed === 'string' ? sanitizedFeed.modelUsed.slice(0, 120) : 'GitHub Actions Collector',
+            targetCategory: typeof sanitizedFeed.targetCategory === 'string' ? sanitizedFeed.targetCategory.slice(0, 80) : 'all',
+            newlyAddedCount: Number(sanitizedFeed.newlyAddedCount ?? syncResult.added ?? issuesWithSource.length),
+            totalIssuesCount: syncResult.totalCount,
+            newIssues: Array.isArray(sanitizedFeed.newIssues)
+              ? sanitizedFeed.newIssues
+                  .map((ni: any) => sanitizePlainObject(ni))
+                  .filter((ni: any): ni is Record<string, any> => Boolean(ni))
+                  .slice(0, 50)
+                  .map((ni: any) => ({
+                    id: String(ni.id || ''),
+                    code: String(ni.code || ''),
+                    title: String(ni.title || ''),
+                    category: String(ni.category || '')
+                  }))
+              : issuesWithSource.slice(0, 20).map((i: any) => ({
+                  id: String(i.id || ''),
+                  code: String(i.code || ''),
+                  title: String(i.title || ''),
+                  category: String(i.category || '')
+                }))
+          };
+          writeJsonFileAtomic(feedPath, nextFeed);
+        }
+      } catch (_) {}
+
       // Record in github_config last sync
       try {
         const ghConfig = readLocalCollection('github_config')[0] || {};
         ghConfig.lastSyncAt = getKSTISOString();
         ghConfig.lastSyncCount = incomingIssues.length;
-        ghConfig.lastSyncStatus = `Success: +${syncResult.added} new, ~${syncResult.updated} updated`;
+        ghConfig.lastSyncStatus = `Webhook Sync: +${syncResult.added} new, ~${syncResult.updated} updated`;
         writeLocalCollection('github_config', [ghConfig]);
       } catch (e) {
         // Non-blocking
@@ -8524,38 +8612,69 @@ jobs:
 
       console.log(`[GitHub Pull] Fetching data from GitHub: ${cleanRepo} (${targetBranch}, ${cleanPath})...`);
 
-      const rawUrl = `https://raw.githubusercontent.com/${cleanRepo}/${encodeURIComponent(targetBranch)}/${cleanPath}`;
+      const rawUrl = `https://raw.githubusercontent.com/${cleanRepo}/${encodeURIComponent(targetBranch)}/${cleanPath}?t=${Date.now()}`;
+      const apiUrl = `https://api.github.com/repos/${cleanRepo}/contents/${cleanPath}?ref=${encodeURIComponent(targetBranch)}`;
       const headers: Record<string, string> = {
-        'User-Agent': 'WindowsFixWizard-App'
+        'User-Agent': 'WindowsFixWizard-App',
+        'Cache-Control': 'no-cache'
       };
       
       const ghConfigSaved = readLocalCollection('github_config')[0] || {};
-      const authToken = token || ghConfigSaved.token || process.env.GITHUB_TOKEN;
+      const cleanToken = (typeof token === 'string' && token.trim() && !token.includes('••••')) ? token.trim() : '';
+      const authToken = cleanToken || ghConfigSaved.token || process.env.GITHUB_TOKEN;
       if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      let parsed: any[] = [];
-      const response = await fetch(rawUrl, { headers, signal: AbortSignal.timeout(15000) });
+      let parsed: any[] | null = null;
+      let lastErrStatus = '';
 
-      if (response.ok) {
-        const text = await response.text();
-        parsed = JSON.parse(text);
-      } else {
-        // Fallback to GitHub Contents API
-        const apiUrl = `https://api.github.com/repos/${cleanRepo}/contents/${cleanPath}?ref=${encodeURIComponent(targetBranch)}`;
-        const apiRes = await fetch(apiUrl, {
-          signal: AbortSignal.timeout(15000),
-          headers: {
-            ...headers,
-            'Accept': 'application/vnd.github.v3.raw'
+      // Prefer GitHub Contents API first when PAT is present so Fastly CDN lag (up to 5m) is bypassed
+      if (authToken) {
+        try {
+          const apiRes = await fetch(apiUrl, {
+            signal: AbortSignal.timeout(15000),
+            headers: {
+              ...headers,
+              'Accept': 'application/vnd.github.v3.raw'
+            }
+          });
+          if (apiRes.ok) {
+            const text = await apiRes.text();
+            parsed = JSON.parse(text);
+          } else {
+            lastErrStatus = `${apiRes.status}: ${apiRes.statusText}`;
           }
-        });
-        if (!apiRes.ok) {
-          throw new Error(`GitHub에서 파일을 불러오지 못했습니다 (${response.status}: ${response.statusText}). 저장소명, 브랜치, 파일 경로 및 저장소 공개 여부를 확인하세요.`);
+        } catch {}
+      }
+
+      if (!parsed) {
+        const response = await fetch(rawUrl, { headers, signal: AbortSignal.timeout(15000) });
+        if (response.ok) {
+          const text = await response.text();
+          parsed = JSON.parse(text);
+        } else {
+          lastErrStatus = `${response.status}: ${response.statusText}`;
+          if (!authToken) {
+            const apiRes = await fetch(apiUrl, {
+              signal: AbortSignal.timeout(15000),
+              headers: {
+                ...headers,
+                'Accept': 'application/vnd.github.v3.raw'
+              }
+            });
+            if (apiRes.ok) {
+              const text = await apiRes.text();
+              parsed = JSON.parse(text);
+            } else {
+              lastErrStatus = `${apiRes.status}: ${apiRes.statusText}`;
+            }
+          }
         }
-        const text = await apiRes.text();
-        parsed = JSON.parse(text);
+      }
+
+      if (!parsed) {
+        throw new Error(`GitHub에서 파일을 불러오지 못했습니다 (${lastErrStatus || 'Unknown'}). 저장소명, 브랜치, 파일 경로 및 저장소 공개 여부를 확인하세요.`);
       }
 
       if (!Array.isArray(parsed)) {
@@ -8563,6 +8682,24 @@ jobs:
       }
 
       const syncResult = await saveIssuesToServer(parsed);
+      lastGithubAutoIntegrateTime = Date.now();
+
+      // Also sync github-feed.json metadata if pulling main issues dataset
+      if (cleanPath === 'data/issues.json') {
+        try {
+          const feedApiUrl = `https://api.github.com/repos/${cleanRepo}/contents/data/github-feed.json?ref=${encodeURIComponent(targetBranch)}`;
+          const feedRawUrl = `https://raw.githubusercontent.com/${cleanRepo}/${encodeURIComponent(targetBranch)}/data/github-feed.json?t=${Date.now()}`;
+          const feedRes = authToken
+            ? await fetch(feedApiUrl, { headers: { ...headers, 'Accept': 'application/vnd.github.v3.raw' }, signal: AbortSignal.timeout(6000) })
+            : await fetch(feedRawUrl, { headers, signal: AbortSignal.timeout(6000) });
+          if (feedRes.ok) {
+            const remoteFeed = sanitizePlainObject(await feedRes.json());
+            if (remoteFeed) {
+              writeJsonFileAtomic(path.join(DATA_DIR, 'github-feed.json'), remoteFeed);
+            }
+          }
+        } catch (_) {}
+      }
       
       // Update config log
       try {
@@ -8611,13 +8748,18 @@ jobs:
       if (!isValidGitRef(workflowId)) {
         return res.status(400).json({ success: false, error: "유효하지 않은 워크플로 파일명입니다." });
       }
-      if (!authToken) {
-        return res.status(400).json({ 
-          success: false, 
-          error: "GitHub Actions를 원격 트리거하려면 GitHub Personal Access Token(PAT - 'repo' 또는 'workflow' 권한)이 필요합니다. 설정창에 토큰을 입력하거나 서버 환경변수 GITHUB_TOKEN을 설정해 주세요." 
+      const cleanProvidedToken = (typeof token === 'string' && token.trim() && !token.includes('••••')) ? token.trim() : '';
+      const cleanAuthToken = cleanProvidedToken || ghConfig.token || process.env.GITHUB_TOKEN;
+      if (!cleanAuthToken) {
+        return res.status(400).json({
+          success: false,
+          error: "GitHub Actions를 원격 트리거하려면 GitHub Personal Access Token(PAT - 'repo' 또는 'workflow' 권한)이 필요합니다. 설정창에 토큰을 입력하거나 서버 환경변수 GITHUB_TOKEN을 설정해 주세요."
         });
       }
 
+      // Only collector workflow accepts topic/batch_size/model_preference/target_windows inputs;
+      // workflows like deploy-pages.yml reject unexpected inputs with HTTP 422.
+      const isCollectorWorkflow = workflowId.includes('collector');
       const clampedBatch = Math.min(Math.max(parseInt(String(batchSize), 10) || 2, 1), 10);
       const inputs: Record<string, string> = {
         topic: String(topic || 'all'),
@@ -8626,21 +8768,23 @@ jobs:
         target_windows: Array.isArray(targetWindows) ? targetWindows.join(',') : String(targetWindows || '')
       };
 
+      const dispatchBody: Record<string, any> = { ref: targetBranch };
+      if (isCollectorWorkflow) {
+        dispatchBody.inputs = inputs;
+      }
+
       const dispatchUrl = `https://api.github.com/repos/${targetRepo}/actions/workflows/${encodeURIComponent(workflowId)}/dispatches`;
-      console.log(`[GitHub Dispatch] Triggering workflow ${workflowId} on ${targetRepo} (ref: ${targetBranch}) with inputs:`, inputs);
+      console.log(`[GitHub Dispatch] Triggering workflow ${workflowId} on ${targetRepo} (ref: ${targetBranch})`);
 
       const ghRes = await fetch(dispatchUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${authToken}`,
+          'Authorization': `Bearer ${cleanAuthToken}`,
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'WindowsFixWizard-App',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          ref: targetBranch,
-          inputs
-        })
+        body: JSON.stringify(dispatchBody)
       });
 
       if (!ghRes.ok) {
@@ -8674,7 +8818,8 @@ jobs:
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
       const targetBranch = typeof branch === 'string' && isValidGitRef(branch) ? branch.trim() : 'main';
-      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+      const cleanProvidedToken = (typeof token === 'string' && token.trim() && !token.includes('••••')) ? token.trim() : '';
+      const authToken = cleanProvidedToken || ghConfig.token || process.env.GITHUB_TOKEN;
 
       if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
@@ -8762,8 +8907,9 @@ jobs:
         'User-Agent': 'WindowsFixWizard-App'
       };
 
-      // 1. Get current file sha if it exists
+      // 1. Get current file sha & content if it exists
       let fileSha: string | undefined = undefined;
+      let remoteContentClean = '';
       try {
         const getRes = await fetch(fileUrl, { headers, signal: AbortSignal.timeout(15000) });
         if (getRes.status === 401 || getRes.status === 403) {
@@ -8772,41 +8918,78 @@ jobs:
         if (getRes.ok) {
           const fileInfo: any = await getRes.json();
           fileSha = fileInfo.sha;
+          remoteContentClean = String(fileInfo.content || '').replace(/\s+/g, '');
         }
       } catch (e: any) {
         if (e.message?.includes('GitHub 인증')) throw e;
         // file might not exist yet
       }
 
-      // 2. Put file to GitHub via Contents API
+      // 2. Put file to GitHub via Contents API (skip commit if identical)
       const contentJson = JSON.stringify(issues, null, 2);
       const contentBase64 = Buffer.from(contentJson, 'utf8').toString('base64');
       const message = commitMessage || `🚀 [GitOps] Push database updates from Windows Fix Wizard (${issues.length} issues)`;
 
-      const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
-        method: 'PUT',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json'
-        },
-        signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({
-          message,
-          content: contentBase64,
-          branch: targetBranch,
-          ...(fileSha ? { sha: fileSha } : {})
-        })
-      });
+      let putData: any = null;
+      if (remoteContentClean && remoteContentClean === contentBase64.replace(/\s+/g, '')) {
+        console.log(`[GitHub Push] Remote ${filePath} is already identical. Skipping redundant commit.`);
+      } else {
+        const putRes = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${filePath}`, {
+          method: 'PUT',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json'
+          },
+          signal: AbortSignal.timeout(15000),
+          body: JSON.stringify({
+            message,
+            content: contentBase64,
+            branch: targetBranch,
+            ...(fileSha ? { sha: fileSha } : {})
+          })
+        });
 
-      if (!putRes.ok) {
-        if (putRes.status === 401 || putRes.status === 403) {
-          throw new Error(`GitHub 인증/권한 실패 (${putRes.status}): Personal Access Token(PAT)의 'repo', 'workflow' 권한을 확인하고 다시 저장해 주세요.`);
+        if (!putRes.ok) {
+          if (putRes.status === 401 || putRes.status === 403) {
+            throw new Error(`GitHub 인증/권한 실패 (${putRes.status}): Personal Access Token(PAT)의 'repo', 'workflow' 권한을 확인하고 다시 저장해 주세요.`);
+          }
+          const errBody = await putRes.text();
+          throw new Error(`GitHub 커밋 푸시 실패 (${putRes.status}): ${errBody || putRes.statusText}`);
         }
-        const errBody = await putRes.text();
-        throw new Error(`GitHub 커밋 푸시 실패 (${putRes.status}): ${errBody || putRes.statusText}`);
+        putData = await putRes.json();
       }
 
-      const putData: any = await putRes.json();
+      // Best-effort sync of local data/github-feed.json if changed
+      try {
+        const localFeedPath = path.join(DATA_DIR, 'github-feed.json');
+        if (fs.existsSync(localFeedPath)) {
+          const localFeedRaw = fs.readFileSync(localFeedPath, 'utf8');
+          const feedBase64 = Buffer.from(localFeedRaw, 'utf8').toString('base64');
+          const feedUrl = `https://api.github.com/repos/${targetRepo}/contents/data/github-feed.json?ref=${encodeURIComponent(targetBranch)}`;
+          let feedSha: string | undefined;
+          let remoteFeedClean = '';
+          const feedGetRes = await fetch(feedUrl, { headers, signal: AbortSignal.timeout(8000) });
+          if (feedGetRes.ok) {
+            const feedInfo: any = await feedGetRes.json();
+            feedSha = feedInfo.sha;
+            remoteFeedClean = String(feedInfo.content || '').replace(/\s+/g, '');
+          }
+          if (!remoteFeedClean || remoteFeedClean !== feedBase64.replace(/\s+/g, '')) {
+            await fetch(`https://api.github.com/repos/${targetRepo}/contents/data/github-feed.json`, {
+              method: 'PUT',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(10000),
+              body: JSON.stringify({
+                message: `📊 [GitOps] Sync github-feed.json metadata (${issues.length} issues)`,
+                content: feedBase64,
+                branch: targetBranch,
+                ...(feedSha ? { sha: feedSha } : {})
+              })
+            });
+          }
+        }
+      } catch (_) {}
+
       let pagesTriggerResult: string | null = null;
 
       // 3. Trigger GitHub Pages deployment if autoDeployPages is enabled
@@ -9277,7 +9460,8 @@ jobs:
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = (repo || ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
       const targetBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : 'main';
-      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
+      const cleanProvidedToken = (typeof token === 'string' && token.trim() && !token.includes('••••')) ? token.trim() : '';
+      const authToken = cleanProvidedToken || ghConfig.token || process.env.GITHUB_TOKEN;
 
       if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명')이 필요합니다." });
@@ -9370,6 +9554,161 @@ jobs:
     } catch (err: any) {
       console.error("[GitHub Push Collector Options] Failed:", err);
       res.status(500).json({ success: false, error: err.message || "GitHub 옵션 푸시 실패" });
+    }
+  });
+
+  // 5-2. Server-side GitHub Actions Workflow Telemetry Proxies (avoids unauthenticated browser 403 & missing PAT on Preview)
+  const workflowTelemetryCache = new Map<string, { payload: any; cachedAt: number }>();
+
+  app.get("/api/github/workflow-status", async (req, res) => {
+    try {
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const configuredRepo = (ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetRepo = (typeof req.query.repo === 'string' && req.query.repo.trim()
+        ? req.query.repo.trim()
+        : configuredRepo);
+      const workflowFile = (typeof req.query.workflowFile === 'string' && req.query.workflowFile.trim()
+        ? req.query.workflowFile.trim()
+        : (ghConfig.workflowId || 'windows-fix-collector.yml'));
+      const bypassCache = req.query.refresh === '1';
+
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
+      }
+      if (!/^[a-zA-Z0-9._-]{1,120}$/.test(workflowFile)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 워크플로 파일명입니다." });
+      }
+
+      const isAdminCaller = verifyAdminAuthHeader(req.headers.authorization).ok;
+      const serverToken = ghConfig.token || process.env.GITHUB_TOKEN || "";
+      const canUseToken = Boolean(serverToken) && (isAdminCaller || targetRepo.toLowerCase() === configuredRepo.toLowerCase());
+      const cacheKey = `wf-status:${targetRepo.toLowerCase()}:${workflowFile}:${canUseToken ? 'auth' : 'pub'}`;
+      const now = Date.now();
+
+      if (!bypassCache) {
+        const cached = workflowTelemetryCache.get(cacheKey);
+        if (cached && now - cached.cachedAt < 30 * 1000) {
+          return res.json(cached.payload);
+        }
+      }
+
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-App'
+      };
+      if (canUseToken) {
+        headers['Authorization'] = `Bearer ${serverToken}`;
+      }
+
+      const url = `https://api.github.com/repos/${targetRepo}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?per_page=1`;
+      const ghRes = await fetch(url, { headers, signal: (AbortSignal as any).timeout(8000) });
+
+      if (!ghRes.ok) {
+        const rateLimited = ghRes.status === 403 || ghRes.status === 429;
+        return res.json({
+          success: true,
+          run: null,
+          rateLimited,
+          notFound: ghRes.status === 404,
+          httpStatus: ghRes.status,
+          hasServerToken: Boolean(serverToken),
+          branch: ghConfig.branch || 'main'
+        });
+      }
+
+      const data: any = await ghRes.json();
+      const latestRun = Array.isArray(data?.workflow_runs) && data.workflow_runs.length > 0
+        ? data.workflow_runs[0]
+        : null;
+
+      const payload = {
+        success: true,
+        run: latestRun,
+        rateLimited: false,
+        hasServerToken: Boolean(serverToken),
+        branch: ghConfig.branch || 'main'
+      };
+
+      if (workflowTelemetryCache.size >= 30) {
+        const oldestKey = workflowTelemetryCache.keys().next().value;
+        if (oldestKey) workflowTelemetryCache.delete(oldestKey);
+      }
+      workflowTelemetryCache.set(cacheKey, { payload, cachedAt: now });
+      res.json(payload);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/github/workflow-runs", async (req, res) => {
+    try {
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const configuredRepo = (ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetRepo = (typeof req.query.repo === 'string' && req.query.repo.trim()
+        ? req.query.repo.trim()
+        : configuredRepo);
+      const perPage = Math.min(Math.max(parseInt(String(req.query.perPage || '25'), 10) || 25, 1), 50);
+      const bypassCache = req.query.refresh === '1';
+
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
+      }
+
+      const isAdminCaller = verifyAdminAuthHeader(req.headers.authorization).ok;
+      const serverToken = ghConfig.token || process.env.GITHUB_TOKEN || "";
+      const canUseToken = Boolean(serverToken) && (isAdminCaller || targetRepo.toLowerCase() === configuredRepo.toLowerCase());
+      const cacheKey = `wf-runs:${targetRepo.toLowerCase()}:${perPage}:${canUseToken ? 'auth' : 'pub'}`;
+      const now = Date.now();
+
+      if (!bypassCache) {
+        const cached = workflowTelemetryCache.get(cacheKey);
+        if (cached && now - cached.cachedAt < 30 * 1000) {
+          return res.json(cached.payload);
+        }
+      }
+
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-App'
+      };
+      if (canUseToken) {
+        headers['Authorization'] = `Bearer ${serverToken}`;
+      }
+
+      const url = `https://api.github.com/repos/${targetRepo}/actions/runs?per_page=${perPage}`;
+      const ghRes = await fetch(url, { headers, signal: (AbortSignal as any).timeout(8000) });
+
+      if (!ghRes.ok) {
+        const rateLimited = ghRes.status === 403 || ghRes.status === 429;
+        return res.json({
+          success: true,
+          runs: [],
+          rateLimited,
+          httpStatus: ghRes.status,
+          hasServerToken: Boolean(serverToken),
+          branch: ghConfig.branch || 'main'
+        });
+      }
+
+      const data: any = await ghRes.json();
+      const runs = Array.isArray(data?.workflow_runs) ? data.workflow_runs : [];
+
+      const payload = {
+        success: true,
+        runs,
+        rateLimited: false,
+        hasServerToken: Boolean(serverToken),
+        branch: ghConfig.branch || 'main'
+      };
+
+      if (workflowTelemetryCache.size >= 30) {
+        const oldestKey = workflowTelemetryCache.keys().next().value;
+        if (oldestKey) workflowTelemetryCache.delete(oldestKey);
+      }
+      workflowTelemetryCache.set(cacheKey, { payload, cachedAt: now });
+      res.json(payload);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

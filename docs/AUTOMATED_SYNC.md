@@ -1,61 +1,43 @@
-# Automated AI Sync Documentation (Webhook)
+# Automated AI & GitOps Sync Documentation (v3.110.0)
 
-This document explains how to use and configure the automated AI collection system implemented in this application.
+This document explains how automated data collection and 3-way synchronization (**GitHub Repository ↔ GitHub Pages ↔ AI Studio Preview Server**) work in Windows Fix Wizard.
 
 ## 1. Overview
-The application supports fully automated background data collection. Since the preview environment (Cloud Run) may go to sleep when there is no traffic, we provide a **Webhook Endpoint** that can be triggered by external "Keep-Alive" or "Cron" services.
+Windows Fix Wizard operates on a **Zero Cloud DB** architecture (`data/*.json` atomic local persistence + GitHub GitOps + GitHub Pages PWA). Because Cloud Run preview instances scale down when idle or run behind developer auth gates, the system combines push webhooks, boot/visibility auto-integration, and CDN-bypassed GitHub API polling.
 
-## 2. Webhook Endpoint
-- **URL**: `https://<YOUR_APP_URL>/api/cron-sync`
+## 2. Webhook Endpoints
+
+### A. GitHub Actions Live Sync Webhook (Primary)
+- **URL**: `https://<SHARED_APP_URL>/api/github/sync`
 - **Method**: `POST`
-- **Authentication**: Required via custom header.
+- **Authentication**:
+  - `x-cron-secret` header matching server `CRON_SECRET` env var (constant-time comparison), **or**
+  - Verified Admin `Authorization: Bearer <token>` header when `CRON_SECRET` is unset.
+- **Behavior**: Deduplicates incoming `issues`, merges into `data/issues.json`, atomically updates `data/github-feed.json` from payload `feed`, and resets auto-integration cooldown.
 
-### Required Header
-| Header Name | Value |
-|-------------|-------|
-| `x-cron-secret` | The value matching your `CRON_SECRET` environment variable |
+### B. External Keep-Alive / Cron Collection Trigger
+- **URL**: `https://<SHARED_APP_URL>/api/cron-sync`
+- **Method**: `GET` / `POST`
+- **Authentication**: `x-cron-secret` header matching `CRON_SECRET`.
 
-## 3. Configuration (Settings > Secrets)
-To use this feature, ensure the following secrets are configured in AI Studio:
+> ⚠️ **CRITICAL — `ais-dev-*` vs `ais-pre-*` URL Rule**:
+> Never use the private Development App URL (`https://ais-dev-...`) for `APP_WEBHOOK_URL` in GitHub Secrets. External `POST` requests to `ais-dev-*` are intercepted by Google auth and receive an HTML login page (`HTTP 200 HTML` or redirect). Publish/Share the app in AI Studio and register the public **Shared App URL (`https://ais-pre-...`)** after confirming `GET /api/health` returns JSON `{"status":"ok"}`. `scripts/github-collector.ts` explicitly inspects webhook responses and logs a diagnostic warning if HTML or non-2xx is returned.
 
-1. **`CRON_SECRET`**: A private password of your choice (e.g., `WinFixAutoSync2024`). This prevents unauthorized people from triggering your AI quota.
-2. **`CUSTOM_API_KEY`**: Your Gemini API Key. Automated tasks strictly require this to ensure stable performance.
-3. **`FIREBASE_SERVICE_ACCOUNT`** (Optional but Recommended): 
-   - If the server reports "Permission Denied" during automated writes, you must provide a Firebase Service Account JSON.
-   - Go to Firebase Console > Project Settings > Service Accounts > Generate New Private Key.
-   - Paste the entire JSON content into this secret.
+## 3. Server Configuration (Environment / Secrets)
+1. **`CRON_SECRET`**: Shared secret between your Express server and GitHub Actions repository secret `CRON_SECRET`.
+2. **`CUSTOM_API_KEY` / `GEMINI_API_KEY`**: Gemini API key(s) for server-side & runner AI generation.
+3. **`GITHUB_TOKEN`** *(Recommended for AI Studio Preview reverse sync)*: GitHub PAT (`repo` + `workflow` scopes) set via server env or Admin UI GitHub Settings so AI Studio Preview can push commits, dispatch workflows, and trigger GitHub Pages deployments without exposing plaintext tokens to the browser.
 
-## 4. How to Set Up External Cron
-You can use free services like [cron-job.org](https://cron-job.org) or [Google Cloud Scheduler](https://cloud.google.com/scheduler).
+## 4. GitHub Actions GitOps Pipeline
+- **Collector Workflow (`.github/workflows/windows-fix-collector.yml`)**:
+  - Runs every 3 hours (`0 */3 * * *` UTC) or manually via `workflow_dispatch`.
+  - Runs `npx tsx scripts/github-collector.ts` with multi-model / keyless AI resilience, updates `data/issues.json`, `data/github-feed.json`, `data/ai-model-registry.json`, and `src/data/knownIssues.ts` (when `autoIntegrateSeed` is enabled).
+  - Commits and pushes changes to `main` (with 3x `git pull --rebase` retry).
+  - Triggers `deploy-pages.yml` via `gh workflow run` when datasets change (respecting `data/github-collector-options.json` `autoDeployPages`).
+- **Pages Deploy Workflow (`.github/workflows/deploy-pages.yml`)**:
+  - Single-triggered on `push` to `main` or `workflow_dispatch` (no duplicate `workflow_run` trigger).
+  - Builds Vite + Workbox PWA (`NetworkOnly` for `/data/*.json` & `/api/*`, `cleanupOutdatedCaches: true`) and copies `issues.json`, `github-feed.json`, `ai-model-registry.json`, and `github-collector-options.json` into `dist/data/`.
 
-### Example Setup (cron-job.org):
-1. **Title**: WinFix Auto Sync
-2. **URL**: `https://your-app-url.run.app/api/cron-sync`
-3. **Execution**: Every 1 hour (or as desired)
-4. **Request Method**: `POST`
-5. **Custom Headers**:
-   - Key: `x-cron-secret`
-   - Value: (The password you set in `CRON_SECRET`)
-
-## 5. Built-in Internal Scheduler
-The server also includes a built-in scheduler (`node-cron`) that runs every 2 hours:
-```javascript
-cron.schedule('0 */2 * * *', async () => { ... });
-```
-*Note: This internal scheduler only works while the server is "awake". Using the Webhook (Section 2) is the most reliable way to ensure the server wakes up and performs the task.*
-
-## 6. High-Availability Server JSON Fallback Integration
-When the server performs background collection or counts retrieval, and the Firestore quota has been exceeded or connection issues occur, the system automatically redirects and serves requests using the **High-Availability Server JSON File DB** (`/data/` directory). This ensures 100% uptime for end-users and background collectors even when Firebase hits its free tier limits.
-
-## 7. GitHub Actions GitOps Autonomous Harvesting (Recommended)
-In addition to the server webhook, the application is synchronized with `.github/workflows/windows-fix-collector.yml`, which runs every 6 hours on GitHub's free runners:
-- Uses Google Search Grounding to harvest new Windows fixes.
-- Automatically pushes updates directly into `data/issues.json` (GitOps).
-- Supports both **Personal Access Token (PAT)** and **SSH Private Key** credentials for repository operations.
-- Triggers webhook sync if `APP_WEBHOOK_URL` and `CRON_SECRET` are configured in GitHub Repository Secrets.
-
-## 8. Monitoring
-You can check the status of the last automated sync in the Admin Dashboard:
-- Real-time GitHub Actions status badges for `windows-fix-collector.yml`.
-- Interactive Recharts usage chart displaying daily GitOps sync counts.
-- Backend sync audit logs in the Admin Monitoring Hub.
+## 5. Server Auto-Integration & Monitoring
+- **Boot & Visibility Auto-Integrate (`POST /api/github/auto-integrate`)**: Runs on server startup and frontend tab focus (`visibilitychange` with 5-minute client / 2-minute server cooldown). Prefers GitHub Contents API (`Accept: application/vnd.github.v3.raw`, `Cache-Control: no-cache`) over cached raw CDN when PAT or `force` is used, and synchronizes `data/issues.json`, `data/github-feed.json`, and `data/github-collector-options.json`.
+- **Telemetry Proxies**: `GET /api/github/workflow-status` and `GET /api/github/workflow-runs` allow AI Studio Preview to display live Actions telemetry and one-click `Run` triggers using server-side PAT credentials cleanly.

@@ -38,8 +38,12 @@ import { GitHubWorkflowStatus, WorkflowRun } from './GitHubWorkflowStatus';
 interface DeploymentDashboardWidgetProps {
   owner?: string;
   repo?: string;
+  branch?: string;
   language?: 'ko' | 'en';
   token?: string;
+  isServerMode?: boolean;
+  hasServerToken?: boolean;
+  getAuthHeaders?: () => Promise<Record<string, string>>;
   className?: string;
   showStatusBadges?: boolean;
 }
@@ -54,66 +58,49 @@ interface EnrichedRun extends WorkflowRun {
 export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps> = ({
   owner = 'AhBiYout-all',
   repo = 'windows-fix-wizard',
+  branch = 'main',
   language = 'ko',
   token,
+  isServerMode = typeof window !== 'undefined' && !window.location.hostname.endsWith('github.io') && !window.location.hostname.includes('pages.dev'),
+  hasServerToken = false,
+  getAuthHeaders,
   className = '',
   showStatusBadges = true
 }) => {
   const [runs, setRuns] = useState<EnrichedRun[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [serverTokenDetected, setServerTokenDetected] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<'all' | 'pages' | 'collector'>('all');
   const [lastUpdated, setLastUpdated] = useState<string>('');
 
   // Active GitHub Token from props or local configuration
   const activeToken = useMemo(() => {
-    if (token) return token;
+    if (token && !token.includes('••••')) return token;
     try {
       const savedCfg = localStorage.getItem('winfix_github_config');
       if (savedCfg) {
         const parsed = JSON.parse(savedCfg);
-        return parsed.token || parsed.pat || '';
+        const raw = parsed.token || parsed.pat || '';
+        if (raw && !String(raw).includes('••••')) return String(raw);
       }
     } catch {}
     return '';
   }, [token]);
 
-  // Fallback seed data in case of GitHub API rate limit (403) or offline mode
-  const fallbackRuns: EnrichedRun[] = useMemo(() => {
-    const baseTimes = [95, 88, 104, 76, 92, 110, 85, 99, 140, 82, 90, 78, 102, 94, 86];
-    const now = Date.now();
-    return baseTimes.map((dur, idx) => {
-      const runNum = 27 - idx;
-      const isPages = idx % 2 === 0;
-      const isFail = idx === 8; // Simulate 1 historical failed run for realistic resilience stats
-      const timestamp = new Date(now - (idx * 3.5 * 3600 * 1000)).toISOString();
-      const mins = Math.floor(dur / 60);
-      const secs = dur % 60;
-      const formattedDur = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-      const dateObj = new Date(timestamp);
-      const timeLabel = `${dateObj.getMonth() + 1}/${dateObj.getDate()} ${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+  const runsCacheKey = `winfix_wf_runs_cache_${owner}_${repo}`;
 
-      return {
-        id: 41553912450 - idx,
-        name: isPages ? 'Deploy Windows Fix Wizard to GitHub Pages' : 'Windows Fix Autonomous Collector & GitOps Sync',
-        path: isPages ? '.github/workflows/deploy-pages.yml' : '.github/workflows/windows-fix-collector.yml',
-        run_number: runNum > 0 ? runNum : idx + 1,
-        event: isPages ? 'workflow_run' : (idx % 4 === 0 ? 'schedule' : 'workflow_dispatch'),
-        status: 'completed',
-        conclusion: isFail ? 'failure' : 'success',
-        created_at: timestamp,
-        updated_at: new Date(new Date(timestamp).getTime() + dur * 1000).toISOString(),
-        run_started_at: timestamp,
-        html_url: `https://github.com/${owner}/${repo}/actions/runs/${41553912450 - idx}`,
-        head_branch: 'main',
-        durationSec: dur,
-        formattedDuration: formattedDur,
-        timeLabel,
-        workflowType: isPages ? 'pages' : 'collector'
-      };
-    });
-  }, [owner, repo]);
+  const readCachedRuns = useCallback((): EnrichedRun[] => {
+    try {
+      const saved = localStorage.getItem(runsCacheKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed?.runs)) return parsed.runs;
+      }
+    } catch {}
+    return [];
+  }, [runsCacheKey]);
 
   const fetchWorkflowRuns = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) {
@@ -124,29 +111,63 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
     setError(null);
 
     try {
-      const headers: Record<string, string> = {
-        'Accept': 'application/vnd.github.v3+json'
-      };
-      if (activeToken) {
-        headers['Authorization'] = `Bearer ${activeToken}`;
+      let workflowRuns: any[] | null = null;
+      let hitRateLimit = false;
+
+      if (isServerMode) {
+        try {
+          const authHdrs = getAuthHeaders ? await getAuthHeaders() : {};
+          const proxyUrl = `/api/github/workflow-runs?repo=${encodeURIComponent(`${owner}/${repo}`)}&perPage=25${isManualRefresh ? '&refresh=1' : ''}`;
+          const proxyRes = await fetch(proxyUrl, { headers: { ...authHdrs } });
+          if (proxyRes.ok) {
+            const proxyData = await proxyRes.json();
+            if (typeof proxyData.hasServerToken === 'boolean') {
+              setServerTokenDetected(proxyData.hasServerToken);
+            }
+            if (proxyData.success && Array.isArray(proxyData.runs) && proxyData.runs.length > 0) {
+              workflowRuns = proxyData.runs;
+            } else if (proxyData.rateLimited) {
+              hitRateLimit = true;
+            }
+          }
+        } catch {}
       }
 
-      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs?per_page=25`;
-      const res = await fetch(url, { headers });
-
-      if (!res.ok) {
-        if (res.status === 403) {
-          console.warn('GitHub API rate limit reached, utilizing high-fidelity preseeded telemetry cache.');
-          setRuns(fallbackRuns);
-          setLastUpdated(new Date().toLocaleTimeString(language === 'en' ? 'en-US' : 'ko-KR'));
-          return;
+      if (!workflowRuns && !hitRateLimit) {
+        const headers: Record<string, string> = {
+          'Accept': 'application/vnd.github.v3+json'
+        };
+        if (activeToken) {
+          headers['Authorization'] = `Bearer ${activeToken}`;
         }
-        throw new Error(`GitHub API error: HTTP ${res.status}`);
+
+        const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs?per_page=25`;
+        const res = await fetch(url, { headers });
+
+        if (!res.ok) {
+          if (res.status === 403 || res.status === 429) {
+            hitRateLimit = true;
+          } else {
+            throw new Error(`GitHub API error: HTTP ${res.status}`);
+          }
+        } else {
+          const data = await res.json();
+          if (Array.isArray(data.workflow_runs) && data.workflow_runs.length > 0) {
+            workflowRuns = data.workflow_runs;
+          }
+        }
       }
 
-      const data = await res.json();
-      if (data.workflow_runs && Array.isArray(data.workflow_runs) && data.workflow_runs.length > 0) {
-        const enriched: EnrichedRun[] = data.workflow_runs.map((r: any) => {
+      if (hitRateLimit && (!workflowRuns || workflowRuns.length === 0)) {
+        const cached = readCachedRuns();
+        setRuns(cached);
+        setError(language === 'en' ? 'GitHub API rate limit reached (showing cached runs if available).' : 'GitHub API 요청 한도 초과 (캐시된 실행 이력 표시 중)');
+        setLastUpdated(new Date().toLocaleTimeString(language === 'en' ? 'en-US' : 'ko-KR'));
+        return;
+      }
+
+      if (workflowRuns && workflowRuns.length > 0) {
+        const enriched: EnrichedRun[] = workflowRuns.map((r: any) => {
           const startTime = new Date(r.run_started_at || r.created_at || Date.now()).getTime();
           const endTime = new Date(r.updated_at || r.created_at || Date.now()).getTime();
           const rawDiffSec = Number.isFinite(startTime) && Number.isFinite(endTime)
@@ -193,20 +214,23 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
         });
 
         setRuns(enriched);
+        try {
+          localStorage.setItem(runsCacheKey, JSON.stringify({ runs: enriched, timestamp: Date.now() }));
+        } catch {}
       } else {
-        setRuns(fallbackRuns);
+        setRuns(readCachedRuns());
       }
       setLastUpdated(new Date().toLocaleTimeString(language === 'en' ? 'en-US' : 'ko-KR'));
     } catch (err: any) {
-      console.warn('Failed to fetch GitHub workflow runs, falling back to simulated telemetry:', err);
+      console.warn('Failed to fetch GitHub workflow runs:', err);
       setError(err.message || 'API connection failed');
-      setRuns(fallbackRuns);
+      setRuns(readCachedRuns());
       setLastUpdated(new Date().toLocaleTimeString(language === 'en' ? 'en-US' : 'ko-KR'));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [owner, repo, activeToken, language, fallbackRuns]);
+  }, [owner, repo, activeToken, isServerMode, getAuthHeaders, language, runsCacheKey, readCachedRuns]);
 
   useEffect(() => {
     fetchWorkflowRuns();
@@ -402,17 +426,27 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
           <GitHubWorkflowStatus
             owner={owner}
             repo={repo}
+            branch={branch}
             workflowFile="deploy-pages.yml"
             language={language}
             token={activeToken}
+            isServerMode={isServerMode}
+            hasServerToken={hasServerToken || serverTokenDetected}
+            getAuthHeaders={getAuthHeaders}
+            onTriggerSuccess={() => void fetchWorkflowRuns(true)}
             title={language === 'en' ? 'GitHub Pages Deployment Pipeline' : 'GitHub Pages 웹 서비스 배포 파이프라인'}
           />
           <GitHubWorkflowStatus
             owner={owner}
             repo={repo}
+            branch={branch}
             workflowFile="windows-fix-collector.yml"
             language={language}
             token={activeToken}
+            isServerMode={isServerMode}
+            hasServerToken={hasServerToken || serverTokenDetected}
+            getAuthHeaders={getAuthHeaders}
+            onTriggerSuccess={() => void fetchWorkflowRuns(true)}
             title={language === 'en' ? 'Autonomous AI Collector Engine' : 'AI 자율 수집 및 GitOps 동기화 엔진'}
           />
         </div>

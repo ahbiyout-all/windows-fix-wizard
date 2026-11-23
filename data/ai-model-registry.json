@@ -1,7 +1,7 @@
 {
   "version": "3.106.15",
-  "updatedAt": "2026-11-23T07:01:51.350Z",
-  "lastDiscoveryAt": "2026-11-22T17:00:31.608Z",
+  "updatedAt": "2026-11-23T08:55:30.117Z",
+  "lastDiscoveryAt": "2026-11-23T08:55:29.038Z",
   "routingPolicy": "quota-split",
   "keylessFallbackEnabled": true,
   "providerOrder": [
@@ -26,7 +26,7 @@
       "enabled": true,
       "priority": 1,
       "source": "default",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-3.1-flash-lite",
@@ -36,7 +36,7 @@
       "enabled": true,
       "priority": 2,
       "source": "default",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-3.8-flash",
@@ -46,7 +46,7 @@
       "enabled": true,
       "priority": 3,
       "source": "default",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-flash-latest",
@@ -65,7 +65,7 @@
       "enabled": true,
       "priority": 7,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-3.5-flash-lite",
@@ -75,7 +75,7 @@
       "enabled": true,
       "priority": 7,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-2.5-flash",
@@ -85,7 +85,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-3.5-flash",
@@ -95,7 +95,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-omni-flash-preview",
@@ -105,7 +105,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-3.6-flash",
@@ -115,7 +115,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-3.7-flash",
@@ -125,7 +125,7 @@
       "enabled": true,
       "priority": 8,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-4-argon",
@@ -135,7 +135,7 @@
       "enabled": true,
       "priority": 9,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-2.5-pro",
@@ -145,7 +145,7 @@
       "enabled": true,
       "priority": 12,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-4-carbon",
@@ -155,7 +155,7 @@
       "enabled": false,
       "priority": 20,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     },
     {
       "id": "gemini-4-neon",
@@ -165,7 +165,7 @@
       "enabled": false,
       "priority": 20,
       "source": "auto-discovered",
-      "lastVerifiedAt": "2026-11-22T17:00:31.608Z"
+      "lastVerifiedAt": "2026-11-23T08:55:29.038Z"
     }
   ],
   "openrouterFreeModels": [
@@ -176,6 +176,7 @@
     "liquid/lfm-3-1.7b:free",
     "particle-ai/particle-1:free",
     "recursive/flint-v1.0:free",
+    "dots-studio/dots-3-note-preview:free",
     "nvidia/nemotron-3.5-lightning:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
@@ -230,6 +231,7 @@
       "liquid/lfm-3-1.7b:free",
       "particle-ai/particle-1:free",
       "recursive/flint-v1.0:free",
+      "dots-studio/dots-3-note-preview:free",
       "nvidia/nemotron-3.5-lightning:free",
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
@@ -246,8 +248,8 @@
       "mistralai/Mistral-Large-4-1T-A52B",
       "deepseek-ai/DeepSeek-V4.1-Flash-1017",
       "deepseek-ai/DeepSeek-V4.1-Flash",
-      "deepseek-ai/DeepSeek-R1",
       "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "deepseek-ai/DeepSeek-R1",
       "deepseek-ai/DeepSeek-V4-Flash"
     ],
     "cerebras": [

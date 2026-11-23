@@ -5,10 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Windows Fix Autonomous Collector & GitOps Sync"]
-    types:
-      - completed
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
@@ -24,12 +20,13 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: 📥 Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: ⚙️ Set up Node.js 22 (LTS)
         uses: actions/setup-node@v4
@@ -42,12 +39,14 @@ jobs:
 
       - name: 🏗️ Build Web Application for GitHub Pages
         run: |
-          npm run build:pages
+          npm run build:pages || npx vite build
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
           mkdir -p dist/data
           cp data/issues.json dist/data/issues.json 2>/dev/null || true
           cp data/github-feed.json dist/data/github-feed.json 2>/dev/null || true
+          cp data/ai-model-registry.json dist/data/ai-model-registry.json 2>/dev/null || true
+          cp data/github-collector-options.json dist/data/github-collector-options.json 2>/dev/null || true
           test -f dist/index.html
           ls -la ./dist
 

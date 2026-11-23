@@ -1,6 +1,16 @@
-# Patch Note - System Update (v3.86.0)
+# Patch Note - System Update (v3.110.0)
 
-This document is synchronized with `/docs/PATCH_NOTE.md`.
+This document is synchronized with `/docs/PATCH_NOTE.md`. (See `/docs/PATCH_NOTE.md` for full itemized notes across `v3.87.0` ~ `v3.110.0`.)
+
+---
+
+## [v3.110.0] - 2026-11-23
+
+### 🔧 GitHub · GitHub Pages · AI Studio 프리뷰 3각 자동 연동 점검 및 일괄 복구
+- **AI Studio 프리뷰 자동 통합 격리 및 탭 복귀 재동기화 (`src/App.tsx`, `server.ts`)**: 서버 모드에서 정적 CDN/`localStorage` 폴백으로 잘못 빠져나가던 버그를 차단하고, `visibilitychange` 탭 복귀 동기화 및 GitHub Contents API(`no-cache`) 기반 이슈·피드·수집 옵션 동시 병합을 구현했습니다.
+- **웹훅 피드 영속화 및 `ais-dev-*` HTML 리다이렉트 감지 (`server.ts`, `scripts/github-collector.ts`, `src/App.tsx`)**: `/api/github/sync` 웹훅 수신 시 `data/github-feed.json`을 원자적으로 저장하고, 비공개 프리뷰 URL(`ais-dev-*`) 사용 시 공유 앱 URL(`ais-pre-*`) 전환 경고를 안내합니다.
+- **GitHub Pages 배포 파이프라인 중복 실행(422) 해소 및 PWA `NetworkOnly` 적용 (`.github/workflows/deploy-pages.yml`, `vite.config.ts`)**: 중복 `workflow_run` 트리거 제거, 정적 데이터 4종 복사 보강, 비수집 워크플로 `inputs` 422 오류 수정, Workbox `/data/*.json` `NetworkOnly` 규칙을 적용했습니다.
+- **서버 PAT 프록시 워크플로 텔레메트리 및 타입/문서 무결성 복구 (`server.ts`, `src/components/GitHubWorkflowStatus.tsx`, `src/components/DeploymentDashboardWidget.tsx`, `src/types.ts`, `docs/*`)**: 서버 PAT 기반 상태·실행 이력 프록시 연결, 가짜 폴백 실행 기록 제거, `KnownIssue.hasBrokenLinks` 타입 보완(`tsc --noEmit` 오류 0건), 전체 운영 문서 `v3.110.0` 동기화를 완료했습니다.
 
 ---
 

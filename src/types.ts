@@ -79,6 +79,9 @@ export interface KnownIssue {
   verifiedAt?: string;
   verificationStatus?: 'pending' | 'verified' | 'needs_update' | 'obsolete';
   aiFeedback?: string;
+  hasBrokenLinks?: boolean;
+  brokenLinks?: string[];
+  lastLinkCheckAt?: string;
 }
 
 /**
