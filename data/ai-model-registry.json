@@ -1,6 +1,6 @@
 {
   "version": "3.106.15",
-  "updatedAt": "2026-11-24T09:27:25.809Z",
+  "updatedAt": "2026-11-24T22:13:41.477Z",
   "lastDiscoveryAt": "2026-11-23T21:06:04.974Z",
   "routingPolicy": "quota-split",
   "keylessFallbackEnabled": true,
@@ -311,15 +311,15 @@
     }
   },
   "telemetry": {
-    "totalRequests": 14,
+    "totalRequests": 15,
     "geminiRequests": 3,
-    "freeProviderRequests": 11,
-    "keylessRequests": 11,
-    "failoverSaves": 11,
+    "freeProviderRequests": 12,
+    "keylessRequests": 12,
+    "failoverSaves": 12,
     "circuitTrips404": 28,
     "lastProviderUsed": "pollinations",
     "lastModelUsed": "Pollinations (openai-fast) [Keyless]",
-    "lastUpdatedAt": "2026-11-24T09:27:25.809Z",
+    "lastUpdatedAt": "2026-11-24T22:13:41.477Z",
     "perProviderUsage": {
       "gemini": 3,
       "groq": 0,
@@ -331,7 +331,7 @@
       "huggingface": 0,
       "cerebras": 0,
       "ovh": 0,
-      "pollinations": 11
+      "pollinations": 12
     }
   }
 }
