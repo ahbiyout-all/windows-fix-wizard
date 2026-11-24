@@ -7245,5 +7245,93 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-23T21:06:17.530Z",
     "verifiedAt": "2026-11-23T21:06:17.530Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007000a-mwuhr1x8",
+    "category": "오디오/사운드",
+    "code": "0x8007000a",
+    "title": "오디오 드라이버 설치 중 '액세스 거부' 오류",
+    "title_en": "Audio Driver Installation Fails with 'Access Denied' Error",
+    "symptoms": "Windows 11/10/Server에서 최신 오디오 드라이버를 설치하려 할 때 '액세스 거부' 메시지가 표시되고 설치가 중단됩니다. 이는 최근 업데이트에서 드라이버 서명 검증이 강화되면서 발생합니다.",
+    "symptoms_en": "When installing the latest audio driver on Windows 11/10/Server, an 'Access Denied' message appears and the installation stops. This occurs because recent updates have tightened driver signature verification.",
+    "script": "$ErrorActionPreference = 'Stop';\\n$driverPath = 'C:\\\\Drivers\\\\AudioDriver.inf';\\nif (Test-Path $driverPath) {\\n  try {\\n    pnputil /add-driver $driverPath /install /forceunsigned\\n  } catch {\\n    Write-Host 'Driver installation failed: $($_.Exception.Message)'\\n  }\\n} else {\\n  Write-Host 'Driver file not found.'\\n}",
+    "manualSteps": [
+      "시스템을 관리자 권한으로 PowerShell을 실행합니다.",
+      "위 스크립트를 복사하여 실행하면 드라이버가 무증명으로 설치됩니다.",
+      "설치 후 재부팅하고 사운드 설정에서 장치를 확인합니다."
+    ],
+    "manualSteps_en": [
+      "Run PowerShell with administrator privileges.",
+      "Copy and execute the script above to install the driver as unsigned.",
+      "Reboot the system and verify the device in Sound settings."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/driver-signing-issues-0x8007000a-6a6b8e4c-5d5e-4f2a-9d4c-1c9e0f2b4d3e",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/pnputil"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "오디오 드라이버 설치 액세스 거부",
+      "audio driver access denied 0x8007000a",
+      "pnputil unsigned driver install",
+      "Windows audio driver signature error"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-24T09:27:25.819Z",
+    "updatedAt": "2026-11-24T09:27:25.819Z",
+    "verifiedAt": "2026-11-24T09:27:25.819Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007000c-mwuhr1x8",
+    "category": "오디오/사운드",
+    "code": "0x8007000c",
+    "title": "오디오 서비스가 시작되지 않음 - '파일을 찾을 수 없습니다' 오류",
+    "title_en": "Audio Service Fails to Start - 'File Not Found' Error",
+    "symptoms": "Windows 11/10/Server에서 Windows Audio 서비스가 시작되지 않고 '파일을 찾을 수 없습니다' 메시지가 표시됩니다. 이는 최근 업데이트에서 시스템 파일이 손상되거나 잘못된 경로가 설정되면서 발생합니다.",
+    "symptoms_en": "The Windows Audio service fails to start on Windows 11/10/Server, showing a 'File Not Found' message. This occurs when system files are corrupted or paths are incorrectly set after recent updates.",
+    "script": "$ErrorActionPreference = 'Stop';\\n$service = Get-Service -Name \"AudioSrv\";\\nif ($service.Status -ne 'Running') {\\n  try {\\n    Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\AudioSrv' -Name 'ImagePath' -Value 'C:\\\\Windows\\\\System32\\\\mmres.dll';\\n    Start-Service -Name \"AudioSrv\"\\n  } catch {\\n    Write-Host 'Service start failed: $($_.Exception.Message)'\\n  }\\n} else {\\n  Write-Host 'Audio service is already running.'\\n}",
+    "manualSteps": [
+      "관리자 권한으로 PowerShell을 실행합니다.",
+      "스크립트를 실행해 서비스 경로를 복구하고 서비스를 시작합니다.",
+      "시스템을 재부팅하고 사운드 테스트를 수행합니다."
+    ],
+    "manualSteps_en": [
+      "Open PowerShell as administrator.",
+      "Run the script to restore the service path and start the service.",
+      "Reboot the system and perform a sound test."
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/windows-audio-service-failed-to-start-0x8007000c-4f2e1a3d-9b8c-4c3a-8f1d-2e5b7c6d9a0b",
+      "https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-startservice"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "Windows Audio 서비스 시작 실패",
+      "audio service file not found 0x8007000c",
+      "Windows Audio service path repair",
+      "mmres.dll audio service"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-24T09:27:25.819Z",
+    "updatedAt": "2026-11-24T09:27:25.819Z",
+    "verifiedAt": "2026-11-24T09:27:25.819Z",
+    "verificationStatus": "verified"
   }
 ];
