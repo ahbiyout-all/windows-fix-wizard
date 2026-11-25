@@ -34,7 +34,7 @@ on:
       target_windows:
         description: 'Comma-separated Windows versions'
         required: false
-        default: 'Windows 11,Windows 10,Windows Server'
+        default: 'Windows 11,Windows 10'
 
 permissions:
   contents: write
@@ -90,7 +90,7 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-
+          
           if [ -n "$(git status --porcelain data/issues.json data/github-feed.json data/ai-model-registry.json src/data/knownIssues.ts)" ]; then
             git add data/issues.json data/github-feed.json
             if [ -f data/ai-model-registry.json ]; then
@@ -101,7 +101,7 @@ jobs:
             fi
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
             git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
-
+            
             for i in {1..3}; do
               git pull --rebase origin ${{ github.ref_name }} || true
               git push origin HEAD:${{ github.ref_name }} && break || sleep 5
