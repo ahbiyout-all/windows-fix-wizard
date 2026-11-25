@@ -7333,5 +7333,50 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-24T09:27:25.819Z",
     "verifiedAt": "2026-11-24T09:27:25.819Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x8007000f-mwvu0wgq",
+    "category": "오디오/사운드",
+    "code": "0x8007000f",
+    "title": "오디오 장치가 Windows 11/10 업데이트 후 인식되지 않음",
+    "title_en": "Audio Device Not Recognized After Windows 11/10 Update",
+    "symptoms": "Windows 업데이트 후 사운드 장치가 장치 관리자에 표시되지 않거나 ‘이 장치를 중지했습니다’ 메시지가 나타납니다. 재생이 전혀 없고, 사운드 설정에서 ‘출력 장치’가 비어 있습니다.",
+    "symptoms_en": "After a Windows update, the audio device disappears from Device Manager or shows ‘This device has been disabled’. No sound is produced and the output device list is empty.",
+    "script": "$ErrorActionPreference = 'Stop';\\n$device = Get-PnpDevice -FriendlyName '*Audio*' | Where-Object {$_.Status -ne 'OK'};\\nif ($device) {\\n  Write-Host 'Re-enabling device...';\\n  Enable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false;\\n  Restart-Service -Name Audiosrv -Force;\\n  Write-Host 'Device re-enabled. Check sound settings.';\\n} else {\\n  Write-Host 'No disabled audio devices found. Running DISM and SFC...';\\n  DISM /Online /Cleanup-Image /RestoreHealth;\\n  sfc /scannow;\\n  Write-Host 'Repair completed. Restart PC if necessary.';\\n}",
+    "manualSteps": [
+      "장치 관리자에서 사운드 장치를 찾아 ‘이 장치를 중지했습니다’가 표시되면 마우스 오른쪽 버튼으로 ‘사용’ 선택",
+      "PowerShell을 관리자 권한으로 실행하고 위 스크립트를 붙여넣어 실행",
+      "PC를 재부팅하고 사운드 설정에서 출력 장치가 정상인지 확인"
+    ],
+    "manualSteps_en": [
+      "In Device Manager, right‑click the audio device that shows ‘This device has been disabled’ and select ‘Enable’",
+      "Run PowerShell as administrator, paste the script above, and execute it",
+      "Reboot the PC and verify the output device appears in Sound settings"
+    ],
+    "sourceUrls": [
+      "https://support.microsoft.com/en-us/windows/stop-audio-from-working-after-a-windows-update-0x8007000f-5c8d6e4b-3e2b-4f3b-9b2d-1a5e2b8c9f4a",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/disable-audio-device"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10",
+      "Windows Server"
+    ],
+    "searchKeywords": [
+      "오디오 장치 인식 안 됨",
+      "audio device not recognized",
+      "Windows update audio issue",
+      "Disable audio device",
+      "Enable audio device PowerShell"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-25T07:58:46.874Z",
+    "updatedAt": "2026-11-25T07:58:46.874Z",
+    "verifiedAt": "2026-11-25T07:58:46.874Z",
+    "verificationStatus": "verified"
   }
 ];
