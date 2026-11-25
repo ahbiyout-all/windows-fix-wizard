@@ -1,7 +1,7 @@
 {
   "version": "3.106.15",
-  "updatedAt": "2026-11-25T07:58:46.862Z",
-  "lastDiscoveryAt": "2026-11-23T21:06:04.974Z",
+  "updatedAt": "2026-11-25T11:36:14.575Z",
+  "lastDiscoveryAt": "2026-11-25T11:36:12.528Z",
   "routingPolicy": "quota-split",
   "keylessFallbackEnabled": true,
   "providerOrder": [
@@ -176,7 +176,6 @@
     "liquid/lfm-3-1.7b:free",
     "particle-ai/particle-1:free",
     "recursive/flint-v1.0:free",
-    "dots-studio/dots-3-note-preview:free",
     "nvidia/nemotron-3.5-lightning:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
@@ -207,7 +206,6 @@
       "open-mistral-nemo"
     ],
     "nvidia": [
-      "google/gemma-4-31b-it",
       "mistralai/mistral-large-4-1t-a52b",
       "google/gemma-3-12b-it",
       "google/gemma-3-4b-it",
@@ -216,7 +214,8 @@
       "nvidia/ising-calibration-1.5-31b",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       "nvidia/nemotron-3-ultra-550b-a55b",
-      "nvidia/nemotron-3.5-bolt-e4b"
+      "nvidia/nemotron-3.5-bolt-e4b",
+      "nvidia/nemotron-3.5-lightning-30b-a3b"
     ],
     "cohere": [
       "command-a-03-2025",
@@ -231,7 +230,6 @@
       "liquid/lfm-3-1.7b:free",
       "particle-ai/particle-1:free",
       "recursive/flint-v1.0:free",
-      "dots-studio/dots-3-note-preview:free",
       "nvidia/nemotron-3.5-lightning:free",
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
@@ -241,16 +239,16 @@
       "@cf/google/gemma-3-12b-it"
     ],
     "huggingface": [
-      "google/gemma-4-31B-it",
       "google/gemma-4-26B-A4B-it",
+      "google/gemma-4-31B-it",
       "meta-llama/Llama-3.1-8B-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct",
       "mistralai/Mistral-Large-4-1T-A52B",
       "deepseek-ai/DeepSeek-V4.1-Flash-1017",
       "deepseek-ai/DeepSeek-V4.1-Flash",
+      "deepseek-ai/DeepSeek-V4-Pro",
       "deepseek-ai/DeepSeek-V4-Flash-0731",
-      "deepseek-ai/DeepSeek-R1",
-      "deepseek-ai/DeepSeek-V4-Pro"
+      "deepseek-ai/DeepSeek-V3.2"
     ],
     "cerebras": [
       "gpt-oss-120b",
@@ -272,44 +270,7 @@
       "openai-fast"
     ]
   },
-  "circuitBreakers": {
-    "gemini-flash-latest": {
-      "modelId": "gemini-flash-latest",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"models/gemini-flash-latest is not found for API version v1, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported me",
-      "trippedAt": "2026-11-23T21:06:04.075Z",
-      "expiresAt": "2026-11-24T21:06:04.075Z",
-      "failureCount": 1
-    },
-    "gemini-2.5-flash-lite": {
-      "modelId": "gemini-2.5-flash-lite",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use models/gemini-3.5-flash-lite for the latest features and improvements. We recomm",
-      "trippedAt": "2026-11-23T21:06:04.155Z",
-      "expiresAt": "2026-11-24T21:06:04.155Z",
-      "failureCount": 1
-    },
-    "gemini-2.5-flash": {
-      "modelId": "gemini-2.5-flash",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to",
-      "trippedAt": "2026-11-23T21:06:04.310Z",
-      "expiresAt": "2026-11-24T21:06:04.310Z",
-      "failureCount": 1
-    },
-    "gemini-2.5-pro": {
-      "modelId": "gemini-2.5-pro",
-      "provider": "gemini",
-      "statusCode": 404,
-      "reason": "{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-pro is no longer available to new users. Please update your code to use models/gemini-3.1-pro-preview for the latest features and improvements. We recommend yo",
-      "trippedAt": "2026-11-23T21:06:04.973Z",
-      "expiresAt": "2026-11-24T21:06:04.973Z",
-      "failureCount": 1
-    }
-  },
+  "circuitBreakers": {},
   "telemetry": {
     "totalRequests": 16,
     "geminiRequests": 3,

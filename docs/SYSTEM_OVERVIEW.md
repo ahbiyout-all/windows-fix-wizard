@@ -1,6 +1,6 @@
-# Windows Fix Wizard - System Architecture Overview (v3.110.0)
+# Windows Fix Wizard - System Architecture Overview (v3.111.0)
 
-This document describes the architecture, Zero Cloud DB persistence, 3-way GitOps synchronization, security hardening, and encrypted recovery strategies implemented in Windows Fix Wizard.
+This document describes the architecture, Zero Cloud DB persistence, 3-way GitOps synchronization, Pre-Flight PowerShell safety/rollback compilation, automated Microsoft link repair, and security hardening implemented in Windows Fix Wizard.
 
 ---
 
@@ -41,15 +41,16 @@ The application runs as a full-stack Node.js + React 19 application built on Vit
 1. **GitHub Actions Collector (`.github/workflows/windows-fix-collector.yml`)**:
    - Runs every 3 hours (`0 */3 * * *`) using `scripts/github-collector.ts` with multi-model & keyless fallback.
    - Updates `data/issues.json`, `data/github-feed.json`, `data/ai-model-registry.json`, and `src/data/knownIssues.ts`.
-   - Calls `APP_WEBHOOK_URL/api/github/sync` (`x-cron-secret`) with HTML login redirect detection (`ais-dev-*` vs `ais-pre-*`).
+   - Signs payloads with `x-winfix-signature-256` HMAC-SHA256 + `x-cron-secret` to `/api/github/sync` (or `/api/github/webhook/heartbeat` when 0 new issues are added) with HTML login redirect detection (`ais-dev-*` vs `ais-pre-*`).
    - Conditionally dispatches `deploy-pages.yml` based on `data/github-collector-options.json` (`autoDeployPages`).
 2. **GitHub Pages Deployment (`.github/workflows/deploy-pages.yml`)**:
    - Triggered cleanly via `push` or `workflow_dispatch` (no duplicate `workflow_run` trigger).
-   - Builds static SPA + copies `issues.json`, `github-feed.json`, `ai-model-registry.json`, and `github-collector-options.json` into `dist/data/`.
-3. **AI Studio Preview Sync**:
+   - Builds static SPA, copies `issues.json`, `github-feed.json`, `ai-model-registry.json`, and `github-collector-options.json` into `dist/data/`, and notifies `/api/github/webhook/heartbeat` (`pages-deploy`) when configured.
+3. **AI Studio Preview Sync & Live Telemetry**:
    - **Boot & Visibility Auto-Integration (`/api/github/auto-integrate`)**: Uses GitHub Contents API (`Cache-Control: no-cache`) to bypass raw CDN caching and merges remote issues, feed metadata, and collector options.
-   - **Telemetry Proxies**: `GET /api/github/workflow-status` and `GET /api/github/workflow-runs` proxy GitHub Actions status with server PAT scoping and 30s TTL caching.
-   - **Automated Verification (`npm run verify:sync`)**: Executes non-destructive `curl` E2E checks across health, version parity, feed counts, webhook secret/HTML-gate guards, admin auth guards, proxy telemetry, and optional remote/PWA build probes.
+   - **Live 4-Node Triangle Monitor (`/api/github/triangle-status`)**: Probes Local Server, GitHub Repo API, GitHub Pages dataset drift, and Shared App Webhook (`UNPUBLISHED_404` / `AUTH_GATE_HTML` / `WEBHOOK_READY`) + displays `data/webhook_events.json` audit logs.
+   - **Workflow Proxies**: `GET /api/github/workflow-status` and `GET /api/github/workflow-runs` proxy GitHub Actions status with server PAT scoping and 30s TTL caching.
+   - **Automated Verification (`npm run verify:sync`)**: Executes 9-stage non-destructive `curl` E2E checks across health, version parity, feed counts, HMAC/secret/HTML-gate guards, admin auth guards, proxy telemetry, pre-flight script rollback compilation, and optional remote/PWA build probes.
 
 ---
 
@@ -67,13 +68,16 @@ The application runs as a full-stack Node.js + React 19 application built on Vit
 
 ---
 
-## 5. Security Hardening & Rate Limiting
-- **HTTP Response Headers**: `X-Powered-By` disabled; `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, and `Referrer-Policy: strict-origin-when-cross-origin` enforced (iframe-compatible).
-- **Rate Limiting**: In-memory IP rate limiting on `/api/admin/smtp/verify` (10 req/min), `/api/visitor/log` (60 req/min), and `/api/github/auto-integrate`.
+## 5. Security Hardening, Pre-Flight Safety & Rate Limiting
+- **HTTP Response Headers & URL Sanitization**: `X-Powered-By` disabled; `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, and `Referrer-Policy: strict-origin-when-cross-origin` enforced. Outbound server link checks validate every redirect hop (`fetchWithValidatedRedirects`) against private/loopback/IPv6 ranges and enforce official Microsoft domain allowlists (`learn.microsoft.com`, `support.microsoft.com`, etc.).
+- **Pre-Flight AST + Lint & Auto-Rollback Wrapper (`src/utils/psRollback.ts`, `POST /api/scripts/preflight`)**: Evaluates scripts through `psVerifier` and `psLinter` before copy/sandbox execution, prepends non-fatal `Checkpoint-Computer` Restore Point creation, and exports detected registry keys to `Restore_Registry.cmd`.
+- **HMAC-SHA256 Webhook Verification**: Validates raw request body bytes (`req.rawBody`) with `crypto.timingSafeEqual` on `x-winfix-signature-256` and `x-cron-secret`.
+- **Rate Limiting**: In-memory IP rate limiting on `/api/admin/smtp/verify`, `/api/visitor/log`, `/api/scripts/preflight`, and `/api/github/auto-integrate`.
 - **Admin Authentication & Secret Isolation**: `requireAdmin` middleware validates signed admin session tokens (`admin_sessions.json`), while plaintext GitHub PATs, private vault keys, and AI API keys stay strictly server-side (masked as `'••••••••'` in client API responses).
 
 ---
 
-## 6. Server-Side AI Proxy & Multi-Key Resilience
-- **Zero Client-Side Keys**: All AI diagnosis, script generation, and verification routes (`/api/ai/*`) execute server-side with Gemini multi-key rotation, cooldown recovery, and free external AI provider fallback.
+## 6. Server-Side AI Proxy, Multi-Key Resilience & Link Repair Workbench
+- **Zero Client-Side Keys**: All AI diagnosis, script generation, and Search Grounded official Microsoft link repair routes (`/api/ai/*`, `/api/admin/links/propose-repairs`) execute server-side (`gemini-4-hydrogen`) with Gemini multi-key rotation, cooldown recovery, and free external AI provider fallback.
+
 

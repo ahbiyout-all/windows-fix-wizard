@@ -11,6 +11,7 @@ import nodemailer from "nodemailer";
 import JSZip from "jszip";
 import { validateKnownIssuesData } from "./src/utils/validateKnownIssue";
 import { parseAiJson } from "./src/utils/safeFetch";
+import { evaluatePreFlightSafety, compileScriptWithRollback } from "./src/utils/psRollback";
 import {
   loadAiModelRegistry,
   saveAiModelRegistry,
@@ -21,7 +22,6 @@ import {
   discoverLiveModels,
   callExternalFreeProvider,
   probeExternalProvider,
-  getPollinationsRateLimitStatus,
   getKeylessRateLimitStatus,
   contentsToPromptText,
   buildExternalFallbackPrompt,
@@ -205,19 +205,26 @@ function isSafeExternalHttpUrl(rawUrl: unknown): boolean {
   try {
     const parsed = new URL(rawUrl.trim());
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
-    const host = parsed.hostname.toLowerCase();
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
     if (
+      !host ||
       host === 'localhost' ||
       host === '0.0.0.0' ||
+      host === '::' ||
       host === '::1' ||
-      host === '[::1]' ||
       host.endsWith('.local') ||
       host.endsWith('.internal') ||
+      host.endsWith('.localhost') ||
+      /^0\./.test(host) ||
       /^127\./.test(host) ||
       /^10\./.test(host) ||
+      /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
       /^169\.254\./.test(host) ||
       /^192\.168\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+      /^(fc|fd)[0-9a-f]{2}:/i.test(host) ||
+      /^fe[89ab][0-9a-f]:/i.test(host) ||
+      /^::ffff:(127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/i.test(host)
     ) {
       return false;
     }
@@ -235,7 +242,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.110.0';
+  return '3.111.0';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
@@ -2023,29 +2030,144 @@ function pruneOldDatabaseLogs(months: number): {
   };
 }
 
-async function verifySingleUrlReachable(rawUrl: string): Promise<boolean> {
-  if (!isSafeExternalHttpUrl(rawUrl)) return false;
-  try {
-    const headResp = await fetch(rawUrl, {
-      method: 'HEAD',
-      redirect: 'follow',
-      signal: (AbortSignal as any).timeout(5000),
-      headers: { 'User-Agent': 'WindowsFixWizard-LinkVerifier/1.0' }
-    });
-    if (headResp.ok) return true;
-    if (headResp.status === 405 || headResp.status === 403 || headResp.status === 400) {
-      const getResp = await fetch(rawUrl, {
-        method: 'GET',
-        redirect: 'follow',
-        signal: (AbortSignal as any).timeout(5000),
-        headers: {
-          'User-Agent': 'WindowsFixWizard-LinkVerifier/1.0',
-          'Range': 'bytes=0-0'
-        }
-      });
-      return getResp.ok || getResp.status === 206;
+async function fetchWithValidatedRedirects(
+  rawUrl: string,
+  method: 'HEAD' | 'GET',
+  extraHeaders: Record<string, string> = {}
+): Promise<{ status: number; finalUrl: string; ok: boolean }> {
+  let currentUrl = rawUrl;
+  for (let hop = 0; hop < 4; hop++) {
+    if (!isSafeExternalHttpUrl(currentUrl)) {
+      throw new Error('Blocked unsafe redirect destination');
     }
+    const resp = await fetch(currentUrl, {
+      method,
+      redirect: 'manual',
+      signal: (AbortSignal as any).timeout(5000),
+      headers: {
+        'User-Agent': 'WindowsFixWizard-LinkVerifier/1.0',
+        ...extraHeaders
+      }
+    });
+    if (resp.status >= 300 && resp.status < 400) {
+      const location = resp.headers.get('location');
+      if (!location) {
+        return { status: resp.status, finalUrl: currentUrl, ok: false };
+      }
+      currentUrl = new URL(location, currentUrl).href;
+      continue;
+    }
+    return { status: resp.status, finalUrl: currentUrl, ok: resp.ok || resp.status === 206 };
+  }
+  return { status: 310, finalUrl: currentUrl, ok: false };
+}
+
+async function verifyUrlWithStatus(rawUrl: string): Promise<{ reachable: boolean; status: number | null; finalUrl?: string }> {
+  if (!isSafeExternalHttpUrl(rawUrl)) {
+    return { reachable: false, status: null };
+  }
+  try {
+    const headResp = await fetchWithValidatedRedirects(rawUrl, 'HEAD');
+    if (headResp.ok) {
+      return { reachable: true, status: headResp.status, finalUrl: headResp.finalUrl };
+    }
+    if (headResp.status === 405 || headResp.status === 403 || headResp.status === 400) {
+      const getResp = await fetchWithValidatedRedirects(rawUrl, 'GET', { 'Range': 'bytes=0-0' });
+      return { reachable: getResp.ok, status: getResp.status, finalUrl: getResp.finalUrl };
+    }
+    return { reachable: false, status: headResp.status, finalUrl: headResp.finalUrl };
+  } catch {
+    return { reachable: false, status: null };
+  }
+}
+
+async function verifySingleUrlReachable(rawUrl: string): Promise<boolean> {
+  const res = await verifyUrlWithStatus(rawUrl);
+  return res.reachable;
+}
+
+const OFFICIAL_MICROSOFT_DOMAINS = [
+  'learn.microsoft.com',
+  'support.microsoft.com',
+  'answers.microsoft.com',
+  'techcommunity.microsoft.com',
+  'docs.microsoft.com',
+  'microsoft.com'
+];
+
+function isOfficialMicrosoftDomain(rawUrl: string): boolean {
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    return OFFICIAL_MICROSOFT_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
     return false;
+  }
+}
+
+function getLinkRepairProposalsPath(): string {
+  return path.join(DATA_DIR, 'link_repair_proposals.json');
+}
+
+function readLinkRepairProposals(): any[] {
+  const p = getLinkRepairProposalsPath();
+  if (!fs.existsSync(p)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLinkRepairProposals(proposals: any[]) {
+  writeJsonFileAtomic(getLinkRepairProposalsPath(), Array.isArray(proposals) ? proposals.slice(0, 500) : []);
+}
+
+function getWebhookEventsPath(): string {
+  return path.join(DATA_DIR, 'webhook_events.json');
+}
+
+function readWebhookTelemetryEvents(): any[] {
+  const p = getWebhookEventsPath();
+  if (!fs.existsSync(p)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendWebhookTelemetryEvent(event: {
+  eventType: 'dataset-sync' | 'pages-deploy' | 'collector-heartbeat' | 'signature-rejected';
+  source: string;
+  status: 'success' | 'warning' | 'error';
+  signatureValid: boolean;
+  authMode: 'hmac-sha256' | 'cron-secret' | 'admin-bearer' | 'none';
+  httpStatus: number;
+  summary: string;
+  details?: Record<string, any>;
+}) {
+  try {
+    const current = readWebhookTelemetryEvents();
+    const record = {
+      id: `wh-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      ...event,
+      timestamp: getKSTISOString()
+    };
+    writeJsonFileAtomic(getWebhookEventsPath(), [record, ...current].slice(0, 100));
+  } catch {}
+}
+
+function verifyHmacSignatureHeader(rawPayload: Buffer | string, signatureHeader: unknown, secret: string): boolean {
+  if (!secret || typeof signatureHeader !== 'string') return false;
+  const trimmed = signatureHeader.trim();
+  if (!trimmed) return false;
+  const providedHex = trimmed.startsWith('sha256=') ? trimmed.slice(7).trim().toLowerCase() : trimmed.toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(providedHex)) return false;
+  try {
+    const expectedHex = crypto.createHmac('sha256', secret).update(rawPayload).digest('hex').toLowerCase();
+    return crypto.timingSafeEqual(Buffer.from(providedHex, 'hex'), Buffer.from(expectedHex, 'hex'));
   } catch {
     return false;
   }
@@ -2666,7 +2788,12 @@ async function startServer() {
   });
 
   // Set up body parsers for JSON payloads
-  app.use(express.json({ limit: "20mb" }));
+  app.use(express.json({
+    limit: "20mb",
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    }
+  }));
   app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
   // Rate Limiting Store for Verification & Sensitive Actions
@@ -8412,23 +8539,73 @@ jobs:
   // GITHUB ACTIONS & GITOPS INTEGRATION ROUTES
   // ==========================================
 
+  const verifyWebhookRequestAuth = (req: any): {
+    ok: boolean;
+    authMode: 'hmac-sha256' | 'cron-secret' | 'admin-bearer' | 'none';
+    signatureValid: boolean;
+    error?: string;
+  } => {
+    const cronSecret = process.env.CRON_SECRET?.trim() || '';
+    const hmacSecret = process.env.GITHUB_WEBHOOK_SECRET?.trim() || cronSecret;
+    const sigHeader = req.headers['x-winfix-signature-256'] || req.headers['x-hub-signature-256'];
+    const rawSecret = req.headers['x-cron-secret'] || req.query.secret || (req.body && req.body.secret);
+    const secretInput = typeof rawSecret === 'string' ? rawSecret : '';
+
+    if (hmacSecret && typeof sigHeader === 'string' && sigHeader.trim()) {
+      const payloadForHmac: Buffer | string = Buffer.isBuffer(req.rawBody)
+        ? req.rawBody
+        : JSON.stringify(req.body || {});
+      if (verifyHmacSignatureHeader(payloadForHmac, sigHeader, hmacSecret)) {
+        return { ok: true, authMode: 'hmac-sha256', signatureValid: true };
+      }
+      return {
+        ok: false,
+        authMode: 'hmac-sha256',
+        signatureValid: false,
+        error: "Unauthorized: Invalid webhook HMAC-SHA256 signature"
+      };
+    }
+
+    if (cronSecret) {
+      if (timingSafeEqualStrings(secretInput, cronSecret)) {
+        return { ok: true, authMode: 'cron-secret', signatureValid: true };
+      }
+      return {
+        ok: false,
+        authMode: 'cron-secret',
+        signatureValid: false,
+        error: "Unauthorized: Invalid or missing secret header 'x-cron-secret'"
+      };
+    }
+
+    const authCheck = verifyAdminAuthHeader(req.headers.authorization);
+    if (authCheck.ok) {
+      return { ok: true, authMode: 'admin-bearer', signatureValid: true };
+    }
+    return {
+      ok: false,
+      authMode: 'none',
+      signatureValid: false,
+      error: "Unauthorized: CRON_SECRET or valid Admin credentials required."
+    };
+  };
+
   // 1. Webhook endpoint called by GitHub Actions collector workflow or external runner
   app.post("/api/github/sync", async (req, res) => {
     try {
-      const rawSecret = req.headers['x-cron-secret'] || req.query.secret || (req.body && req.body.secret);
-      const secretInput = typeof rawSecret === 'string' ? rawSecret : '';
-      const cronSecret = process.env.CRON_SECRET?.trim() || '';
-      // If server has CRON_SECRET configured, verify secret in constant time; otherwise require verified Admin auth header
-      if (cronSecret) {
-        if (!timingSafeEqualStrings(secretInput, cronSecret)) {
-          console.warn(`[GitHub Webhook] Unauthorized sync attempt with invalid secret`);
-          return res.status(401).json({ success: false, error: "Unauthorized: Invalid or missing secret header 'x-cron-secret'" });
-        }
-      } else {
-        const authCheck = verifyAdminAuthHeader(req.headers.authorization);
-        if (!authCheck.ok) {
-          return res.status(401).json({ success: false, error: "Unauthorized: CRON_SECRET or valid Admin credentials required." });
-        }
+      const webhookAuth = verifyWebhookRequestAuth(req);
+      if (!webhookAuth.ok) {
+        console.warn(`[GitHub Webhook] Unauthorized sync attempt (${webhookAuth.authMode})`);
+        appendWebhookTelemetryEvent({
+          eventType: 'signature-rejected',
+          source: String(req.headers['user-agent'] || 'external-caller').slice(0, 80),
+          status: 'error',
+          signatureValid: false,
+          authMode: webhookAuth.authMode,
+          httpStatus: 401,
+          summary: webhookAuth.error || 'Unauthorized webhook attempt rejected'
+        });
+        return res.status(401).json({ success: false, error: webhookAuth.error });
       }
 
       const incomingIssues = req.body?.issues;
@@ -8450,7 +8627,7 @@ jobs:
         return res.status(400).json({ success: false, error: "No valid issue objects provided in payload." });
       }
 
-      console.log(`[GitHub Webhook] Received ${issuesWithSource.length} issues from GitHub Actions`);
+      console.log(`[GitHub Webhook] Received ${issuesWithSource.length} issues from GitHub Actions (${webhookAuth.authMode})`);
 
       const syncResult = await saveIssuesToServer(issuesWithSource);
       lastGithubAutoIntegrateTime = Date.now();
@@ -8497,27 +8674,746 @@ jobs:
         const ghConfig = readLocalCollection('github_config')[0] || {};
         ghConfig.lastSyncAt = getKSTISOString();
         ghConfig.lastSyncCount = incomingIssues.length;
-        ghConfig.lastSyncStatus = `Webhook Sync: +${syncResult.added} new, ~${syncResult.updated} updated`;
+        ghConfig.lastSyncStatus = `Webhook Sync (${webhookAuth.authMode}): +${syncResult.added} new, ~${syncResult.updated} updated`;
         writeLocalCollection('github_config', [ghConfig]);
       } catch (e) {
         // Non-blocking
       }
 
+      appendWebhookTelemetryEvent({
+        eventType: 'dataset-sync',
+        source: String(req.body?.source || 'GitHub Actions Collector').slice(0, 80),
+        status: 'success',
+        signatureValid: webhookAuth.signatureValid,
+        authMode: webhookAuth.authMode,
+        httpStatus: 200,
+        summary: `수신 ${incomingIssues.length}건 (신규 ${syncResult.added}, 갱신 ${syncResult.updated})`,
+        details: { added: syncResult.added, updated: syncResult.updated, total: syncResult.totalCount }
+      });
+
       await logSyncEvent({
         type: 'success',
         source: 'github-webhook-sync',
         message: `GitHub Actions에서 ${incomingIssues.length}개의 해결책 수신 (신규: ${syncResult.added}개, 갱신: ${syncResult.updated}개)`,
-        details: { count: incomingIssues.length, result: syncResult }
+        details: { count: incomingIssues.length, authMode: webhookAuth.authMode, result: syncResult }
       });
 
       res.json({
         success: true,
+        authMode: webhookAuth.authMode,
         message: `Successfully ingested ${incomingIssues.length} issues from GitHub Actions`,
         result: syncResult
       });
     } catch (err: any) {
       console.error("[GitHub Webhook] Ingestion failed:", err);
       res.status(500).json({ success: false, error: err.message || "Failed to process GitHub sync payload" });
+    }
+  });
+
+  // 1-0. Webhook Heartbeat & Pages Deployment Notification Endpoint
+  app.post("/api/github/webhook/heartbeat", async (req, res) => {
+    try {
+      const webhookAuth = verifyWebhookRequestAuth(req);
+      if (!webhookAuth.ok) {
+        appendWebhookTelemetryEvent({
+          eventType: 'signature-rejected',
+          source: String(req.headers['user-agent'] || 'external-caller').slice(0, 80),
+          status: 'error',
+          signatureValid: false,
+          authMode: webhookAuth.authMode,
+          httpStatus: 401,
+          summary: webhookAuth.error || 'Unauthorized webhook heartbeat rejected'
+        });
+        return res.status(401).json({ success: false, error: webhookAuth.error });
+      }
+
+      const eventTypeRaw = String(req.body?.eventType || 'collector-heartbeat');
+      const eventType: 'pages-deploy' | 'collector-heartbeat' =
+        eventTypeRaw === 'pages-deploy' ? 'pages-deploy' : 'collector-heartbeat';
+      const summary = String(req.body?.summary || (eventType === 'pages-deploy'
+        ? 'GitHub Pages 배포 완료 웹훅 수신'
+        : 'GitHub Actions 수집기 정상 실행 완료(신규 변경 없음)')).slice(0, 240);
+
+      appendWebhookTelemetryEvent({
+        eventType,
+        source: String(req.body?.source || 'GitHub Actions').slice(0, 80),
+        status: 'success',
+        signatureValid: webhookAuth.signatureValid,
+        authMode: webhookAuth.authMode,
+        httpStatus: 200,
+        summary,
+        details: sanitizePlainObject(req.body?.details) || undefined
+      });
+
+      if (eventType === 'pages-deploy') {
+        try {
+          const ghConfig = readLocalCollection('github_config')[0] || {};
+          ghConfig.lastPagesDeployAt = getKSTISOString();
+          ghConfig.lastPagesDeploySummary = summary;
+          writeLocalCollection('github_config', [ghConfig]);
+        } catch {}
+      }
+
+      await logSyncEvent({
+        type: 'info',
+        source: `webhook-${eventType}`,
+        message: summary
+      });
+
+      res.json({ success: true, eventType, authMode: webhookAuth.authMode, timestamp: getKSTISOString() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Heartbeat processing failed" });
+    }
+  });
+
+  // 1-0b. Real-Time 3-Way Triangle Sync Diagnostic & Webhook Probe
+  app.get("/api/github/triangle-status", requireAdmin, async (req, res) => {
+    try {
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const targetRepo = (typeof req.query.repo === 'string' && req.query.repo.trim()
+        ? req.query.repo.trim()
+        : (ghConfig.repo || "AhBiYout-all/windows-fix-wizard")).trim();
+      const branch = (typeof req.query.branch === 'string' && req.query.branch.trim()
+        ? req.query.branch.trim()
+        : (ghConfig.branch || "main")).trim();
+
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
+      }
+
+      const [ownerPart, repoPart] = targetRepo.split('/');
+      const pgOwner = (ownerPart || 'AhBiYout-all').toLowerCase();
+      const pgRepo = (repoPart || 'windows-fix-wizard').trim();
+      const pagesBaseUrl = pgRepo.toLowerCase() === `${pgOwner}.github.io`
+        ? `https://${pgOwner}.github.io`
+        : `https://${pgOwner}.github.io/${pgRepo}`;
+
+      // Node 1: Local Server
+      const localIssues = readLocalCollection('issues');
+      let localFeed: any = null;
+      try {
+        const fp = path.join(DATA_DIR, 'github-feed.json');
+        if (fs.existsSync(fp)) localFeed = JSON.parse(fs.readFileSync(fp, 'utf8'));
+      } catch {}
+
+      const localNode = {
+        id: 'localServer',
+        label: 'AI Studio / Local Server',
+        status: 'healthy' as const,
+        httpStatus: 200,
+        latencyMs: 1,
+        issueCount: localIssues.length,
+        lastSyncedAt: localFeed?.lastCollectedAt || ghConfig.lastSyncAt || null,
+        message: `로컬 JSON DB ${localIssues.length}건 활성 · v${getAppVersion()}`
+      };
+
+      // Node 2: GitHub Public Repo (via server PAT if present)
+      const serverToken = ghConfig.token || process.env.GITHUB_TOKEN || '';
+      const ghHeaders: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-App'
+      };
+      if (serverToken) ghHeaders['Authorization'] = `Bearer ${serverToken}`;
+
+      const probeRepo = async () => {
+        const t0 = Date.now();
+        try {
+          const commitRes = await fetch(
+            `https://api.github.com/repos/${targetRepo}/commits/${encodeURIComponent(branch)}`,
+            { headers: ghHeaders, signal: (AbortSignal as any).timeout(6000) }
+          );
+          const latencyMs = Date.now() - t0;
+          if (!commitRes.ok) {
+            const isLimited = commitRes.status === 403 || commitRes.status === 429;
+            return {
+              id: 'githubRepo',
+              label: 'GitHub Repository',
+              status: isLimited ? 'warning' : 'error',
+              httpStatus: commitRes.status,
+              latencyMs,
+              issueCount: null,
+              lastSyncedAt: null,
+              diagnosticCode: isLimited ? 'RATE_LIMITED' : 'REPO_HTTP_ERROR',
+              message: isLimited
+                ? `GitHub API 한도 대기 (HTTP ${commitRes.status}) — 서버 PAT 설정 권장`
+                : `GitHub 저장소 응답 오류 (HTTP ${commitRes.status})`,
+              targetUrl: `https://github.com/${targetRepo}`
+            };
+          }
+          const commitData: any = await commitRes.json();
+          return {
+            id: 'githubRepo',
+            label: 'GitHub Repository',
+            status: 'healthy',
+            httpStatus: 200,
+            latencyMs,
+            issueCount: localIssues.length,
+            lastSyncedAt: commitData?.commit?.committer?.date || null,
+            diagnosticCode: 'REPO_OK',
+            message: `브랜치 ${branch} 최신 커밋 ${String(commitData?.sha || '').slice(0, 7)} 확인됨`,
+            targetUrl: `https://github.com/${targetRepo}`
+          };
+        } catch (err: any) {
+          return {
+            id: 'githubRepo',
+            label: 'GitHub Repository',
+            status: 'error',
+            httpStatus: null,
+            latencyMs: Date.now() - t0,
+            issueCount: null,
+            lastSyncedAt: null,
+            diagnosticCode: 'NETWORK_ERROR',
+            message: err?.message || 'GitHub 저장소 연결 실패',
+            targetUrl: `https://github.com/${targetRepo}`
+          };
+        }
+      };
+
+      // Node 3: GitHub Pages
+      const probePages = async () => {
+        const t0 = Date.now();
+        try {
+          const pRes = await fetch(`${pagesBaseUrl}/data/issues.json?cb=${Date.now()}`, {
+            signal: (AbortSignal as any).timeout(6000),
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          const latencyMs = Date.now() - t0;
+          if (!pRes.ok) {
+            return {
+              id: 'githubPages',
+              label: 'GitHub Pages Static Site',
+              status: 'warning',
+              httpStatus: pRes.status,
+              latencyMs,
+              issueCount: null,
+              lastSyncedAt: null,
+              diagnosticCode: 'PAGES_UNAVAILABLE',
+              message: `GitHub Pages 응답 HTTP ${pRes.status} — deploy-pages.yml 실행 확인 필요`,
+              targetUrl: `${pagesBaseUrl}/`
+            };
+          }
+          const remoteIssues = await pRes.json();
+          const remoteCount = Array.isArray(remoteIssues) ? remoteIssues.length : 0;
+          const delta = localIssues.length - remoteCount;
+          return {
+            id: 'githubPages',
+            label: 'GitHub Pages Static Site',
+            status: delta === 0 ? 'healthy' : 'warning',
+            httpStatus: 200,
+            latencyMs,
+            issueCount: remoteCount,
+            lastSyncedAt: null,
+            diagnosticCode: delta === 0 ? 'PAGES_SYNCED' : 'PAGES_DRIFT',
+            message: delta === 0
+              ? `Pages 실시간 ${remoteCount}건 100% 일치`
+              : `Pages ${remoteCount}건 (로컬과 ${Math.abs(delta)}건 차이 — Pages 배포 필요)`,
+            targetUrl: `${pagesBaseUrl}/`
+          };
+        } catch (err: any) {
+          return {
+            id: 'githubPages',
+            label: 'GitHub Pages Static Site',
+            status: 'error',
+            httpStatus: null,
+            latencyMs: Date.now() - t0,
+            issueCount: null,
+            lastSyncedAt: null,
+            diagnosticCode: 'PAGES_FETCH_FAIL',
+            message: err?.message || 'GitHub Pages 조회 실패',
+            targetUrl: `${pagesBaseUrl}/`
+          };
+        }
+      };
+
+      // Node 4: Shared App Webhook (ais-pre-*) Probe
+      const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').trim();
+      const reqProto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+      const derivedOrigin = reqHost && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')
+        ? `${reqProto}://${reqHost}`.replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-')
+        : '';
+      const rawSharedInput = typeof req.query.sharedUrl === 'string' && req.query.sharedUrl.trim()
+        ? req.query.sharedUrl.trim()
+        : (process.env.SHARED_APP_URL?.trim() || ghConfig.sharedAppUrl || derivedOrigin);
+
+      const probeSharedWebhook = async () => {
+        if (!rawSharedInput || !isSafeExternalHttpUrl(rawSharedInput)) {
+          return {
+            id: 'sharedWebhook',
+            label: 'AI Studio Shared Webhook',
+            status: 'unconfigured',
+            httpStatus: null,
+            latencyMs: null,
+            issueCount: null,
+            lastSyncedAt: null,
+            diagnosticCode: 'UNCONFIGURED',
+            message: '공유 앱 URL(ais-pre-*) 미지정 — AI Studio Publish 후 URL을 입력해 점검하세요.',
+            targetUrl: ''
+          };
+        }
+        const normalizedShared = rawSharedInput.replace(/\/+$/, '').replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-');
+        const t0 = Date.now();
+        try {
+          const shRes = await fetch(`${normalizedShared}/api/health`, {
+            signal: (AbortSignal as any).timeout(5000),
+            headers: { 'User-Agent': 'WindowsFixWizard-TriangleProbe/1.0' }
+          });
+          const latencyMs = Date.now() - t0;
+          const bodyText = await shRes.text();
+          const isHtmlGate = /^\s*<(?:!doctype|html)/i.test(bodyText);
+          if (shRes.ok && !isHtmlGate) {
+            return {
+              id: 'sharedWebhook',
+              label: 'AI Studio Shared Webhook',
+              status: 'healthy',
+              httpStatus: shRes.status,
+              latencyMs,
+              issueCount: localIssues.length,
+              lastSyncedAt: readWebhookTelemetryEvents()[0]?.timestamp || null,
+              diagnosticCode: 'WEBHOOK_READY',
+              message: `공유 웹훅 엔드포인트 정상(HTTP ${shRes.status}) · HMAC/Secret 수신 준비 완료`,
+              targetUrl: normalizedShared
+            };
+          }
+          if (isHtmlGate) {
+            return {
+              id: 'sharedWebhook',
+              label: 'AI Studio Shared Webhook',
+              status: 'warning',
+              httpStatus: shRes.status,
+              latencyMs,
+              issueCount: null,
+              lastSyncedAt: null,
+              diagnosticCode: 'AUTH_GATE_HTML',
+              message: `Google 로그인 인증 게이트 HTML 응답 감지(HTTP ${shRes.status}) — 외부 웹훅은 공개 공유 앱 URL(ais-pre-*)만 허용됩니다.`,
+              targetUrl: normalizedShared
+            };
+          }
+          if (shRes.status === 404) {
+            return {
+              id: 'sharedWebhook',
+              label: 'AI Studio Shared Webhook',
+              status: 'warning',
+              httpStatus: 404,
+              latencyMs,
+              issueCount: null,
+              lastSyncedAt: null,
+              diagnosticCode: 'UNPUBLISHED_404',
+              message: '공유 URL(ais-pre-*)이 아직 Publish/Share 활성화되지 않아 HTTP 404 상태입니다.',
+              targetUrl: normalizedShared
+            };
+          }
+          return {
+            id: 'sharedWebhook',
+            label: 'AI Studio Shared Webhook',
+            status: 'error',
+            httpStatus: shRes.status,
+            latencyMs,
+            issueCount: null,
+            lastSyncedAt: null,
+            diagnosticCode: 'WEBHOOK_HTTP_ERROR',
+            message: `공유 URL 헬스 응답 오류 (HTTP ${shRes.status})`,
+            targetUrl: normalizedShared
+          };
+        } catch (err: any) {
+          return {
+            id: 'sharedWebhook',
+            label: 'AI Studio Shared Webhook',
+            status: 'error',
+            httpStatus: null,
+            latencyMs: Date.now() - t0,
+            issueCount: null,
+            lastSyncedAt: null,
+            diagnosticCode: 'WEBHOOK_NETWORK_ERROR',
+            message: err?.message || '공유 URL 프로브 연결 실패',
+            targetUrl: normalizedShared
+          };
+        }
+      };
+
+      const [repoNode, pagesNode, webhookNode] = await Promise.all([
+        probeRepo(),
+        probePages(),
+        probeSharedWebhook()
+      ]);
+
+      const webhookEvents = readWebhookTelemetryEvents().slice(0, 20);
+      res.json({
+        success: true,
+        checkedAt: getKSTISOString(),
+        repo: targetRepo,
+        branch,
+        hasWebhookSecret: Boolean(process.env.CRON_SECRET?.trim() || process.env.GITHUB_WEBHOOK_SECRET?.trim()),
+        hasServerGithubToken: Boolean(serverToken),
+        nodes: [localNode, repoNode, pagesNode, webhookNode],
+        webhookEvents
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Triangle status probe failed" });
+    }
+  });
+
+  // 1-0c. Automated Broken-Link Detection & Official Microsoft URL Repair Workbench Routes
+  app.get("/api/admin/links/proposals", requireAdmin, (_req, res) => {
+    try {
+      const issues = readLocalCollection('issues');
+      const proposals = readLinkRepairProposals();
+      const issuesWithLinks = issues.filter((i: any) => Array.isArray(i?.sourceUrls) && i.sourceUrls.length > 0);
+      const checkedIssues = issuesWithLinks.filter((i: any) => Boolean(i.lastLinkCheckAt));
+      const brokenIssues = issuesWithLinks
+        .filter((i: any) => Boolean(i.hasBrokenLinks) && Array.isArray(i.brokenLinks) && i.brokenLinks.length > 0)
+        .map((i: any) => ({
+          id: i.id,
+          code: i.code,
+          title: i.title,
+          category: i.category,
+          sourceUrls: i.sourceUrls,
+          brokenLinks: i.brokenLinks,
+          lastLinkCheckAt: i.lastLinkCheckAt || null
+        }));
+
+      const brokenUrlsCount = brokenIssues.reduce((acc: number, item: any) => acc + (item.brokenLinks?.length || 0), 0);
+      const pendingProposalsCount = proposals.filter((p: any) => p.status === 'pending').length;
+      const approvedProposalsCount = proposals.filter((p: any) => p.status === 'approved').length;
+
+      res.json({
+        success: true,
+        summary: {
+          totalIssuesWithLinks: issuesWithLinks.length,
+          checkedIssuesCount: checkedIssues.length,
+          brokenIssuesCount: brokenIssues.length,
+          brokenUrlsCount,
+          pendingProposalsCount,
+          approvedProposalsCount
+        },
+        brokenIssues,
+        proposals
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Failed to load link repair workbench" });
+    }
+  });
+
+  app.post("/api/admin/links/scan", requireAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(80, Math.max(5, Number(req.body?.limit) || 35));
+      const onlyUnchecked = Boolean(req.body?.onlyUnchecked);
+      const issues = readLocalCollection('issues');
+      const nowIso = getKSTISOString();
+
+      const targets = issues
+        .filter((issue: any) => Array.isArray(issue?.sourceUrls) && issue.sourceUrls.length > 0)
+        .filter((issue: any) => !onlyUnchecked || !issue.lastLinkCheckAt)
+        .sort((a: any, b: any) => {
+          const aTime = a.lastLinkCheckAt ? new Date(a.lastLinkCheckAt).getTime() : 0;
+          const bTime = b.lastLinkCheckAt ? new Date(b.lastLinkCheckAt).getTime() : 0;
+          return aTime - bTime;
+        })
+        .slice(0, limit);
+
+      const issueIndexById = new Map<string, number>();
+      issues.forEach((item: any, idx: number) => {
+        if (item?.id) issueIndexById.set(String(item.id), idx);
+      });
+
+      let checkedIssuesCount = 0;
+      let brokenIssuesFound = 0;
+      let brokenUrlsFound = 0;
+
+      for (let i = 0; i < targets.length; i += 5) {
+        const chunk = targets.slice(i, i + 5);
+        await Promise.all(chunk.map(async (item: any) => {
+          const urls: string[] = Array.isArray(item.sourceUrls) ? item.sourceUrls : [];
+          if (urls.length === 0) return;
+          checkedIssuesCount++;
+          const brokenLinks: string[] = [];
+          for (const url of urls) {
+            const check = await verifyUrlWithStatus(url);
+            if (!check.reachable) {
+              brokenLinks.push(url);
+              brokenUrlsFound++;
+            }
+          }
+          const idx = issueIndexById.get(String(item.id));
+          if (idx !== undefined) {
+            issues[idx] = {
+              ...issues[idx],
+              hasBrokenLinks: brokenLinks.length > 0,
+              brokenLinks,
+              lastLinkCheckAt: nowIso
+            };
+          }
+          if (brokenLinks.length > 0) brokenIssuesFound++;
+        }));
+      }
+
+      writeLocalCollection('issues', issues);
+      addLocalLog("logs_admin", {
+        action: 'link_scan',
+        target: 'issues_source_urls',
+        details: `수동 링크 스캔 완료: 문서 ${checkedIssuesCount}건 점검, 깨진 문서 ${brokenIssuesFound}건 (URL ${brokenUrlsFound}건)`,
+        severity: brokenIssuesFound > 0 ? 'warning' : 'info',
+        timestamp: nowIso,
+        admin: 'ADMIN'
+      });
+
+      res.json({
+        success: true,
+        checkedIssuesCount,
+        brokenIssuesFound,
+        brokenUrlsFound,
+        checkedAt: nowIso
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Link scan failed" });
+    }
+  });
+
+  app.post("/api/admin/links/propose-repairs", requireAdmin, async (req, res) => {
+    try {
+      const maxUrls = Math.min(12, Math.max(1, Number(req.body?.maxUrls) || 6));
+      const targetIssueId = typeof req.body?.issueId === 'string' ? req.body.issueId.trim() : '';
+      const issues = readLocalCollection('issues');
+      const existingProposals = readLinkRepairProposals();
+
+      const brokenPairs: Array<{ issue: any; brokenUrl: string }> = [];
+      for (const issue of issues) {
+        if (targetIssueId && issue.id !== targetIssueId) continue;
+        if (!issue?.hasBrokenLinks || !Array.isArray(issue.brokenLinks)) continue;
+        for (const brokenUrl of issue.brokenLinks) {
+          const hasActiveProposal = existingProposals.some(
+            (p: any) => p.issueId === issue.id && p.originalUrl === brokenUrl && p.status === 'pending'
+          );
+          if (!hasActiveProposal) {
+            brokenPairs.push({ issue, brokenUrl });
+          }
+        }
+      }
+
+      const workItems = brokenPairs.slice(0, maxUrls);
+      const newlyCreated: any[] = [];
+      const skipped: Array<{ issueId: string; brokenUrl: string; reason: string }> = [];
+
+      let healedRecoveredLinks = 0;
+      const issueIndexById = new Map<string, number>();
+      issues.forEach((it: any, idx: number) => {
+        if (it?.id) issueIndexById.set(String(it.id), idx);
+      });
+
+      for (const { issue, brokenUrl } of workItems) {
+        try {
+          const origCheck = await verifyUrlWithStatus(brokenUrl);
+          if (origCheck.reachable) {
+            // Link recovered! Self-heal brokenLinks flag on this issue immediately
+            const idx = issueIndexById.get(String(issue.id));
+            if (idx !== undefined) {
+              const remainingBroken = Array.isArray(issues[idx].brokenLinks)
+                ? issues[idx].brokenLinks.filter((u: string) => u !== brokenUrl)
+                : [];
+              issues[idx] = {
+                ...issues[idx],
+                brokenLinks: remainingBroken,
+                hasBrokenLinks: remainingBroken.length > 0,
+                lastLinkCheckAt: getKSTISOString()
+              };
+              healedRecoveredLinks++;
+            }
+            skipped.push({ issueId: issue.id, brokenUrl, reason: `원본 URL이 현재 HTTP ${origCheck.status}로 정상 응답하여 자동 복구 처리되었습니다.` });
+            continue;
+          }
+
+          const searchPrompt = [
+            `Find 1-3 currently active official Microsoft Learn or Microsoft Support documentation URLs (learn.microsoft.com or support.microsoft.com) that replace this broken reference link for a Windows troubleshooting article.`,
+            `Issue Code: ${issue.code || 'N/A'}`,
+            `Issue Title: ${issue.title || issue.title_en || ''}`,
+            `Category: ${issue.category || ''}`,
+            `Symptoms: ${String(issue.symptoms || '').slice(0, 260)}`,
+            `Broken URL: ${brokenUrl}`,
+            `Return strict JSON ONLY: { "candidates": [ { "url": "https://learn.microsoft.com/...", "title": "Official Page Title", "reason": "Korean 1-sentence reason" } ] }`
+          ].join('\n');
+
+          const aiRes = await executeServerGeminiCall(searchPrompt, {
+            model: 'gemini-4-hydrogen',
+            enableSearch: true,
+            workloadType: 'heavy-grounded',
+            config: { responseMimeType: 'application/json' }
+          });
+
+          const parsed = parseAiJson(aiRes.text || '');
+          const rawCandidates: Array<{ url: string; title?: string; reason?: string }> = Array.isArray(parsed?.candidates)
+            ? parsed.candidates
+            : [];
+
+          // Fallback regex URL extraction if AI returned prose with official URLs
+          if (rawCandidates.length === 0 && aiRes.text) {
+            const urlMatches = aiRes.text.match(/https:\/\/(?:learn|support|answers|techcommunity)\.microsoft\.com\/[^\s"'<>)]+/gi) || [];
+            for (const u of urlMatches) {
+              rawCandidates.push({ url: u, title: 'Microsoft Official Documentation' });
+            }
+          }
+
+          let verifiedCandidate: { url: string; title: string; status: number | null; reason: string } | null = null;
+          for (const cand of rawCandidates) {
+            if (!cand?.url || !isSafeExternalHttpUrl(cand.url) || !isOfficialMicrosoftDomain(cand.url)) continue;
+            const check = await verifyUrlWithStatus(cand.url);
+            const resolvedUrl = check.finalUrl || cand.url;
+            if (check.reachable && isSafeExternalHttpUrl(resolvedUrl) && isOfficialMicrosoftDomain(resolvedUrl)) {
+              verifiedCandidate = {
+                url: resolvedUrl,
+                title: String(cand.title || 'Microsoft Official Support').slice(0, 140),
+                status: check.status,
+                reason: String(cand.reason || 'Google Search Grounding + 서버 HTTP 200 도달 검증 통과').slice(0, 220)
+              };
+              break;
+            }
+          }
+
+          if (verifiedCandidate) {
+            const proposal = {
+              id: `lrp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              issueId: String(issue.id),
+              issueCode: String(issue.code || ''),
+              issueTitle: String(issue.title || ''),
+              originalUrl: brokenUrl,
+              originalHttpStatus: origCheck.status,
+              proposedUrl: verifiedCandidate.url,
+              proposedTitle: verifiedCandidate.title,
+              verifiedHttpStatus: verifiedCandidate.status,
+              groundingDomain: new URL(verifiedCandidate.url).hostname,
+              reason: verifiedCandidate.reason,
+              status: 'pending' as const,
+              checkedAt: getKSTISOString()
+            };
+            newlyCreated.push(proposal);
+          } else {
+            skipped.push({
+              issueId: issue.id,
+              brokenUrl,
+              reason: 'HTTP 200 도달 검증을 통과한 공식 Microsoft URL 후보를 찾지 못했습니다.'
+            });
+          }
+        } catch (itemErr: any) {
+          skipped.push({
+            issueId: issue.id,
+            brokenUrl,
+            reason: itemErr?.message || 'AI 탐색 중 오류 발생'
+          });
+        }
+      }
+
+      if (healedRecoveredLinks > 0) {
+        writeLocalCollection('issues', issues);
+      }
+
+      const mergedProposals = [...newlyCreated, ...existingProposals].slice(0, 500);
+      writeLinkRepairProposals(mergedProposals);
+
+      res.json({
+        success: true,
+        processedCount: workItems.length,
+        createdCount: newlyCreated.length,
+        created: newlyCreated,
+        skipped
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Official URL discovery failed" });
+    }
+  });
+
+  app.post("/api/admin/links/apply", requireAdmin, async (req, res) => {
+    try {
+      const { proposalId, action = 'approve', overrideUrl, approveAllPending = false } = req.body || {};
+      const issues = readLocalCollection('issues');
+      const proposals = readLinkRepairProposals();
+      const nowIso = getKSTISOString();
+
+      const targetIds = approveAllPending
+        ? proposals.filter((p: any) => p.status === 'pending').map((p: any) => p.id)
+        : (proposalId ? [String(proposalId)] : []);
+
+      if (targetIds.length === 0) {
+        return res.status(400).json({ success: false, error: "적용할 교정 제안이 지정되지 않았습니다." });
+      }
+
+      if (overrideUrl && (!isSafeExternalHttpUrl(overrideUrl) || !isOfficialMicrosoftDomain(overrideUrl))) {
+        return res.status(400).json({
+          success: false,
+          error: "수동 교정 URL은 유효한 공식 Microsoft 도메인(learn.microsoft.com / support.microsoft.com 등)이어야 합니다."
+        });
+      }
+
+      let appliedCount = 0;
+      let rejectedCount = 0;
+      const issueIndexById = new Map<string, number>();
+      issues.forEach((it: any, idx: number) => {
+        if (it?.id) issueIndexById.set(String(it.id), idx);
+      });
+
+      const updatedProposals = proposals.map((prop: any) => {
+        if (!targetIds.includes(prop.id)) return prop;
+        if (action === 'reject') {
+          rejectedCount++;
+          return { ...prop, status: 'rejected', resolvedAt: nowIso };
+        }
+        const replacementUrl = (overrideUrl && !approveAllPending) ? String(overrideUrl).trim() : prop.proposedUrl;
+        const issueIdx = issueIndexById.get(String(prop.issueId));
+        if (issueIdx !== undefined) {
+          const targetIssue = issues[issueIdx];
+          const nextSourceUrls = Array.isArray(targetIssue.sourceUrls)
+            ? Array.from(new Set(targetIssue.sourceUrls.map((u: string) => u === prop.originalUrl ? replacementUrl : u)))
+            : [replacementUrl];
+          const nextBrokenLinks = Array.isArray(targetIssue.brokenLinks)
+            ? targetIssue.brokenLinks.filter((u: string) => u !== prop.originalUrl)
+            : [];
+          issues[issueIdx] = {
+            ...targetIssue,
+            sourceUrls: nextSourceUrls,
+            brokenLinks: nextBrokenLinks,
+            hasBrokenLinks: nextBrokenLinks.length > 0,
+            lastLinkCheckAt: nowIso,
+            updatedAt: nowIso
+          };
+          appliedCount++;
+        }
+        return {
+          ...prop,
+          proposedUrl: replacementUrl,
+          status: 'approved',
+          resolvedAt: nowIso
+        };
+      });
+
+      if (appliedCount > 0) {
+        writeLocalCollection('issues', issues);
+      }
+      writeLinkRepairProposals(updatedProposals);
+
+      addLocalLog("logs_admin", {
+        action: action === 'reject' ? 'link_repair_reject' : 'link_repair_apply',
+        target: 'issues_source_urls',
+        details: action === 'reject'
+          ? `참고 링크 교정 제안 ${rejectedCount}건 보류/거부 처리`
+          : `공식 Microsoft 참고 링크 ${appliedCount}건 교정 반영 완료`,
+        severity: 'info',
+        timestamp: nowIso,
+        admin: 'ADMIN'
+      });
+
+      if (appliedCount > 0) {
+        await logSyncEvent({
+          type: 'success',
+          source: 'link-repair-workbench',
+          message: `깨진 참고 링크 ${appliedCount}건을 검증된 공식 Microsoft URL로 교정 반영했습니다.`
+        });
+      }
+
+      res.json({
+        success: true,
+        appliedCount,
+        rejectedCount,
+        proposals: updatedProposals
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Failed to apply link repair" });
     }
   });
 
@@ -9968,6 +10864,34 @@ jobs:
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // PowerShell Pre-Flight Safety Audit & Rollback Wrapper Endpoint
+  app.post("/api/scripts/preflight", rateLimitPublicLogs, (req, res) => {
+    try {
+      const { script, issueCode, includeRollback = true } = req.body || {};
+      if (typeof script !== 'string' || !script.trim()) {
+        return res.status(400).json({ success: false, error: "Valid PowerShell script string is required" });
+      }
+      if (script.length > 64000) {
+        return res.status(400).json({ success: false, error: "Script exceeds 64KB safety limit" });
+      }
+      const report = evaluatePreFlightSafety(script);
+      const compiledScript = includeRollback
+        ? compileScriptWithRollback(script, {
+            issueCode: typeof issueCode === 'string' ? issueCode : 'WinFix',
+            includeRestorePoint: true,
+            includeRegistryBackup: true
+          })
+        : script;
+      res.json({
+        success: true,
+        report,
+        compiledScript
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || "Pre-flight evaluation failed" });
     }
   });
 

@@ -35,13 +35,16 @@ When an IP exceeds the allowed threshold within the time window, the server retu
 
 ---
 
-## 3. Administrative Route Access Controls
+## 3. Administrative Route Access Controls, Webhook Signing & URL Safeguards
 
 All administrative endpoints are guarded by the `requireAdmin` Express middleware (`Zero Cloud DB` architecture):
 1. Extracts the HTTP `Authorization: Bearer <SESSION_TOKEN>` header sent from the client.
 2. Verifies the token against persisted server-side session records (`data/admin_sessions.json`), expiration timestamps, and verified admin user roles (`data/users.json` / `ADMIN_EMAILS`).
 3. Enforces secret isolation: plaintext GitHub PATs, Private Vault encryption keys, SMTP passwords, and AI API keys remain server-side only (masked as `'••••••••'` in client API responses).
 4. Rejects unauthorized or missing token requests with HTTP `401 Unauthorized` or `403 Forbidden`.
+5. **Webhook Raw-Body HMAC-SHA256 Verification**: `POST /api/github/sync` and `POST /api/github/webhook/heartbeat` verify `x-winfix-signature-256` (`sha256=<hex>`) over exact `req.rawBody` bytes using `crypto.timingSafeEqual` and record outcomes in `data/webhook_events.json`.
+6. **Outbound URL & Redirect Hop Validation**: Server link scanning and official Microsoft URL repair (`POST /api/admin/links/*`) validate every redirect hop manually (`fetchWithValidatedRedirects`) against private/loopback/IPv6 ranges and enforce official `microsoft.com` domain allowlists.
+7. **PowerShell Pre-Flight AST+Lint & Auto-Rollback Wrapper (`POST /api/scripts/preflight`)**: Evaluates scripts before copy/sandbox execution and wraps approved scripts with non-fatal `Checkpoint-Computer` Restore Point creation and automatic `reg.exe export` backups (`Restore_Registry.cmd`).
 
 ---
 

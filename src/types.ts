@@ -42,12 +42,14 @@ export interface FirestoreErrorInfo {
  * AI Response Schema for Troubleshooting Wizard
  */
 export interface TroubleshootingResult {
+  code?: string;
   diagnosis: string;
   isScriptApplicable: boolean;
   script: string;
   scriptSafetyWarning: string;
   manualSteps: string[];
   sourceUrls: string[];
+  brokenLinks?: string[];
 }
 
 /**
@@ -82,6 +84,64 @@ export interface KnownIssue {
   hasBrokenLinks?: boolean;
   brokenLinks?: string[];
   lastLinkCheckAt?: string;
+  linkRepairProposals?: LinkRepairProposal[];
+}
+
+export interface LinkRepairProposal {
+  id: string;
+  issueId: string;
+  issueCode?: string;
+  issueTitle?: string;
+  originalUrl: string;
+  originalHttpStatus?: number | null;
+  proposedUrl: string;
+  proposedTitle?: string;
+  verifiedHttpStatus?: number | null;
+  groundingDomain?: string;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  checkedAt: string;
+  resolvedAt?: string;
+}
+
+export interface WebhookTelemetryEvent {
+  id: string;
+  eventType: 'dataset-sync' | 'pages-deploy' | 'collector-heartbeat' | 'signature-rejected';
+  source: string;
+  status: 'success' | 'warning' | 'error';
+  signatureValid: boolean;
+  authMode: 'hmac-sha256' | 'cron-secret' | 'admin-bearer' | 'none';
+  httpStatus: number;
+  summary: string;
+  timestamp: string;
+  details?: Record<string, any>;
+}
+
+export interface TriangleNodeTelemetry {
+  id: 'localServer' | 'githubRepo' | 'githubPages' | 'sharedWebhook';
+  label: string;
+  status: 'healthy' | 'warning' | 'error' | 'unconfigured';
+  httpStatus?: number | null;
+  latencyMs?: number | null;
+  issueCount?: number | null;
+  lastSyncedAt?: string | null;
+  diagnosticCode?: string;
+  message: string;
+  targetUrl?: string;
+}
+
+export interface PreFlightSafetyReport {
+  safetyRating: 'SECURE' | 'LOW_RISK' | 'SUSPICIOUS' | 'HIGH_ALERT';
+  obfuscationScore: number;
+  lintQualityScore: number;
+  errorCount: number;
+  warningCount: number;
+  fixableCount: number;
+  detectedRegistryTargets: string[];
+  detectedCmdlets: string[];
+  hasRollbackPreamble: boolean;
+  isBlocked: boolean;
+  blockReasons: string[];
 }
 
 /**

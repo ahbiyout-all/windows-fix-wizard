@@ -31,8 +31,8 @@
    - 문제 발생 시 언제든지 특정 커밋으로 데이터를 롤백(Rollback)하거나 브랜치별로 격리 검증할 수 있습니다.
 3. **무제한 글로벌 CDN 배포**:
    - Git 저장소에 커밋된 파일은 GitHub Raw Content CDN(`raw.githubusercontent.com`) 또는 GitHub Pages(`*.github.io`)를 통해 전 세계 어디서든 지연 없이 직접 읽어올 수 있습니다.
-4. **듀얼 스토리지 자동 동기화 (Dual Storage Sync)**:
-   - 파일(Git)과 클라우드 DB(Firestore) 양쪽에 병렬 저장되므로 한쪽 서비스가 일시 중단되어도 서비스 무중단이 유지됩니다.
+4. **Zero Cloud DB & 3각 무손실 자동 동기화**:
+   - Git 저장소(`data/*.json`), GitHub Pages 정적 PWA, AI Studio Express 로컬 DB가 웹훅·Contents API로 병렬 동기화되므로 클라우드 DB 과금이나 일일 쿼터 소진 없이 24/7 무중단으로 유지됩니다.
 
 ---
 
@@ -41,23 +41,25 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Cron as ⏰ GitHub Actions Scheduler (매 6시간 / 수동)
+    participant Cron as ⏰ GitHub Actions Scheduler (매 3시간 / 수동)
     participant Runner as 🐧 Ubuntu Runner (Node.js 22 LTS)
     participant Gemini as 🤖 Google Gemini AI (Web Grounding)
     participant Git as 📦 GitHub Repo (data/issues.json)
-    participant Webhook as 📡 Live Web App (/api/github/sync)
-    participant DB as 🗄️ Firestore / Local DB
+    participant Webhook as 📡 Live App Webhook (/sync · /heartbeat)
+    participant Pages as 🌐 GitHub Pages PWA
 
     Cron->>Runner: 워크플로 트리거 (windows-fix-collector.yml)
     Runner->>Runner: git checkout & Node.js 22 의존성 설치
     Runner->>Gemini: 최신 Windows 10/11 오류 트렌드 및 해결책 요청 (기존 코드 제외)
     Gemini-->>Runner: Google Search 기반 검증된 해결책 + PowerShell 스크립트 반환
     Runner->>Runner: JSON 스키마 유효성 검증 & 중복 필터링 (Deduplication)
-    Runner->>Git: data/issues.json 누적 커밋 및 푸시 (GitOps Auto-Commit)
-    opt Live Webhook 활성화 시 (APP_WEBHOOK_URL 설정된 경우)
-        Runner->>Webhook: 신규 이슈 데이터 POST 전송 (HMAC / x-cron-secret)
-        Webhook->>DB: Firestore 및 서버 DB에 실시간 upsert
+    Runner->>Git: data/issues.json & github-feed.json 커밋/푸시 (GitOps)
+    opt Live Webhook 활성화 시 (APP_WEBHOOK_URL = ais-pre-*)
+        Runner->>Webhook: HMAC-SHA256 서명 기반 POST 전송 (/sync 또는 0건 /heartbeat)
+        Webhook->>Webhook: 로컬 data/*.json upsert & 감사 로그(webhook_events.json) 기록
     end
+    Git->>Pages: deploy-pages.yml 정적 PWA 배포 & pages-deploy 하트비트 통지
+```
     Runner->>Runner: GITHUB_STEP_SUMMARY 리포트 생성 및 실행 종료
 ```
 
@@ -260,7 +262,7 @@ INPUT_TOPIC="네트워크" BATCH_SIZE=2 npm run collect:github
 
 ---
 
-## 🎛️ 7. 앱 관리자(Admin) UI 연동 및 원격 제어 매뉴얼 (v3.110.0 최신)
+## 🎛️ 7. 앱 관리자(Admin) UI 연동 및 원격 제어 매뉴얼 (v3.111.0 최신)
 
 Windows Fix Wizard 웹 애플리케이션의 **관리자 대시보드 (Admin Dashboard)** > **`GitHub Actions & GitOps 자율 데이터 수집 센터`**에서 모든 기능을 브라우저 클릭만으로 원격 제어할 수 있습니다:
 
@@ -278,11 +280,12 @@ Windows Fix Wizard 웹 애플리케이션의 **관리자 대시보드 (Admin Das
 - **서버 모드(AI Studio 프리뷰)**: 부팅 및 브라우저 탭 복귀(`visibilitychange`) 시 `/api/github/auto-integrate`가 GitHub Contents API(`no-cache`)로 `data/issues.json`, `data/github-feed.json`, `data/github-collector-options.json`을 CDN 지연 없이 자동 병합합니다.
 - **GitHub Pages 정적 모드**: Workbox PWA 서비스 워커가 `/data/*.json`을 `NetworkOnly`로 조회하며, 사용자 지정 저장소·브랜치 기준으로 `data/issues.json`과 `data/github-feed.json`을 IndexedDB 캐시에 병합합니다.
 
-### 4) 실시간 GitHub Actions 상태 배지 모니터링
-- 관리자 패널에서 **자율 수집 엔진 (`windows-fix-collector.yml`)** 및 **웹 배포 워크플로 (`deploy-pages.yml`)**의 최근 실행 상태, 소요 시간, 25건 히스토리 차트를 실시간으로 확인할 수 있습니다.
+### 4) 실시간 3각 연동 모니터 & HMAC-SHA256 웹훅 감사 로그
+- 관리자 패널의 **3각 연동 실시간 상태 모니터(`TriangleSyncMonitor`)**가 **로컬 서버 · GitHub 저장소 · GitHub Pages · 공유 앱 웹훅(`ais-pre-*`)** 4개 노드를 동시 프로브해 HTTP 상태, 응답 지연, 데이터 건수 차이, 미발행 404/로그인 HTML 게이트 여부를 진단합니다.
+- **자율 수집 엔진 (`windows-fix-collector.yml`)**과 **웹 배포 워크플로 (`deploy-pages.yml`)**가 보내는 `dataset-sync`, `collector-heartbeat`, `pages-deploy` 웹훅의 HMAC-SHA256(`x-winfix-signature-256`) 검증 이력을 실시간 테이블로 확인할 수 있습니다.
 
 ### 5) GitHub Pages 정적 웹사이트와의 연동
-- `deploy-pages.yml`은 `dist/data/`에 `issues.json`, `github-feed.json`, `ai-model-registry.json`, `github-collector-options.json` 4종을 함께 배포하여 정적 웹사이트(`https://ahbiyout-all.github.io/windows-fix-wizard/`)가 서버리스 환경에서도 100% 최신 데이터를 표시하도록 보장합니다.
+- `deploy-pages.yml`은 `dist/data/`에 `issues.json`, `github-feed.json`, `ai-model-registry.json`, `github-collector-options.json` 4종을 함께 배포하고, 완료 시 `/api/github/webhook/heartbeat`로 `pages-deploy` 이벤트를 보고해 정적 웹사이트(`https://ahbiyout-all.github.io/windows-fix-wizard/`)와 실시간 일치 상태를 유지합니다.
 
 ---
 
@@ -314,6 +317,9 @@ export interface KnownIssue {
   verificationStatus?: 'pending' | 'verified' | 'needs_update' | 'obsolete'; // AI 검증 상태
   aiFeedback?: string;            // AI 검증 피드백
   hasBrokenLinks?: boolean;       // 참고 링크 자동 점검 깨짐 여부 플래그
+  brokenLinks?: string[];         // HTTP 도달 불가 판정된 원본 참고 URL 목록
+  lastLinkCheckAt?: string;       // 최근 링크 유효성 점검 일시 (ISO 8601)
+  linkRepairProposals?: LinkRepairProposal[]; // 공식 Microsoft URL 교정 제안 내역
 }
 ```
 

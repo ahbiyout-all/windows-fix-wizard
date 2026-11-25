@@ -11,6 +11,7 @@
 import "dotenv/config";
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import {
   loadAiModelRegistry,
@@ -541,7 +542,7 @@ JSON Schema:
     fs.writeFileSync(feedFilePath, JSON.stringify(feedData, null, 2), 'utf-8');
     console.log(`📄 Wrote feed summary to ${feedFilePath}`);
 
-    // Optional Webhook Push to Live Web Application
+    // Optional Webhook Push to Live Web Application (HMAC-SHA256 signed)
     const webhookUrl = process.env.APP_WEBHOOK_URL;
     const cronSecret = process.env.CRON_SECRET;
 
@@ -549,22 +550,25 @@ JSON Schema:
       console.log(`\n📡 Transmitting new data to live app webhook: ${webhookUrl}...`);
       try {
         const syncEndpoint = webhookUrl.replace(/\/+$/, '') + '/api/github/sync';
+        const bodyStr = JSON.stringify({
+          issues: newIssues,
+          source: 'GitHub Actions Automated Collector',
+          feed: feedData
+        });
         const headers: Record<string, string> = {
           'Content-Type': 'application/json'
         };
         if (cronSecret) {
           headers['x-cron-secret'] = cronSecret;
+          const hmac = crypto.createHmac('sha256', cronSecret).update(bodyStr, 'utf8').digest('hex');
+          headers['x-winfix-signature-256'] = `sha256=${hmac}`;
         }
 
         const webhookRes = await fetch(syncEndpoint, {
           method: 'POST',
           signal: AbortSignal.timeout(15000),
           headers,
-          body: JSON.stringify({
-            issues: newIssues,
-            source: 'GitHub Actions Automated Collector',
-            feed: feedData
-          })
+          body: bodyStr
         });
 
         const rawWebhookText = await webhookRes.text();
@@ -594,6 +598,28 @@ JSON Schema:
     }
   } else {
     console.log('ℹ️ No new unique issues were discovered in this cycle.');
+    const webhookUrl = process.env.APP_WEBHOOK_URL;
+    const cronSecret = process.env.CRON_SECRET;
+    if (webhookUrl && webhookUrl.startsWith('http')) {
+      try {
+        const hbEndpoint = webhookUrl.replace(/\/+$/, '') + '/api/github/webhook/heartbeat';
+        const hbBody = JSON.stringify({
+          eventType: 'collector-heartbeat',
+          source: 'GitHub Actions Automated Collector',
+          summary: `수집 주기 완료 (${targetCategory}, 모델: ${successfulModel}) — 신규 중복 제외 0건`,
+          details: { targetCategory, modelUsed: successfulModel, totalIssues: existingIssues.length }
+        });
+        const hbHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (cronSecret) {
+          hbHeaders['x-cron-secret'] = cronSecret;
+          hbHeaders['x-winfix-signature-256'] = `sha256=${crypto.createHmac('sha256', cronSecret).update(hbBody, 'utf8').digest('hex')}`;
+        }
+        const hbRes = await fetch(hbEndpoint, { method: 'POST', signal: AbortSignal.timeout(10000), headers: hbHeaders, body: hbBody });
+        console.log(`💓 Collector heartbeat sent (${hbRes.status})`);
+      } catch (hbErr: any) {
+        console.warn(`⚠️ Collector heartbeat skipped:`, hbErr?.message);
+      }
+    }
   }
 
   // GitHub Actions Step Summary

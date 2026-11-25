@@ -22,7 +22,6 @@ import {
   TrendingUp,
   AlertTriangle,
   RefreshCw,
-  HardDrive,
   BarChart2,
   Activity,
   Info,

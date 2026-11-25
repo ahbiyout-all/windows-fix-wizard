@@ -17,8 +17,8 @@ import {
   Line
 } from 'recharts';
 import { 
-  Activity, Clock, ShieldCheck, AlertTriangle, Key, Cpu, 
-  TrendingUp, BarChart2, PieChart as PieIcon, Zap, CheckCircle2, LineChart as LucideLineChart, Rocket
+  Activity, Clock, ShieldCheck, Key,
+  TrendingUp, BarChart2, Rocket
 } from 'lucide-react';
 import { DeploymentDashboardWidget } from './DeploymentDashboardWidget';
 

@@ -1,0 +1,101 @@
+[
+  {
+    "id": "wh-1795607028152-uyn9k",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "hmac-sha256",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid webhook HMAC-SHA256 signature",
+    "timestamp": "2026-11-25T20:43:48.152+09:00"
+  },
+  {
+    "id": "wh-1795606997699-1midh",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "cron-secret",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid or missing secret header 'x-cron-secret'",
+    "timestamp": "2026-11-25T20:43:17.699+09:00"
+  },
+  {
+    "id": "wh-1795606997525-7ok07",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "cron-secret",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid or missing secret header 'x-cron-secret'",
+    "timestamp": "2026-11-25T20:43:17.525+09:00"
+  },
+  {
+    "id": "wh-1795606583401-yn05x",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "hmac-sha256",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid webhook HMAC-SHA256 signature",
+    "timestamp": "2026-11-25T20:36:23.401+09:00"
+  },
+  {
+    "id": "wh-1795606536781-gd5hk",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "cron-secret",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid or missing secret header 'x-cron-secret'",
+    "timestamp": "2026-11-25T20:35:36.781+09:00"
+  },
+  {
+    "id": "wh-1795606536710-a6wwj",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "cron-secret",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid or missing secret header 'x-cron-secret'",
+    "timestamp": "2026-11-25T20:35:36.710+09:00"
+  },
+  {
+    "id": "wh-1795604973995-l3d5n",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "cron-secret",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid or missing secret header 'x-cron-secret'",
+    "timestamp": "2026-11-25T20:09:33.995+09:00"
+  },
+  {
+    "id": "wh-1795604971863-70al0",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "cron-secret",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid or missing secret header 'x-cron-secret'",
+    "timestamp": "2026-11-25T20:09:31.863+09:00"
+  },
+  {
+    "id": "wh-1795604971794-vjq03",
+    "eventType": "signature-rejected",
+    "source": "curl/7.88.1",
+    "status": "error",
+    "signatureValid": false,
+    "authMode": "cron-secret",
+    "httpStatus": 401,
+    "summary": "Unauthorized: Invalid or missing secret header 'x-cron-secret'",
+    "timestamp": "2026-11-25T20:09:31.794+09:00"
+  }
+]

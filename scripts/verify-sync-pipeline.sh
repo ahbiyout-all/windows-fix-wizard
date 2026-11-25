@@ -370,6 +370,58 @@ if [[ "$WITH_BUILD" == "1" ]]; then
 fi
 
 echo ""
+echo "[9/9] Pre-Flight Safety Wrapper, Link Workbench & HMAC Webhook Guards"
+PF_BODY="$TMP_DIR/preflight.body"
+PF_HDR="$TMP_DIR/preflight.hdr"
+PF_CODE="$(http_req POST "${BASE_URL}/api/scripts/preflight" "$PF_BODY" "$PF_HDR" -H "Content-Type: application/json" -d '{"script":"Set-ItemProperty -Path \"HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\" -Name WUServer -Value \"\"","issueCode":"0x8024402f","includeRollback":true}')"
+if [[ "$PF_CODE" == "200" ]] && assert_json_expr "$PF_BODY" 'd.success === true && d.report && d.report.detectedRegistryTargets.length >= 1 && /WINFIX_ROLLBACK_PREAMBLE_START/.test(d.compiledScript || "") && /0x8024402f/.test(d.compiledScript || "")'; then
+  pass "POST /api/scripts/preflight evaluated AST/Lint & compiled labeled rollback preamble"
+else
+  fail "POST /api/scripts/preflight failed safety/rollback assertions (HTTP ${PF_CODE})"
+fi
+
+PF_BAD_BODY="$TMP_DIR/preflight_bad.body"
+PF_BAD_HDR="$TMP_DIR/preflight_bad.hdr"
+PF_BAD_CODE="$(http_req POST "${BASE_URL}/api/scripts/preflight" "$PF_BAD_BODY" "$PF_BAD_HDR" -H "Content-Type: application/json" -d '{"script":"   "}')"
+if [[ "$PF_BAD_CODE" == "400" ]] && assert_json_expr "$PF_BAD_BODY" 'd.success === false'; then
+  pass "POST /api/scripts/preflight rejects empty script with HTTP 400"
+else
+  fail "POST /api/scripts/preflight empty check expected 400, got HTTP ${PF_BAD_CODE}"
+fi
+
+for route in \
+  "GET:/api/github/triangle-status" \
+  "GET:/api/admin/links/proposals" \
+  "POST:/api/admin/links/scan" \
+  "POST:/api/admin/links/propose-repairs" \
+  "POST:/api/admin/links/apply"
+do
+  method="${route%%:*}"
+  path="${route#*:}"
+  V_BODY="$TMP_DIR/v9_$(echo "$path" | tr '/:' '_').body"
+  V_HDR="$TMP_DIR/v9_$(echo "$path" | tr '/:' '_').hdr"
+  if [[ "$method" == "POST" ]]; then
+    V_CODE="$(http_req POST "${BASE_URL}${path}" "$V_BODY" "$V_HDR" -H "Content-Type: application/json" -d '{}')"
+  else
+    V_CODE="$(http_req GET "${BASE_URL}${path}" "$V_BODY" "$V_HDR")"
+  fi
+  if [[ "$V_CODE" == "401" ]] && assert_json_expr "$V_BODY" 'd.success === false'; then
+    pass "${method} ${path} unauthenticated guard -> HTTP 401"
+  else
+    fail "${method} ${path} expected HTTP 401, got HTTP ${V_CODE}"
+  fi
+done
+
+HB_BAD_BODY="$TMP_DIR/hb_bad.body"
+HB_BAD_HDR="$TMP_DIR/hb_bad.hdr"
+HB_BAD_CODE="$(http_req POST "${BASE_URL}/api/github/webhook/heartbeat" "$HB_BAD_BODY" "$HB_BAD_HDR" -H "Content-Type: application/json" -H "x-winfix-signature-256: sha256=0000000000000000000000000000000000000000000000000000000000000000" -d '{"eventType":"collector-heartbeat"}')"
+if [[ "$HB_BAD_CODE" == "401" ]] && assert_json_expr "$HB_BAD_BODY" 'd.success === false'; then
+  pass "POST /api/github/webhook/heartbeat rejects invalid HMAC signature with HTTP 401"
+else
+  fail "POST /api/github/webhook/heartbeat invalid HMAC expected 401, got HTTP ${HB_BAD_CODE}"
+fi
+
+echo ""
 echo "========================================================================"
 printf " Summary: PASS=%d | WARN=%d | FAIL=%d\n" "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
 echo "========================================================================"

@@ -73,3 +73,37 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           artifact_name: github-pages
+
+      - name: 📡 Notify Live App Webhook (Pages Deployed)
+        if: ${{ secrets.APP_WEBHOOK_URL != '' && secrets.CRON_SECRET != '' }}
+        env:
+          APP_WEBHOOK_URL: ${{ secrets.APP_WEBHOOK_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          node -e '
+            const crypto = require("crypto");
+            const base = (process.env.APP_WEBHOOK_URL || "").replace(/\/+$/, "");
+            const secret = process.env.CRON_SECRET || "";
+            if (!base.startsWith("http") || !secret) process.exit(0);
+            const body = JSON.stringify({
+              eventType: "pages-deploy",
+              source: "GitHub Pages Deploy Workflow",
+              summary: "GitHub Pages 정적 웹 및 데이터셋 배포 완료 (" + (process.env.PAGE_URL || "github.io") + ")",
+              details: { pageUrl: process.env.PAGE_URL || "", commit: process.env.GITHUB_SHA || "" }
+            });
+            const sig = "sha256=" + crypto.createHmac("sha256", secret).update(body, "utf8").digest("hex");
+            fetch(base + "/api/github/webhook/heartbeat", {
+              method: "POST",
+              signal: AbortSignal.timeout(10000),
+              headers: {
+                "Content-Type": "application/json",
+                "x-cron-secret": secret,
+                "x-winfix-signature-256": sig
+              },
+              body
+            }).then(async (r) => {
+              const t = await r.text();
+              console.log("Pages deploy webhook status:", r.status, t.slice(0, 180));
+            }).catch((e) => console.warn("Pages webhook skipped:", e.message));
+          ' || true

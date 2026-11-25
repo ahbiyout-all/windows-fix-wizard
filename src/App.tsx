@@ -3,9 +3,9 @@ import JSZip from 'jszip';
 import { 
   Terminal, Search, AlertCircle, AlertOctagon, Wrench, CheckCircle2, Copy, LayoutList,
   ExternalLink, ShieldCheck, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, ChevronsUp, ChevronsDown, Info, BookOpen, 
-  RefreshCw, Wifi, Monitor, ShoppingBag, Key, Shield, Database, Globe, LogIn, LogOut, AlertTriangle, Moon, Sun, Download, Upload, Edit2, Trash2, X, XCircle, Save, ThumbsUp, ThumbsDown, FileCheck, Sparkles, Flame, Settings, Cloud, Zap, Layers, ShieldAlert, Check, ArrowRight, Activity, Sliders, Mail, RotateCcw,
-  Heart, Bookmark, BookmarkCheck, BookmarkX, Clock, History, User as UserIcon, Filter, Users, UserCheck, Smartphone, Laptop, Tablet, Ban, Eye, EyeOff, Server, Bot, HelpCircle, LifeBuoy, Menu,
-  Github, GitBranch, Play, Code2, Rocket, ArrowUpCircle, Building2, Mic, MicOff, HardDrive, Volume2, Keyboard, Tv, Cpu,
+  RefreshCw, Wifi, Monitor, ShoppingBag, Key, Shield, Database, Globe, LogIn, LogOut, AlertTriangle, Moon, Sun, Download, Upload, Edit2, Trash2, X, XCircle, Save, ThumbsUp, ThumbsDown, FileCheck, Sparkles, Flame, Settings, Zap, Layers, ShieldAlert, Check, ArrowRight, Activity, Sliders, RotateCcw,
+  Heart, Bookmark, BookmarkCheck, BookmarkX, Clock, History, Filter, Users, UserCheck, Smartphone, Laptop, Tablet, Ban, Eye, EyeOff, Server, Bot, HelpCircle, LifeBuoy, Menu,
+  Github, GitBranch, Play, Code2, Rocket, Building2, Mic, MicOff, HardDrive, Volume2, Keyboard, Tv, Cpu,
   Archive, FileText, Printer, CheckSquare, Square, Hash, Plus, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -29,11 +29,8 @@ const where = (...args: any[]): any => ({});
 const writeBatch = (...args: any[]): any => ({ commit: async () => {}, set: () => {}, update: () => {}, delete: () => {} });
 const getCountFromServer = async (...args: any[]): Promise<any> => ({ data: () => ({ count: 0 }) });
 const signOut = async (...args: any[]): Promise<any> => {};
-const onAuthStateChanged = (authObj: any, callback: any) => { callback(null); return () => {}; };
 type User = any;
 type QueryDocumentSnapshot = any;
-const createUserWithEmailAndPassword = async (...args: any[]): Promise<any> => ({ user: null });
-const signInWithEmailAndPassword = async (...args: any[]): Promise<any> => ({ user: null });
 import { 
   OperationType, 
   FirestoreErrorInfo, 
@@ -75,6 +72,10 @@ import {
   type ServerKeyPresence,
   type ProbeTestResult
 } from './components/FreeAiExplorerAndKeyPanel';
+import { SymptomDiagnosticWizard } from './components/SymptomDiagnosticWizard';
+import { TriangleSyncMonitor } from './components/TriangleSyncMonitor';
+import { LinkRepairWorkbench } from './components/LinkRepairWorkbench';
+import { compileScriptWithRollback, stripRollbackPreamble, evaluatePreFlightSafety } from './utils/psRollback';
 
 interface AppErrorLog {
   id?: string;
@@ -727,7 +728,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.110.0";
+const APP_VERSION = "3.111.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1253,8 +1254,6 @@ jobs:
 `;
 };
 
-const GITHUB_WORKFLOW_YAML = buildCollectorWorkflowYaml(DEFAULT_COLLECTOR_OPTIONS);
-
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1729,6 +1728,9 @@ export default function App() {
   const [result, setResult] = useState<TroubleshootingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedScript, setCopiedScript] = useState<string | null>(null);
+  const [wizardRollbackEnabled, setWizardRollbackEnabled] = useState<boolean>(true);
+  const [wizardGuidanceMode, setWizardGuidanceMode] = useState<'guided' | 'quick'>('guided');
+  const [wizardSafetyOverride, setWizardSafetyOverride] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>('전체');
   const [selectedVersionFilter, setSelectedVersionFilter] = useState<string>('전체');
   const [selectedHardwareFilter, setSelectedHardwareFilter] = useState<string>('all');
@@ -11730,6 +11732,7 @@ export default function App() {
           ]);
 
       return {
+        code: bestMatch.code,
         diagnosis: `[${isEn ? 'Microsoft Knowledge Base' : '내장 Microsoft 해결 가이드'}: ${isEn ? (bestMatch.title_en || bestMatch.title) : bestMatch.title}]\n${isEn ? (bestMatch.symptoms_en || bestMatch.symptoms) : (bestMatch.symptoms || bestMatch.title)}`,
         isScriptApplicable: !!bestMatch.script,
         script: bestMatch.script || "",
@@ -11737,23 +11740,25 @@ export default function App() {
           ? (isEn ? "Execute with Administrator privileges in PowerShell after creating a system restore point." : "시스템 복원 지점을 생성한 후 관리자 권한 PowerShell에서 신중하게 실행하십시오.")
           : (isEn ? "No automated script required." : "스크립트가 제공되지 않는 가이드입니다."),
         manualSteps: steps,
-        sourceUrls: bestMatch.sourceUrls && bestMatch.sourceUrls.length > 0 ? bestMatch.sourceUrls : ["https://support.microsoft.com/windows"]
+        sourceUrls: bestMatch.sourceUrls && bestMatch.sourceUrls.length > 0 ? bestMatch.sourceUrls : ["https://support.microsoft.com/windows"],
+        brokenLinks: bestMatch.brokenLinks
       };
     }
 
     return null;
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const executeDiagnosis = async (targetQuery: string, targetVersion: string = version) => {
+    const cleanQuery = targetQuery.trim();
+    if (!cleanQuery) return;
 
     // Record activity
-    recordUserActivity('diagnosis', undefined, query, { windowsVersion: version });
+    recordUserActivity('diagnosis', undefined, cleanQuery, { windowsVersion: targetVersion });
 
     setLoading(true);
     setError(null);
     setResult(null);
+    setWizardSafetyOverride(false);
 
     let parsedResult: TroubleshootingResult | null = null;
 
@@ -11762,12 +11767,12 @@ export default function App() {
         ? `\n\n[Advanced Knowledge Base - High Priority]\n${aiOptimizedKnowledge}\n\nApply the patterns above to your diagnosis if relevant.`
         : '';
 
-      const promptData = `Windows Version: ${version}\nError/Symptom: ${query}${knowledgeContext}\n\nPlease provide the official Microsoft solution or highly trusted community solutions for this specific error. Provide a clear diagnosis, a safe PowerShell fix script (if applicable).\n\nCRITICAL SAFETY RULES:\n1. If you provide a script, you MUST explicitly detail all potential risks in the 'scriptSafetyWarning' field. This includes registry modifications, system service changes, file deletions, or security settings changes.\n2. If a script is too risky or not applicable, leave the 'script' field empty and set 'isScriptApplicable' to false, then explain why in 'scriptSafetyWarning'.\n3. Ensure any provided script is safe, effective, and follows best practices.\n\nReturn strictly valid raw JSON with keys: {"title": string, "diagnosis": string, "isScriptApplicable": boolean, "script": string, "scriptSafetyWarning": string, "manualSteps": string[], "sources": [{"title": string, "url": string}]}. Respond in ${language === 'en' ? 'English' : 'Korean'}.`;
+      const promptData = `Windows Version: ${targetVersion}\nError/Symptom: ${cleanQuery}${knowledgeContext}\n\nPlease provide the official Microsoft solution or highly trusted community solutions for this specific error. Provide a clear diagnosis, a safe PowerShell fix script (if applicable).\n\nCRITICAL SAFETY RULES:\n1. If you provide a script, you MUST explicitly detail all potential risks in the 'scriptSafetyWarning' field. This includes registry modifications, system service changes, file deletions, or security settings changes.\n2. If a script is too risky or not applicable, leave the 'script' field empty and set 'isScriptApplicable' to false, then explain why in 'scriptSafetyWarning'.\n3. Ensure any provided script is safe, effective, and follows best practices.\n\nReturn strictly valid raw JSON with keys: {"title": string, "diagnosis": string, "isScriptApplicable": boolean, "script": string, "scriptSafetyWarning": string, "manualSteps": string[], "sources": [{"title": string, "url": string}]}. Respond in ${language === 'en' ? 'English' : 'Korean'}.`;
 
       const diagResp = await fetch('/api/ai/diagnose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptData, query, version })
+        body: JSON.stringify({ prompt: promptData, query: cleanQuery, version: targetVersion })
       });
 
       if (diagResp.ok) {
@@ -11784,16 +11789,24 @@ export default function App() {
 
     // Seamless Local Knowledge Base Fallback
     if (!parsedResult) {
-      parsedResult = findLocalTroubleshootingGuide(query, version);
+      parsedResult = findLocalTroubleshootingGuide(cleanQuery, targetVersion);
     }
 
     if (parsedResult) {
       setResult(parsedResult);
-      await logSearch(query, version);
+      await logSearch(cleanQuery, targetVersion);
+      setTimeout(() => {
+        wizardResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
     } else {
       setError(language === 'en' ? "No solution found. Please check the Guidebook tab for categorized issues." : "해당 증상에 대한 해결책을 찾지 못했습니다. 가이드북 탭에서 관련 증상을 확인해 보세요.");
     }
     setLoading(false);
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeDiagnosis(query, version);
   };
 
   const handleGeneratePdfReport = () => {
@@ -12909,7 +12922,92 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
           >
-            {/* Search Section */}
+            {/* Wizard Mode Switcher + 4-Step Symptom Funnel / Direct Search */}
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div className="inline-flex rounded-xl bg-slate-200/80 dark:bg-slate-800/80 p-1 border border-slate-300/60 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => setWizardGuidanceMode('guided')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    wizardGuidanceMode === 'guided'
+                      ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {language === 'en' ? 'Guided 4-Step Wizard' : '증상 선택형 4단계 진단'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardGuidanceMode('quick')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    wizardGuidanceMode === 'quick'
+                      ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  {language === 'en' ? 'Direct Code / Voice Search' : '오류코드 · 음성 직접 검색'}
+                </button>
+              </div>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                {language === 'en'
+                  ? 'Pre-flight AST & Rollback protection active'
+                  : '복구 스크립트 AST·린트 사전 검증 및 자동 롤백 포인트 보호 활성화됨'}
+              </span>
+            </div>
+
+            {wizardGuidanceMode === 'guided' ? (
+              <div className="mb-8">
+                <SymptomDiagnosticWizard
+                  language={language}
+                  version={version}
+                  onChangeVersion={setVersion}
+                  windowsVersions={WINDOWS_VERSIONS}
+                  issuesPool={myLabIssuesPool}
+                  isLoadingAi={loading}
+                  onSelectIssueSolution={(issue, includeRollback) => {
+                    const isEn = language === 'en';
+                    const localizedSteps =
+                      isEn && issue.manualSteps_en && issue.manualSteps_en.length > 0
+                        ? issue.manualSteps_en
+                        : issue.manualSteps || [];
+                    setWizardRollbackEnabled(includeRollback);
+                    setWizardSafetyOverride(false);
+                    setError(null);
+                    setQuery(issue.code ? `${issue.code} ${isEn ? (issue.title_en || issue.title) : issue.title}` : issue.title);
+                    setResult({
+                      code: issue.code,
+                      diagnosis: `[${isEn ? 'Guided KB Match' : '증상 마법사 검증 가이드'}: ${issue.code ? `${issue.code} · ` : ''}${isEn ? (issue.title_en || issue.title) : issue.title}]\n${isEn ? (issue.symptoms_en || issue.symptoms) : (issue.symptoms || issue.title)}`,
+                      isScriptApplicable: Boolean(issue.script && issue.script.trim().length > 0),
+                      script: issue.script || '',
+                      scriptSafetyWarning: issue.script
+                        ? (isEn
+                            ? 'Pre-flight validated PowerShell fix. Keep Auto-Rollback enabled to create a System Restore Point & automatic registry backup before changes.'
+                            : '사전 안전 검증(AST+린트)이 연동된 PowerShell 스크립트입니다. 자동 롤백 포인트 생성을 켜두면 실행 전 시스템 복원 지점과 레지스트리 백업이 자동 생성됩니다.')
+                        : (isEn ? 'Manual steps recommended for this symptom.' : '자동 스크립트가 필요 없는 수동 점검 가이드입니다.'),
+                      manualSteps: localizedSteps,
+                      sourceUrls: issue.sourceUrls && issue.sourceUrls.length > 0 ? issue.sourceUrls : ['https://support.microsoft.com/windows'],
+                      brokenLinks: issue.brokenLinks
+                    });
+                    void logSearch(issue.code || issue.title, version);
+                    setTimeout(() => {
+                      wizardResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 120);
+                  }}
+                  onRunAiDiagnosis={(structuredPrompt, includeRollback) => {
+                    setWizardRollbackEnabled(includeRollback);
+                    setQuery(structuredPrompt);
+                    void executeDiagnosis(structuredPrompt, version);
+                  }}
+                  onSendToSandbox={(scriptText) => {
+                    window.dispatchEvent(new CustomEvent('uwes-set-sandbox-script', { detail: { script: scriptText } }));
+                    setActiveTab('powershell-sandbox');
+                  }}
+                />
+              </div>
+            ) : (
+            /* Direct Search Section */
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 mb-8">
               <form onSubmit={handleSearch} className="flex flex-col gap-4">
                 <div className="flex flex-col md:flex-row gap-4">
@@ -13017,6 +13115,7 @@ export default function App() {
                 </div>
               </form>
             </div>
+            )}
 
             {/* WIZARD TAB AD */}
             <div className="bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 mb-8">
@@ -13139,49 +13238,58 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Script Card */}
-                  {result.script && result.isScriptApplicable && (
+                  {/* Script Card with Pre-Flight Safety Gate & Auto-Rollback Wrapper */}
+                  {result.script && result.isScriptApplicable && (() => {
+                    const rawWizardScript = stripRollbackPreamble(result.script);
+                    const wizardSafetyReport = evaluatePreFlightSafety(rawWizardScript);
+                    const effectiveWizardScript = wizardRollbackEnabled
+                      ? compileScriptWithRollback(rawWizardScript, { issueCode: result.code || query || 'WinFix' })
+                      : rawWizardScript;
+                    const executionLocked = wizardSafetyReport.isBlocked && !wizardSafetyOverride;
+
+                    return (
                     <div className="bg-slate-900 dark:bg-slate-950 rounded-2xl shadow-sm border border-slate-800 dark:border-slate-800/50 overflow-hidden">
-                      <div className="bg-slate-800/50 dark:bg-slate-900/50 px-4 py-3 border-b border-slate-700/50 dark:border-slate-800 flex items-center justify-between">
+                      <div className="bg-slate-800/50 dark:bg-slate-900/50 px-4 py-3 border-b border-slate-700/50 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-slate-300 text-sm font-medium">
                           <Terminal className="w-4 h-4" />
                           {language === 'en' ? 'Auto-fix Script (PowerShell Admin)' : '자동 해결 스크립트 (PowerShell 관리자 권한)'}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             onClick={() => {
-                              const scriptToSend = result.script;
-                              copyToClipboard(scriptToSend, 'wizard-script');
+                              const scriptToSend = effectiveWizardScript;
                               const event = new CustomEvent('uwes-set-validator-script', {
                                 detail: { script: scriptToSend }
                               });
                               window.dispatchEvent(event);
                               setActiveTab('threat-verifier');
                             }}
-                            className="text-indigo-300 hover:text-white hover:bg-indigo-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-indigo-950/40 border border-indigo-900/50 px-2.5 py-1.5 rounded-md"
+                            className="text-indigo-300 hover:text-white hover:bg-indigo-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-indigo-950/40 border border-indigo-900/50 px-2.5 py-1.5 rounded-md cursor-pointer"
                             title={language === 'ko' ? '이 해결 스크립트를 안심 검사소 가상 편집기로 즉시 보내 검증 및 롤백 스크립트를 컴파일합니다.' : 'Transmit this resolution script straight to the secure sandbox verifier code block.'}
                           >
                             <ShieldAlert className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
                             <span>{language === 'ko' ? '🛡️ 안심 검사소로 전송' : '🛡️ Send to Verifier'}</span>
                           </button>
                           <button
+                            disabled={executionLocked}
                             onClick={() => {
-                              const scriptToSend = result.script;
+                              const scriptToSend = effectiveWizardScript;
                               const event = new CustomEvent('uwes-set-sandbox-script', {
                                 detail: { script: scriptToSend }
                               });
                               window.dispatchEvent(event);
                               setActiveTab('powershell-sandbox');
                             }}
-                            className="text-cyan-300 hover:text-white hover:bg-cyan-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-cyan-950/40 border border-cyan-900/50 px-2.5 py-1.5 rounded-md"
+                            className="text-cyan-300 hover:text-white hover:bg-cyan-700/60 transition-colors flex items-center gap-1.5 text-xs font-medium bg-cyan-950/40 border border-cyan-900/50 px-2.5 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                             title={language === 'ko' ? '이 해결 스크립트를 격리된 WebAssembly 가상 환경에서 모의 실행하고 시스템 상태 변화를 관찰합니다.' : 'Transmit this resolution script to the isolated WebAssembly sandbox to simulate execution.'}
                           >
                             <Cpu className="w-3.5 h-3.5 text-cyan-400" />
                             <span>{language === 'ko' ? '⚡ 샌드박스 실행' : '⚡ Test in Sandbox'}</span>
                           </button>
                           <button
-                            onClick={() => copyToClipboard(result.script, 'wizard-script')}
-                            className="text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium bg-slate-700/50 hover:bg-slate-700 px-3 py-1.5 rounded-md"
+                            disabled={executionLocked}
+                            onClick={() => copyToClipboard(effectiveWizardScript, 'wizard-script')}
+                            className="text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium bg-slate-700/60 hover:bg-slate-700 px-3 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                           >
                             {copiedScript === 'wizard-script' ? (
                               <>
@@ -13191,15 +13299,77 @@ export default function App() {
                             ) : (
                               <>
                                 <Copy className="w-3.5 h-3.5" />
-                                <span className="text-slate-300">{language === 'en' ? 'Copy' : '복사하기'}</span>
+                                <span>{language === 'en' ? 'Copy Safe Script' : '안전 스크립트 복사'}</span>
                               </>
                             )}
                           </button>
                         </div>
                       </div>
+
+                      {/* Pre-Flight AST + Lint + Auto-Rollback Bar */}
+                      <div className="px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold border ${
+                            wizardSafetyReport.safetyRating === 'SECURE' || wizardSafetyReport.safetyRating === 'LOW_RISK'
+                              ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50'
+                              : wizardSafetyReport.safetyRating === 'SUSPICIOUS'
+                                ? 'bg-amber-950/60 text-amber-300 border-amber-700/50'
+                                : 'bg-rose-950/70 text-rose-300 border-rose-700/60'
+                          }`}>
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            AST: {wizardSafetyReport.safetyRating}
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 font-mono">
+                            Lint {wizardSafetyReport.lintQualityScore}/100
+                          </span>
+                          {wizardSafetyReport.detectedRegistryTargets.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-950/70 text-indigo-300 border border-indigo-700/50 font-medium">
+                              {language === 'en'
+                                ? `Registry Backup: ${wizardSafetyReport.detectedRegistryTargets.length} key(s)`
+                                : `레지스트리 자동 백업 대상 ${wizardSafetyReport.detectedRegistryTargets.length}건`}
+                            </span>
+                          )}
+                        </div>
+
+                        <label className="inline-flex items-center gap-2 cursor-pointer text-slate-200 select-none">
+                          <input
+                            type="checkbox"
+                            checked={wizardRollbackEnabled}
+                            onChange={(e) => setWizardRollbackEnabled(e.target.checked)}
+                            className="rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500"
+                          />
+                          <span className="font-semibold text-indigo-300">
+                            {language === 'en'
+                              ? 'Include Auto-Rollback Point & Registry Backup'
+                              : '자동 복원 지점(Checkpoint-Computer) + 레지스트리 백업 포함'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {executionLocked && (
+                        <div className="px-4 py-3 bg-rose-950/70 border-b border-rose-800/70 text-xs text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-start gap-2">
+                            <AlertOctagon className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                            <div>
+                              <strong className="text-rose-100">
+                                {language === 'en' ? 'Pre-Flight Safety Gate Blocked Copy/Sandbox:' : '사전 안전 검증 게이트 차단됨:'}
+                              </strong>{' '}
+                              {wizardSafetyReport.blockReasons.join(' · ')}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setWizardSafetyOverride(true)}
+                            className="px-2.5 py-1 rounded-md bg-rose-800/80 hover:bg-rose-700 text-white font-semibold shrink-0 cursor-pointer"
+                          >
+                            {language === 'en' ? 'Unlock After Review' : '위험 인지 후 잠금 해제'}
+                          </button>
+                        </div>
+                      )}
+
                       <div className="p-4 overflow-x-auto">
                         <pre className="text-sm font-mono text-blue-300 leading-relaxed">
-                          <code>{result.script}</code>
+                          <code>{effectiveWizardScript}</code>
                         </pre>
                       </div>
                       <div className="bg-blue-900/20 px-4 py-3 border-t border-slate-800 text-xs text-blue-300 flex items-center gap-2">
@@ -13209,19 +13379,20 @@ export default function App() {
 
                       {/* AI Generated Script Thumbs-Up / Thumbs-Down Rating System */}
                       <WizardScriptRatingPanel
-                        scriptText={result.script}
+                        scriptText={rawWizardScript}
                         scriptCode={result.code}
                         query={query}
                         windowsVersion={version}
                         language={language}
                       />
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* PowerShell Advanced Signature and Obfuscated Verification Analyzer */}
                   {result.script && result.isScriptApplicable && (
                     <PowerShellVerifierPanel
-                      scriptText={result.script}
+                      scriptText={wizardRollbackEnabled ? compileScriptWithRollback(stripRollbackPreamble(result.script), { issueCode: result.code || query || 'WinFix' }) : stripRollbackPreamble(result.script)}
                       language={language}
                       onScriptSigned={(newScript) => {
                         setResult(prev => prev ? { ...prev, script: newScript } : null);
@@ -13252,19 +13423,43 @@ export default function App() {
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
                       <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">{language === 'en' ? 'References (Microsoft Official)' : '참고 문서 (Microsoft 공식)'}</h2>
                       <ul className="space-y-2">
-                        {result.sourceUrls.map((url, index) => (
-                          <li key={index}>
+                        {result.sourceUrls.map((url, index) => {
+                          const isBroken = Array.isArray(result.brokenLinks) && result.brokenLinks.includes(url);
+                          let isMsOfficial = false;
+                          let isSafeHttp = false;
+                          try {
+                            const parsedUrl = new URL(url);
+                            isSafeHttp = parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'http:';
+                            const host = parsedUrl.hostname.toLowerCase();
+                            isMsOfficial = isSafeHttp && (host === 'microsoft.com' || host.endsWith('.microsoft.com'));
+                          } catch (_) {}
+                          if (!isSafeHttp) return null;
+                          return (
+                          <li key={index} className="flex flex-wrap items-center justify-between gap-2">
                             <a
                               href={url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1.5 text-sm"
+                              className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1.5 text-sm min-w-0"
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
+                              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                               <span className="truncate">{url}</span>
                             </a>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isMsOfficial && (
+                                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                                  {language === 'en' ? 'Official Microsoft' : 'Microsoft 공식'}
+                                </span>
+                              )}
+                              {isBroken && (
+                                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">
+                                  {language === 'en' ? 'Link flagged for repair' : '교정 대기 링크'}
+                                </span>
+                              )}
+                            </div>
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                     </div>
                   )}
@@ -15671,6 +15866,13 @@ export default function App() {
                   );
                 })()}
 
+                {/* 3-Way Triangle Live Telemetry & HMAC Webhook Console */}
+                <TriangleSyncMonitor
+                  language={language}
+                  repo={githubRepo || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`}
+                  branch={githubBranch || 'main'}
+                  getAuthHeaders={getAuthHeaders}
+                />
 
                 {/* Featured Hero Action: One-Click Instant Dataset Sync & Pages Deploy */}
                 <div className="p-5 bg-gradient-to-br from-indigo-900/90 via-slate-900 to-purple-950 text-white rounded-2xl shadow-lg border border-indigo-500/30 space-y-4">
@@ -18319,6 +18521,13 @@ export default function App() {
                   </span>
                 </div>
               </div>
+
+              {/* Broken Reference Link Detection & Official Microsoft URL Repair Workbench */}
+              <LinkRepairWorkbench
+                language={language}
+                getAuthHeaders={getAuthHeaders}
+                onLinksRepaired={() => { void fetchIssues(false, true); }}
+              />
 
               {isReclassifying && (
                 <motion.div 

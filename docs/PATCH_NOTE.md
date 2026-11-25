@@ -1,6 +1,42 @@
-# Patch Note - System Update (v3.110.0)
+# Patch Note - System Update (v3.111.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.111.0] - 2026-11-25
+
+### 🚀 Major New Features & Integrations
+- **증상 선택형 4단계 진단 마법사(Symptom Diagnostic Wizard) 도입 (`src/components/SymptomDiagnosticWizard.tsx`, `src/App.tsx`)**:
+  - 오류 코드를 모르는 일반 사용자도 **1) 문제 영역(Windows Update · 네트워크 · 부팅/BSOD · 성능/디스크 · 하드웨어/드라이버 · 보안/앱) → 2) 세부 증상 칩·발생 시점 → 3) OS 버전·관리자 권한·자동 롤백 옵션 → 4) 로컬 지식베이스 랭킹 매칭 + 사전 안전 검증 + Gemini AI 심층 진단** 순으로 단계별 진단을 진행할 수 있습니다.
+  - 상단 모드 전환 바를 통해 기존 오류코드·음성 직접 검색 모드와 즉시 전환할 수 있으며, 진단 결과의 참고 URL에 `Microsoft 공식` 도메인 배지 및 교정 대기 링크 경고를 표시합니다.
+- **복구 스크립트 사전 안전 검증(Pre-Flight AST+린트) 및 자동 롤백 포인트 래퍼 (`src/utils/psRollback.ts`, `server.ts`, `src/App.tsx`)**:
+  - `evaluatePreFlightSafety`가 `verifyPowerShellScript`(AST·난독화 분석)와 `analyzePowerShellScript`(품질·위험 Cmdlet 린트)를 통합해 복사/샌드박스 실행 전 고위험 스크립트를 자동 차단하거나 검토 잠금 해제를 요구합니다.
+  - `compileScriptWithRollback` 및 `POST /api/scripts/preflight`가 실행 전 `Checkpoint-Computer` 복원 지점 생성과 스크립트 내 레지스트리 대상 키 자동 탐지·`reg.exe export` 백업 및 `Restore_Registry.cmd` 원클릭 복구 스크립트를 PowerShell 상단에 멱등하게 래핑합니다.
+- **깨진 참고 링크 자동 탐지 및 최신 공식 Microsoft URL 교정 워크벤치 (`server.ts`, `src/components/LinkRepairWorkbench.tsx`)**:
+  - 관리자 전용 `GET /api/admin/links/proposals`, `POST /api/admin/links/scan`, `POST /api/admin/links/propose-repairs`, `POST /api/admin/links/apply` 파이프라인을 구축했습니다.
+  - HTTP `404/410/5xx`/DNS 실패 링크를 순환 탐지한 뒤, Gemini Search Grounding(`gemini-4-hydrogen`, `enableSearch: true`)과 Microsoft 공식 도메인 화이트리스트(`learn.microsoft.com`, `support.microsoft.com` 등)·서버 HTTP 200 실검증을 거쳐 `data/link_repair_proposals.json` 대기열에 적재하고, 관리자 화면에서 Diff 비교 및 단건/일괄 원클릭 승인으로 `data/issues.json`에 즉시 반영합니다.
+- **3각 연동 실시간 상태 모니터링 및 HMAC-SHA256 웹훅 완성 (`server.ts`, `scripts/github-collector.ts`, `src/components/TriangleSyncMonitor.tsx`)**:
+  - `GET /api/github/triangle-status`로 로컬 Express 서버, GitHub 저장소 API, GitHub Pages, 공유 프리뷰(`ais-pre-*`) 4개 노드의 HTTP 상태·지연시간·데이터셋 동기화 시각을 실시간 프로브하고 `UNPUBLISHED_404` vs `AUTH_GATE_HTML` vs `WEBHOOK_READY` 원인을 즉시 진단합니다.
+  - `POST /api/github/webhook/heartbeat` 추가 및 `scripts/github-collector.ts`의 수집 0건 하트비트 보고와 실시간 HMAC-SHA256 웹훅 서명 검증(`x-winfix-signature-256`)·감사 로그(`data/webhook_events.json`) 영속화를 완성했습니다.
+
+### 🛡️ Security Hardening & Authentication
+- **원시 바이트(`rawBody`) 기반 타이밍-안전 HMAC-SHA256 웹훅 검증 (`server.ts`, `scripts/github-collector.ts`, `.github/workflows/deploy-pages.yml`)**:
+  - `express.json` `verify` 훅으로 원시 바이트 버퍼를 보존하고 `crypto.timingSafeEqual`로 `x-winfix-signature-256` / `x-hub-signature-256` 서명 및 `x-cron-secret`을 검증하며, 실패 요청은 `signature-rejected` 감사 이벤트로 기록합니다.
+  - `deploy-pages.yml` 배포 완료 시에도 `pages-deploy` HMAC 서명 하트비트를 전송해 3각 웹훅 텔레메트리를 완성했습니다.
+- **리다이렉트 홉 검증 기반 외부 URL 안전 검사 및 공식 Microsoft 도메인 교차 검증 (`server.ts`, `src/App.tsx`)**:
+  - `isSafeExternalHttpUrl`에서 IPv6 ULA/링크-로컬/CGNAT/IPv4-mapped 루프백 대역을 차단하고, `fetchWithValidatedRedirects`로 최대 4홉의 리다이렉트 목적지마다 안전 검증을 수행하며, AI 링크 교정 제안의 최종 리다이렉트 URL까지 Microsoft 공식 도메인 여부를 재확인합니다.
+  - 기존 깨진 URL이 재점검 중 HTTP 200으로 정상 복구된 경우 이슈의 `brokenLinks` 플래그를 자동 자가 치유(self-heal)하며, 진단 결과 참고 링크 렌더링 시 `http(s)` 프로토콜 검증을 적용했습니다.
+
+### 🔧 Bug Fixes & Deep Audit Refinements
+- **롤백 래퍼 인자 전달 및 PowerShell 문자열 안전성·정리 개선 (`src/utils/psRollback.ts`, `src/App.tsx`, `src/components/SymptomDiagnosticWizard.tsx`)**:
+  - `src/App.tsx`에서 `compileScriptWithRollback` 호출 시 문자열 대신 `{ issueCode }` 옵션 객체를 전달하도록 교정하고 함수 시그니처도 방어적으로 확장해 복원 지점 레이블(`WinFix_<오류코드>`)이 정확히 주입되도록 수정했습니다.
+  - 레지스트리 백업 `reg.exe export` 경로를 단일 따옴표 리터럴로 격리해 `$`/`\`` 치환을 원천 차단하고, 백업 대상 키가 PC에 아직 존재하지 않아 `Restore_Registry.cmd`가 생성되지 않은 경우 바탕화면 빈 백업 폴더를 자동 정리하도록 개선했습니다.
+  - 증상 진단 마법사의 `performance` 영역 매칭 카테고리에 데이터셋 실제 분류(`성능/프리징`, `파일 시스템/저장소`)를 추가하고, 스크립트가 없는 수동 가이드 카드에 `수동 절차 가이드` 배지를 분리 표시했습니다.
+
+### 📈 UI/UX, E2E Verification & Documentation Synchronization
+- **불필요 요소·미사용 자산 및 의존성 정리**: 미사용 컴포넌트(`LibraryAnalyticsChart.tsx`), 루트 중복 문서(`blogger_patch_guide.md`), 정적 빌드(`dist/`)에 포함되던 미참조 자산(`/public/assets/aistudio/`, 약 2.1MB), 미사용 npm 패키지(`@google/generative-ai`, `autoprefixer`, `sharp`), 주요 파일의 미사용 import/상수를 제거하고 `ReadingProgressBar.tsx`를 공식 `motion/react` import로 통일했습니다.
+- `src/types.ts`(`TroubleshootingResult`, `LinkRepairProposal`, `WebhookTelemetryEvent`, `TriangleNodeTelemetry`, `PreFlightSafetyReport`) 확장, `scripts/verify-sync-pipeline.sh` 9단계 검증 확장, 전 모듈 및 전체 운영 문서(`README.md`, `docs/AUTOMATED_SYNC.md`, `docs/GITHUB_ACTIONS_GUIDE.md`, `docs/GITHUB_README.md`, `docs/SYSTEM_OVERVIEW.md`, `docs/PATCHNOTES.md`, `docs/PATCH_NOTE.md`)를 `v3.111.0`으로 일괄 동기화했습니다.
 
 ---
 

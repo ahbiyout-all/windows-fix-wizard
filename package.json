@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "3.110.0",
+  "version": "3.111.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -16,11 +16,9 @@
   },
   "dependencies": {
     "@google/genai": "^3.3.0",
-    "@google/generative-ai": "^0.21.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/prismjs": "^1.26.6",
     "@vitejs/plugin-react": "^5.0.4",
-    "autoprefixer": "^10.4.21",
     "dotenv": "^17.2.3",
     "esbuild": "^0.28.0",
     "express": "^4.22.1",
@@ -33,7 +31,6 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.8.1",
-    "sharp": "^0.34.5",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

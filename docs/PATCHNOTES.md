@@ -1,6 +1,16 @@
-# Patch Note - System Update (v3.110.0)
+# Patch Note - System Update (v3.111.0)
 
-This document is synchronized with `/docs/PATCH_NOTE.md`. (See `/docs/PATCH_NOTE.md` for full itemized notes across `v3.87.0` ~ `v3.110.0`.)
+This document is synchronized with `/docs/PATCH_NOTE.md`. (See `/docs/PATCH_NOTE.md` for full itemized notes across `v3.87.0` ~ `v3.111.0`.)
+
+---
+
+## [v3.111.0] - 2026-11-25
+
+### 🚀 Phase 1 로드맵 구현 · 심층 감사 보안·안정성 보강
+- **증상 선택형 4단계 진단 마법사 (`SymptomDiagnosticWizard.tsx`, `src/App.tsx`)**: 문제 영역(6종 · `성능/프리징`·`파일 시스템/저장소` 카테고리 포함) → 세부 증상/트리거 → OS·권한·롤백 설정 → 내장 지식베이스 랭킹 처방 + AI 복합 진단의 4단계 퍼널을 도입하고, 결과 참고 URL의 `http(s)` 프로토콜 검증 및 공식 Microsoft 도메인 배지를 적용했습니다.
+- **복구 스크립트 사전 안전 검증(Pre-Flight AST+린트) & 자동 롤백 포인트 래퍼 (`src/utils/psRollback.ts`, `server.ts`)**: `evaluatePreFlightSafety` + `compileScriptWithRollback` 및 `POST /api/scripts/preflight`로 고위험 스크립트를 사전 차단하고, 단일 따옴표 리터럴 안전 격리가 적용된 `Checkpoint-Computer` 및 레지스트리 백업(`Restore_Registry.cmd`)·빈 백업 폴더 자동 정리까지 결합했습니다.
+- **깨진 참고 링크 탐지 & 공식 Microsoft URL 교정 워크벤치 (`server.ts`, `LinkRepairWorkbench.tsx`)**: 리다이렉트 홉 단위 외부 URL 안전 검증(`fetchWithValidatedRedirects`) + Gemini Search Grounding(`gemini-4-hydrogen`) + 최종 리다이렉트 후 Microsoft 공식 도메인·HTTP 200 검증 + 정상 복구된 URL 자가 치유를 통해 관리자 승인 대기열에서 1-클릭/일괄 교정을 지원합니다.
+- **3각 연동 실시간 모니터 & HMAC-SHA256 웹훅 완성 (`server.ts`, `scripts/github-collector.ts`, `.github/workflows/deploy-pages.yml`, `TriangleSyncMonitor.tsx`, `scripts/verify-sync-pipeline.sh`)**: `x-winfix-signature-256` 원시 바이트 HMAC 검증, 수집기 0건·Pages 배포 완료(`/api/github/webhook/heartbeat`) 통지, 4노드 실시간 프로브(`/api/github/triangle-status`), 9단계 E2E 검증 스크립트 및 전체 운영 문서(`docs/*`, `README.md`) 동기화를 완료했습니다.
 
 ---
 
