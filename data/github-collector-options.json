@@ -16,12 +16,11 @@
   ],
   "targetWindowsVersions": [
     "Windows 11",
-    "Windows 10",
-    "Windows Server"
+    "Windows 10"
   ],
   "modelPreference": "auto",
   "dedupStrictness": "strict",
   "autoDeployPages": true,
   "autoIntegrateSeed": true,
-  "updatedAt": "2026-11-21T17:01:09.378+09:00"
+  "updatedAt": "2026-11-25T10:44:04.677Z"
 }
