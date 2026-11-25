@@ -11,7 +11,6 @@ To prevent common web application vulnerabilities, the Express backend server (`
 
 - **`X-Powered-By` Header Suppression**: Express default `X-Powered-By: Express` header is explicitly disabled via `app.disable("x-powered-by")` to prevent technology stack disclosure and targeted automated fingerprinting.
 - **`X-Content-Type-Options: nosniff`**: Prevents browsers from MIME-sniffing response content types, enforcing declared content types (e.g., preventing executable scripts from running disguised as text or images).
-- **`X-Frame-Options: SAMEORIGIN`**: Mitigates clickjacking attacks by preventing external sites from embedding the application inside malicious `<iframe>` tags.
 - **`X-XSS-Protection: 1; mode=block`**: Enables browser-level reflected cross-site scripting (XSS) filters to block page rendering when malicious script injection is detected.
 - **`Referrer-Policy: strict-origin-when-cross-origin`**: Protects privacy by stripping path and query string parameters when navigating away to external websites.
 

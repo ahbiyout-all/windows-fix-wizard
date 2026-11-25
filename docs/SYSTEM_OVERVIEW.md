@@ -49,6 +49,7 @@ The application runs as a full-stack Node.js + React 19 application built on Vit
 3. **AI Studio Preview Sync**:
    - **Boot & Visibility Auto-Integration (`/api/github/auto-integrate`)**: Uses GitHub Contents API (`Cache-Control: no-cache`) to bypass raw CDN caching and merges remote issues, feed metadata, and collector options.
    - **Telemetry Proxies**: `GET /api/github/workflow-status` and `GET /api/github/workflow-runs` proxy GitHub Actions status with server PAT scoping and 30s TTL caching.
+   - **Automated Verification (`npm run verify:sync`)**: Executes non-destructive `curl` E2E checks across health, version parity, feed counts, webhook secret/HTML-gate guards, admin auth guards, proxy telemetry, and optional remote/PWA build probes.
 
 ---
 
@@ -67,7 +68,7 @@ The application runs as a full-stack Node.js + React 19 application built on Vit
 ---
 
 ## 5. Security Hardening & Rate Limiting
-- **HTTP Response Headers**: `X-Powered-By` disabled; `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection: 1; mode=block`, and `Referrer-Policy: strict-origin-when-cross-origin` enforced.
+- **HTTP Response Headers**: `X-Powered-By` disabled; `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, and `Referrer-Policy: strict-origin-when-cross-origin` enforced (iframe-compatible).
 - **Rate Limiting**: In-memory IP rate limiting on `/api/admin/smtp/verify` (10 req/min), `/api/visitor/log` (60 req/min), and `/api/github/auto-integrate`.
 - **Admin Authentication & Secret Isolation**: `requireAdmin` middleware validates signed admin session tokens (`admin_sessions.json`), while plaintext GitHub PATs, private vault keys, and AI API keys stay strictly server-side (masked as `'••••••••'` in client API responses).
 

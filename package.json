@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "start": "node dist/server.cjs",
-    "collect:github": "tsx scripts/github-collector.ts"
+    "collect:github": "tsx scripts/github-collector.ts",
+    "verify:sync": "bash scripts/verify-sync-pipeline.sh"
   },
   "dependencies": {
     "@google/genai": "^3.3.0",

@@ -4,7 +4,12 @@ This patch document outlines the latest features, enhancements, and system secur
 
 ---
 
-## [v3.110.0] - 2026-11-23
+## [v3.110.0] - 2026-11-25
+
+### 🚀 UI/UX & Sandbox Improvements
+- **PowerShell 샌드박스 '실행 기록(Execution History)' 사이드바 추가 (`src/components/PowerShellSandbox.tsx`)**:
+  - 전체 스크립트 실행 및 `PS>` 단문 진단 명령 실행 결과를 브라우저 `localStorage`(`winfix_sandbox_execution_history`, 최대 30건)에 자동 영속화합니다.
+  - 사이드바 내 실시간 검색, 상태/유형 필터(전체 · 성공만 · 스크립트 · 단일명령), 1-클릭 **재실행(Re-run)** 및 편집기 즉시 로드 **편집(Edit)**·개별/일괄 삭제 기능을 지원하며 레이아웃 툴바에서 열기/닫기 상태를 기억합니다.
 
 ### 🔧 Bug Fixes & Auto-Sync Pipeline Improvements
 - **GitHub 저장소 · GitHub Pages · AI Studio 프리뷰 3각 자동 연동 파이프라인 전면 복구**:
@@ -21,6 +26,8 @@ This patch document outlines the latest features, enhancements, and system secur
   - `POST /api/github/push-to-repo`에 SHA 기반 중복 커밋 생략(Smart Diff)과 `data/github-feed.json` 동기화를 추가해 원격 푸시 시 피드 메타데이터가 누락되지 않도록 개선했습니다.
   - `GitHubWorkflowStatus.tsx`·`DeploymentDashboardWidget.tsx`에서 API 한도 초과·오류 시 가짜 실행 타임스탬프("1.5시간 전 성공")를 합성하지 않고 실제 `localStorage` 캐시 또는 정직한 상태 배지(`API 한도 대기`)를 표시하도록 수정했습니다.
   - `KnownIssue` 타입(`src/types.ts`)에 `hasBrokenLinks?: boolean`, `brokenLinks?: string[]`, `lastLinkCheckAt?: string`을 반영해 전체 `tsc --noEmit` 타입 검사가 오류 없이 통과하도록 복구했습니다.
+- **자동화 `curl` 기반 3각 연동 E2E 검증 하네스 구축 (`scripts/verify-sync-pipeline.sh`, `package.json`, `docs/AUTOMATED_SYNC.md`)**:
+  - 서버 헬스·버전 일치·피드/이슈 정합성(157건+), 웹훅(`x-cron-secret`) 및 HTML 리다이렉트 방어, 관리자 엔드포인트 `401` 가드·마스킹 토큰(`••••`) 차단, 서버 PAT 프록시, 비파괴 자동 통합, 선택적 원격 Pages/공유 프리뷰(`--check-remote`) 및 린트/PWA 빌드(`--with-build`)를 일괄 점검하는 `npm run verify:sync` 스크립트를 추가했습니다.
 - **문서 일괄 동기화 (`README.md`, `docs/AUTOMATED_SYNC.md`, `docs/GITHUB_ACTIONS_GUIDE.md`, `docs/GITHUB_README.md`, `docs/SYSTEM_OVERVIEW.md`, `docs/PATCHNOTES.md`)**:
   - Zero Cloud DB 아키텍처, 3시간 수집 스케줄, 비공개 저장소 AES-256-GCM 금고, `ais-pre-*` 웹훅 권장 규칙 및 `v3.110.0` 연동 사양을 전 문서에 반영했습니다.
 - 패치 노트 및 전 모듈(`server.ts`, `src/App.tsx`, `package.json`, `src/components/QuickSystemScanUtility.tsx`) 버전을 `v3.110.0`으로 동기화했습니다.

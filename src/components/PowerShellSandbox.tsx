@@ -40,7 +40,10 @@ import {
   Code2,
   Eye,
   EyeOff,
-  Wrench
+  Wrench,
+  Search,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-powershell';
@@ -74,6 +77,49 @@ export interface ScriptVersion {
   createdAt: string;
   lineCount: number;
   charCount: number;
+}
+
+export interface ExecutionHistoryEntry {
+  id: string;
+  title: string;
+  script: string;
+  runType: 'full' | 'prompt';
+  engine: 'wasm-ps' | 'pyodide';
+  status: 'success' | 'warning';
+  lineCount: number;
+  durationMs: number;
+  safetyRating: string;
+  lintScore: number;
+  executedAt: string;
+}
+
+const EXECUTION_HISTORY_STORAGE_KEY = 'winfix_sandbox_execution_history';
+const HISTORY_SIDEBAR_OPEN_KEY = 'winfix_sandbox_history_sidebar_open';
+const MAX_EXECUTION_HISTORY = 30;
+
+function deriveExecutionTitle(code: string, runType: 'full' | 'prompt'): string {
+  const lines = code
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (runType === 'prompt' || lines.length === 1) {
+    const first = lines[0] || 'Command';
+    return first.length > 64 ? `${first.slice(0, 61)}...` : first;
+  }
+  const commentLine = lines.find(
+    (l) =>
+      l.startsWith('#') &&
+      !/^#Requires\b/i.test(l) &&
+      !/^#[\s=\-*]+$/.test(l)
+  );
+  if (commentLine) {
+    const cleaned = commentLine.replace(/^#+\s*/, '').trim();
+    if (cleaned.length > 0) {
+      return cleaned.length > 64 ? `${cleaned.slice(0, 61)}...` : cleaned;
+    }
+  }
+  const firstCmd = lines.find((l) => !l.startsWith('#')) || lines[0] || 'PowerShell Script';
+  return firstCmd.length > 64 ? `${firstCmd.slice(0, 61)}...` : firstCmd;
 }
 
 interface Props {
@@ -299,6 +345,42 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
   const [previewVersion, setPreviewVersion] = useState<ScriptVersion | null>(null);
   const [versionToast, setVersionToast] = useState<string | null>(null);
 
+  // Execution History state (persisted to localStorage)
+  const [executionHistory, setExecutionHistory] = useState<ExecutionHistoryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem(EXECUTION_HISTORY_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .filter(
+              (item: any) =>
+                item &&
+                typeof item === 'object' &&
+                typeof item.id === 'string' &&
+                typeof item.script === 'string' &&
+                item.script.trim().length > 0
+            )
+            .slice(0, MAX_EXECUTION_HISTORY);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load execution history from localStorage:', e);
+    }
+    return [];
+  });
+  const [showHistorySidebar, setShowHistorySidebar] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_SIDEBAR_OPEN_KEY);
+      if (saved === 'false') return false;
+      if (saved === 'true') return true;
+    } catch (_) {}
+    return true;
+  });
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'success' | 'full' | 'prompt'>('all');
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
+
   // Syntax highlighting & Editor view state
   const [syntaxHighlightEnabled, setSyntaxHighlightEnabled] = useState(true);
   const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
@@ -331,8 +413,9 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
       localStorage.setItem('winfix_sandbox_layout_mode', layoutMode);
       localStorage.setItem('winfix_sandbox_editor_height', editorHeightMode);
       localStorage.setItem('winfix_sandbox_console_height', consoleHeightMode);
+      localStorage.setItem(HISTORY_SIDEBAR_OPEN_KEY, String(showHistorySidebar));
     } catch (_) {}
-  }, [layoutMode, editorHeightMode, consoleHeightMode]);
+  }, [layoutMode, editorHeightMode, consoleHeightMode, showHistorySidebar]);
 
   useEffect(() => {
     if (initialScript && initialScript.trim()) {
@@ -816,29 +899,166 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
     return true;
   };
 
-  // Run full script
-  const handleRunFullScript = async () => {
-    if (isRunning) return;
+  const persistExecutionHistory = useCallback((nextHistory: ExecutionHistoryEntry[]) => {
+    setExecutionHistory(nextHistory);
+    try {
+      localStorage.setItem(EXECUTION_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+    } catch (e) {
+      console.warn('Failed to persist execution history to localStorage:', e);
+    }
+  }, []);
+
+  const recordExecutionHistory = useCallback(
+    (params: {
+      script: string;
+      runType: 'full' | 'prompt';
+      durationMs: number;
+      engine: 'wasm-ps' | 'pyodide';
+    }) => {
+      const trimmed = params.script.trim();
+      if (!trimmed) return;
+
+      const secReport = verifyPowerShellScript(params.script);
+      const lntReport = analyzePowerShellScript(params.script);
+      const isCleanSuccess =
+        lntReport.errorCount === 0 &&
+        secReport.safetyRating !== 'HIGH_ALERT' &&
+        secReport.safetyRating !== 'SUSPICIOUS';
+
+      const entry: ExecutionHistoryEntry = {
+        id: `hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        title: deriveExecutionTitle(params.script, params.runType),
+        script: params.script,
+        runType: params.runType,
+        engine: params.engine,
+        status: isCleanSuccess ? 'success' : 'warning',
+        lineCount: params.script.split('\n').length,
+        durationMs: Math.max(1, Math.round(params.durationMs)),
+        safetyRating: secReport.safetyRating,
+        lintScore: lntReport.qualityScore,
+        executedAt: new Date().toISOString()
+      };
+
+      setExecutionHistory((prev) => {
+        const deduped = prev.filter(
+          (item) => !(item.runType === entry.runType && item.script.trim() === trimmed)
+        );
+        const next = [entry, ...deduped].slice(0, MAX_EXECUTION_HISTORY);
+        try {
+          localStorage.setItem(EXECUTION_HISTORY_STORAGE_KEY, JSON.stringify(next));
+        } catch (e) {
+          console.warn('Failed to persist execution history to localStorage:', e);
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  // Run arbitrary script target (used by Run button and Execution History Re-run)
+  const runTargetScript = async (targetScript: string) => {
+    if (isRunning || !targetScript.trim()) return;
     setIsRunning(true);
     setIsDebugging(false);
+    setActiveInspectorTab('terminal');
 
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     appendTerminalLine('------------------------------------------------------------', 'info');
     appendTerminalLine(`[Sandbox Run] Starting execution via ${sandboxEngine.toUpperCase()} engine...`, 'cyan');
 
-    const lines = scriptText.split('\n');
+    const lines = targetScript.split('\n');
     for (let i = 0; i < lines.length; i++) {
       if (!isMountedRef.current) return;
       const line = lines[i].trim();
       if (!line) continue;
       await executeSingleCommandLine(line);
-      // Small pause to give realistic execution feel
-      await new Promise(r => setTimeout(r, 60));
+      await new Promise((r) => setTimeout(r, 60));
     }
 
     if (!isMountedRef.current) return;
+    const elapsedMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
     appendTerminalLine(`[Sandbox Run] Execution completed. All operations isolated from host.`, 'green');
     appendTerminalLine('------------------------------------------------------------', 'info');
     setIsRunning(false);
+
+    recordExecutionHistory({
+      script: targetScript,
+      runType: 'full',
+      durationMs: elapsedMs,
+      engine: sandboxEngine
+    });
+  };
+
+  // Run full script from editor
+  const handleRunFullScript = async () => {
+    await runTargetScript(scriptText);
+  };
+
+  // Filtered Execution History entries
+  const filteredExecutionHistory = useMemo(() => {
+    const q = historySearchQuery.trim().toLowerCase();
+    return executionHistory.filter((entry) => {
+      if (historyFilter === 'success' && entry.status !== 'success') return false;
+      if (historyFilter === 'full' && entry.runType !== 'full') return false;
+      if (historyFilter === 'prompt' && entry.runType !== 'prompt') return false;
+      if (!q) return true;
+      return (
+        entry.title.toLowerCase().includes(q) ||
+        entry.script.toLowerCase().includes(q) ||
+        entry.safetyRating.toLowerCase().includes(q)
+      );
+    });
+  }, [executionHistory, historySearchQuery, historyFilter]);
+
+  const handleEditHistoryEntry = (entry: ExecutionHistoryEntry) => {
+    setScriptText(entry.script);
+    setEditorMode('edit');
+    appendTerminalLine(`[History] Loaded '${entry.title}' into ScriptEditor.ps1 for editing.`, 'cyan');
+    setVersionToast(
+      language === 'en'
+        ? `Loaded '${entry.title}' into editor`
+        : `'${entry.title}' 명령을 편집기로 불러왔습니다`
+    );
+    scheduleTimeout(() => setVersionToast(null), 2600);
+    scheduleTimeout(() => {
+      textareaRef.current?.focus();
+    }, 50);
+  };
+
+  const handleRerunHistoryEntry = async (entry: ExecutionHistoryEntry) => {
+    if (isRunning) return;
+    setScriptText(entry.script);
+    if (entry.runType === 'prompt' && !entry.script.includes('\n')) {
+      setActiveInspectorTab('terminal');
+      const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      await executeSingleCommandLine(entry.script.trim());
+      const elapsedMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+      recordExecutionHistory({
+        script: entry.script,
+        runType: 'prompt',
+        durationMs: elapsedMs,
+        engine: sandboxEngine
+      });
+      return;
+    }
+    await runTargetScript(entry.script);
+  };
+
+  const handleDeleteHistoryEntry = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = executionHistory.filter((item) => item.id !== id);
+    persistExecutionHistory(updated);
+  };
+
+  const handleClearExecutionHistory = () => {
+    if (!confirmClearHistory) {
+      setConfirmClearHistory(true);
+      scheduleTimeout(() => setConfirmClearHistory(false), 3000);
+      return;
+    }
+    persistExecutionHistory([]);
+    setConfirmClearHistory(false);
+    appendTerminalLine('[History] Cleared persisted sandbox execution history.', 'info');
   };
 
   // Step-by-step debugger
@@ -865,12 +1085,20 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
   };
 
   // Direct prompt input execution
-  const handlePromptSubmit = (e: React.FormEvent) => {
+  const handlePromptSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commandPromptInput.trim()) return;
     const cmd = commandPromptInput.trim();
     setCommandPromptInput('');
-    executeSingleCommandLine(cmd);
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    await executeSingleCommandLine(cmd);
+    const elapsedMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    recordExecutionHistory({
+      script: cmd,
+      runType: 'prompt',
+      durationMs: elapsedMs,
+      engine: sandboxEngine
+    });
   };
 
   // Safe clipboard helper
@@ -1096,17 +1324,38 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
         </div>
       </div>
 
-      {/* Layout Mode Toolbar: Stacked (상하 2단) vs Split (좌우 2단) */}
+      {/* Layout Mode Toolbar: Execution History Toggle + Stacked / Split */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-2xl shadow-sm text-xs">
         <div className="flex items-center gap-2 text-slate-300 font-semibold">
           <Sliders className="w-4 h-4 text-indigo-400 shrink-0" />
-          <span>{language === 'en' ? 'Sandbox Layout & Window Splitter' : '샌드박스 화면 레이아웃 및 2단 분할 제어'}</span>
+          <span>{language === 'en' ? 'Sandbox Layout & Window Splitter' : '샌드박스 화면 레이아웃 및 실행 기록 제어'}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => setShowHistorySidebar((prev) => !prev)}
+            className={`px-3 py-1.5 min-h-[36px] rounded-xl font-bold flex items-center gap-1.5 border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              showHistorySidebar
+                ? 'bg-indigo-600/20 border-indigo-500/60 text-indigo-200 hover:bg-indigo-600/30'
+                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+            }`}
+            title={language === 'en' ? 'Toggle Execution History Sidebar' : '실행 기록 사이드바 열기/닫기'}
+          >
+            {showHistorySidebar ? (
+              <PanelLeftClose className="w-3.5 h-3.5 text-indigo-400" />
+            ) : (
+              <PanelLeftOpen className="w-3.5 h-3.5 text-indigo-400" />
+            )}
+            <span>{language === 'en' ? 'Execution History' : '실행 기록'}</span>
+            <span className="font-mono tabular-nums text-[11px] text-indigo-300">
+              ({executionHistory.length})
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setLayoutMode('stacked')}
-            className={`px-3 py-1.5 min-h-[36px] rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 min-h-[36px] rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               layoutMode === 'stacked'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1117,7 +1366,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
           <button
             type="button"
             onClick={() => setLayoutMode('split')}
-            className={`px-3 py-1.5 min-h-[36px] rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 min-h-[36px] rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               layoutMode === 'split'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1128,8 +1377,240 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
         </div>
       </div>
 
-      {/* Main Layout Container: Stacked (상하 2단) or Split (좌우 2단) */}
-      <div className={layoutMode === 'stacked' ? 'flex flex-col gap-6' : 'grid grid-cols-1 lg:grid-cols-12 gap-6'}>
+      {/* Main Sandbox Workspace + Collapsible Execution History Sidebar */}
+      <div className="flex flex-col xl:flex-row gap-6 items-start">
+        {showHistorySidebar && (
+          <aside
+            aria-label={language === 'en' ? 'Execution History' : '실행 기록 사이드바'}
+            className="w-full xl:w-[320px] shrink-0 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col xl:max-h-[960px]"
+          >
+            {/* Sidebar Header */}
+            <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <History className="w-4 h-4 text-indigo-400 shrink-0" />
+                <h3 className="text-xs font-bold text-slate-100 truncate">
+                  {language === 'en' ? 'Execution History' : '실행 기록'}
+                </h3>
+                <span className="text-[11px] font-mono tabular-nums text-slate-400">
+                  {executionHistory.length}/{MAX_EXECUTION_HISTORY}
+                </span>
+              </div>
+
+              {executionHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearExecutionHistory}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    confirmClearHistory
+                      ? 'bg-rose-600 text-white hover:bg-rose-500'
+                      : 'text-slate-400 hover:text-rose-300 hover:bg-slate-800'
+                  }`}
+                  title={language === 'en' ? 'Clear all execution history' : '모든 실행 기록 비우기'}
+                >
+                  {confirmClearHistory
+                    ? language === 'en'
+                      ? 'Confirm Clear'
+                      : '삭제 확인'
+                    : language === 'en'
+                    ? 'Clear All'
+                    : '전체 비우기'}
+                </button>
+              )}
+            </div>
+
+            {/* Search & Filter Controls */}
+            <div className="p-3 border-b border-slate-800 space-y-2.5 bg-slate-900/60">
+              <div className="relative flex items-center">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder={
+                    language === 'en' ? 'Search diagnostic commands...' : '실행한 명령어 · 스크립트 검색...'
+                  }
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 outline-none transition-colors"
+                />
+                {historySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearchQuery('')}
+                    className="absolute right-2 p-0.5 text-slate-500 hover:text-slate-300 cursor-pointer"
+                    aria-label={language === 'en' ? 'Clear search' : '검색어 지우기'}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-4 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-xl text-[11px] font-medium">
+                {(
+                  [
+                    { key: 'all', labelEn: 'All', labelKo: '전체' },
+                    { key: 'success', labelEn: 'Success', labelKo: '성공만' },
+                    { key: 'full', labelEn: 'Scripts', labelKo: '스크립트' },
+                    { key: 'prompt', labelEn: 'PS>', labelKo: '단일명령' }
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setHistoryFilter(tab.key)}
+                    className={`py-1 px-1.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap truncate ${
+                      historyFilter === tab.key
+                        ? 'bg-indigo-600 text-white font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {language === 'en' ? tab.labelEn : tab.labelKo}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* History Entries List */}
+            <div className="p-3 space-y-2.5 overflow-y-auto max-h-[420px] xl:max-h-[780px] flex-1">
+              {executionHistory.length === 0 ? (
+                <div className="p-5 text-center border border-dashed border-slate-800 rounded-xl bg-slate-950/50 space-y-3">
+                  <Clock className="w-6 h-6 text-slate-500 mx-auto" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-200">
+                      {language === 'en' ? 'No Execution History Yet' : '아직 실행 기록이 없습니다'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      {language === 'en'
+                        ? 'Scripts and PS> diagnostic commands you run are automatically persisted locally for instant re-run or editing.'
+                        : '샌드박스에서 실행한 스크립트와 PS> 진단 명령어가 브라우저에 자동 저장되어 즉시 재실행하거나 편집할 수 있습니다.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => runTargetScript(scriptText)}
+                    disabled={isRunning || !scriptText.trim()}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    <span>{language === 'en' ? 'Run Current Script' : '현재 스크립트 실행하기'}</span>
+                  </button>
+                </div>
+              ) : filteredExecutionHistory.length === 0 ? (
+                <div className="p-5 text-center border border-dashed border-slate-800 rounded-xl bg-slate-950/50 space-y-2">
+                  <p className="text-xs font-semibold text-slate-300">
+                    {language === 'en' ? 'No matching runs found' : '조건에 맞는 실행 기록이 없습니다'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistorySearchQuery('');
+                      setHistoryFilter('all');
+                    }}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-semibold cursor-pointer"
+                  >
+                    {language === 'en' ? 'Reset filters' : '필터 초기화'}
+                  </button>
+                </div>
+              ) : (
+                filteredExecutionHistory.map((entry) => {
+                  const formattedTime =
+                    entry.executedAt && !Number.isNaN(Date.parse(entry.executedAt))
+                      ? new Date(entry.executedAt).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })
+                      : '-';
+                  const snippetPreview = entry.script
+                    .split('\n')
+                    .map((l) => l.trim())
+                    .filter((l) => l && !l.startsWith('#'))
+                    .slice(0, 2)
+                    .join('\n') || entry.script.trim();
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="p-3 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 transition-colors space-y-2"
+                    >
+                      {/* Quiet Typographic Metadata Line (no pills, tabular numerals) */}
+                      <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums">
+                        <div className="flex items-center gap-1.5 min-w-0 truncate">
+                          {entry.status === 'success' ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-400 font-bold shrink-0">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>{language === 'en' ? 'OK' : '성공'}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-amber-400 font-bold shrink-0">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>{language === 'en' ? 'WARN' : '주의'}</span>
+                            </span>
+                          )}
+                          <span className="text-slate-600" aria-hidden="true">·</span>
+                          <span className="text-slate-400 shrink-0">
+                            {entry.runType === 'prompt' ? 'PS>' : `${entry.lineCount}L`}
+                          </span>
+                          <span className="text-slate-600" aria-hidden="true">·</span>
+                          <span className="text-slate-400 truncate">{formattedTime}</span>
+                          <span className="text-slate-600" aria-hidden="true">·</span>
+                          <span className="text-slate-500 shrink-0">{entry.durationMs}ms</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteHistoryEntry(entry.id, e)}
+                          className="p-1 text-slate-500 hover:text-rose-400 rounded hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                          title={language === 'en' ? 'Remove entry' : '기록 삭제'}
+                          aria-label={language === 'en' ? 'Remove entry' : '기록 삭제'}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Title */}
+                      <div
+                        className="text-xs font-bold text-slate-200 truncate"
+                        title={entry.title}
+                      >
+                        {entry.title}
+                      </div>
+
+                      {/* Monospace Code Snippet */}
+                      <pre className="p-2 rounded-lg bg-slate-900/90 border border-slate-800/80 font-mono text-[11px] text-slate-300 leading-snug overflow-hidden whitespace-pre-wrap break-all line-clamp-2 m-0">
+                        {snippetPreview}
+                      </pre>
+
+                      {/* Action Buttons: Re-run & Edit */}
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleRerunHistoryEntry(entry)}
+                          disabled={isRunning}
+                          className="flex-1 px-2.5 py-1.5 min-h-[32px] bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                          title={language === 'en' ? 'Re-run in sandbox immediately' : '샌드박스에서 즉시 재실행'}
+                        >
+                          <Play className="w-3 h-3" />
+                          <span>{language === 'en' ? 'Re-run' : '재실행'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEditHistoryEntry(entry)}
+                          className="flex-1 px-2.5 py-1.5 min-h-[32px] bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                          title={language === 'en' ? 'Load into editor to edit' : '편집기로 불러와 수정'}
+                        >
+                          <Edit3 className="w-3 h-3 text-indigo-400" />
+                          <span>{language === 'en' ? 'Edit' : '편집'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </aside>
+        )}
+
+        {/* Main Layout Container: Stacked (상하 2단) or Split (좌우 2단) */}
+        <div className={`flex-1 min-w-0 w-full ${layoutMode === 'stacked' ? 'flex flex-col gap-6' : 'grid grid-cols-1 lg:grid-cols-12 gap-6'}`}>
         {/* Upper / Left Pane: Code Editor & Execution Controls */}
         <div className={layoutMode === 'stacked' ? 'w-full space-y-4' : 'lg:col-span-5 space-y-4'}>
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm flex flex-col">
@@ -1918,6 +2399,7 @@ export function PowerShellSandbox({ language, initialScript }: Props) {
             </form>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Version History Management Modal */}

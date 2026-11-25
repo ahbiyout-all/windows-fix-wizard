@@ -41,3 +41,10 @@ Windows Fix Wizard operates on a **Zero Cloud DB** architecture (`data/*.json` a
 ## 5. Server Auto-Integration & Monitoring
 - **Boot & Visibility Auto-Integrate (`POST /api/github/auto-integrate`)**: Runs on server startup and frontend tab focus (`visibilitychange` with 5-minute client / 2-minute server cooldown). Prefers GitHub Contents API (`Accept: application/vnd.github.v3.raw`, `Cache-Control: no-cache`) over cached raw CDN when PAT or `force` is used, and synchronizes `data/issues.json`, `data/github-feed.json`, and `data/github-collector-options.json`.
 - **Telemetry Proxies**: `GET /api/github/workflow-status` and `GET /api/github/workflow-runs` allow AI Studio Preview to display live Actions telemetry and one-click `Run` triggers using server-side PAT credentials cleanly.
+
+## 6. Automated `curl` E2E Pipeline Verification
+Run the non-destructive automated verification suite (`scripts/verify-sync-pipeline.sh`) to audit server health, version parity, feed integrity, webhook secret & HTML-redirect guards, admin endpoint `401` protections, server PAT workflow proxies, and non-destructive auto-integrate behavior:
+- **Local API Suite**: `npm run verify:sync`
+- **Full Check (Remote Pages + Shared URL + Lint + PWA Build)**:
+  `bash scripts/verify-sync-pipeline.sh --check-remote --shared-url https://<SHARED_APP_URL> --with-build`
+
