@@ -30,10 +30,19 @@ export const TriangleSyncMonitor: React.FC<TriangleSyncMonitorProps> = ({
   getAuthHeaders
 }) => {
   const isEn = language === 'en';
-  const defaultDerivedShared =
-    typeof window !== 'undefined' && window.location.hostname.includes('run.app')
-      ? window.location.origin.replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-')
-      : '';
+  const defaultDerivedShared = (() => {
+    if (typeof window === 'undefined') return 'https://windows-fix-wizard.ai.studio';
+    try {
+      const saved = localStorage.getItem('winfix_shared_webhook_url');
+      if (saved && /^https?:\/\//i.test(saved) && !/ais-(dev|pre)-/i.test(saved)) {
+        return saved.replace(/\/+$/, '');
+      }
+    } catch (_) {}
+    if (window.location.hostname.endsWith('.ai.studio')) {
+      return window.location.origin;
+    }
+    return 'https://windows-fix-wizard.ai.studio';
+  })();
 
   const [sharedUrlInput, setSharedUrlInput] = useState<string>(defaultDerivedShared);
   const [nodes, setNodes] = useState<TriangleNodeTelemetry[]>([]);
@@ -162,8 +171,15 @@ export const TriangleSyncMonitor: React.FC<TriangleSyncMonitorProps> = ({
           <input
             type="url"
             value={sharedUrlInput}
-            onChange={(e) => setSharedUrlInput(e.target.value)}
-            placeholder="https://ais-pre-...run.app"
+            onChange={(e) => {
+              const val = e.target.value;
+              setSharedUrlInput(val);
+              try {
+                if (val.trim()) localStorage.setItem('winfix_shared_webhook_url', val.trim());
+                else localStorage.removeItem('winfix_shared_webhook_url');
+              } catch (_) {}
+            }}
+            placeholder="https://windows-fix-wizard.ai.studio"
             aria-label={isEn ? 'Shared App Webhook URL' : '공유 앱 웹훅 URL'}
             className="w-full sm:w-64 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
           />

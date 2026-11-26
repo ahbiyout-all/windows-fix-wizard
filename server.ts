@@ -8918,12 +8918,13 @@ jobs:
         }
       };
 
-      // Node 4: Shared App Webhook (ais-pre-*) Probe
+      // Node 4: Shared App Webhook (ai.studio / ais-pre-*) Probe
       const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').trim();
       const reqProto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
-      const derivedOrigin = reqHost && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')
-        ? `${reqProto}://${reqHost}`.replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-')
-        : '';
+      const DEFAULT_PUBLIC_APP_URL = 'https://windows-fix-wizard.ai.studio';
+      const derivedOrigin = reqHost && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1') && !/^ais-dev-/i.test(reqHost)
+        ? `${reqProto}://${reqHost}`
+        : DEFAULT_PUBLIC_APP_URL;
       const rawSharedInput = typeof req.query.sharedUrl === 'string' && req.query.sharedUrl.trim()
         ? req.query.sharedUrl.trim()
         : (process.env.SHARED_APP_URL?.trim() || ghConfig.sharedAppUrl || derivedOrigin);
@@ -8939,7 +8940,7 @@ jobs:
             issueCount: null,
             lastSyncedAt: null,
             diagnosticCode: 'UNCONFIGURED',
-            message: '공유 앱 URL(ais-pre-*) 미지정 — AI Studio Publish 후 URL을 입력해 점검하세요.',
+            message: '공개 앱 URL 미지정 — AI Studio Publish 후 공개 URL(예: https://windows-fix-wizard.ai.studio)을 입력해 점검하세요.',
             targetUrl: ''
           };
         }
@@ -9985,7 +9986,7 @@ jobs:
   // 5. Save GitHub integration configuration
   app.post("/api/github/config", requireAdmin, async (req, res) => {
     try {
-      const { repo, branch, workflowId, token, authMode, sshPrivateKey, autoDeployPages, clearToken, clearSshKey } = req.body || {};
+      const { repo, branch, workflowId, token, authMode, sshPrivateKey, autoDeployPages, sharedAppUrl, clearToken, clearSshKey } = req.body || {};
       const current = readLocalCollection('github_config')[0] || {};
       if (repo !== undefined && String(repo).trim() !== '' && !isValidGithubRepo(String(repo))) {
         return res.status(400).json({ success: false, error: "유효한 GitHub 저장소 형식('소유자/저장소명')이 아닙니다." });
@@ -9995,6 +9996,10 @@ jobs:
       }
       if (workflowId !== undefined && String(workflowId).trim() !== '' && !isValidGitRef(String(workflowId))) {
         return res.status(400).json({ success: false, error: "유효하지 않은 워크플로 ID 형식입니다." });
+      }
+      const cleanSharedUrl = sharedAppUrl !== undefined ? String(sharedAppUrl).trim().replace(/\/+$/, '') : undefined;
+      if (cleanSharedUrl && !isSafeExternalHttpUrl(cleanSharedUrl)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 공개 앱 URL 형식입니다." });
       }
       const nextToken = clearToken === true
         ? ""
@@ -10010,6 +10015,7 @@ jobs:
         workflowId: workflowId !== undefined && String(workflowId).trim() ? String(workflowId).trim() : current.workflowId || "windows-fix-collector.yml",
         authMode: authMode === 'SSH' ? 'SSH' : (authMode === 'PAT' ? 'PAT' : (current.authMode || "PAT")),
         autoDeployPages: autoDeployPages !== undefined ? Boolean(autoDeployPages) : (current.autoDeployPages !== false),
+        sharedAppUrl: cleanSharedUrl !== undefined ? cleanSharedUrl : (current.sharedAppUrl || ""),
         token: nextToken,
         sshPrivateKey: nextSshKey,
         updatedAt

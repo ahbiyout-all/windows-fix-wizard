@@ -9,6 +9,7 @@ This document is synchronized with `/docs/PATCH_NOTE.md`. (See `/docs/PATCH_NOTE
 ### 🚀 GitHub Pages (`deploy-pages.yml`) 실시간 배포 로그 모니터 도입
 - **전용 관리자 콘솔 탭 & GitOps 실시간 로그 섹션 (`PagesDeploymentLogMonitor.tsx`, `src/App.tsx`)**: 관리자 콘솔 상단에 `Pages 배포 실시간 로그 (deploy-pages.yml)` 전용 탭을 추가하고 Tier 2 GitOps 섹션에서도 즉시 열람할 수 있도록 통합했습니다. 실행 목록 필터(`전체/성공/실패/진행`), Job·Step별 소요 시간 타임라인, 다크 콘솔 로그 뷰어(키워드 검색·오류 필터·하단 고정·복사·`.log` 다운로드), 적응형 자동 폴링(진행 중 10초 / 대기 30초) 및 원클릭 `즉시 Pages 배포` 버튼을 제공합니다.
 - **Actions API 백엔드 프록시 & 보안 검증 (`server.ts`)**: `GET /api/github/workflow-runs`의 `workflowFile` 필터 지원, `requireAdmin` 보호 기반 `GET /api/github/workflow-run-jobs` 및 `GET /api/github/workflow-job-logs`(허용된 HTTPS 스토리지 도메인 리다이렉트 검증 및 ANSI 정리) 엔드포인트를 추가했습니다.
+- **공개 `.ai.studio` 도메인 기본 웹훅·3각 프로브 전환 (`server.ts`, `TriangleSyncMonitor.tsx`, `src/App.tsx`, `scripts/github-collector.ts`)**: `ais-pre-*` 404 대신 라이브 확인된 `https://windows-fix-wizard.ai.studio`를 3각 연동 및 `APP_WEBHOOK_URL` 추천 주소 기본값으로 적용했습니다.
 
 ---
 

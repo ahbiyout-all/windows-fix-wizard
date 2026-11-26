@@ -11,6 +11,8 @@ This patch document outlines the latest features, enhancements, and system secur
   - 관리자 콘솔 상단에 **`Pages 배포 실시간 로그 (deploy-pages.yml)`** 전용 뷰 탭을 신설하고, `[2등급] GitOps 센터` 내부에도 동일한 실시간 관제 섹션을 배치했습니다(단일 마운트 전환으로 중복 폴링 방지).
   - `GET /api/github/workflow-runs?workflowFile=deploy-pages.yml`로 Pages 배포 워크플로 실행 이력만 전용 필터링해 조회하고, 실행 중(`queued`/`in_progress`) 상태에서는 10초, 유휴 상태에서는 30초 주기로 자동 폴링합니다(폴링 일시정지·수동 새로고침·즉시 Pages 배포 버튼 내장).
   - `GET /api/github/workflow-run-jobs`를 통해 선택된 실행의 Job(`build`, `deploy`)과 각 Step별 진행 상태·소요 시간을 실시간 타임라인으로 확인하고, `GET /api/github/workflow-job-logs`로 원시 콘솔 터미널 로그 검색·오류 라인 필터·하단 고정·복사 및 `.log` 파일 다운로드를 지원합니다(GitHub Pages 정적 환경에서는 PAT 기반 직접 REST API 폴백 자동 지원).
+- **공개 `.ai.studio` 도메인(`https://windows-fix-wizard.ai.studio`) 기본 웹훅·3각 관제 연동 (`server.ts`, `src/components/TriangleSyncMonitor.tsx`, `src/App.tsx`, `scripts/github-collector.ts`)**:
+  - 커스텀 `.ai.studio` 도메인 발행 후 `HTTP 404`를 반환하는 기존 `ais-pre-*` 대신 `https://windows-fix-wizard.ai.studio`를 3각 프로브 및 `APP_WEBHOOK_URL` 가이드의 기본 공개 URL로 전환하고, `/api/github/config`에 `sharedAppUrl` 저장 및 브라우저 `localStorage` 기억 기능을 추가했습니다.
 
 ### 🛡️ Security Hardening & Authentication
 - **Actions Job/Logs 백엔드 프록시 인증 및 로그 리다이렉트 도메인 화이트리스트 검증 (`server.ts`)**:

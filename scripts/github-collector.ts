@@ -584,7 +584,7 @@ JSON Schema:
         }
         if (!webhookRes.ok || isHtmlResponse) {
           console.warn(
-            `⚠️ Live Webhook returned HTTP ${webhookRes.status}${isHtmlResponse ? ' (HTML auth/login redirect detected — ensure APP_WEBHOOK_URL uses the Shared App URL https://ais-pre-... instead of https://ais-dev-...)' : ''}:`,
+            `⚠️ Live Webhook returned HTTP ${webhookRes.status}${isHtmlResponse ? ' (HTML auth/login redirect detected — ensure APP_WEBHOOK_URL uses the published public URL such as https://windows-fix-wizard.ai.studio instead of https://ais-dev-...)' : ''}:`,
             webhookData
           );
         } else {

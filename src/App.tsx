@@ -16757,7 +16757,7 @@ export default function App() {
                               const origin = window.location.origin;
                               const isPrivateDev = /^https?:\/\/ais-dev-/i.test(origin);
                               const webhookSuggestion = isPrivateDev
-                                ? origin.replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-')
+                                ? 'https://windows-fix-wizard.ai.studio'
                                 : origin;
                               return (
                                 <>
@@ -16765,7 +16765,7 @@ export default function App() {
                                   <span className="font-mono text-indigo-300 select-all">{webhookSuggestion}</span>)
                                   {isPrivateDev && (
                                     <span className="block mt-1 text-[10px] text-amber-300 leading-relaxed">
-                                      ⚠️ 현재 AI Studio 개발 프리뷰(<code className="font-mono">ais-dev-*</code>)는 구글 인증으로 차단되므로, GitHub Secret <code className="font-mono">APP_WEBHOOK_URL</code>에는 반드시 공개 공유 앱 주소(<code className="font-mono">ais-pre-*</code>)를 등록하세요.
+                                      ⚠️ 현재 AI Studio 개발 프리뷰(<code className="font-mono">ais-dev-*</code>)는 구글 인증으로 차단되므로, GitHub Secret <code className="font-mono">APP_WEBHOOK_URL</code>에는 공개 앱 주소(<code className="font-mono">https://windows-fix-wizard.ai.studio</code>)를 등록하세요.
                                     </span>
                                   )}
                                 </>
@@ -23872,7 +23872,7 @@ export default function App() {
                                 const origin = window.location.origin;
                                 const isPrivateDev = /^https?:\/\/ais-dev-/i.test(origin);
                                 const webhookSuggestion = isPrivateDev
-                                  ? origin.replace(/^(https?:\/\/)ais-dev-/i, '$1ais-pre-')
+                                  ? 'https://windows-fix-wizard.ai.studio'
                                   : origin;
                                 return (
                                   <div className="space-y-1">
@@ -23881,7 +23881,7 @@ export default function App() {
                                     </div>
                                     {isPrivateDev && (
                                       <div className="text-[11px] text-amber-700 dark:text-amber-300">
-                                        ⚠️ <code className="font-mono">ais-dev-*</code> 프리뷰 주소는 로그인 리다이렉트로 웹훅이 차단되므로 반드시 <code className="font-mono">ais-pre-*</code> 공유 앱 URL을 사용하세요.
+                                        ⚠️ <code className="font-mono">ais-dev-*</code> 프리뷰 주소는 로그인 리다이렉트로 웹훅이 차단되므로 반드시 공개 앱 URL(<code className="font-mono">https://windows-fix-wizard.ai.studio</code>)을 사용하세요.
                                       </div>
                                     )}
                                   </div>
