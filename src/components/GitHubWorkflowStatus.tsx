@@ -29,6 +29,7 @@ interface GitHubWorkflowStatusProps {
   className?: string;
   showBadgeImage?: boolean;
   onTriggerSuccess?: () => void;
+  onViewLogs?: () => void;
 }
 
 export interface WorkflowRun {
@@ -96,7 +97,8 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
   getAuthHeaders,
   className = '',
   showBadgeImage = true,
-  onTriggerSuccess
+  onTriggerSuccess,
+  onViewLogs
 }) => {
   const cacheKey = `winfix_wf_cache_${owner}_${repo}_${workflowFile}`;
 
@@ -502,15 +504,27 @@ export const GitHubWorkflowStatus: React.FC<GitHubWorkflowStatusProps> = ({
                 )}
               </div>
 
-              <a 
-                href={lastRun.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold"
-              >
-                <span>{language === 'en' ? 'View Run Logs' : '실행 로그'}</span>
-                <ExternalLink className="w-2.5 h-2.5" />
-              </a>
+              <div className="flex items-center gap-3">
+                {onViewLogs && (
+                  <button
+                    type="button"
+                    onClick={onViewLogs}
+                    className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-bold cursor-pointer"
+                  >
+                    <Activity className="w-2.5 h-2.5" />
+                    <span>{language === 'en' ? 'Live Log Console' : '실시간 로그 콘솔'}</span>
+                  </button>
+                )}
+                <a 
+                  href={lastRun.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold"
+                >
+                  <span>{language === 'en' ? 'View Run Logs' : '실행 로그'}</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </div>
             </div>
           </div>
         )}

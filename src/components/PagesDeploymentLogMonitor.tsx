@@ -103,6 +103,31 @@ function formatDuration(start?: string | null, end?: string | null): string {
   return m > 0 ? `${m}m ${r}s` : `${r}s`;
 }
 
+function formatExactTimestamp(dateStr: string | undefined, isEn: boolean, compact = false): string {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  if (compact) {
+    return d.toLocaleString(isEn ? 'en-US' : 'ko-KR', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  }
+  return d.toLocaleString(isEn ? 'en-US' : 'ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+}
+
 function getRunStateLabel(status: string, conclusion: string | null, isEn: boolean) {
   if (status !== 'completed') {
     return {
@@ -556,8 +581,24 @@ export const PagesDeploymentLogMonitor: React.FC<PagesDeploymentLogMonitorProps>
     [selectedJob]
   );
 
+  const runMetrics = useMemo(() => {
+    const passed = runs.filter((r) => r.status === 'completed' && r.conclusion === 'success').length;
+    const failed = runs.filter(
+      (r) => r.status === 'completed' && r.conclusion !== 'success' && r.conclusion !== 'cancelled' && r.conclusion !== 'skipped'
+    ).length;
+    const active = runs.filter((r) => r.status !== 'completed').length;
+    const finished = passed + failed;
+    const successRate = finished > 0 ? Math.round((passed / finished) * 100) : null;
+    const latest = runs[0] || null;
+    const latestState = latest ? getRunStateLabel(latest.status, latest.conclusion, isEn) : null;
+    return { passed, failed, active, successRate, latest, latestState };
+  }, [runs, isEn]);
+
   return (
-    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+    <section
+      id="pages-deploy-logs-section"
+      className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden"
+    >
       {/* Header Bar */}
       <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="space-y-1 min-w-0">
@@ -680,6 +721,83 @@ export const PagesDeploymentLogMonitor: React.FC<PagesDeploymentLogMonitorProps>
         </div>
       )}
 
+      {/* Summary KPI Strip: Status, Recent Timestamp & Pass/Fail Tally */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 dark:divide-slate-800 border-b border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40">
+        <div className="px-4 py-3 space-y-0.5">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {isEn ? 'Latest Deploy Status' : '최신 배포 상태'}
+          </div>
+          {runMetrics.latest && runMetrics.latestState ? (
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold">
+              <span className={`w-2 h-2 rounded-full ${runMetrics.latestState.dotClass}`} />
+              <span className={runMetrics.latestState.textClass}>{runMetrics.latestState.label}</span>
+              <span className="font-mono text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                #{runMetrics.latest.run_number}
+              </span>
+            </div>
+          ) : (
+            <div className="text-xs font-mono text-slate-400">{isLoadingRuns ? '...' : '-'}</div>
+          )}
+        </div>
+
+        <div className="px-4 py-3 space-y-0.5">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {isEn ? 'Recent Execution Time' : '최근 실행 시각'}
+          </div>
+          {runMetrics.latest ? (
+            <div className="text-xs font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums truncate">
+              {formatExactTimestamp(runMetrics.latest.created_at, isEn)}
+              <span className="ml-1.5 font-sans text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                ({formatRelativeTime(runMetrics.latest.created_at, isEn)})
+              </span>
+            </div>
+          ) : (
+            <div className="text-xs font-mono text-slate-400">{isLoadingRuns ? '...' : '-'}</div>
+          )}
+        </div>
+
+        <div className="px-4 py-3 space-y-0.5">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {isEn ? 'Recent Pass / Fail' : '최근 성공 · 실패 집계'}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 text-xs font-mono font-bold tabular-nums">
+            <span className="text-emerald-600 dark:text-emerald-400">
+              {runMetrics.passed} {isEn ? 'Passed' : '성공'}
+            </span>
+            <span aria-hidden="true" className="text-slate-400">·</span>
+            <span className={runMetrics.failed > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}>
+              {runMetrics.failed} {isEn ? 'Failed' : '실패'}
+            </span>
+            {runMetrics.successRate !== null && (
+              <>
+                <span aria-hidden="true" className="text-slate-400">·</span>
+                <span className="text-slate-700 dark:text-slate-300">{runMetrics.successRate}%</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="px-4 py-3 space-y-0.5">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {isEn ? 'Latest Trigger & Duration' : '트리거 · 소요 시간'}
+          </div>
+          {runMetrics.latest ? (
+            <div className="text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 tabular-nums">
+              <span>{runMetrics.latest.event || 'push'}</span>
+              <span aria-hidden="true" className="mx-1.5 text-slate-400">·</span>
+              <span>
+                {formatDuration(
+                  runMetrics.latest.run_started_at || runMetrics.latest.created_at,
+                  runMetrics.latest.status === 'completed' ? runMetrics.latest.updated_at : null
+                )}
+              </span>
+            </div>
+          ) : (
+            <div className="text-xs font-mono text-slate-400">{isLoadingRuns ? '...' : '-'}</div>
+          )}
+        </div>
+      </div>
+
       {/* Main Two-Column Inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-800">
         {/* Left Pane: deploy-pages.yml Run History */}
@@ -770,6 +888,8 @@ export const PagesDeploymentLogMonitor: React.FC<PagesDeploymentLogMonitorProps>
                       </p>
 
                       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10.5px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                        <span>{formatExactTimestamp(run.created_at, isEn, true)}</span>
+                        <span aria-hidden="true">·</span>
                         <span>{run.event || 'push'}</span>
                         <span aria-hidden="true">·</span>
                         <span>{run.head_branch || branch}</span>

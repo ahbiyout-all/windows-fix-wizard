@@ -15867,6 +15867,7 @@ export default function App() {
                         isServerMode={!IS_GITHUB_PAGES}
                         getAuthHeaders={getAuthHeaders}
                         onTriggerSuccess={() => { void fetchGithubConfig(); }}
+                        onViewLogs={() => setAdminConsoleView('pages-logs')}
                         title={language === 'en' ? 'GitHub Pages Deployment Pipeline' : 'GitHub Pages 웹 서비스 배포 파이프라인'}
                       />
                       <GitHubWorkflowStatus
