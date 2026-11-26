@@ -28,8 +28,9 @@ The application runs as a full-stack Node.js + React 19 application built on Vit
 
 ### Frontend (Client-Side)
 - **Framework**: React 19 with TypeScript and Vite.
-- **PWA Offline / Cache Control**: `vite-plugin-pwa` with `cleanupOutdatedCaches: true` and `NetworkOnly` rules for `/data/*.json` and `/api/*` so newly deployed datasets are immediately visible.
-- **Styling & UI**: Tailwind CSS v4, Framer Motion (`motion/react`), `lucide-react`, Recharts.
+- **PWA Offline / Cache Control**: `vite-plugin-pwa` with `cleanupOutdatedCaches: true` and `NetworkOnly` rules for `/data/*.json` and `/api/*` so newly deployed datasets are immediately visible (static bundle pruned of unreferenced assets and dead components).
+- **Interactive Modules**: 4-step `SymptomDiagnosticWizard`, `PowerShellSandbox` with `localStorage`-persisted Execution History sidebar, `TriangleSyncMonitor`, and `LinkRepairWorkbench`.
+- **Styling & UI**: Tailwind CSS v4, Motion (`motion/react`), `lucide-react`, Recharts.
 
 ### Backend (Server-Side)
 - **Engine**: Express with TypeScript running on port `3000` (Vite middleware in dev, CJS `esbuild` bundle in production).
@@ -39,7 +40,7 @@ The application runs as a full-stack Node.js + React 19 application built on Vit
 
 ## 2. 3-Way Automated Synchronization (GitHub ↔ Pages ↔ AI Studio Preview)
 1. **GitHub Actions Collector (`.github/workflows/windows-fix-collector.yml`)**:
-   - Runs every 3 hours (`0 */3 * * *`) using `scripts/github-collector.ts` with multi-model & keyless fallback.
+   - Runs every 3 hours (`0 */3 * * *`) targeting `Windows 11, Windows 10` (`data/github-collector-options.json`) using `scripts/github-collector.ts` with multi-model & keyless fallback.
    - Updates `data/issues.json`, `data/github-feed.json`, `data/ai-model-registry.json`, and `src/data/knownIssues.ts`.
    - Signs payloads with `x-winfix-signature-256` HMAC-SHA256 + `x-cron-secret` to `/api/github/sync` (or `/api/github/webhook/heartbeat` when 0 new issues are added) with HTML login redirect detection (`ais-dev-*` vs `ais-pre-*`).
    - Conditionally dispatches `deploy-pages.yml` based on `data/github-collector-options.json` (`autoDeployPages`).

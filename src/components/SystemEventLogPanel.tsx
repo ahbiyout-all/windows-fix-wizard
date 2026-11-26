@@ -7,29 +7,21 @@ import {
   RefreshCw,
   Search,
   Filter,
-  Download,
   Copy,
   Check,
-  FileCode,
   Layers,
-  Clock,
   ShieldAlert,
-  Server,
   X,
   ExternalLink,
   ChevronRight,
-  Code2,
   Sparkles,
   CheckCircle2,
   Monitor,
   Cpu,
   HardDrive,
   Wifi,
-  Globe,
   Laptop,
   Upload,
-  Play,
-  ShieldCheck,
   Zap,
   BookOpen,
   Smartphone,
@@ -432,45 +424,6 @@ export const SystemEventLogPanel: React.FC<SystemEventLogPanelProps> = ({
       return true;
     });
   }, [logs, selectedLevel, selectedChannel, searchQuery]);
-
-  // Export handlers
-  const handleExportJson = () => {
-    const exportable = filteredLogs.map(l => ({
-      ...l,
-      errorCode: getEventErrorCode(l)
-    }));
-    const blob = new Blob([JSON.stringify(exportable, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Windows_Event_Logs_${selectedLevel}_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const handleExportCsv = () => {
-    const headers = ['EventID', 'ErrorCode', 'Level', 'Timestamp', 'Provider', 'Channel', 'Source', 'Message'];
-    const rows = filteredLogs.map(l => [
-      l.eventId,
-      `"${getEventErrorCode(l)}"`,
-      l.level,
-      l.timestamp,
-      `"${String(l.provider ?? '').replace(/"/g, '""')}"`,
-      l.channel,
-      `"${String(l.source ?? '').replace(/"/g, '""')}"`,
-      `"${String(l.message ?? '').replace(/"/g, '""')}"`
-    ]);
-    const csvString = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Windows_Event_Logs_${selectedLevel}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
 
   const handleCopyXml = (xml?: string) => {
     if (!xml) return;

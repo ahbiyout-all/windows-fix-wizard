@@ -3,7 +3,6 @@ import { parseJsonResponse } from '../utils/safeFetch';
 import { 
   Shield, 
   ShieldAlert, 
-  ShieldCheck, 
   Check, 
   AlertTriangle, 
   Cpu, 
@@ -14,7 +13,6 @@ import {
   FileSignature, 
   X,
   Sparkles,
-  Info,
   Copy,
   Clipboard,
   Trash2

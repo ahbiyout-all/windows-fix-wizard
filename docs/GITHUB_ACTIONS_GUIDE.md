@@ -96,13 +96,22 @@ on:
           - '오디오/사운드'
           - '디스플레이/그래픽'
       batch_size:
-        description: '수집할 해결책 개수 (1-4개 권장)'
+        description: 'Number of fixes to collect (1-10)'
         required: false
-        default: '2'
+        default: ''
+      model_preference:
+        description: 'Preferred Gemini AI Model (auto or model ID)'
+        required: false
+        default: 'auto'
+      target_windows:
+        description: 'Comma-separated Windows versions'
+        required: false
+        default: 'Windows 11,Windows 10'
 
 # 3. Git 커밋 및 푸시를 위한 필수 권한 부여
 permissions:
   contents: write
+  actions: write
 
 jobs:
   collect-and-sync:
@@ -130,33 +139,51 @@ jobs:
         id: run-collector
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           APP_WEBHOOK_URL: ${{ secrets.APP_WEBHOOK_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          INPUT_TOPIC: ${{ github.event.inputs.topic || 'all' }}
-          BATCH_SIZE: ${{ github.event.inputs.batch_size || '2' }}
+          INPUT_TOPIC: ${{ github.event.inputs.topic || '' }}
+          INPUT_BATCH_SIZE: ${{ github.event.inputs.batch_size || '' }}
+          INPUT_MODEL_PREFERENCE: ${{ github.event.inputs.model_preference || '' }}
+          INPUT_TARGET_WINDOWS: ${{ github.event.inputs.target_windows || '' }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: |
           npx tsx scripts/github-collector.ts
 
       - name: 🚀 Commit & Push updated issues dataset (GitOps)
+        id: git-push-step
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # 수집된 데이터셋 변경 여부 체크
-          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json)" ]; then
+
+          if [ -n "$(git status --porcelain data/issues.json data/github-feed.json data/ai-model-registry.json src/data/knownIssues.ts)" ]; then
             git add data/issues.json data/github-feed.json
+            [ -f data/ai-model-registry.json ] && git add data/ai-model-registry.json || true
+            [ -f src/data/knownIssues.ts ] && git add src/data/knownIssues.ts || true
             TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
-            git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP) [skip ci]"
-            
-            # 동시 커밋 충돌 방지를 위한 rebase 재시도 루프 (최대 3회)
+            git commit -m "🤖 [GitOps] Autonomous AI Windows Fixes collected ($TIMESTAMP)"
+
             for i in {1..3}; do
               git pull --rebase origin ${{ github.ref_name }} || true
               git push origin HEAD:${{ github.ref_name }} && break || sleep 5
             done
-            echo "✅ Successfully committed and pushed updated dataset to repository."
+            echo "dataset_changed=true" >> $GITHUB_OUTPUT
           else
-            echo "ℹ️ No dataset changes to commit in this cycle."
+            echo "dataset_changed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: 🌐 Trigger GitHub Pages Deployment
+        if: steps.git-push-step.outputs.dataset_changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          AUTO_DEPLOY=$(node -e "try{const fs=require('fs');const o=JSON.parse(fs.readFileSync('data/github-collector-options.json','utf8'));console.log(o.autoDeployPages===false?'false':'true')}catch{console.log('true')}")
+          if [ "$AUTO_DEPLOY" = "false" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            exit 0
+          fi
+          gh workflow run deploy-pages.yml --ref ${{ github.ref_name }} || true
 ```
 
 ### ⏰ Cron 스케줄 시간대(Timezone) 변환표
@@ -207,12 +234,12 @@ GitHub Actions가 문제 없이 자동 커밋하고 AI API를 호출하려면 **
 
 자율 수집 엔진인 `scripts/github-collector.ts`는 안정적인 수집을 위해 다층 방어 기법을 적용하고 있습니다.
 
-### 1) 다중 모델 자동 폴백 (Multi-Model Resilience)
-Gemini 특정 모델의 일시적인 쿼터 소진이나 서비스 점검 시 다음 순서로 즉시 폴백하여 중단 없이 수집을 완수합니다:
-1. `gemini-2.5-flash` (기본 초고속 추론)
-2. `gemini-3.5-flash` (심층 검색 추론)
-3. `gemini-3.1-flash-lite` (경량 모델 폴백)
-4. `gemini-2.5-flash-lite` (최종 비상 폴백)
+### 1) 다중 모델 자동 폴백 (Multi-Model & External AI Resilience)
+`lib/ai-resilience-router.ts` 기반 서킷 브레이커와 멀티 프로바이더 라우터가 동작하며, Gemini 모델 쿼터 소진 또는 장애 시 다음 순서로 자동 전환됩니다:
+1. `gemini-4-hydrogen` (최신 4세대 Flash · Google Search Grounding 기본 엔진)
+2. `gemini-3.8-flash` (Search Grounding 안정화 폴백)
+3. `gemini-3.1-flash-lite` (경량 고속 모델 폴백)
+4. 무료 외부 프로바이더 (`Groq`, `Mistral`, `OpenRouter`, `NVIDIA`, `Cohere`, `Cerebras`, `Cloudflare`, `HuggingFace`) 및 Keyless 폴백
 
 ### 2) 실시간 웹 그라운딩 (Google Search Grounding)
 `tools: [{ googleSearch: {} }]` 옵션을 활성화하여, 단순 사전 학습된 지식이 아니라 **Microsoft 공식 지원 문서(support.microsoft.com), Windows 11 24H2/23H2 최신 릴리즈 노트, TechNet 포럼**의 실시간 오류 해결책을 검색하고 반영합니다.
@@ -338,8 +365,8 @@ export interface KnownIssue {
 ### Q3. 여러 워크플로가 동시에 실행되거나 로컬에서 커밋을 올려서 충돌(Conflict)이 나면 어떻게 되나요?
 > **해결책**: 워크플로의 푸시 스텝에 `git pull --rebase origin ${{ github.ref_name }}` 재시도 루프가 3회 구현되어 있어, 최신 원격 변경사항을 자동으로 리베이스한 뒤 푸시하므로 충돌로 인한 워크플로 실패가 방지됩니다.
 
-### Q4. 스케줄 크론(`0 */6 * * *`)이 정각에 바로 돌지 않습니다.
-> **설명**: GitHub Actions의 스케줄 큐는 무료 공유 풀을 사용하므로 서버 부하에 따라 5분~15분 정도의 지연이 발생할 수 있습니다. 정상 동작이며 지연 후 반드시 실행됩니다. 즉시 수집을 원할 경우 Actions 탭의 **`Run workflow`** 버튼이나 앱 UI의 **`워크플로 가동`** 버튼을 누르시면 됩니다.
+### Q4. 스케줄 크론(`0 */3 * * *`)이 정각에 바로 돌지 않습니다.
+> **설명**: GitHub Actions의 스케줄 큐는 무료 공유 풀을 사용하므로 서버 부하에 따라 5분~15분 정도의 지연이 발생할 수 있습니다. 정상 동작이며 지연 후 반드시 실행됩니다. 즉시 수집을 원할 경우 Actions 탭의 **`Run workflow`** 버튼이나 앱 UI의 **`워크플로 가동`** 버튼을 누르시면 됩니다. (참고: 기본 대상 OS는 `data/github-collector-options.json`의 `Windows 11, Windows 10`으로 설정되어 있습니다.)
 
 ### Q5. 수집 결과를 한눈에 확인하려면 어디로 가야 하나요?
 > **확인 방법**:

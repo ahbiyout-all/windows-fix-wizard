@@ -11,9 +11,8 @@ import {
   AlertTriangle, 
   Info, 
   ExternalLink, 
-  RefreshCw, 
   Terminal, 
-  X, 
+  X,  
   Check, 
   Sparkles, 
   Cpu, 
@@ -68,7 +67,7 @@ export const SystemRestoreUtility: React.FC<SystemRestoreUtilityProps> = ({
   }, []);
 
   // Simulated / Sample restore points list for inspection preview
-  const [restorePoints, setRestorePoints] = useState<SimulatedRestorePoint[]>([
+  const [restorePoints] = useState<SimulatedRestorePoint[]>([
     {
       sequenceNumber: 42,
       description: 'WinFix_PreRepair_NetworkStack_Reset',

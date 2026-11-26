@@ -5,7 +5,7 @@
 [![GitHub Pages Deploy](https://github.com/AhBiYout-all/windows-fix-wizard/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/AhBiYout-all/windows-fix-wizard/actions/workflows/deploy-pages.yml)
 [![GitOps Collector](https://github.com/AhBiYout-all/windows-fix-wizard/actions/workflows/windows-fix-collector.yml/badge.svg)](https://github.com/AhBiYout-all/windows-fix-wizard/actions/workflows/windows-fix-collector.yml)
 
-> **Google Gemini AI 실시간 웹 그라운딩과 Zero Cloud DB (`data/*.json` + AES-256-GCM 비공개 백업 금고), GitHub Actions/Pages 3각 자동 연동 파이프라인을 결합한 Windows 10/11/Server 시스템 복구 플랫폼**
+> **Google Gemini AI 실시간 웹 그라운딩과 Zero Cloud DB (`data/*.json` + AES-256-GCM 비공개 백업 금고), GitHub Actions/Pages 3각 자동 연동 파이프라인을 결합한 Windows 11 · Windows 10 시스템 복구 플랫폼**
 
 ---
 

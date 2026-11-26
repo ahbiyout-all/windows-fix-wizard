@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Archive, 
-  Download, 
   Trash2, 
   Clock, 
   HardDrive, 
@@ -10,9 +9,6 @@ import {
   RefreshCw, 
   X, 
   ShieldCheck, 
-  Layers, 
-  AlertCircle,
-  Database,
   Lock,
   ArrowDownToLine,
   CheckCircle2

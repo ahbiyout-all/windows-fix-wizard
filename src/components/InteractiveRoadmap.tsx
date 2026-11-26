@@ -1,25 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { parseJsonResponse } from '../utils/safeFetch';
 import { 
   Milestone, 
   CheckCircle2, 
-  Circle, 
-  ArrowRight, 
-  ShieldAlert, 
-  Activity, 
   Play, 
   Check, 
-  AlertCircle, 
   Terminal, 
-  ChevronRight,
   Database,
-  Cpu,
   Lock,
   AlertTriangle,
   ShieldCheck,
   RefreshCw,
   RotateCcw,
-  Settings,
   HelpCircle,
   Copy,
   Download,
@@ -29,16 +20,6 @@ import {
 
 interface Props {
   language: 'ko' | 'en';
-}
-
-interface RoadmapPhase {
-  id: number;
-  title: string;
-  titleKo: string;
-  status: 'completed' | 'in_progress' | 'planned';
-  desc: string;
-  descKo: string;
-  steps: { name: string; nameKo: string; done: boolean }[];
 }
 
 // Preset powershell commands for the user to try out in the validator
@@ -124,27 +105,13 @@ const JARGON_DICTIONARY = [
 ];
 
 export function InteractiveRoadmap({ language }: Props) {
-  const [activeTab, setActiveTab] = useState<'validator' | 'multinode' | 'future'>('validator');
   const [isBeginnerMode, setIsBeginnerMode] = useState<boolean>(true);
-  const [selectedPhase, setSelectedPhase] = useState<number>(6); // Set default to Phase 6 (Multi-Node Recovery & Grounding Sync)
-
-  // Future & Self-Reflection precision validation states
-  const [isSelfReflecting, setIsSelfReflecting] = useState<boolean>(false);
-  const [reflectionProgress, setReflectionProgress] = useState<number>(0);
-  const [reflectionLogs, setReflectionLogs] = useState<string[]>([]);
-  const [reflectionAuditResults, setReflectionAuditResults] = useState<any[]>([
-    { id: 'aud-1', nameKo: '타겟 OS 호환 상태 오프라인 검증 무결성', nameEn: 'Target OS Offline State Schema Integrity', status: 'pending', value: 'N/A' },
-    { id: 'aud-2', nameKo: 'AST 구문 파서 - 권한 상승 및 Base64 탐지 정밀도', nameEn: 'AST Parser Privilege & Obfuscation Detection Accuracy', status: 'pending', value: 'N/A' },
-    { id: 'aud-3', nameKo: '실시간 이중화 안전 보증 채널(Safe Vault) 지연 시간', nameEn: 'Dual-Sync Cloud Safe Vault Handshake Latency', status: 'pending', value: 'N/A' },
-    { id: 'aud-4', nameKo: '자가 자율 복구 센티널 메모리 정합성', nameEn: 'Autonomous Self-Healing Sentry Memory Allocations', status: 'pending', value: 'N/A' }
-  ]);
 
   // Interactive Validator States
   const [targetOS, setTargetOS] = useState<string>('win11_23h2');
   const [isAdminElevated, setIsAdminElevated] = useState<boolean>(true);
   const [activeScript, setActiveScript] = useState<string>(SCRIPTS_PRESETS[0].code);
   const [isValidating, setIsValidating] = useState<boolean>(false);
-  const [validatedCode, setValidatedCode] = useState<string>('');
   
   // Real analysis reports
   const [diagnosedCmdlets, setDiagnosedCmdlets] = useState<string[]>([]);
@@ -213,213 +180,14 @@ export function InteractiveRoadmap({ language }: Props) {
     setShowManualPasteBox(true);
   };
 
-  // Phase 6 Multi-Terminal / Cloud Vault Sync states with real Backend API Integration
-  const [nodes, setNodes] = useState([
-    { id: 'node-1', name: 'WS-CORE-01', status: 'warning', os: 'Windows 11 23H2', textKo: '정책 레지스트리 비암호화 유도 검출', textEn: 'DeliveryOptimization policy drift' },
-    { id: 'node-2', name: 'WS-PROD-RECV', status: 'healthy', os: 'Windows 10 22H2', textKo: '정상 동기화 패치 수립됨', textEn: 'Synced & Certified' },
-    { id: 'node-3', name: 'WS-DEV-09', status: 'healthy', os: 'Windows 11 22H2', textKo: '보안 프로파일 무결성 정상', textEn: 'Digital signature verified' },
-    { id: 'node-4', name: 'WS-STAGE-SVR', status: 'failed', os: 'Windows Server 2022', textKo: 'wuauserv 기동 지연 및 데이터 캐시 데드락', textEn: 'Update cache conflict (Code 0x80240020)' }
-  ]);
-  const [recoveryProgress, setRecoveryProgress] = useState<number>(0);
-  const [isRecovering, setIsRecovering] = useState<boolean>(false);
-  const [recoveryLogs, setRecoveryLogs] = useState<string[]>([
-    "[SYSTEM WATCHER] Active Sentinel v3.1 Daemon fully initialized...",
-    "[CLOUD INTERFERE] Vault double connection securely verified.",
-    "[COMPLIANCE] Verification parameters passed on standard client WS-DEV-09.",
-    "[ALERT] WS-STAGE-SVR and WS-CORE-01 require corrective rollbacks."
-  ]);
-
   const intervalRef = useRef<any>(null);
-  const simIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reflectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef<boolean>(true);
   const runDiagnosticsRef = useRef<(code: string) => void>(() => {});
 
-  // Poll real-time Multi-Node telemetry and Sentinel logs from Backend API
   useEffect(() => {
-    let pollInterval: any = null;
-
-    const fetchNodeData = async () => {
-      try {
-        const resp = await fetch("/api/nodes");
-        const data = await parseJsonResponse(resp);
-        if (data.success) {
-          setNodes(data.nodes);
-          setIsRecovering(data.isHealing);
-          setRecoveryProgress(data.progress || 0);
-        }
-
-        const logResp = await fetch("/api/nodes/logs");
-        const logData = await parseJsonResponse(logResp);
-        if (logData.success) {
-          setRecoveryLogs(logData.logs);
-        }
-      } catch (err) {
-        console.error("Failed to fetch node telemetry:", err);
-      }
-    };
-
-    if (activeTab === 'multinode') {
-      fetchNodeData();
-      pollInterval = setInterval(fetchNodeData, 1000);
-    }
-
     return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  }, [activeTab]);
-
-  const startMultiNodeHealingSimulation = async () => {
-    try {
-      setIsRecovering(true);
-      setRecoveryProgress(0);
-      const rawToken = localStorage.getItem('winfix_admin_token') || '';
-      const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : '';
-      const headers: Record<string, string> = {};
-      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
-
-      const resp = await fetch("/api/nodes/heal", { method: "POST", headers });
-      const data = await parseJsonResponse(resp);
-      if (data.success) {
-        // Immediate update request
-        const statusResp = await fetch("/api/nodes");
-        const statusData = await parseJsonResponse(statusResp);
-        if (statusData.success) {
-          setNodes(statusData.nodes);
-          setIsRecovering(statusData.isHealing);
-          setRecoveryProgress(statusData.progress || 0);
-        }
-      } else {
-        // Client-side local simulation fallback when viewing unauthenticated
-        if (simIntervalRef.current) {
-          clearInterval(simIntervalRef.current);
-          simIntervalRef.current = null;
-        }
-        let simProgress = 0;
-        simIntervalRef.current = setInterval(() => {
-          simProgress += 20;
-          setRecoveryProgress(simProgress);
-          if (simProgress >= 100) {
-            if (simIntervalRef.current) {
-              clearInterval(simIntervalRef.current);
-              simIntervalRef.current = null;
-            }
-            setIsRecovering(false);
-            setNodes(prev => prev.map(n => ({ ...n, status: 'healthy' })));
-          }
-        }, 500);
-      }
-    } catch (err) {
-      console.error("Failed to trigger enterprise multinode healing:", err);
-      setIsRecovering(false);
-    }
-  };
-
-  const triggerSelfReflectionAudit = async () => {
-    if (isSelfReflecting) return;
-    setIsSelfReflecting(true);
-    setReflectionProgress(0);
-    setReflectionLogs([
-      language === 'ko' 
-        ? '[자아성찰 엔진] 시스템의 실질 구성 및 정밀 검증 성능 진단 루프 시동...' 
-        : '[SELF-REFLECTIVE SYSTEM] Starting real-time code verification and system accuracy audit...',
-      language === 'ko'
-        ? '[분석] AST 구문 분석 상태, OS 타겟 정합성, 이중 영속화 채널 레이턴시 실측 진행 중...'
-        : '[AUDIT] Measuring AST patterns correctness, OS build schemas, and dual-sync safe-vault latencies...'
-    ]);
-
-    setReflectionAuditResults(curr => curr.map(item => ({ ...item, status: 'running', value: '...' })));
-
-    try {
-      const rawToken = localStorage.getItem('winfix_admin_token') || '';
-      const adminToken = rawToken && rawToken !== 'local-admin-token' ? rawToken : '';
-      const headers: Record<string, string> = {};
-      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
-
-      const resp = await fetch("/api/audit/self-reflection", { method: "POST", headers });
-      const data = await parseJsonResponse(resp);
-      
-      if (reflectionIntervalRef.current) {
-        clearInterval(reflectionIntervalRef.current);
-        reflectionIntervalRef.current = null;
-      }
-
-      let step = 0;
-      reflectionIntervalRef.current = setInterval(() => {
-        if (!isMountedRef.current) return;
-        step += 25;
-        setReflectionProgress(step);
-
-        const logsArr = Array.isArray(data?.logs) ? data.logs : [];
-        const auditArr = Array.isArray(data?.auditResults) ? data.auditResults : [];
-
-        if (step === 25) {
-          setReflectionLogs(prev => [
-            ...prev,
-            data?.success && logsArr[1] ? logsArr[1] : (language === 'ko' ? '[체크 1/4] 타겟 파일 상태 확인 완료' : '[CHECK 1/4] Checked file target sizes')
-          ]);
-          if (data?.success && auditArr[0]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-1' ? auditArr[0] : item));
-          }
-        } else if (step === 50) {
-          setReflectionLogs(prev => [
-            ...prev,
-            data?.success && logsArr[2] ? logsArr[2] : (language === 'ko' ? '[체크 2/4] 검증 모듈 기능 갱신 체크 완료' : '[CHECK 2/4] Custom buttons verification')
-          ]);
-          if (data?.success && auditArr[1]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-2' ? auditArr[1] : item));
-          }
-        } else if (step === 75) {
-          setReflectionLogs(prev => [
-            ...prev,
-            data?.success && logsArr[3] ? logsArr[3] : (language === 'ko' ? '[체크 3/4] 영속 리드 이미지 무결성 정상' : '[CHECK 3/4] Checked DB mapping integrity')
-          ]);
-          if (data?.success && auditArr[2]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-3' ? auditArr[2] : item));
-          }
-        } else if (step === 100) {
-          if (reflectionIntervalRef.current) {
-            clearInterval(reflectionIntervalRef.current);
-            reflectionIntervalRef.current = null;
-          }
-          setIsSelfReflecting(false);
-          setReflectionLogs(prev => [
-            ...prev,
-            data?.success && logsArr[4] ? logsArr[4] : '',
-            language === 'ko'
-              ? '[자가 검증 성공] 전체 고정 아키텍처 및 정밀 오류 검증 엔진의 무결성 자아성찰이 정상 통과되었습니다.'
-              : '[SUCCESS] Deep self-reflection & multi-state diagnostic audit complete! System is 100% robust.'
-          ].filter(Boolean));
-          if (data?.success && auditArr[3]) {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-4' ? auditArr[3] : item));
-          } else {
-            setReflectionAuditResults(curr => curr.map(item => item.id === 'aud-4' ? { ...item, status: 'success', value: 'Port 3000 Secured' } : item));
-          }
-        }
-      }, 505);
-    } catch (err) {
-      console.error("Failed to run remote code self-reflection audit:", err);
-      if (isMountedRef.current) {
-        setIsSelfReflecting(false);
-      }
-    }
-  };
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
-      }
-      if (simIntervalRef.current) {
-        clearInterval(simIntervalRef.current);
-        simIntervalRef.current = null;
-      }
-      if (reflectionIntervalRef.current) {
-        clearInterval(reflectionIntervalRef.current);
-        reflectionIntervalRef.current = null;
       }
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
@@ -427,101 +195,6 @@ export function InteractiveRoadmap({ language }: Props) {
       }
     };
   }, []);
-
-  // Update phases state dynamically - reflecting Phase 3 as Completed and Phase 4 as in_progress or completed with our simulator!
-  const phases: RoadmapPhase[] = [
-    {
-      id: 1,
-      title: "Phase 1: Base Platform & AI Solution Engine",
-      titleKo: "1단계: 기본 플랫폼 및 AI 해결방안 엔진 구축",
-      status: 'completed',
-      desc: "Architected core wizard system matching error symptoms to Microsoft KB documentation and trusted community solutions dynamically.",
-      descKo: "오류 증상과 Microsoft KB 공식 문서 및 커뮤니티 해결책을 동적으로 연계하는 빌더 코어 시스템 구축 완료.",
-      steps: [
-        { name: "Symptom Diagnosis Matrix Integration", nameKo: "오류 진단 매트릭스 매칭 시스템 구현", done: true },
-        { name: "Dual-mode Persistence Engine (Jamstack & File DB)", nameKo: "이중 영속화 채널 기어 연동 (Jamstack/로컬 파일 DB)", done: true },
-        { name: "Semantic Solution Search Keywords Handler", nameKo: "시맨틱 솔루션 실시간 가중치 검색 적용", done: true }
-      ]
-    },
-    {
-      id: 2,
-      title: "Phase 2: PowerShell Secure Sign & Obfuscation Heuristics",
-      titleKo: "2단계: PowerShell 스크립트 서명 및 난독화 검증 고도화",
-      status: 'completed',
-      desc: "Implemented advanced PowerShell syntax analyzers, SHA-256 digital signature signing, and interactive tampering sandboxes.",
-      descKo: "PowerShell 전용 원화 진단기, 일차 무결성 서명 엔진(SHA-256) 및 하이퍼 실시간 위변조 탐지 샌드박스 완비.",
-      steps: [
-        { name: "Anti-obfuscation Heuristic Sensors (Base64/IEX)", nameKo: "우회 경로 원천 차단 센서 탑재 (Base64/IEX/다운로드)", done: true },
-        { name: "Cryptographic Certificate Sign (UWES Root CA)", nameKo: "플랫폼 공식 루트 인증서 기반 디지털 서명(Sign) 탑재", done: true },
-        { name: "Real-time Tampering Detection Lab Sandbox", nameKo: "실시간 1바이트 오염대비 해시 변동 시뮬레이터 배포", done: true }
-      ]
-    },
-    {
-      id: 3,
-      title: "Phase 3: Secure System State Pre-validation Pipeline",
-      titleKo: "3단계: 시스템 사전 로컬 보안 검증 파이프라인 수립",
-      status: 'completed', // Now fully completed in this turn!
-      desc: "Preflight safety checks to ensure target Windows OS configurations compatibility, registry subtree keys matching, and administrator privilege checks.",
-      descKo: "대상 윈도우 OS 아키텍처 호환성 검정, 레지스트리 충돌 사전 진단 및 관리자 권한 누락 여부 무오류 체크 파이프라인 완비.",
-      steps: [
-        { name: "OS Target Version Alignment Guard", nameKo: "운영체제 대상 빌드 버전 정합성 자동 세부 분석", done: true },
-        { name: "System State Reg Conflict Analyzers", nameKo: "레지스트리 정적 트리 충돌 위험도 지수 산출 모듈", done: true },
-        { name: "Pre-execution Safe Mode Evaluator", nameKo: "안전 모드(Bypass Safe Mode) 가동 시뮬레이팅 기능", done: true }
-      ]
-    },
-    {
-      id: 4,
-      title: "Phase 4: Automatic Restorative Rollback Generator",
-      titleKo: "4단계: 자동 원상복구 회복(Rollback) 트리거 생성기",
-      status: 'completed', // Fully finalized now!
-      desc: "For every applied system fix, automatically compile and side-load rollback PowerShell commands or registry system state restores.",
-      descKo: "변경 적용 예정인 모든 조치 스크립트에 대하여, 100% 원상태 복구가 가능한 백업 .reg / 복원 트리거 자동 합성 기능 구현.",
-      steps: [
-        { name: "Auto-compile Rollback .REG files", nameKo: "실시간 대조 원복용 레지스트리 레코드 자동 변환", done: true },
-        { name: "System Restore Point Injection", nameKo: "윈도우 복원 지점(System Restore) 실시간 주입 연동", done: true },
-        { name: "Disaster Recovery Emergency One-click Action", nameKo: "재해 복구 전용 원클릭 응급 복구 패키지 생성", done: true }
-      ]
-    },
-    {
-      id: 5,
-      title: "Phase 5: Enterprise-Grade Verification & Real-time Diagnostic Sandbox",
-      titleKo: "5단계: 기업급 이행 정밀 검증 및 실시간 위협 진단 샌드박서",
-      status: 'completed',
-      desc: "Conduct high-fidelity environment simulation to prevent privilege escalation exploits, block harmful obfuscation patterns, and assure reliable state restoration.",
-      descKo: "권한 상승 익스플로잇 방지, 난독화된 악성 명령어 원천 차단, 초정밀 타겟 OS 호환 상태 오프라인 진단과 다중 복구 파이프라인 무오류 고도화.",
-      steps: [
-        { name: "AST-level Privilege Escalation Detection", nameKo: "AST 구문 분석 기반 권한 상승(UAC) 위협 원천 방어", done: true },
-        { name: "Active Heuristic De-obfuscation Decrypter", nameKo: "실시간 난독화(Base64/Hex) 복호화 및 유해 위협 격리 진단", done: true },
-        { name: "Multi-State Consistency Deep Validation", nameKo: "다중 시스템 정합성 자아성찰 교차 검증 파이프라인 탑재", done: true }
-      ]
-    },
-    {
-      id: 6,
-      title: "Phase 6: Multi-Node Recovery & Active Grounding Synchronization",
-      titleKo: "6단계: 다중 노드 무중단 회복 및 실시간 액티브 동기화",
-      status: 'completed',
-      desc: "Establish low-latency synchronizers connected to Cloud DB and secure offline vaults, assuring fail-safe disaster recovery across massive Windows terminals.",
-      descKo: "보안 오프라인 볼트와 클라우드 데이터베이스의 실시간 이중 동적 동기화를 통해, 수많은 윈도우 단말 전체를 아우르는 강력한 일괄 재해 복구(Disaster Recovery) 가동.",
-      steps: [
-        { name: "Cloud Vault Secure Dual-Sync Channel", nameKo: "클라우드 세이프 볼트-이중 영속화 정합성 교차 가동", done: true },
-        { name: "Enterprise One-Click Collective Rollback", nameKo: "대규모 다중 단말 일괄 재해 대비 영구 원복 시나리오 구축", done: true },
-        { name: "Autonomous AI Self-Healing Sentinel", nameKo: "자가 복구(Self-Healing) 기반 자율 감시 보초병 센티널 자율 적용", done: true }
-      ]
-    },
-    {
-      id: 7,
-      title: "Phase 7: Granular Threat Intelligence & Federated Verification",
-      titleKo: "7단계: 세분화된 위협 인텔리전스 공유 및 자가 성찰적 프로파일 연합",
-      status: 'completed',
-      desc: "Introduce autonomous dynamic signature alignment and deep static semantic validation loops to prevent regression exploits and assure total security conformance.",
-      descKo: "실시간 보안 회귀 분석용 무결성 서명 체계 자가 진화 및 보안 정책 변경 내역 원격 피드백 채널을 활용한 차세대 위협 프로파일링 자치 연합 수립.",
-      steps: [
-        { name: "Static Semantic Verification Alignment Loop", nameKo: "정적 시맨틱 검증 정합성 차단 루프 수립", done: true },
-        { name: "Self-Reflective Validation Sandbox Sentry", nameKo: "자아성찰적 가상 기계 시뮬레이션 센트리 고도화", done: true },
-        { name: "Telemetry and Audit Immutable Proof Vault", nameKo: "침해 분석 조사용 원격 텔레메트리 보증 영속 스토리지", done: true }
-      ]
-    }
-  ];
 
   // Live Deep Diagnostics Parser
   const runLiveDeepDiagnostics = (code: string) => {
@@ -633,25 +306,19 @@ export function InteractiveRoadmap({ language }: Props) {
     compositeRollback += `# Generated At: ${new Date().toISOString()}\r\n`;
     compositeRollback += `# =========================================================\r\n\r\n`;
 
-    let actionAdded = false;
-
     // Check registry changes to undo
     if (registryKeys.length > 0) {
       compositeRollback += `# --- 1단계: 레지스트리 원래 설정 복원 (Registry Auto-Restore) ---\r\n`;
       registryKeys.forEach(key => {
         if (key.toLowerCase().includes('deliveryoptimization')) {
           compositeRollback += `Set-ItemProperty -Path "${key}" -Name "DODownloadMode" -Value 1 -Force\r\n`;
-          actionAdded = true;
         } else if (key.toLowerCase().includes('tls 1.0')) {
           compositeRollback += `Remove-Item -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.0" -Recurse -Force\r\n`;
-          actionAdded = true;
         } else if (key.toLowerCase().includes('windowsupdate')) {
           compositeRollback += `Remove-ItemProperty -Path "${key}" -Name "ExcludeWUDriversInQualityUpdate" -Force\r\n`;
-          actionAdded = true;
         } else {
           compositeRollback += `# [ROLLBACK REC] Restore key values to default baseline for: ${key}\r\n`;
           compositeRollback += `Remove-ItemProperty -Path "${key}" -Name "*" -ErrorAction SilentlyContinue\r\n`;
-          actionAdded = true;
         }
       });
       compositeRollback += `\r\n`;
@@ -662,11 +329,9 @@ export function InteractiveRoadmap({ language }: Props) {
       compositeRollback += `# --- 2단계: 중지된 필수 시스템 스케줄러 서비스 재가동 ---\r\n`;
       if (code.toLowerCase().includes('wuauserv')) {
         compositeRollback += `Start-Service -Name "wuauserv" -ErrorAction SilentlyContinue\r\n`;
-        actionAdded = true;
       }
       if (code.toLowerCase().includes('bits')) {
         compositeRollback += `Start-Service -Name "bits" -ErrorAction SilentlyContinue\r\n`;
-        actionAdded = true;
       }
       compositeRollback += `\r\n`;
     }
@@ -700,7 +365,6 @@ export function InteractiveRoadmap({ language }: Props) {
         const receivedScript = customEvent.detail.script;
         setActiveScript(receivedScript);
         runDiagnosticsRef.current(receivedScript);
-        setActiveTab('validator');
         // Scroll to the verifier cockpit so the user sees results immediately
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
         scrollTimeoutRef.current = setTimeout(() => {
@@ -735,7 +399,6 @@ export function InteractiveRoadmap({ language }: Props) {
   const handleStartRealValidation = () => {
     setIsValidating(true);
     setSafetyScore(null);
-    setValidatedCode(activeScript);
 
     let progress = 0;
     if (intervalRef.current) {

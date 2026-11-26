@@ -12,7 +12,6 @@ import {
   Zap,
   Tag,
   GitBranch,
-  Radio,
   Sparkles
 } from 'lucide-react';
 

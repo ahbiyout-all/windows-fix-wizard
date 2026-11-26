@@ -33,10 +33,13 @@ This patch document outlines the latest features, enhancements, and system secur
   - `src/App.tsx`에서 `compileScriptWithRollback` 호출 시 문자열 대신 `{ issueCode }` 옵션 객체를 전달하도록 교정하고 함수 시그니처도 방어적으로 확장해 복원 지점 레이블(`WinFix_<오류코드>`)이 정확히 주입되도록 수정했습니다.
   - 레지스트리 백업 `reg.exe export` 경로를 단일 따옴표 리터럴로 격리해 `$`/`\`` 치환을 원천 차단하고, 백업 대상 키가 PC에 아직 존재하지 않아 `Restore_Registry.cmd`가 생성되지 않은 경우 바탕화면 빈 백업 폴더를 자동 정리하도록 개선했습니다.
   - 증상 진단 마법사의 `performance` 영역 매칭 카테고리에 데이터셋 실제 분류(`성능/프리징`, `파일 시스템/저장소`)를 추가하고, 스크립트가 없는 수동 가이드 카드에 `수동 절차 가이드` 배지를 분리 표시했습니다.
+  - 관리자 로그인 및 관리자 탭 진입 시 백그라운드 로그 카운트 선로딩(`fetchAdminLogs`, `fetchSearchLogs`, `fetchFeedbackLogs`, `fetchAppErrorLogs`)이 `showLogsModal`을 자동 호출해 **사용자 피드백 로그 모달이 자동으로 열리던 문제**를 `openModal = false` 기본 파라미터 분리로 수정했습니다(명시적 조회 버튼·페이지네이션 클릭 시에만 모달 표시).
+  - `.github/workflows/deploy-pages.yml`의 스텝 `if: ${{ secrets.* }}` 구문 오류를 제거해 GitHub Actions 워크플로 파싱 실패(#180)를 해결하고, `server.ts` 3각 프로브(`/api/github/triangle-status`)가 미발행 공유 URL의 HTTP 404 HTML 응답을 `AUTH_GATE_HTML` 대신 `UNPUBLISHED_404`로 정확히 분류하도록 개선했습니다.
 
-### 📈 UI/UX, E2E Verification & Documentation Synchronization
-- **불필요 요소·미사용 자산 및 의존성 정리**: 미사용 컴포넌트(`LibraryAnalyticsChart.tsx`), 루트 중복 문서(`blogger_patch_guide.md`), 정적 빌드(`dist/`)에 포함되던 미참조 자산(`/public/assets/aistudio/`, 약 2.1MB), 미사용 npm 패키지(`@google/generative-ai`, `autoprefixer`, `sharp`), 주요 파일의 미사용 import/상수를 제거하고 `ReadingProgressBar.tsx`를 공식 `motion/react` import로 통일했습니다.
-- `src/types.ts`(`TroubleshootingResult`, `LinkRepairProposal`, `WebhookTelemetryEvent`, `TriangleNodeTelemetry`, `PreFlightSafetyReport`) 확장, `scripts/verify-sync-pipeline.sh` 9단계 검증 확장, 전 모듈 및 전체 운영 문서(`README.md`, `docs/AUTOMATED_SYNC.md`, `docs/GITHUB_ACTIONS_GUIDE.md`, `docs/GITHUB_README.md`, `docs/SYSTEM_OVERVIEW.md`, `docs/PATCHNOTES.md`, `docs/PATCH_NOTE.md`)를 `v3.111.0`으로 일괄 동기화했습니다.
+### 📈 UI/UX, E2E Verification & Documentation Synchronization (2026-11-26 갱신)
+- **불필요 요소·미사용 자산 및 의존성 정리**: 미사용 컴포넌트(`LibraryAnalyticsChart.tsx`), 루트 중복 문서(`blogger_patch_guide.md`), 정적 빌드(`dist/`)에 포함되던 미참조 자산(`/public/assets/aistudio/`, 약 2.1MB), 미사용 npm 패키지(`@google/generative-ai`, `autoprefixer`, `sharp`), 데드 코드 및 주요 파일의 미사용 import/변수를 제거하고 `ReadingProgressBar.tsx`를 공식 `motion/react` import로 통일했습니다.
+- **수집 대상 OS 집중 정렬 (`.github/workflows/windows-fix-collector.yml`, `data/github-collector-options.json`)**: 기본 수집 대상을 `Windows 11, Windows 10`으로 정렬해 일반 데스크톱·노트북 문제 해결 정확도와 수집 밀도를 높였습니다.
+- **GitHub · 운영 · 구글 블로거 듀얼 모드 문서 일괄 최신화**: `src/types.ts` 확장 및 `scripts/verify-sync-pipeline.sh` 9단계 검증(PASS=28, WARN=0, FAIL=0)을 바탕으로 `README.md`, `docs/GITHUB_README.md`, `docs/GITHUB_ACTIONS_GUIDE.md`, `docs/AUTOMATED_SYNC.md`, `docs/SECURITY_AND_SMTP_GUIDE.md`, `docs/SYSTEM_OVERVIEW.md`, `docs/PATCHNOTES.md`, `docs/PATCH_NOTE.md`와 구글 블로거 전용 문서(`docs/BLOGGER_COMPOSE_MODE.md`, `docs/BLOGGER_HTML_MODE.md`, `docs/BLOGGER_POST_TEMPLATE.md`, `docs/blogger_patch_guide.md`)를 모두 `v3.111.0` (`2026-11-26`) 사양으로 동기화했습니다.
 
 ---
 

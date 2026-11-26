@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ResponsiveContainer,
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   PieChart,
   Pie,
   Cell,
@@ -24,14 +21,10 @@ import {
   ExternalLink, 
   TrendingUp, 
   ShieldCheck, 
-  AlertTriangle, 
   Play, 
-  GitBranch, 
-  Calendar,
   Zap,
   Activity,
-  Layers,
-  ChevronRight
+  Layers
 } from 'lucide-react';
 import { GitHubWorkflowStatus, WorkflowRun } from './GitHubWorkflowStatus';
 
@@ -71,7 +64,7 @@ export const DeploymentDashboardWidget: React.FC<DeploymentDashboardWidgetProps>
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [serverTokenDetected, setServerTokenDetected] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<'all' | 'pages' | 'collector'>('all');
   const [lastUpdated, setLastUpdated] = useState<string>('');
 

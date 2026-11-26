@@ -1,26 +1,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Activity,
-  Cpu,
   ShieldCheck,
   CheckCircle2,
-  AlertTriangle,
   RefreshCw,
   Copy,
   Check,
   Download,
   Terminal,
   X,
-  Zap,
   RotateCcw,
-  Sparkles,
-  HardDrive,
-  Globe,
   FileCode,
-  ShieldAlert,
   Play,
-  CheckCircle,
-  Clock,
   ArrowRight
 } from 'lucide-react';
 
@@ -55,7 +46,6 @@ export const QuickSystemScanUtility: React.FC<QuickSystemScanUtilityProps> = ({
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(-1);
   const [terminalLogs, setTerminalLogs] = useState<{ type: 'cmd' | 'info' | 'success' | 'warn'; text: string; timestamp: string }[]>([]);
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
-  const [copiedReport, setCopiedReport] = useState<boolean>(false);
   const [healthScore, setHealthScore] = useState<number>(100);
   const [scanCompleted, setScanCompleted] = useState<boolean>(false);
 

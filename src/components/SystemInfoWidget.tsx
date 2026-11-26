@@ -8,11 +8,8 @@ import {
   Filter, 
   Sparkles, 
   Maximize2, 
-  Info, 
   Smartphone, 
-  Wifi, 
   Layers, 
-  ChevronRight,
   ShieldCheck,
   HardDrive
 } from 'lucide-react';

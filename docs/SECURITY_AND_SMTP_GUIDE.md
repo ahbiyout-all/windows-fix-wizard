@@ -1,4 +1,4 @@
-# WinFix Security Hardening & Real SMTP Gateway Guide
+# WinFix Security Hardening & Real SMTP Gateway Guide (v3.111.0)
 
 This document provides a detailed technical reference for the application security mechanisms, rate limiting policies, HTTP response headers, and the real SMTP email delivery gateway implemented in Windows Fix Wizard.
 
@@ -24,6 +24,8 @@ Sensitive endpoints susceptible to abuse, log flooding, or credential-stuffing a
 |---|---|---|---|
 | `POST /api/admin/smtp/verify` | 10 requests / IP | 60 seconds (1 min) | Prevents brute-forcing or abusing external SMTP servers via handshake verification. |
 | `POST /api/visitor/log` | 60 requests / IP | 60 seconds (1 min) | Prevents log-flooding attacks on visitor telemetry and database storage. |
+| `POST /api/scripts/preflight` | 45 requests / IP | 60 seconds (1 min) | Bounds AST/Lint evaluation & rollback wrapper compilation load per client IP. |
+| `POST /api/github/auto-integrate` | 20 requests / IP | 60 seconds (1 min) | Protects server GitHub sync trigger alongside 2-minute server cooldown. |
 
 When an IP exceeds the allowed threshold within the time window, the server returns HTTP `429 Too Many Requests`:
 ```json

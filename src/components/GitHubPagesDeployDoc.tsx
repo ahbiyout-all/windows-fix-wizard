@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Copy, Check, Download, FileCode, Shield, CheckCircle2, AlertTriangle, 
+  Copy, Check, Download, CheckCircle2, AlertTriangle, 
   ExternalLink, ChevronDown, ChevronUp, Globe, Terminal, Sparkles, FolderGit2,
-  RefreshCw, XCircle, Info, Settings, Play, CheckCircle
+  RefreshCw, XCircle, Info, CheckCircle
 } from 'lucide-react';
 
 interface GitHubPagesDeployDocProps {

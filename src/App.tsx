@@ -36,10 +36,6 @@ import {
   FirestoreErrorInfo, 
   TroubleshootingResult, 
   KnownIssue,
-  AdminLog,
-  SearchLog,
-  FeedbackLog,
-  UserActivity,
   BackendLog,
   VisitorLog,
   AutoBlockSettings,
@@ -86,43 +82,6 @@ interface AppErrorLog {
   timestamp: any;
   userId?: string;
   metadata?: any;
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errMsg = error instanceof Error ? error.message : String(error);
-  const lowerMsg = errMsg.toLowerCase();
-  const isQuota = 
-    lowerMsg.includes('quota') || 
-    lowerMsg.includes('429') || 
-    lowerMsg.includes('resource_exhausted') || 
-    lowerMsg.includes('resource-exhausted') ||
-    lowerMsg.includes('free daily read units') ||
-    lowerMsg.includes('free tier database');
-
-  const errInfo: FirestoreErrorInfo = {
-    error: errMsg,
-    authInfo: {
-      userId: auth?.currentUser?.uid || undefined,
-      email: auth?.currentUser?.email || undefined,
-      emailVerified: auth?.currentUser?.emailVerified || undefined,
-      isAnonymous: auth?.currentUser?.isAnonymous || undefined,
-      tenantId: auth?.currentUser?.tenantId || undefined,
-    },
-    operationType,
-    path
-  };
-
-  if (isQuota) {
-    console.warn('Firestore Quota Exceeded (Engaging HA server_file fallback):', JSON.stringify(errInfo));
-    try {
-      localStorage.setItem('winfix_db_mode', 'server_file');
-      localStorage.setItem('winfix_db_mode_fallback', 'true');
-    } catch {}
-    return;
-  }
-
-  console.error('Firestore Error (Global): ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -5274,9 +5233,9 @@ export default function App() {
     }
   };
 
-  const fetchAdminLogs = async (page = 0) => {
+  const fetchAdminLogs = async (page = 0, openModal = false) => {
     if (!isAdmin) return;
-    setLoadingLogs(true);
+    if (openModal) setLoadingLogs(true);
     const path = 'admin_logs';
     let logsLoaded = false;
     try {
@@ -5352,8 +5311,10 @@ export default function App() {
       } catch (_) {}
     }
 
-    setLoadingLogs(false);
-    setShowLogsModal('admin');
+    if (openModal) {
+      setLoadingLogs(false);
+      setShowLogsModal('admin');
+    }
   };
 
   const logVisitorSession = useCallback(async (currentTab?: string, actionType?: string) => {
@@ -5679,9 +5640,9 @@ export default function App() {
     });
   };
 
-  const fetchSearchLogs = async (page = 0) => {
+  const fetchSearchLogs = async (page = 0, openModal = false) => {
     if (!isAdmin) return;
-    setLoadingLogs(true);
+    if (openModal) setLoadingLogs(true);
     const path = 'search_logs';
     let logsLoaded = false;
     try {
@@ -5757,13 +5718,15 @@ export default function App() {
       } catch (_) {}
     }
 
-    setLoadingLogs(false);
-    setShowLogsModal('search');
+    if (openModal) {
+      setLoadingLogs(false);
+      setShowLogsModal('search');
+    }
   };
 
-  const fetchFeedbackLogs = async (page = 0) => {
+  const fetchFeedbackLogs = async (page = 0, openModal = false) => {
     if (!isAdmin) return;
-    setLoadingLogs(true);
+    if (openModal) setLoadingLogs(true);
     const path = 'feedback';
     let logsLoaded = false;
     try {
@@ -5839,8 +5802,10 @@ export default function App() {
       } catch (_) {}
     }
 
-    setLoadingLogs(false);
-    setShowLogsModal('feedback');
+    if (openModal) {
+      setLoadingLogs(false);
+      setShowLogsModal('feedback');
+    }
   };
 
   const clearSearchLogs = () => {
@@ -6096,9 +6061,9 @@ export default function App() {
     );
   };
 
-  const fetchAppErrorLogs = async (page = 0) => {
+  const fetchAppErrorLogs = async (page = 0, openModal = false) => {
     if (!isAdmin) return;
-    setLoadingLogs(true);
+    if (openModal) setLoadingLogs(true);
     const path = 'app_error_logs';
     let logsLoaded = false;
     try {
@@ -6174,8 +6139,10 @@ export default function App() {
       } catch (_) {}
     }
 
-    setLoadingLogs(false);
-    setShowLogsModal('error');
+    if (openModal) {
+      setLoadingLogs(false);
+      setShowLogsModal('error');
+    }
   };
 
   const clearBackendLogs = async () => {
@@ -7233,11 +7200,11 @@ export default function App() {
 
   useEffect(() => {
     if (activeTab === 'admin' && isAdmin) {
-      fetchBackendLogs();
-      fetchAdminLogs();
-      fetchSearchLogs();
-      fetchFeedbackLogs();
-      fetchAppErrorLogs();
+      fetchBackendLogs(false);
+      fetchAdminLogs(0, false);
+      fetchSearchLogs(0, false);
+      fetchFeedbackLogs(0, false);
+      fetchAppErrorLogs(0, false);
       fetchMaintenanceSettings();
       fetchGithubConfig();
       fetchEngineStatus();
@@ -18683,10 +18650,10 @@ export default function App() {
 
                     const openModal = () => {
                       if (isVisitor) fetchVisitorLogs();
-                      else if (isSearch) fetchSearchLogs(0);
-                      else if (isFeedback) fetchFeedbackLogs(0);
-                      else if (isAdminLog) fetchAdminLogs(0);
-                      else if (isError) fetchAppErrorLogs(0);
+                      else if (isSearch) fetchSearchLogs(0, true);
+                      else if (isFeedback) fetchFeedbackLogs(0, true);
+                      else if (isAdminLog) fetchAdminLogs(0, true);
+                      else if (isError) fetchAppErrorLogs(0, true);
                       else if (isBackend) fetchBackendLogs(true);
                     };
 
@@ -21933,10 +21900,10 @@ export default function App() {
                       <button
                         disabled={loadingLogs || (showLogsModal === 'admin' ? logPages.admin === 0 : showLogsModal === 'search' ? logPages.search === 0 : showLogsModal === 'error' ? logPages.error === 0 : logPages.feedback === 0)}
                         onClick={() => {
-                          if (showLogsModal === 'admin') fetchAdminLogs(logPages.admin - 1);
-                          else if (showLogsModal === 'search') fetchSearchLogs(logPages.search - 1);
-                          else if (showLogsModal === 'feedback') fetchFeedbackLogs(logPages.feedback - 1);
-                          else if (showLogsModal === 'error') fetchAppErrorLogs(logPages.error - 1);
+                          if (showLogsModal === 'admin') fetchAdminLogs(logPages.admin - 1, true);
+                          else if (showLogsModal === 'search') fetchSearchLogs(logPages.search - 1, true);
+                          else if (showLogsModal === 'feedback') fetchFeedbackLogs(logPages.feedback - 1, true);
+                          else if (showLogsModal === 'error') fetchAppErrorLogs(logPages.error - 1, true);
                         }}
                         className="p-1.5 sm:p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 transition-colors shrink-0"
                         title={language === 'en' ? "Previous Page" : "이전 페이지"}
@@ -21952,10 +21919,10 @@ export default function App() {
                       <button
                         disabled={loadingLogs || (showLogsModal === 'admin' ? !logHasMore.admin : showLogsModal === 'search' ? !logHasMore.search : showLogsModal === 'error' ? !logHasMore.error : !logHasMore.feedback)}
                         onClick={() => {
-                          if (showLogsModal === 'admin') fetchAdminLogs(logPages.admin + 1);
-                          else if (showLogsModal === 'search') fetchSearchLogs(logPages.search + 1);
-                          else if (showLogsModal === 'feedback') fetchFeedbackLogs(logPages.feedback + 1);
-                          else if (showLogsModal === 'error') fetchAppErrorLogs(logPages.error + 1);
+                          if (showLogsModal === 'admin') fetchAdminLogs(logPages.admin + 1, true);
+                          else if (showLogsModal === 'search') fetchSearchLogs(logPages.search + 1, true);
+                          else if (showLogsModal === 'feedback') fetchFeedbackLogs(logPages.feedback + 1, true);
+                          else if (showLogsModal === 'error') fetchAppErrorLogs(logPages.error + 1, true);
                         }}
                         className="p-1.5 sm:p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 transition-colors shrink-0"
                         title={language === 'en' ? "Next Page" : "다음 페이지"}
@@ -21966,10 +21933,10 @@ export default function App() {
                       
                       <button
                         onClick={() => {
-                          if (showLogsModal === 'admin') fetchAdminLogs(logPages.admin);
-                          else if (showLogsModal === 'search') fetchSearchLogs(logPages.search);
-                          else if (showLogsModal === 'feedback') fetchFeedbackLogs(logPages.feedback);
-                          else if (showLogsModal === 'error') fetchAppErrorLogs(logPages.error);
+                          if (showLogsModal === 'admin') fetchAdminLogs(logPages.admin, true);
+                          else if (showLogsModal === 'search') fetchSearchLogs(logPages.search, true);
+                          else if (showLogsModal === 'feedback') fetchFeedbackLogs(logPages.feedback, true);
+                          else if (showLogsModal === 'error') fetchAppErrorLogs(logPages.error, true);
                         }}
                         className="ml-1 sm:ml-2 p-1.5 sm:p-2 text-slate-400 hover:text-blue-600 transition-colors shrink-0"
                         title={language === 'en' ? "Refresh Current Page" : "현재 페이지 새로고침"}

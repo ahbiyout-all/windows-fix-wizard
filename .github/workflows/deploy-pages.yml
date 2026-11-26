@@ -75,7 +75,6 @@ jobs:
           artifact_name: github-pages
 
       - name: 📡 Notify Live App Webhook (Pages Deployed)
-        if: ${{ secrets.APP_WEBHOOK_URL != '' && secrets.CRON_SECRET != '' }}
         env:
           APP_WEBHOOK_URL: ${{ secrets.APP_WEBHOOK_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

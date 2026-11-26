@@ -32,12 +32,13 @@ Windows Fix Wizard operates on a **Zero Cloud DB** architecture (`data/*.json` a
 
 ## 3. Server Configuration (Environment / Secrets)
 1. **`CRON_SECRET`** *(and optional `GITHUB_WEBHOOK_SECRET`)*: Shared secret between Express and GitHub Actions for constant-time secret and HMAC-SHA256 webhook verification.
-2. **`CUSTOM_API_KEY` / `GEMINI_API_KEY`**: Gemini API key(s) for server-side & runner AI generation and Search Grounded official Microsoft link repair.
-3. **`GITHUB_TOKEN`** *(Recommended for AI Studio Preview reverse sync)*: GitHub PAT (`repo` + `workflow` scopes) set via server env or Admin UI GitHub Settings so AI Studio Preview can push commits, dispatch workflows, and trigger GitHub Pages deployments without exposing plaintext tokens to the browser.
+2. **`SHARED_APP_URL`**: Public Shared App URL (`https://ais-pre-...run.app`) displayed in Admin setup guides and probed by `GET /api/github/triangle-status`.
+3. **`CUSTOM_API_KEY` / `GEMINI_API_KEY`**: Gemini API key(s) for server-side & runner AI generation and Search Grounded official Microsoft link repair.
+4. **`GITHUB_TOKEN`** *(Recommended for AI Studio Preview reverse sync)*: GitHub PAT (`repo` + `workflow` scopes) set via server env or Admin UI GitHub Settings so AI Studio Preview can push commits, dispatch workflows, and trigger GitHub Pages deployments without exposing plaintext tokens to the browser.
 
 ## 4. GitHub Actions GitOps Pipeline
 - **Collector Workflow (`.github/workflows/windows-fix-collector.yml`)**:
-  - Runs every 3 hours (`0 */3 * * *` UTC) or manually via `workflow_dispatch`.
+  - Runs every 3 hours (`0 */3 * * *` UTC) or manually via `workflow_dispatch`, targeting **`Windows 11, Windows 10`** by default (`data/github-collector-options.json`).
   - Runs `npx tsx scripts/github-collector.ts` with multi-model / keyless AI resilience, updates `data/issues.json`, `data/github-feed.json`, `data/ai-model-registry.json`, and `src/data/knownIssues.ts` (when `autoIntegrateSeed` is enabled).
   - Signs and pushes `/api/github/sync` (new issues) or `/api/github/webhook/heartbeat` (0 new issues), commits/pushes changes to `main`, and triggers `deploy-pages.yml` when datasets change (respecting `autoDeployPages`).
 - **Pages Deploy Workflow (`.github/workflows/deploy-pages.yml`)**:

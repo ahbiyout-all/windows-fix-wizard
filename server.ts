@@ -1689,7 +1689,6 @@ async function runAiSyncInternal(): Promise<any> {
     if (now < invalidUntil) return false;
     const throttledUntil = keyThrottledUntil.get(k.name) || 0;
     if (now < throttledUntil) {
-      const remainSec = Math.round((throttledUntil - now) / 1000);
       return false;
     }
     return true;
@@ -2256,8 +2255,6 @@ function computeNextMaintenanceAt(settings: any, fromMs: number = Date.now()): s
 }
 
 let activeMaintenanceCronTask: any = null;
-let activeMaintenanceCronPattern: string | null = null;
-let activeMaintenanceScheduleDesc: string = 'Paused';
 let isMaintenanceRunning: boolean = false;
 
 function setupMaintenanceScheduler(settings: any) {
@@ -2268,15 +2265,11 @@ function setupMaintenanceScheduler(settings: any) {
   }
 
   if (settings?.maintenanceEnabled === false) {
-    activeMaintenanceCronPattern = null;
-    activeMaintenanceScheduleDesc = 'Disabled by admin';
     console.log("[MAINTENANCE] Automatic maintenance scheduler is disabled by admin settings.");
     return;
   }
 
   const { pattern, description } = getMaintenanceCronPattern(settings);
-  activeMaintenanceCronPattern = pattern;
-  activeMaintenanceScheduleDesc = description;
   console.log(`[MAINTENANCE] Scheduling automated cleanup & link verification: "${pattern}" (${description})`);
 
   activeMaintenanceCronTask = cron.schedule(pattern, async () => {
@@ -3514,7 +3507,7 @@ async function startServer() {
     
     let isThrottled = false;
     let remainingThrottleSeconds = 0;
-    for (const [key, until] of keyThrottledUntil.entries()) {
+    for (const [, until] of keyThrottledUntil.entries()) {
       if (until > now) {
         isThrottled = true;
         remainingThrottleSeconds = Math.max(remainingThrottleSeconds, Math.round((until - now) / 1000));
@@ -3523,7 +3516,7 @@ async function startServer() {
 
     let isCooldown = false;
     let remainingCooldownSeconds = 0;
-    for (const [key, until] of keyInvalidUntil.entries()) {
+    for (const [, until] of keyInvalidUntil.entries()) {
       if (until > now) {
         isCooldown = true;
         remainingCooldownSeconds = Math.max(remainingCooldownSeconds, Math.round((until - now) / 1000));
@@ -8959,8 +8952,15 @@ jobs:
           });
           const latencyMs = Date.now() - t0;
           const bodyText = await shRes.text();
-          const isHtmlGate = /^\s*<(?:!doctype|html)/i.test(bodyText);
-          if (shRes.ok && !isHtmlGate) {
+          const isHtmlBody = /^\s*<(?:!doctype|html)/i.test(bodyText);
+          const isExplicitLoginGate = isHtmlBody && (
+            /accounts\.google\.com|ServiceLogin|<title>\s*Sign in/i.test(bodyText) ||
+            shRes.status === 200 ||
+            shRes.status === 302 ||
+            shRes.status === 401 ||
+            shRes.status === 403
+          );
+          if (shRes.ok && !isHtmlBody) {
             return {
               id: 'sharedWebhook',
               label: 'AI Studio Shared Webhook',
@@ -8974,20 +8974,6 @@ jobs:
               targetUrl: normalizedShared
             };
           }
-          if (isHtmlGate) {
-            return {
-              id: 'sharedWebhook',
-              label: 'AI Studio Shared Webhook',
-              status: 'warning',
-              httpStatus: shRes.status,
-              latencyMs,
-              issueCount: null,
-              lastSyncedAt: null,
-              diagnosticCode: 'AUTH_GATE_HTML',
-              message: `Google 로그인 인증 게이트 HTML 응답 감지(HTTP ${shRes.status}) — 외부 웹훅은 공개 공유 앱 URL(ais-pre-*)만 허용됩니다.`,
-              targetUrl: normalizedShared
-            };
-          }
           if (shRes.status === 404) {
             return {
               id: 'sharedWebhook',
@@ -8998,7 +8984,21 @@ jobs:
               issueCount: null,
               lastSyncedAt: null,
               diagnosticCode: 'UNPUBLISHED_404',
-              message: '공유 URL(ais-pre-*)이 아직 Publish/Share 활성화되지 않아 HTTP 404 상태입니다.',
+              message: '공유 URL(ais-pre-*)이 아직 Publish/Share 활성화되지 않았거나 슬립 상태여도 HTTP 404가 반환됩니다. (AI Studio Share 활성화 필요)',
+              targetUrl: normalizedShared
+            };
+          }
+          if (isExplicitLoginGate) {
+            return {
+              id: 'sharedWebhook',
+              label: 'AI Studio Shared Webhook',
+              status: 'warning',
+              httpStatus: shRes.status,
+              latencyMs,
+              issueCount: null,
+              lastSyncedAt: null,
+              diagnosticCode: 'AUTH_GATE_HTML',
+              message: `Google 로그인 인증 게이트 HTML 응답 감지(HTTP ${shRes.status}) — 외부 웹훅은 공개 공유 앱 URL(ais-pre-*)만 허용됩니다.`,
               targetUrl: normalizedShared
             };
           }
@@ -9636,7 +9636,6 @@ jobs:
       const ghConfig = readLocalCollection('github_config')[0] || {};
       const targetRepo = (repo || ghConfig.repo || '').trim();
       const targetBranch = typeof branch === 'string' && isValidGitRef(branch) ? branch.trim() : 'main';
-      const authToken = token || ghConfig.token || process.env.GITHUB_TOKEN;
       
       if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "저장소 이름('소유자/저장소명', 예: user/winfix)이 필요합니다." });
