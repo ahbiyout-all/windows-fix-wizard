@@ -1,6 +1,21 @@
-# Patch Note - System Update (v3.111.0)
+# Patch Note - System Update (v3.112.0)
 
 This patch document outlines the latest features, enhancements, and system security fixes applied to the Windows Fix Wizard system.
+
+---
+
+## [v3.112.0] - 2026-11-26
+
+### 🚀 Major New Features & Integrations
+- **GitHub Pages 배포(`deploy-pages.yml`) 실시간 로그 관제 모니터 및 전용 관리자 탭 추가 (`src/components/PagesDeploymentLogMonitor.tsx`, `src/App.tsx`, `server.ts`)**:
+  - 관리자 콘솔 상단에 **`Pages 배포 실시간 로그 (deploy-pages.yml)`** 전용 뷰 탭을 신설하고, `[2등급] GitOps 센터` 내부에도 동일한 실시간 관제 섹션을 배치했습니다(단일 마운트 전환으로 중복 폴링 방지).
+  - `GET /api/github/workflow-runs?workflowFile=deploy-pages.yml`로 Pages 배포 워크플로 실행 이력만 전용 필터링해 조회하고, 실행 중(`queued`/`in_progress`) 상태에서는 10초, 유휴 상태에서는 30초 주기로 자동 폴링합니다(폴링 일시정지·수동 새로고침·즉시 Pages 배포 버튼 내장).
+  - `GET /api/github/workflow-run-jobs`를 통해 선택된 실행의 Job(`build`, `deploy`)과 각 Step별 진행 상태·소요 시간을 실시간 타임라인으로 확인하고, `GET /api/github/workflow-job-logs`로 원시 콘솔 터미널 로그 검색·오류 라인 필터·하단 고정·복사 및 `.log` 파일 다운로드를 지원합니다(GitHub Pages 정적 환경에서는 PAT 기반 직접 REST API 폴백 자동 지원).
+
+### 🛡️ Security Hardening & Authentication
+- **Actions Job/Logs 백엔드 프록시 인증 및 로그 리다이렉트 도메인 화이트리스트 검증 (`server.ts`)**:
+  - `/api/github/workflow-run-jobs`, `/api/github/workflow-job-logs` 엔드포인트에 `requireAdmin` 인증, `isValidGithubRepo` 저장소 형식 검증, 숫자형 `runId`/`jobId` 정규식 검증을 적용했습니다.
+  - GitHub `/actions/jobs/{id}/logs`의 `302` 서명 리다이렉트를 수동 추적(`redirect: 'manual'`)하며 HTTPS 및 허용된 GitHub/Azure 로그 스토리지 도메인(`.githubusercontent.com`, `.blob.core.windows.net`, `.github.com`)만 허용하고, ANSI 이스케이프 시퀀스를 정리한 뒤 최대 350KB로 안전하게 상한을 제한해 반환합니다.
 
 ---
 

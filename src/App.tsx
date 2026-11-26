@@ -71,6 +71,7 @@ import {
 import { SymptomDiagnosticWizard } from './components/SymptomDiagnosticWizard';
 import { TriangleSyncMonitor } from './components/TriangleSyncMonitor';
 import { LinkRepairWorkbench } from './components/LinkRepairWorkbench';
+import { PagesDeploymentLogMonitor } from './components/PagesDeploymentLogMonitor';
 import { compileScriptWithRollback, stripRollbackPreamble, evaluatePreFlightSafety } from './utils/psRollback';
 
 interface AppErrorLog {
@@ -687,7 +688,7 @@ const StagingCountdownBadge: React.FC<{
   );
 };
 
-const APP_VERSION = "3.111.0";
+const APP_VERSION = "3.112.0";
 const DEVELOPER_NAME = "AhBiYout";
 const GITHUB_USERNAME = "AhBiYout-all";
 const GITHUB_REPO_NAME = "windows-fix-wizard";
@@ -1696,6 +1697,7 @@ export default function App() {
   const [dateSortOrder, setDateSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all'); // 'all' | '7days' | '30days' | '90days' | 'YYYY-MM'
   const [isGroupByDate, setIsGroupByDate] = useState<boolean>(false);
+  const [adminConsoleView, setAdminConsoleView] = useState<'overview' | 'pages-logs'>('overview');
   const [adminTierCollapse, setAdminTierCollapse] = useState<{ [tier: number]: boolean }>({
     1: false,
     2: false,
@@ -15133,43 +15135,94 @@ export default function App() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
-            {/* Master Tier Collapsible Navigation Header */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-sm shrink-0">
-                  <Sliders className="w-5 h-5" />
+            {/* Master Tier Collapsible Navigation Header & Dedicated Sub-Tabs */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 mb-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-sm shrink-0">
+                    <Sliders className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      {language === 'en' ? 'Admin Console Tier Navigation' : '관리자 콘솔 중요 등급별 뷰어 설정'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {language === 'en' 
+                        ? 'Switch between the full admin overview or focus directly on real-time deploy-pages.yml deployment logs.' 
+                        : '전체 관리 콘솔을 보거나 GitHub Pages 배포(deploy-pages.yml) 실시간 로그 전용 탭으로 즉시 전환하세요.'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    {language === 'en' ? 'Admin Console Tier Navigation' : '관리자 콘솔 중요 등급별 뷰어 설정'}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {language === 'en' 
-                      ? 'Quickly toggle or collapse importance tier sections to focus on specific management tasks.' 
-                      : '필요한 등급 메뉴만 선택하여 열람하거나 전체 메뉴를 한번에 접어서 화면을 깔끔하게 정리하세요.'}
-                  </p>
-                </div>
+
+                {adminConsoleView === 'overview' && (
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setAllAdminTiersCollapsed(false)}
+                      className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
+                    >
+                      <ChevronsDown className="w-4 h-4 text-emerald-500" />
+                      {language === 'en' ? 'Expand All' : '모두 펼치기'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAllAdminTiersCollapsed(true)}
+                      className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
+                    >
+                      <ChevronsUp className="w-4 h-4 text-slate-400" />
+                      {language === 'en' ? 'Collapse All' : '모두 접기'}
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+              {/* Dedicated Admin Console Sub-Tabs */}
+              <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center gap-2" role="tablist" aria-label="Admin Console Views">
                 <button
                   type="button"
-                  onClick={() => setAllAdminTiersCollapsed(false)}
-                  className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
+                  role="tab"
+                  aria-selected={adminConsoleView === 'overview'}
+                  onClick={() => setAdminConsoleView('overview')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-2 cursor-pointer ${
+                    adminConsoleView === 'overview'
+                      ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
                 >
-                  <ChevronsDown className="w-4 h-4 text-emerald-500" />
-                  {language === 'en' ? 'Expand All' : '모두 펼치기'}
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Full Console Overview' : '전체 관리 콘솔'}</span>
                 </button>
+
                 <button
                   type="button"
-                  onClick={() => setAllAdminTiersCollapsed(true)}
-                  className="min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
+                  role="tab"
+                  aria-selected={adminConsoleView === 'pages-logs'}
+                  onClick={() => setAdminConsoleView('pages-logs')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-2 cursor-pointer ${
+                    adminConsoleView === 'pages-logs'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
                 >
-                  <ChevronsUp className="w-4 h-4 text-slate-400" />
-                  {language === 'en' ? 'Collapse All' : '모두 접기'}
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Pages Deploy Logs (deploy-pages.yml)' : 'Pages 배포 실시간 로그 (deploy-pages.yml)'}</span>
                 </button>
               </div>
             </div>
+
+            {adminConsoleView === 'pages-logs' ? (
+              <PagesDeploymentLogMonitor
+                language={language}
+                repo={githubRepo || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`}
+                branch={githubBranch || 'main'}
+                token={githubToken}
+                hasServerToken={hasServerGithubToken}
+                isServerMode={!IS_GITHUB_PAGES}
+                getAuthHeaders={getAuthHeaders}
+                onDeployTriggered={() => { void fetchGithubConfig(); }}
+              />
+            ) : (
+              <>
 
             {/* [1등급] 핵심 필수 관리 기능 (Daily Check & Core Operations) */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all mb-6">
@@ -15839,6 +15892,18 @@ export default function App() {
                   repo={githubRepo || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`}
                   branch={githubBranch || 'main'}
                   getAuthHeaders={getAuthHeaders}
+                />
+
+                {/* Dedicated Real-Time GitHub Pages Deployment Log Monitor (deploy-pages.yml) */}
+                <PagesDeploymentLogMonitor
+                  language={language}
+                  repo={githubRepo || `${GITHUB_USERNAME}/${GITHUB_REPO_NAME}`}
+                  branch={githubBranch || 'main'}
+                  token={githubToken}
+                  hasServerToken={hasServerGithubToken}
+                  isServerMode={!IS_GITHUB_PAGES}
+                  getAuthHeaders={getAuthHeaders}
+                  onDeployTriggered={() => { void fetchGithubConfig(); }}
                 />
 
                 {/* Featured Hero Action: One-Click Instant Dataset Sync & Pages Deploy */}
@@ -19852,6 +19917,8 @@ export default function App() {
           )}
         </AnimatePresence>
       </div>
+              </>
+            )}
     </motion.div>
   )}
 

@@ -242,7 +242,7 @@ function getAppVersion(): string {
       if (pkg?.version) return String(pkg.version).trim();
     }
   } catch (_) {}
-  return '3.111.0';
+  return '3.112.0';
 }
 
 function maskSystemConfigSecrets(cfg: Record<string, any>): Record<string, any> {
@@ -10542,22 +10542,29 @@ jobs:
       const targetRepo = (typeof req.query.repo === 'string' && req.query.repo.trim()
         ? req.query.repo.trim()
         : configuredRepo);
+      const workflowFile = (typeof req.query.workflowFile === 'string' && req.query.workflowFile.trim()
+        ? req.query.workflowFile.trim()
+        : '');
       const perPage = Math.min(Math.max(parseInt(String(req.query.perPage || '25'), 10) || 25, 1), 50);
       const bypassCache = req.query.refresh === '1';
 
       if (!isValidGithubRepo(targetRepo)) {
         return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
       }
+      if (workflowFile && !/^[a-zA-Z0-9._-]{1,120}$/.test(workflowFile)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 워크플로 파일명입니다." });
+      }
 
       const isAdminCaller = verifyAdminAuthHeader(req.headers.authorization).ok;
       const serverToken = ghConfig.token || process.env.GITHUB_TOKEN || "";
       const canUseToken = Boolean(serverToken) && (isAdminCaller || targetRepo.toLowerCase() === configuredRepo.toLowerCase());
-      const cacheKey = `wf-runs:${targetRepo.toLowerCase()}:${perPage}:${canUseToken ? 'auth' : 'pub'}`;
+      const cacheKey = `wf-runs:${targetRepo.toLowerCase()}:${workflowFile || 'all'}:${perPage}:${canUseToken ? 'auth' : 'pub'}`;
       const now = Date.now();
 
       if (!bypassCache) {
         const cached = workflowTelemetryCache.get(cacheKey);
-        if (cached && now - cached.cachedAt < 30 * 1000) {
+        const cacheTtlMs = workflowFile ? 10 * 1000 : 30 * 1000;
+        if (cached && now - cached.cachedAt < cacheTtlMs) {
           return res.json(cached.payload);
         }
       }
@@ -10570,7 +10577,9 @@ jobs:
         headers['Authorization'] = `Bearer ${serverToken}`;
       }
 
-      const url = `https://api.github.com/repos/${targetRepo}/actions/runs?per_page=${perPage}`;
+      const url = workflowFile
+        ? `https://api.github.com/repos/${targetRepo}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?per_page=${perPage}`
+        : `https://api.github.com/repos/${targetRepo}/actions/runs?per_page=${perPage}`;
       const ghRes = await fetch(url, { headers, signal: (AbortSignal as any).timeout(8000) });
 
       if (!ghRes.ok) {
@@ -10596,7 +10605,223 @@ jobs:
         branch: ghConfig.branch || 'main'
       };
 
-      if (workflowTelemetryCache.size >= 30) {
+      if (workflowTelemetryCache.size >= 40) {
+        const oldestKey = workflowTelemetryCache.keys().next().value;
+        if (oldestKey) workflowTelemetryCache.delete(oldestKey);
+      }
+      workflowTelemetryCache.set(cacheKey, { payload, cachedAt: now });
+      res.json(payload);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5-3. Real-time Jobs & Steps breakdown for a specific workflow run (used by Pages Deployment Log Monitor)
+  app.get("/api/github/workflow-run-jobs", requireAdmin, async (req, res) => {
+    try {
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const configuredRepo = (ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetRepo = (typeof req.query.repo === 'string' && req.query.repo.trim()
+        ? req.query.repo.trim()
+        : configuredRepo);
+      const runId = typeof req.query.runId === 'string' ? req.query.runId.trim() : '';
+      const bypassCache = req.query.refresh === '1';
+
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
+      }
+      if (!/^\d{1,20}$/.test(runId)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 workflow runId입니다." });
+      }
+
+      const serverToken = ghConfig.token || process.env.GITHUB_TOKEN || "";
+      const cacheKey = `wf-jobs:${targetRepo.toLowerCase()}:${runId}:${serverToken ? 'auth' : 'pub'}`;
+      const now = Date.now();
+
+      if (!bypassCache) {
+        const cached = workflowTelemetryCache.get(cacheKey);
+        if (cached && now - cached.cachedAt < 8 * 1000) {
+          return res.json(cached.payload);
+        }
+      }
+
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'WindowsFixWizard-App'
+      };
+      if (serverToken) {
+        headers['Authorization'] = `Bearer ${serverToken}`;
+      }
+
+      const url = `https://api.github.com/repos/${targetRepo}/actions/runs/${runId}/jobs?per_page=30`;
+      const ghRes = await fetch(url, { headers, signal: (AbortSignal as any).timeout(8000) });
+
+      if (!ghRes.ok) {
+        const rateLimited = ghRes.status === 403 || ghRes.status === 429;
+        return res.json({
+          success: true,
+          jobs: [],
+          rateLimited,
+          httpStatus: ghRes.status,
+          hasServerToken: Boolean(serverToken)
+        });
+      }
+
+      const data: any = await ghRes.json();
+      const rawJobs = Array.isArray(data?.jobs) ? data.jobs : [];
+      const jobs = rawJobs.map((job: any) => ({
+        id: job.id,
+        run_id: job.run_id,
+        name: job.name,
+        status: job.status,
+        conclusion: job.conclusion,
+        started_at: job.started_at,
+        completed_at: job.completed_at,
+        html_url: job.html_url,
+        runner_name: job.runner_name || '',
+        steps: Array.isArray(job.steps)
+          ? job.steps.map((step: any) => ({
+              number: step.number,
+              name: step.name,
+              status: step.status,
+              conclusion: step.conclusion,
+              started_at: step.started_at,
+              completed_at: step.completed_at
+            }))
+          : []
+      }));
+
+      const payload = {
+        success: true,
+        jobs,
+        rateLimited: false,
+        hasServerToken: Boolean(serverToken)
+      };
+
+      if (workflowTelemetryCache.size >= 40) {
+        const oldestKey = workflowTelemetryCache.keys().next().value;
+        if (oldestKey) workflowTelemetryCache.delete(oldestKey);
+      }
+      workflowTelemetryCache.set(cacheKey, { payload, cachedAt: now });
+      res.json(payload);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5-4. Raw Job Console Log Stream Proxy (requires PAT with actions:read/repo; validates signed GitHub/Azure redirect safely)
+  app.get("/api/github/workflow-job-logs", requireAdmin, async (req, res) => {
+    try {
+      const ghConfig = readLocalCollection('github_config')[0] || {};
+      const configuredRepo = (ghConfig.repo || "AhBiYout-all/windows-fix-wizard").trim();
+      const targetRepo = (typeof req.query.repo === 'string' && req.query.repo.trim()
+        ? req.query.repo.trim()
+        : configuredRepo);
+      const jobId = typeof req.query.jobId === 'string' ? req.query.jobId.trim() : '';
+      const bypassCache = req.query.refresh === '1';
+
+      if (!isValidGithubRepo(targetRepo)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 GitHub 저장소 형식입니다." });
+      }
+      if (!/^\d{1,20}$/.test(jobId)) {
+        return res.status(400).json({ success: false, error: "유효하지 않은 workflow jobId입니다." });
+      }
+
+      const serverToken = ghConfig.token || process.env.GITHUB_TOKEN || "";
+      if (!serverToken) {
+        return res.json({
+          success: true,
+          requiresToken: true,
+          logs: "",
+          truncated: false,
+          hasServerToken: false,
+          message: "원시 콘솔 로그(Raw Logs)를 스트리밍하려면 관리자 설정에 GitHub PAT('repo' / 'actions:read' 권한)를 등록해야 합니다."
+        });
+      }
+
+      const cacheKey = `wf-job-log:${targetRepo.toLowerCase()}:${jobId}`;
+      const now = Date.now();
+      if (!bypassCache) {
+        const cached = workflowTelemetryCache.get(cacheKey);
+        if (cached && now - cached.cachedAt < 15 * 1000) {
+          return res.json(cached.payload);
+        }
+      }
+
+      const apiUrl = `https://api.github.com/repos/${targetRepo}/actions/jobs/${jobId}/logs`;
+      const ghRes = await fetch(apiUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: {
+          'Authorization': `Bearer ${serverToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'WindowsFixWizard-App'
+        },
+        signal: (AbortSignal as any).timeout(10000)
+      });
+
+      let rawText = "";
+      if (ghRes.status >= 300 && ghRes.status < 400) {
+        const location = ghRes.headers.get('location') || '';
+        let parsedRedirect: URL;
+        try {
+          parsedRedirect = new URL(location);
+        } catch {
+          throw new Error("유효하지 않은 GitHub 로그 리다이렉트 URL입니다.");
+        }
+        const host = parsedRedirect.hostname.toLowerCase();
+        const isAllowedLogHost =
+          parsedRedirect.protocol === 'https:' &&
+          (host.endsWith('.githubusercontent.com') ||
+            host.endsWith('.blob.core.windows.net') ||
+            host.endsWith('.github.com'));
+        if (!isAllowedLogHost) {
+          throw new Error("허용되지 않은 GitHub 로그 스토리지 도메인입니다.");
+        }
+        const blobRes = await fetch(parsedRedirect.toString(), {
+          method: 'GET',
+          headers: { 'User-Agent': 'WindowsFixWizard-App' },
+          signal: (AbortSignal as any).timeout(12000)
+        });
+        if (!blobRes.ok) {
+          throw new Error(`로그 스토리지 응답 오류 (HTTP ${blobRes.status})`);
+        }
+        rawText = await blobRes.text();
+      } else if (ghRes.ok) {
+        rawText = await ghRes.text();
+      } else {
+        const isAuthOrPerm = ghRes.status === 401 || ghRes.status === 403;
+        return res.json({
+          success: true,
+          requiresToken: isAuthOrPerm,
+          inProgressUnavailable: ghRes.status === 404 || ghRes.status === 409,
+          httpStatus: ghRes.status,
+          logs: "",
+          truncated: false,
+          hasServerToken: Boolean(serverToken),
+          message: ghRes.status === 404
+            ? "작업 로그가 아직 생성 중이거나 보관 기간이 만료되었습니다."
+            : `GitHub API 로그 조회 응답 (HTTP ${ghRes.status})`
+        });
+      }
+
+      // Strip ANSI color escape sequences cleanly for readable web console output
+      // eslint-disable-next-line no-control-regex
+      const cleaned = rawText.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+      const MAX_LOG_CHARS = 350000;
+      const truncated = cleaned.length > MAX_LOG_CHARS;
+      const boundedLogs = truncated ? cleaned.slice(cleaned.length - MAX_LOG_CHARS) : cleaned;
+
+      const payload = {
+        success: true,
+        requiresToken: false,
+        logs: boundedLogs,
+        truncated,
+        totalBytes: Buffer.byteLength(cleaned, 'utf8'),
+        hasServerToken: true
+      };
+
+      if (workflowTelemetryCache.size >= 40) {
         const oldestKey = workflowTelemetryCache.keys().next().value;
         if (oldestKey) workflowTelemetryCache.delete(oldestKey);
       }
