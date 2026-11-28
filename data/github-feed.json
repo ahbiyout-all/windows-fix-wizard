@@ -1,15 +1,21 @@
 {
-  "lastCollectedAt": "2026-11-25T07:58:46.874Z",
+  "lastCollectedAt": "2026-11-28T07:19:24.801Z",
   "modelUsed": "Pollinations (openai-fast) [Keyless]",
-  "targetCategory": "오디오/사운드",
-  "newlyAddedCount": 1,
-  "totalIssuesCount": 160,
+  "targetCategory": "보안/백신",
+  "newlyAddedCount": 2,
+  "totalIssuesCount": 162,
   "newIssues": [
     {
-      "id": "gh-0x8007000f-mwvu0wgq",
-      "code": "0x8007000f",
-      "title": "오디오 장치가 Windows 11/10 업데이트 후 인식되지 않음",
-      "category": "오디오/사운드"
+      "id": "gh-0x800106ba-mx02y4q5",
+      "code": "0x800106ba",
+      "title": "Windows Defender 오류 0x800106ba: 바이러스 백신 서비스가 중지됨",
+      "category": "보안/백신"
+    },
+    {
+      "id": "gh-0x800706d9-mx02y4q6",
+      "code": "0x800706d9",
+      "title": "Microsoft Defender 방화벽 오류 0x800706d9: 방화벽 서비스 확인",
+      "category": "보안/백신"
     }
   ]
 }

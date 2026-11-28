@@ -7378,5 +7378,97 @@ export const KNOWN_ISSUES: KnownIssue[] = [
     "updatedAt": "2026-11-25T07:58:46.874Z",
     "verifiedAt": "2026-11-25T07:58:46.874Z",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800106ba-mx02y4q5",
+    "category": "보안/백신",
+    "code": "0x800106ba",
+    "title": "Windows Defender 오류 0x800106ba: 바이러스 백신 서비스가 중지됨",
+    "title_en": "Windows Defender Error 0x800106ba: Antivirus Service Stopped",
+    "symptoms": "Microsoft Defender 바이러스 백신 검사를 시작할 때 오류 0x800106ba가 표시되거나 보호 상태가 활성화되지 않을 수 있습니다. 재부팅 후에도 반복된다면 Defender 서비스가 중지되었거나 다른 백신과의 충돌로 서비스가 정상 실행되지 않는 경우가 있습니다.",
+    "symptoms_en": "Starting a Microsoft Defender Antivirus scan may return error 0x800106ba, or protection may remain inactive. If the issue persists after restarting, the Defender service may be stopped or unable to run, sometimes because of a conflict with another antivirus product.",
+    "script": "$ErrorActionPreference = 'Continue'\nGet-Service WinDefend, WdNisSvc | Select-Object Name, Status, StartType\nGet-MpComputerStatus | Select-Object AMServiceEnabled, AntivirusEnabled, RealTimeProtectionEnabled, AntivirusSignatureLastUpdated",
+    "manualSteps": [
+      "PC를 다시 시작한 뒤 Windows 보안 > 바이러스 및 위협 방지에서 상태를 확인합니다.",
+      "다른 백신이 설치되어 있다면 해당 제품의 상태를 확인하고, 제거했다면 제조사 제거 도구를 사용해 남은 구성 요소를 정리한 뒤 재부팅합니다.",
+      "관리자 PowerShell에서 제공된 진단 스크립트를 실행해 WinDefend 및 WdNisSvc 상태를 확인합니다. 서비스가 조직 정책으로 관리되는 장치라면 관리자에게 문의합니다.",
+      "Windows 보안 > 바이러스 및 위협 방지 > 보호 업데이트에서 보안 인텔리전스를 업데이트한 뒤 검사를 다시 실행합니다."
+    ],
+    "manualSteps_en": [
+      "Restart the PC, then check the status under Windows Security > Virus & threat protection.",
+      "If another antivirus is installed, check its status. If it was removed, use the vendor's removal tool to clear remaining components, then restart.",
+      "Run the supplied diagnostic script in an elevated PowerShell window to inspect WinDefend and WdNisSvc. Contact your administrator if policy manages these services.",
+      "Update security intelligence under Windows Security > Virus & threat protection > Protection updates, then run the scan again."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus",
+      "https://support.microsoft.com/en-us/windows/stay-protected-with-windows-security-2ae0363d-0ada-c064-8b56-6a39afb6a963"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "Defender 0x800106ba 해결",
+      "WinDefend 서비스 중지",
+      "Microsoft Defender service stopped",
+      "0x800106ba Windows 11",
+      "0x800106ba Windows 10"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-28T07:19:24.801Z",
+    "updatedAt": "2026-11-28T07:19:24.801Z",
+    "verifiedAt": "2026-11-28T07:19:24.801Z",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "gh-0x800706d9-mx02y4q6",
+    "category": "보안/백신",
+    "code": "0x800706d9",
+    "title": "Microsoft Defender 방화벽 오류 0x800706d9: 방화벽 서비스 확인",
+    "title_en": "Microsoft Defender Firewall Error 0x800706d9: Check the Firewall Service",
+    "symptoms": "Windows 보안에서 방화벽 설정을 열거나 방화벽 프로필을 변경할 때 0x800706d9가 발생할 수 있습니다. Windows Defender Firewall 서비스(MpsSvc)가 중지되었거나 서비스 구성 및 정책이 변경된 경우 방화벽 설정이 적용되지 않을 수 있습니다.",
+    "symptoms_en": "Error 0x800706d9 may appear when opening firewall settings in Windows Security or changing a firewall profile. Firewall settings may fail to apply if the Windows Defender Firewall service (MpsSvc) is stopped or its configuration or policy has changed.",
+    "script": "$ErrorActionPreference = 'Continue'\nGet-Service MpsSvc, BFE | Select-Object Name, Status, StartType\nGet-NetFirewallProfile | Select-Object Name, Enabled, DefaultInboundAction, DefaultOutboundAction",
+    "manualSteps": [
+      "관리자 PowerShell에서 제공된 진단 스크립트를 실행해 MpsSvc와 BFE의 상태를 확인합니다.",
+      "services.msc를 열어 Base Filtering Engine과 Windows Defender Firewall 서비스의 상태를 확인합니다. 서비스가 조직 정책으로 관리되거나 시작할 수 없다면 임의로 레지스트리 권한을 변경하지 말고 관리자에게 문의합니다.",
+      "설정 > 네트워크 및 인터넷 > 고급 네트워크 설정 > Windows 방화벽에서 방화벽 상태를 확인합니다.",
+      "타사 방화벽을 사용 중이라면 해당 제품의 설정을 확인하고, 제거 또는 비활성화 후 재부팅해 Windows 방화벽 동작을 다시 시험합니다."
+    ],
+    "manualSteps_en": [
+      "Run the supplied diagnostic script in an elevated PowerShell window to check the status of MpsSvc and BFE.",
+      "Open services.msc and inspect Base Filtering Engine and Windows Defender Firewall. If policy manages a service or it will not start, do not change registry permissions blindly; contact your administrator.",
+      "Check firewall status under Settings > Network & internet > Advanced network settings > Windows Firewall.",
+      "If using a third-party firewall, review its settings. After removing or disabling it, restart and test Windows Firewall again."
+    ],
+    "sourceUrls": [
+      "https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/",
+      "https://learn.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallprofile"
+    ],
+    "source": "GitHub Actions Autonomous Collector",
+    "windowsVersions": [
+      "Windows 11",
+      "Windows 10"
+    ],
+    "searchKeywords": [
+      "방화벽 0x800706d9 해결",
+      "MpsSvc 시작 상태",
+      "BFE Windows 방화벽 오류",
+      "Windows Firewall error 0x800706d9",
+      "Get-NetFirewallProfile 진단"
+    ],
+    "upvoteCount": 0,
+    "upvotedBy": [],
+    "downvotedBy": [],
+    "isLatest": true,
+    "createdAt": "2026-11-28T07:19:24.801Z",
+    "updatedAt": "2026-11-28T07:19:24.801Z",
+    "verifiedAt": "2026-11-28T07:19:24.801Z",
+    "verificationStatus": "verified"
   }
 ];
