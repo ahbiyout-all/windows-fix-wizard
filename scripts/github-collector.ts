@@ -60,7 +60,10 @@ const CATEGORIES = [
   '정품인증',
   '보안/백신',
   '오디오/사운드',
-  '디스플레이/그래픽'
+  '디스플레이/그래픽',
+  '하드웨어/드라이버',
+  '성능/프리징',
+  '파일 시스템/저장소'
 ];
 
 async function runCollector() {
@@ -119,9 +122,16 @@ async function runCollector() {
     }
   }
 
-  // Build avoidance list
+  // Build complete avoidance list (all unique error codes + per-category counts)
   const avoidCodes = new Set(existingIssues.map(i => (i.code || '').trim().toLowerCase()).filter(Boolean));
-  const avoidTitles = existingIssues.slice(-25).map(i => i.title).join(', ');
+  const allUniqueCodesDisplay = Array.from(new Set(existingIssues.map(i => (i.code || '').trim()).filter(Boolean)));
+  const categoryCounts = new Map<string, number>();
+  for (const cat of CATEGORIES) categoryCounts.set(cat, 0);
+  for (const issue of existingIssues) {
+    if (issue.category) {
+      categoryCounts.set(issue.category, (categoryCounts.get(issue.category) || 0) + 1);
+    }
+  }
 
   // Load system config & GitHub collector options if present
   const sysConfigPath = path.join(dataDir, 'system_config.json');
@@ -160,25 +170,32 @@ async function runCollector() {
     return;
   }
 
-  // Select target category using INPUT_TOPIC > fixed/rotate options > all categories
+  // Select target category using INPUT_TOPIC > fixed/rotate options > weighted pool favoring underrepresented categories
   const envTopic = (process.env.INPUT_TOPIC || '').trim();
   const preferredPool: string[] = Array.isArray(collectorOpts.preferredTopics) && collectorOpts.preferredTopics.length > 0
     ? collectorOpts.preferredTopics.filter((c: string) => CATEGORIES.includes(c))
     : CATEGORIES;
   const activePool = preferredPool.length > 0 ? preferredPool : CATEGORIES;
 
+  const sortedByCoverage = [...activePool].sort(
+    (a, b) => (categoryCounts.get(a) || 0) - (categoryCounts.get(b) || 0)
+  );
   let targetCategory = '';
+  const isPinnedCategory = Boolean((envTopic && envTopic !== 'all' && CATEGORIES.includes(envTopic)) || (collectorOpts.topicMode === 'fixed' && collectorOpts.fixedTopic && collectorOpts.fixedTopic !== 'all' && CATEGORIES.includes(collectorOpts.fixedTopic)));
   if (envTopic && envTopic !== 'all' && CATEGORIES.includes(envTopic)) {
     targetCategory = envTopic;
   } else if (collectorOpts.topicMode === 'fixed' && collectorOpts.fixedTopic && collectorOpts.fixedTopic !== 'all' && CATEGORIES.includes(collectorOpts.fixedTopic)) {
     targetCategory = collectorOpts.fixedTopic;
   } else if (collectorOpts.topicMode === 'rotate') {
-    targetCategory = activePool[Math.floor(Math.random() * activePool.length)];
+    const hourSlot = new Date().getUTCHours();
+    targetCategory = activePool[hourSlot % activePool.length];
   } else {
-    targetCategory = activePool[Math.floor(Math.random() * activePool.length)];
+    // Pick among the 4 least-populated categories so underrepresented areas get filled cleanly
+    const candidateSubset = sortedByCoverage.slice(0, Math.min(4, sortedByCoverage.length));
+    targetCategory = candidateSubset[Math.floor(Math.random() * candidateSubset.length)];
   }
 
-  console.log(`🎯 Target Category: [${targetCategory}] (Mode: ${collectorOpts.topicMode || 'all'})`);
+  console.log(`🎯 Primary Target Category: [${targetCategory}] (Existing: ${categoryCounts.get(targetCategory) || 0}, Mode: ${collectorOpts.topicMode || 'all'})`);
 
   const rawBatchSize = (process.env.INPUT_BATCH_SIZE || process.env.BATCH_SIZE || '').trim()
     || (collectorOpts.batchSize ? String(collectorOpts.batchSize) : '')
@@ -205,7 +222,7 @@ async function runCollector() {
       })
     : null;
   const preferredModel = (process.env.INPUT_MODEL_PREFERENCE || collectorOpts.modelPreference || 'auto').trim();
-  let modelsToTry = getHealthyGeminiCandidates(preferredModel, registry);
+  const modelsToTry = getHealthyGeminiCandidates(preferredModel, registry);
   console.log(`🤖 AI Model Priority (Registry-Backed): ${modelsToTry.join(' -> ')}`);
 
 function generateDefaultPowerShellScript(code: string = '', category: string = '', title: string = ''): string {
@@ -236,19 +253,40 @@ function generateDefaultPowerShellScript(code: string = '', category: string = '
   return `# Windows System Integrity Repair Script (${codeUpper || 'System Fix'})\n# Target: SFC System File Checker & DISM Image Servicing\n\nWrite-Host "[1/3] Running System File Checker (SFC)..." -ForegroundColor Cyan\nsfc /scannow\n\nWrite-Host "[2/3] Checking Component Store Health via DISM..." -ForegroundColor Cyan\ndism /Online /Cleanup-Image /CheckHealth\n\nWrite-Host "[3/3] Restoring Component Store Corruption via DISM..." -ForegroundColor Cyan\ndism /Online /Cleanup-Image /RestoreHealth\n\nWrite-Host "[+] System file integrity repair complete. Please restart your system." -ForegroundColor Green`;
 }
 
-  const prompt = `Search and identify ${batchSize} verified and LATEST (2024-2026) ${targetWindowsVersions.join(' / ')} troubleshooting guide(s) or error code(s).
-Category focus: "${targetCategory}".
+  const newIssues: KnownIssue[] = [];
+  const batchNormalizedTitles = new Set<string>();
+  const rejectedCodesThisRun: string[] = [];
+  let successfulModel = '';
+  let generatedAtLeastOnce = false;
+  const nowIso = new Date().toISOString();
+
+  const buildCategoryPrompt = (categoryForAttempt: string, attemptNum: number) => {
+    const categoryTitles = existingIssues
+      .filter((i) => i.category === categoryForAttempt)
+      .map((i) => i.title)
+      .slice(-30)
+      .join(', ');
+    const recentGlobalTitles = existingIssues
+      .slice(-20)
+      .map((i) => i.title)
+      .join(', ');
+    const fullCodesList = Array.from(new Set([...allUniqueCodesDisplay, ...rejectedCodesThisRun])).join(', ');
+    return `Identify ${batchSize} verified, SPECIFIC and LESS-COMMON (2024-2026) ${targetWindowsVersions.join(' / ')} troubleshooting guide(s) or error code(s).
+Category focus: "${categoryForAttempt}".
 Target OS focus: ${JSON.stringify(targetWindowsVersions)}.
-Do NOT generate these existing issues: [${avoidTitles.substring(0, 400)}...].
-Avoid error codes already present: [${Array.from(avoidCodes).slice(-25).join(', ')}].
+CRITICAL ANTI-DUPLICATE REQUIREMENT (Attempt #${attemptNum}):
+- NEVER generate ANY of these already-registered error codes: [${fullCodesList}].
+- Do NOT generate issues similar to existing titles in this category: [${categoryTitles || 'none'}].
+- Also avoid these recent titles: [${recentGlobalTitles}].
+- Do NOT use generic cliché codes like 0x80070002, 0x80070005, 0x8024402f, 0x800f081f, or 0x80070422 if listed above. Pick genuine, specific error codes (e.g., driver/BSOD bugcheck codes, BitLocker/TPM/WinRE codes, audio/WASAPI/bluetooth codes, Storage/NTFS/VSS codes, Windows Update/Defender/AppX specific codes) NOT in the forbidden list!
 
 Requirements for each item:
-1. Specific Windows error code (e.g., 0x80070005, 0x8024402f, WHEA_UNCORRECTABLE_ERROR, 0x80073D02) or clear identifier.
-2. Accurate Korean title & symptoms explaining why it occurs in recent Windows updates.
+1. Specific Windows error code (e.g., 0x80070490, 0x8024001e, DRIVER_POWER_STATE_FAILURE, 0x88890008, 0x80070070) NOT present in the forbidden list above.
+2. Accurate Korean title & symptoms explaining why it occurs in Windows 10/11.
 3. English title and English symptoms.
-4. A MANDATORY, working, non-destructive PowerShell repair or diagnostic script specifically tailored for this error (e.g. sfc /scannow, DISM, Get-AppxPackage, netsh winsock reset, etc.). Do NOT leave script empty or null!
+4. A MANDATORY, working, non-destructive PowerShell repair or diagnostic script specifically tailored for this error (e.g. sfc /scannow, DISM, Get-AppxPackage, netsh, Get-PnpDevice, etc.). Do NOT leave script empty or null!
 5. 3-5 structured step-by-step recovery instructions in Korean (manualSteps) and English (manualSteps_en).
-6. 1-2 legitimate source URLs (e.g. support.microsoft.com, learn.microsoft.com, or official tech portals).
+6. 1-2 legitimate source URLs (e.g. support.microsoft.com, learn.microsoft.com).
 7. Applicable Windows versions (${JSON.stringify(targetWindowsVersions)}).
 8. 4-6 search keywords in Korean & English.
 
@@ -260,128 +298,264 @@ IMPORTANT JSON FORMATTING RULES:
 JSON Schema:
 [
   {
-    "category": "${targetCategory}",
+    "category": "${categoryForAttempt}",
     "code": "string",
     "title": "Korean Title",
     "title_en": "English Title",
     "symptoms": "Korean Symptoms",
     "symptoms_en": "English Symptoms",
-    "script": "Mandatory PowerShell Script for this error",
+    "script": "PowerShell Script for this error",
     "manualSteps": ["Step 1", "Step 2", "Step 3"],
     "manualSteps_en": ["Step 1", "Step 2", "Step 3"],
-    "sourceUrls": ["https://support.microsoft.com/..."],
+    "sourceUrls": ["https://learn.microsoft.com/..."],
     "windowsVersions": ${JSON.stringify(targetWindowsVersions)},
     "searchKeywords": ["Keyword1", "Keyword2"]
   }
 ]`;
-
-  let generatedText = '';
-  let successfulModel = '';
-  let encountered404 = false;
-
-  const tryGeminiList = async (candidates: string[]) => {
-    if (!ai) return false;
-    for (const model of candidates) {
-      try {
-        console.log(`🤖 Attempting generation with model: ${model}...`);
-        let response;
-        try {
-          response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: { tools: [{ googleSearch: {} }] }
-          });
-        } catch (groundingErr: any) {
-          const classifiedGround = classifyAiError(groundingErr);
-          if (
-            classifiedGround.type === 'MODEL_NOT_FOUND_404' ||
-            classifiedGround.type === 'INVALID_KEY' ||
-            classifiedGround.type === 'QUOTA_EXHAUSTED_429'
-          ) {
-            throw groundingErr;
-          }
-          console.info(`ℹ️ Search grounding skipped for ${model} (${classifiedGround.message.substring(0, 120)}). Retrying standard generation...`);
-          response = await ai.models.generateContent({
-            model,
-            contents: prompt
-          });
-        }
-
-        if (response && response.text) {
-          generatedText = response.text;
-          successfulModel = model;
-          recordRegistryUsage('gemini', model, false);
-          console.log(`✅ Successfully generated response using model: ${model}`);
-          return true;
-        }
-      } catch (modelErr: any) {
-        const classified = classifyAiError(modelErr);
-        console.warn(`⚠️ Model ${model} failed [${classified.type}]: ${classified.message.substring(0, 140)}`);
-        if (classified.type === 'MODEL_NOT_FOUND_404') {
-          encountered404 = true;
-          tripCircuitBreaker(registry, model, 'gemini', 404, classified.message);
-        } else if (classified.type === 'INVALID_KEY') {
-          break;
-        }
-      }
-    }
-    return false;
   };
 
-  if (hasGeminiKey) {
-    await tryGeminiList(modelsToTry);
+  const runAiGenerationOnce = async (promptText: string): Promise<{ text: string; model: string; provider: ProviderId } | null> => {
+    let textOut = '';
+    let modelOut = '';
+    let providerOut: ProviderId = 'gemini';
+    let encountered404 = false;
 
-    // If 404s occurred and Gemini generation didn't succeed, attempt live catalog discovery once
-    if (!generatedText && encountered404) {
-      console.log('🔎 404 model error detected; running live Gemini model auto-discovery...');
-      try {
-        const discovery = await discoverLiveModels({ geminiApiKey: apiKey });
-        registry = discovery.registry;
-        const freshCandidates = getHealthyGeminiCandidates(preferredModel, registry).filter((m) => !modelsToTry.includes(m));
-        if (freshCandidates.length > 0) {
-          console.log(`🆕 Discovered fresh healthy Gemini models: ${freshCandidates.join(', ')}`);
-          await tryGeminiList(freshCandidates);
+    const tryGeminiList = async (candidates: string[]) => {
+      if (!ai) return false;
+      for (const model of candidates) {
+        try {
+          console.log(`🤖 Attempting generation with model: ${model}...`);
+          let response;
+          try {
+            response = await ai.models.generateContent({
+              model,
+              contents: promptText,
+              config: { tools: [{ googleSearch: {} }] }
+            });
+          } catch (groundingErr: any) {
+            const classifiedGround = classifyAiError(groundingErr);
+            if (
+              classifiedGround.type === 'MODEL_NOT_FOUND_404' ||
+              classifiedGround.type === 'INVALID_KEY' ||
+              classifiedGround.type === 'QUOTA_EXHAUSTED_429'
+            ) {
+              throw groundingErr;
+            }
+            console.info(`ℹ️ Search grounding skipped for ${model} (${classifiedGround.message.substring(0, 120)}). Retrying standard generation...`);
+            response = await ai.models.generateContent({
+              model,
+              contents: promptText
+            });
+          }
+
+          if (response && response.text) {
+            textOut = response.text;
+            modelOut = model;
+            providerOut = 'gemini';
+            console.log(`✅ Successfully generated response using model: ${model}`);
+            return true;
+          }
+        } catch (modelErr: any) {
+          const classified = classifyAiError(modelErr);
+          console.warn(`⚠️ Model ${model} failed [${classified.type}]: ${classified.message.substring(0, 140)}`);
+          if (classified.type === 'MODEL_NOT_FOUND_404') {
+            encountered404 = true;
+            tripCircuitBreaker(registry, model, 'gemini', 404, classified.message);
+          } else if (classified.type === 'INVALID_KEY') {
+            break;
+          }
         }
-      } catch (_) {}
-    }
-  }
+      }
+      return false;
+    };
 
-  // Multi-provider Keyed Free-Tier Failover across configured external providers
-  if (!generatedText) {
-    const externalPrompt = buildExternalFallbackPrompt(prompt, { responseMimeType: 'application/json' });
-    const orderList = (registry.providerOrder || ['groq', 'mistral', 'nvidia', 'cohere', 'openrouter', 'cloudflare', 'huggingface', 'cerebras', 'ovh', 'pollinations']);
-    const keyedProviders = orderList
-      .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && !KEYLESS_PROVIDER_IDS.includes(p));
-    for (const providerId of keyedProviders) {
-      console.log(`🔄 Attempting external free-tier failover via ${providerId.toUpperCase()}...`);
-      const extRes = await callExternalFreeProvider(providerId, externalPrompt, { registry });
-      if (extRes && extRes.text) {
-        generatedText = extRes.text;
-        successfulModel = extRes.modelUsed;
-        recordRegistryUsage(providerId, extRes.modelUsed, true);
-        console.log(`✅ Successfully generated response via ${extRes.modelUsed}!`);
-        break;
+    if (hasGeminiKey) {
+      await tryGeminiList(modelsToTry);
+      if (!textOut && encountered404) {
+        console.log('🔎 404 model error detected; running live Gemini model auto-discovery...');
+        try {
+          const discovery = await discoverLiveModels({ geminiApiKey: apiKey });
+          registry = discovery.registry;
+          const freshCandidates = getHealthyGeminiCandidates(preferredModel, registry).filter((m) => !modelsToTry.includes(m));
+          if (freshCandidates.length > 0) {
+            console.log(`🆕 Discovered fresh healthy Gemini models: ${freshCandidates.join(', ')}`);
+            await tryGeminiList(freshCandidates);
+          }
+        } catch (_) {}
       }
     }
 
-    // Last-resort keyless serverless fallback (OVHcloud / Pollinations) ONLY if enabled and all keyed tiers failed
-    if (!generatedText && registry.keylessFallbackEnabled !== false) {
-      const keylessProviders = orderList.filter((p): p is Exclude<ProviderId, 'gemini'> => KEYLESS_PROVIDER_IDS.includes(p));
-      for (const keylessPid of keylessProviders) {
-        console.log(`🔄 Attempting last-resort keyless failover via ${keylessPid.toUpperCase()}...`);
-        const keylessRes = await callExternalFreeProvider(keylessPid, externalPrompt, { registry });
-        if (keylessRes && keylessRes.text) {
-          generatedText = keylessRes.text;
-          successfulModel = keylessRes.modelUsed;
-          recordRegistryUsage(keylessPid, keylessRes.modelUsed, true);
-          console.log(`✅ Successfully generated response via ${keylessRes.modelUsed}!`);
+    if (!textOut) {
+      const externalPrompt = buildExternalFallbackPrompt(promptText, { responseMimeType: 'application/json' });
+      const orderList = (registry.providerOrder || ['groq', 'mistral', 'nvidia', 'cohere', 'openrouter', 'cloudflare', 'huggingface', 'cerebras', 'ovh', 'pollinations']);
+      const keyedProviders = orderList
+        .filter((p): p is Exclude<ProviderId, 'gemini'> => p !== 'gemini' && !KEYLESS_PROVIDER_IDS.includes(p));
+      for (const providerId of keyedProviders) {
+        console.log(`🔄 Attempting external free-tier failover via ${providerId.toUpperCase()}...`);
+        const extRes = await callExternalFreeProvider(providerId, externalPrompt, { registry });
+        if (extRes && extRes.text) {
+          textOut = extRes.text;
+          modelOut = extRes.modelUsed;
+          providerOut = providerId;
+          console.log(`✅ Successfully generated response via ${extRes.modelUsed}!`);
           break;
         }
       }
+
+      if (!textOut && registry.keylessFallbackEnabled !== false) {
+        const keylessProviders = orderList.filter((p): p is Exclude<ProviderId, 'gemini'> => KEYLESS_PROVIDER_IDS.includes(p));
+        for (const keylessPid of keylessProviders) {
+          console.log(`🔄 Attempting last-resort keyless failover via ${keylessPid.toUpperCase()}...`);
+          const keylessRes = await callExternalFreeProvider(keylessPid, externalPrompt, { registry });
+          if (keylessRes && keylessRes.text) {
+            textOut = keylessRes.text;
+            modelOut = keylessRes.modelUsed;
+            providerOut = keylessPid;
+            console.log(`✅ Successfully generated response via ${keylessRes.modelUsed}!`);
+            break;
+          }
+        }
+      }
+    }
+
+    return textOut ? { text: textOut, model: modelOut, provider: providerOut } : null;
+  };
+
+  // Up to 2 attempts: if attempt 1 hits 100% duplicates, retry with least-populated category & rejected codes blocked
+  const secondaryCategory = sortedByCoverage.find((c) => c !== targetCategory) || targetCategory;
+  const attemptCategories = isPinnedCategory
+    ? [targetCategory, targetCategory]
+    : [targetCategory, secondaryCategory];
+
+  let activeCategoryUsed = targetCategory;
+  let lastWinningProvider: ProviderId | null = null;
+
+  for (let attemptIdx = 0; attemptIdx < attemptCategories.length; attemptIdx++) {
+    const attemptCategory = attemptCategories[attemptIdx];
+    if (attemptIdx > 0) {
+      console.log(`\n🔁 Retry Pass #${attemptIdx + 1}: attempting category [${attemptCategory}] after 0 unique discoveries...`);
+    }
+
+    const promptForAttempt = buildCategoryPrompt(attemptCategory, attemptIdx + 1);
+    const aiResult = await runAiGenerationOnce(promptForAttempt);
+    if (!aiResult) {
+      continue;
+    }
+
+    generatedAtLeastOnce = true;
+    successfulModel = aiResult.model;
+    lastWinningProvider = aiResult.provider;
+    activeCategoryUsed = attemptCategory;
+
+    let parsedItems: any[] = [];
+    try {
+      const parsed = parseAiJson(aiResult.text);
+      parsedItems = Array.isArray(parsed)
+        ? parsed
+        : (parsed && Array.isArray((parsed as any).issues) ? (parsed as any).issues : [parsed]);
+    } catch (parseErr: any) {
+      console.warn(`⚠️ Failed to parse JSON from AI response (attempt #${attemptIdx + 1}):`, parseErr.message);
+      console.log('Raw output preview:', aiResult.text.trim().substring(0, 300));
+      continue;
+    }
+
+    const asCleanString = (val: unknown): string => {
+      if (typeof val === 'string') return val.trim();
+      if (typeof val === 'number' && Number.isFinite(val)) return String(val);
+      return '';
+    };
+    const asCleanStringArray = (val: unknown): string[] => {
+      if (!Array.isArray(val)) return [];
+      return val.map((item) => asCleanString(item)).filter(Boolean);
+    };
+    const filterSafeHttpUrls = (val: unknown): string[] => {
+      return asCleanStringArray(val).filter((u) => /^https?:\/\//i.test(u));
+    };
+
+    for (const raw of parsedItems) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const code = asCleanString((raw as any).code);
+      const title = asCleanString((raw as any).title);
+
+      if (!title) continue;
+
+      const normalizedCode = code.toLowerCase().trim();
+      const normalizedTitle = title.toLowerCase().replace(/\s+/g, '');
+      const isDupTitle =
+        batchNormalizedTitles.has(normalizedTitle) ||
+        existingIssues.some(ex => typeof ex?.title === 'string' && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle);
+      const isDupCodeStrict = dedupStrictness === 'strict' && normalizedCode.length >= 4 && avoidCodes.has(normalizedCode);
+      const isDupCodeAndTitle = existingIssues.some(
+        ex => typeof ex?.code === 'string' && typeof ex?.title === 'string' && ex.code.toLowerCase().trim() === normalizedCode && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
+      );
+
+      if (isDupTitle || isDupCodeAndTitle || isDupCodeStrict) {
+        console.log(`⏭️ Skipping duplicate issue (${dedupStrictness}): [${code}] ${title}`);
+        if (code) rejectedCodesThisRun.push(code);
+        continue;
+      }
+
+      const cleanCode = code || 'WIN-GEN-' + Math.floor(1000 + Math.random() * 9000);
+      const issueId = `gh-${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
+      const resolvedCategory = asCleanString((raw as any).category) || attemptCategory;
+      const resolvedTitleEn = asCleanString((raw as any).title_en) || title;
+      const resolvedSymptoms = asCleanString((raw as any).symptoms) || title;
+      const resolvedSymptomsEn = asCleanString((raw as any).symptoms_en) || resolvedSymptoms;
+      const resolvedScript = asCleanString((raw as any).script);
+      const resolvedSteps = asCleanStringArray((raw as any).manualSteps);
+      const resolvedStepsEn = asCleanStringArray((raw as any).manualSteps_en);
+      const resolvedUrls = filterSafeHttpUrls((raw as any).sourceUrls);
+      const resolvedVersions = asCleanStringArray((raw as any).windowsVersions);
+      const resolvedKeywords = asCleanStringArray((raw as any).searchKeywords);
+
+      const formattedIssue: KnownIssue = {
+        id: issueId,
+        category: resolvedCategory,
+        code: cleanCode,
+        title,
+        title_en: resolvedTitleEn,
+        symptoms: resolvedSymptoms,
+        symptoms_en: resolvedSymptomsEn,
+        script: resolvedScript.length >= 15
+          ? resolvedScript
+          : generateDefaultPowerShellScript(cleanCode, resolvedCategory, title),
+        manualSteps: resolvedSteps.length > 0 ? resolvedSteps : [
+          'Windows 설정 > 문제 해결 도구를 실행합니다.',
+          '관리자 권한 명령 프롬프트에서 sfc /scannow 검사를 진행합니다.'
+        ],
+        manualSteps_en: resolvedStepsEn.length > 0 ? resolvedStepsEn : [
+          'Run Windows Settings > Troubleshooters.',
+          'Run sfc /scannow in Administrator Command Prompt.'
+        ],
+        sourceUrls: resolvedUrls.length > 0 ? resolvedUrls : [
+          'https://support.microsoft.com/windows'
+        ],
+        source: 'GitHub Actions Autonomous Collector',
+        windowsVersions: resolvedVersions.length > 0 ? resolvedVersions : targetWindowsVersions,
+        searchKeywords: resolvedKeywords.length > 0 ? resolvedKeywords : [cleanCode, attemptCategory, 'Windows Fix'],
+        upvoteCount: 0,
+        upvotedBy: [],
+        downvotedBy: [],
+        isLatest: true,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        verifiedAt: nowIso,
+        verificationStatus: 'verified'
+      };
+
+      newIssues.push(formattedIssue);
+      batchNormalizedTitles.add(normalizedTitle);
+      if (normalizedCode) avoidCodes.add(normalizedCode);
+    }
+
+    if (newIssues.length > 0) {
+      break;
     }
   }
 
-  if (!generatedText) {
+  targetCategory = activeCategoryUsed;
+
+  if (!generatedAtLeastOnce) {
     console.warn('⚠️ Could not generate issue content across candidate models (quota exhausted or API unavailable). Skipping cycle.');
     const summaryFile = process.env.GITHUB_STEP_SUMMARY;
     if (summaryFile && fs.existsSync(summaryFile)) {
@@ -389,118 +563,6 @@ JSON Schema:
       fs.appendFileSync(summaryFile, md, 'utf-8');
     }
     return;
-  }
-
-  // Parse JSON response resiliently (handles Markdown code fences, prose preambles, and Windows paths)
-  let parsedItems: any[] = [];
-  try {
-    const parsed = parseAiJson(generatedText);
-    parsedItems = Array.isArray(parsed)
-      ? parsed
-      : (parsed && Array.isArray((parsed as any).issues) ? (parsed as any).issues : [parsed]);
-  } catch (parseErr: any) {
-    console.warn('⚠️ Failed to parse JSON from AI response:', parseErr.message);
-    console.log('Raw output preview:', generatedText.trim().substring(0, 300));
-    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
-    if (summaryFile && fs.existsSync(summaryFile)) {
-      const md = `## ⚠️ Autonomous Data Collection Notice\n\n- **Status**: AI output JSON parse error. Cycle skipped safely.\n`;
-      fs.appendFileSync(summaryFile, md, 'utf-8');
-    }
-    return;
-  }
-
-  // Normalize, deduplicate and format into KnownIssue
-  const newIssues: KnownIssue[] = [];
-  const batchNormalizedTitles = new Set<string>();
-  const nowIso = new Date().toISOString();
-
-  const asCleanString = (val: unknown): string => {
-    if (typeof val === 'string') return val.trim();
-    if (typeof val === 'number' && Number.isFinite(val)) return String(val);
-    return '';
-  };
-  const asCleanStringArray = (val: unknown): string[] => {
-    if (!Array.isArray(val)) return [];
-    return val.map((item) => asCleanString(item)).filter(Boolean);
-  };
-  const filterSafeHttpUrls = (val: unknown): string[] => {
-    return asCleanStringArray(val).filter((u) => /^https?:\/\//i.test(u));
-  };
-
-  for (const raw of parsedItems) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
-    const code = asCleanString((raw as any).code);
-    const title = asCleanString((raw as any).title);
-
-    if (!title) continue;
-
-    // Check duplication according to dedupStrictness option
-    const normalizedCode = code.toLowerCase().trim();
-    const normalizedTitle = title.toLowerCase().replace(/\s+/g, '');
-    const isDupTitle =
-      batchNormalizedTitles.has(normalizedTitle) ||
-      existingIssues.some(ex => typeof ex?.title === 'string' && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle);
-    const isDupCodeStrict = dedupStrictness === 'strict' && normalizedCode.length >= 4 && avoidCodes.has(normalizedCode);
-    const isDupCodeAndTitle = existingIssues.some(
-      ex => typeof ex?.code === 'string' && typeof ex?.title === 'string' && ex.code.toLowerCase().trim() === normalizedCode && ex.title.toLowerCase().replace(/\s+/g, '') === normalizedTitle
-    );
-
-    if (isDupTitle || isDupCodeAndTitle || isDupCodeStrict) {
-      console.log(`⏭️ Skipping duplicate issue (${dedupStrictness}): [${code}] ${title}`);
-      continue;
-    }
-
-    const cleanCode = code || 'WIN-GEN-' + Math.floor(1000 + Math.random() * 9000);
-    const issueId = `gh-${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
-    const resolvedCategory = asCleanString((raw as any).category) || targetCategory;
-    const resolvedTitleEn = asCleanString((raw as any).title_en) || title;
-    const resolvedSymptoms = asCleanString((raw as any).symptoms) || title;
-    const resolvedSymptomsEn = asCleanString((raw as any).symptoms_en) || resolvedSymptoms;
-    const resolvedScript = asCleanString((raw as any).script);
-    const resolvedSteps = asCleanStringArray((raw as any).manualSteps);
-    const resolvedStepsEn = asCleanStringArray((raw as any).manualSteps_en);
-    const resolvedUrls = filterSafeHttpUrls((raw as any).sourceUrls);
-    const resolvedVersions = asCleanStringArray((raw as any).windowsVersions);
-    const resolvedKeywords = asCleanStringArray((raw as any).searchKeywords);
-
-    const formattedIssue: KnownIssue = {
-      id: issueId,
-      category: resolvedCategory,
-      code: cleanCode,
-      title,
-      title_en: resolvedTitleEn,
-      symptoms: resolvedSymptoms,
-      symptoms_en: resolvedSymptomsEn,
-      script: resolvedScript.length >= 15
-        ? resolvedScript
-        : generateDefaultPowerShellScript(cleanCode, resolvedCategory, title),
-      manualSteps: resolvedSteps.length > 0 ? resolvedSteps : [
-        'Windows 설정 > 문제 해결 도구를 실행합니다.',
-        '관리자 권한 명령 프롬프트에서 sfc /scannow 검사를 진행합니다.'
-      ],
-      manualSteps_en: resolvedStepsEn.length > 0 ? resolvedStepsEn : [
-        'Run Windows Settings > Troubleshooters.',
-        'Run sfc /scannow in Administrator Command Prompt.'
-      ],
-      sourceUrls: resolvedUrls.length > 0 ? resolvedUrls : [
-        'https://support.microsoft.com/windows'
-      ],
-      source: 'GitHub Actions Autonomous Collector',
-      windowsVersions: resolvedVersions.length > 0 ? resolvedVersions : targetWindowsVersions,
-      searchKeywords: resolvedKeywords.length > 0 ? resolvedKeywords : [cleanCode, targetCategory, 'Windows Fix'],
-      upvoteCount: 0,
-      upvotedBy: [],
-      downvotedBy: [],
-      isLatest: true,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      verifiedAt: nowIso,
-      verificationStatus: 'verified'
-    };
-
-    newIssues.push(formattedIssue);
-    batchNormalizedTitles.add(normalizedTitle);
-    if (normalizedCode) avoidCodes.add(normalizedCode);
   }
 
   console.log(`\n✨ Discovered and formatted ${newIssues.length} new unique issues!`);
